@@ -397,6 +397,7 @@ html, body {
           <li data-ico="🕹️">Move with <strong>WASD / arrow keys</strong>. Your blaster auto-fires toward your <strong>mouse</strong> (or the nearest enemy on touch).</li>
           <li data-ico="💨">Tap <strong>Space</strong> or <strong>Shift</strong> to dash through danger (brief invulnerability).</li>
           <li data-ico="🧪">Clear a room to trigger a <strong>science MCQ</strong>. Answer correctly to choose an upgrade — level an element to 5/10, or <strong>level up your skill</strong>.</li>
+          <li data-ico="⚠️">Wrong answers in a row cost <strong>8%, 16%, 28%, then 45%</strong> of maximum HP. A <strong>fifth ends the run</strong>; a correct answer resets the streak.</li>
           <li data-ico="🎯">Pick <strong>one skill</strong> below — it's the only one you'll wield this run. Fire it with <strong>key Q</strong>.</li>
         </ul>
         <div style="font-weight:800;font-size:var(--font-size-sm);margin-bottom:6px;">Pick your raider</div>
@@ -434,6 +435,7 @@ html, body {
         </div>
         <div class="q-stem" id="qStem"></div>
         <div class="q-options" id="qOptions"></div>
+        <p class="q-pressure-rule" style="font-size:.78rem;line-height:1.45;">Wrong answers in a row deal increasing damage. Five in a row ends the run. A correct answer resets the streak.</p>
         <div class="q-explain" id="qExplain"></div>
         <div class="row" style="margin-top:14px;justify-content:space-between;align-items:flex-start;gap:10px;">
           <div class="flagbox" id="flagBox" style="display:none;">
@@ -484,6 +486,7 @@ html, body {
 </div>
 
 <script src="science-feed-bridge.js"></script>
+<script src="game-question-pressure.js?v=1.457.0"></script>
 <script>
 /* ============================================================================
  * SCIENCE RAIDERS — roguelite top-down shooter with a science-MCQ economy.
@@ -1015,7 +1018,7 @@ function startRun(){
     diff: DIFFS[chosenDiff],
     floor: 1, room: 1,
     enemies: [], bullets: [], ebullets: [], particles: [], floaters: [], pickups: [],
-    kills: 0, correct: 0, answered: 0,
+    kills: 0, correct: 0, answered: 0, questionPressure:{wrongStreak:0},
     state: 'play',   // play | question | upgrade | over
     coins: 0,
     bannerT: 0, shakeT: 0, shakeMag: 0,
@@ -2522,6 +2525,7 @@ function reportScore(){
 }
 
 function gameOver(){
+  if(!G || G.state==='over')return;
   reportScore();
   G.state = 'over';
   $('overSub').textContent = 'You fell on Floor ' + G.floor + ', Room ' + G.room + '.';
@@ -2666,11 +2670,15 @@ async function openQuestion(){
 }
 
 function answerQuestion(idx, btnEl){
+  if(!G || G.state!=='question' || !qState.active)return;
   if(!scienceFeed.current(qState.current)) return;
   if (qState.answered) return;
   qState.answered = true;
   var q = qState.current;
   var correct = (idx === q.answer);
+  var questionRun=G;
+  var pressure=GameQuestionPressure.answer(G.questionPressure||(G.questionPressure={wrongStreak:0}),correct,G.player.maxHp);
+  if(!correct)G.player.hp=pressure.fatal?0:Math.max(0,G.player.hp-pressure.damage);
   playSfx(correct ? 'correct' : 'wrong', { vol: 0.55 });
   G.answered++; if (correct) G.correct++;
   recordAnswer(q, correct);
@@ -2686,6 +2694,7 @@ function answerQuestion(idx, btnEl){
   var reward = correct ? Math.round(20 * G.diff.reward) : Math.round(6 * G.diff.reward);
   G.coins += reward; updateHud();
   $('qReward').textContent = (correct ? '✅ +' : '❌ +') + reward + ' 🪙';
+  if(!correct || pressure.reset)$('qReward').textContent+=' · '+pressure.message;
 
   var p = G.player;
   var capped = (p.upgrades || 0) >= MAX_UPGRADES;
@@ -2704,7 +2713,7 @@ function answerQuestion(idx, btnEl){
   btn.style.display = 'inline-flex';
   btn.textContent = grantsUpgrade ? 'Choose an upgrade →' : 'Continue →';
   btn.onclick = function(){
-    if(!G || !qState.active || qState.current!==q || !scienceFeed.current(q))return;
+    if(G!==questionRun || G.state!=='question' || !qState.active || qState.current!==q || !scienceFeed.current(q))return;
     qState.active = false;
     hide('questionOverlay');
     if (grantsUpgrade){ openUpgrade(); }
@@ -2715,6 +2724,10 @@ function answerQuestion(idx, btnEl){
       advanceRoom();
     }
   };
+  if(G.player.hp<=0){
+    qState.active=false;hide('questionOverlay');gameOver();
+    $('overSub').textContent=pressure.message+' Your question penalty ended this raid.';
+  }
 }
 
 /* ---- Upgrade picker — element builds with per-element 5/10 milestones ---- */

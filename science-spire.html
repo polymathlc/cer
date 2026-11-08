@@ -279,6 +279,7 @@ svg.spr.anim-death{animation:sprDeath .55s ease-in forwards;transform-origin:50%
     <h2>🗼 Science Spire</h2>
     <p>An <b>endless climb</b> with no final floor. Win card battles, answer science questions for bonuses, and open <b>booster packs</b> to build your deck. Beat a boss every <b>12 floors</b>, recover health, and keep climbing against stronger foes.</p>
     <p>Your score is recorded as you clear rooms. Keep going until you fall, or choose <b>End climb</b> whenever you are ready. Continuing after a boss uses no extra play credit.</p>
+    <p style="font-size:.82rem;">Wrong answers in a row cost <b>8%, 16%, 28%, then 45%</b> of maximum HP. A <b>fifth ends the run</b>; a correct answer resets the streak. Question damage bypasses block.</p>
     <p style="font-size:0.82rem;">Play cards using <b>energy</b>. <b>Attacks</b> hurt foes, <b>skills</b> give block & utility, <b>powers</b> are permanent buffs. Block resets each turn. Watch the enemy <b>intent</b> above their head and plan ahead.</p>
     <p style="font-size:0.82rem;">Buy <b>Spell Packs</b> in the app with points you earn from questions to <b>permanently collect cards</b> and build your own starting deck — your climb begins with whatever deck you forged.</p>
     <h3 style="margin:14px 0 6px;font-size:0.95rem;letter-spacing:.03em;">Choose your hero</h3>
@@ -293,6 +294,7 @@ svg.spr.anim-death{animation:sprDeath .55s ease-in forwards;transform-origin:50%
     <h2 style="font-size:1.05rem;">🧪 Science question <span style="font-size:0.8rem;color:var(--muted);">— answer for a battle bonus</span></h2>
     <div class="q-stem" id="qStem" style="margin:8px 0 6px;line-height:1.5;"></div>
     <div id="qOptions"></div>
+    <p class="q-pressure-rule" style="font-size:.78rem;line-height:1.45;">Wrong answers in a row deal increasing damage. Five in a row ends the run. A correct answer resets the streak.</p>
     <div id="qExplain" style="display:none;font-size:0.85rem;color:var(--muted);margin-top:8px;line-height:1.5;"></div>
     <div class="center" style="margin-top:12px;"><button class="btn primary" id="qContinueBtn" type="button" style="display:none;">Fight! ⚔️</button></div>
   </div>
@@ -362,6 +364,7 @@ svg.spr.anim-death{animation:sprDeath .55s ease-in forwards;transform-origin:50%
 <div class="toast" id="toast"></div>
 
 <script src="science-feed-bridge.js"></script>
+<script src="game-question-pressure.js?v=1.457.0"></script>
 <script src="spire-svg-art.js"></script>
 <script>
 "use strict";
@@ -488,7 +491,7 @@ function newRun(){
     map: buildMap(),
     node: 0,
     kills:0,
-    questionBonus:0,
+    questionBonus:0, questionPressure:{wrongStreak:0},
     state:'map'
   };
   // starter deck — use the player's custom deck (built from packs in the app)
@@ -809,6 +812,8 @@ function answerQuestion(idx, btn){
   var run=G;
   if (qState.answered) return; qState.answered=true;
   var q=qState.current; var correct = (idx===q.answer);
+  var pressure=GameQuestionPressure.answer(G.questionPressure||(G.questionPressure={wrongStreak:0}),correct,G.player.maxHp);
+  if(!correct)G.player.hp=pressure.fatal?0:Math.max(0,G.player.hp-pressure.damage);
   var opts = $('qOptions').children;
   for (var i=0;i<opts.length;i++){
     opts[i].classList.add(i===q.answer?'correct':(i===idx?'wrong':'dim'));
@@ -816,9 +821,9 @@ function answerQuestion(idx, btn){
   }
   if (correct){ G.questionBonus = 2; G.gold += 10; toast('Correct! +2 energy next fight, +10🪙'); }
   else { G.questionBonus = 0; toast('Not quite — no bonus this fight'); }
-  if (q.explainHtml || q.explain){
-    var ex=$('qExplain'); ex.style.display=''; ex.innerHTML = (correct?'✅ ':'❌ ') + (q.explainHtml || escapeText(q.explain));
-  }
+  var ex=$('qExplain'); ex.style.display='';
+  ex.innerHTML = (correct?'✅ ':'❌ ') + (q.explainHtml || escapeText(q.explain || 'Review this concept in your notes.'));
+  if(!correct || pressure.reset)ex.appendChild(document.createTextNode(' '+pressure.message));
   noteQuestionAnswered(q, correct); // keep the unseen-first pick honest mid-run
   // record to parent (teacher log + leaderboard "questions done")
   try {
@@ -826,6 +831,7 @@ function answerQuestion(idx, btn){
   } catch(e){}
   var btnc=$('qContinueBtn'); btnc.style.display=''; btnc.onclick=function(){ if(G!==run || G.state!=='question' || qState.current!==q || !scienceFeed.current(q) || !spireRunCurrent()) return; hide('qOverlay'); beginCombat(); };
   updateHud();
+  if(G.player.hp<=0){gameOver();$('overMsg').textContent=pressure.message+' Your question penalty ended this climb.';}
 }
 
 /* ============================ PACKS ============================ */

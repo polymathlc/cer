@@ -584,6 +584,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
           <li data-ico="🕹️">Move with <strong>WASD / arrows</strong>, or <strong>click the ground</strong> to walk there. <strong>Click an enemy</strong> to attack it, hold <strong>right-click</strong> to fire at the crosshair, and skills <strong>1–4 fire at the crosshair</strong>.</li>
           <li data-ico="✨">Each class knows <strong>12 skills</strong> — unlock, rank, branch and crown them with 1-of-3 <strong>ULTIMATES</strong> in a huge <strong>skill tree (T)</strong>, then pick your <strong>4</strong> with 🎯 <strong>Select Skill (K)</strong>.</li>
           <li data-ico="⚡">Everything spends <strong>action points</strong>: basic attacks <strong>1 ⚡</strong>, skills <strong>4 ⚡</strong>, and even the auto-attacks from unique/mythic gear <strong>2–3 ⚡</strong>. At zero, a science MCQ appears — <strong>correct = full refill</strong> +1 skill point; <strong>wrong = only ⅓ of your actions</strong> next turn.</li>
+          <li data-ico="⚠️">Wrong answers in a row also cost <strong>8%, 16%, 28%, then 45%</strong> of maximum HP. A <strong>fifth wrong answer ends the run</strong>. A correct answer resets the streak.</li>
           <li data-ico="👑">Each floor hides a <strong>boss</strong> — kill it for a <strong>guaranteed item drop</strong> (0.5% Mythic!) and the stairs to the next depth.</li>
           <li data-ico="🎁">Spend app points on <strong>loot boxes</strong> in the <strong>Armory (B)</strong> — permanent helm, armour, gloves, greaves, rings &amp; amulet. Unique and Mythic gear carries <strong>skill-changing powers</strong>.</li>
         </ul>
@@ -630,6 +631,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
         </div>
         <div class="q-stem" id="qStem"></div>
         <div class="q-options" id="qOptions"></div>
+        <p class="q-pressure-rule" style="font-size:.78rem;line-height:1.45;">Wrong answers in a row deal increasing damage. Five in a row ends the run. A correct answer resets the streak.</p>
         <div class="q-explain" id="qExplain"></div>
         <div class="row" style="margin-top:14px;justify-content:space-between;align-items:flex-start;gap:10px;">
           <div class="flagbox" id="flagBox" style="display:none;">
@@ -722,6 +724,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
 </div>
 
 <script src="science-feed-bridge.js?v=1.456.0"></script>
+<script src="game-question-pressure.js?v=1.457.0"></script>
 <script>
 /* ============================================================================
  * SCIENCE LEGENDS (BETA) — top-down horde-action RPG with a science-MCQ pulse.
@@ -2235,7 +2238,7 @@ function newGame(cls){
     alloc: {}, stats: null, slots: loadLoadout(cls),
     gold: 0, kills: 0, wave: 1, time: 0,
     waveT: 0, spawnT: 1.2,
-    qTimer: 0, answered: 0, correct: 0,
+    qTimer: 0, answered: 0, correct: 0, questionPressure:{wrongStreak:0},
     ap: 30, apMax: 30, stairs: null, packSeq: 0,
     enemies: [], pets: [], projs: [], eprojs: [], fx: [], texts: [], zones: [], orbs: [],
     cds: {}, spin: null, auras: [], orbits: [], abuffs: [], delays: [],
@@ -2269,7 +2272,7 @@ function saveRun(auto){
     wave: G.wave, level: G.level, xp: G.xp, xpNext: G.xpNext, points: G.points,
     alloc: G.alloc, slots: G.slots, ap: G.ap, apMax: G.apMax,
     kills: G.kills, gold: G.gold, time: G.time,
-    answered: G.answered, correct: G.correct,
+    answered: G.answered, correct: G.correct, questionPressure:G.questionPressure,
     cheatUsed: G.cheatUsed, phoenixUsed: G.phoenixUsed, packSeq: G.packSeq,
     player: { x: p.x, y: p.y, hp: p.hp, maxHp: p.maxHp, levelHp: p.levelHp },
     stairs: G.stairs, map: Array.from(map), rooms: rooms, explored: G.explored ? Array.from(G.explored) : [], evadeCd:G.player.evadeCd||0,
@@ -2306,6 +2309,7 @@ function resumeRun(){
   G.ap = s.ap; G.apMax = s.apMax || 30;
   G.kills = s.kills; G.gold = s.gold; G.time = s.time || 0;
   G.answered = s.answered || 0; G.correct = s.correct || 0;
+  G.questionPressure={wrongStreak:Math.max(0,Math.min(5,Math.floor(Number(s.questionPressure && s.questionPressure.wrongStreak)||0)))};
   G.cheatUsed = !!s.cheatUsed; G.phoenixUsed = !!s.phoenixUsed; G.packSeq = s.packSeq || 999;
   G.stairs = s.stairs || null;
   G.explored=s.explored && s.explored.length===map.length ? Uint8Array.from(s.explored) : null;
@@ -4670,12 +4674,15 @@ async function openQuestion(){
 }
 
 function answerQuestion(idx){
+  if(!G || G.state!=='play' || !qState.active) return;
   if(!scienceFeed.current(qState.current)) return;
   if (qState.answered) return;
   if (performance.now() < (qState.lockT || 0)) return; // anti-misclick lock
   qState.answered = true;
   var q = qState.current;
   var correct = (idx === q.answer);
+  var questionRun=G;
+  var pressure=GameQuestionPressure.answer(G.questionPressure||(G.questionPressure={wrongStreak:0}),correct,G.player.maxHp);
   sfx(correct ? 'correct' : 'wrong');
   G.answered++; if (correct) G.correct++;
   recordAnswer(q, correct);
@@ -4694,10 +4701,11 @@ function answerQuestion(idx){
     earnPoints(15, 'correct answer');
     $('qReward').textContent = '✅ +1 skill point · ' + G.apMax + ' actions refilled · Insight surge!';
   } else {
-    healPlayer(G.player.maxHp * 0.1);
+    G.player.hp=pressure.fatal?0:Math.max(0,G.player.hp-pressure.damage);
     G.ap = Math.ceil(G.apMax / 3);
-    $('qReward').textContent = '❌ Only ' + G.ap + ' actions this turn — answer correctly for a full refill!';
+    $('qReward').textContent = '❌ Only ' + G.ap + ' actions · '+pressure.message;
   }
+  if(correct && pressure.reset)$('qReward').textContent+=' · '+pressure.message;
   updateHud();
   var ex = $('qExplain');
   var head = correct ? '<b>Correct!</b> ' : '<b>Not quite.</b> ';
@@ -4709,11 +4717,16 @@ function answerQuestion(idx){
   var btn = $('qContinueBtn');
   btn.style.display = 'inline-flex';
   btn.onclick = function(){
+    if(G!==questionRun || G.state!=='play' || !qState.active || qState.current!==q)return;
     qState.active = false;
     hide('questionOverlay');
     updateHud();
   };
   updateHud();
+  if(G.player.hp<=0){
+    qState.active=false;hide('questionOverlay');gameOver();
+    $('overSub').textContent=pressure.message+' Your question penalty ended this run.';
+  }
 }
 
 /* ---- diagram image retry (mirrors Defenders/Raiders) ---- */

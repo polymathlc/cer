@@ -592,6 +592,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
           <li data-ico="🎯">On touch screens, <strong>hold a skill and drag</strong> to preview its aim. <strong>Release to cast</strong>, or return to the skill button to cancel. Your other thumb can keep moving.</li>
           <li data-ico="✨">Each class knows <strong>12 skills</strong> — unlock, rank, branch and crown them with 1-of-3 <strong>ULTIMATES</strong> in a huge <strong>skill tree (T)</strong>, then pick your <strong>4</strong> with 🎯 <strong>Select Skill (K)</strong>.</li>
           <li data-ico="🧪">Every <strong>20s</strong>: a science MCQ. Correct = <strong>+1 skill point</strong>, a heal and an Insight damage surge.</li>
+          <li data-ico="⚠️">Wrong answers in a row cause increasing health loss: <strong>8%, 16%, 28%, then 45%</strong> of maximum HP. A <strong>fifth wrong answer ends the run</strong>. A correct answer resets the streak.</li>
           <li data-ico="🎁">Spend app points on <strong>loot boxes</strong> in the <strong>Armory (B)</strong> — permanent helm, armour, gloves, greaves, rings &amp; amulet. Unique and Mythic gear carries <strong>skill-changing powers</strong>.</li>
         </ul></details>
         <div class="legends-section-title">01 · Choose your legend</div>
@@ -637,6 +638,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
         </div>
         <div class="q-stem" id="qStem"></div>
         <div class="q-options" id="qOptions"></div>
+        <p class="q-pressure-rule" style="font-size:.78rem;line-height:1.45;">Wrong answers in a row deal increasing damage. Five in a row ends the run. A correct answer resets the streak.</p>
         <div class="q-explain" id="qExplain"></div>
         <div class="row" style="margin-top:14px;justify-content:space-between;align-items:flex-start;gap:10px;">
           <div class="flagbox" id="flagBox" style="display:none;">
@@ -729,6 +731,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
 </div>
 
 <script src="science-feed-bridge.js?v=1.456.0"></script>
+<script src="game-question-pressure.js?v=1.457.0"></script>
 <script src="science-legends-art.js?v=1.456.0"></script>
 <script src="science-legends-view.js?v=1.456.0"></script>
 <script src="science-legends-atlas.js?v=1.456.0"></script>
@@ -2134,7 +2137,7 @@ function newGame(cls){
     alloc: {}, stats: null, slots: loadLoadout(cls),
     gold: 0, kills: 0, wave: 1, time: 0,
     waveT: 0, spawnT: 1.2,
-    qTimer: 0, answered: 0, correct: 0,
+    qTimer: 0, answered: 0, correct: 0, questionPressure:{wrongStreak:0},
     enemies: [], pets: [], projs: [], eprojs: [], fx: [], texts: [], zones: [], orbs: [],
     cds: {}, spin: null, auras: [], orbits: [], abuffs: [], delays: [],
     moveTarget: null, atkTarget: null, camX: 0, camY: 0,
@@ -4563,12 +4566,15 @@ async function openQuestion(){
 }
 
 function answerQuestion(idx){
+  if(!G || G.state!=='play' || !qState.active) return;
   if(!scienceFeed.current(qState.current)) return;
   if (qState.answered) return;
   if (performance.now() < (qState.lockT || 0)) return; // anti-misclick lock
   qState.answered = true;
   var q = qState.current;
   var correct = (idx === q.answer);
+  var questionRun=G;
+  var pressure=GameQuestionPressure.answer(G.questionPressure||(G.questionPressure={wrongStreak:0}),correct,G.player.maxHp);
   sfx(correct ? 'correct' : 'wrong');
   G.answered++; if (correct) G.correct++;
   recordAnswer(q, correct);
@@ -4586,9 +4592,10 @@ function answerQuestion(idx){
     earnPoints(15, 'correct answer');
     $('qReward').textContent = '✅ +1 skill point · +30% HP · Insight surge!';
   } else {
-    healPlayer(G.player.maxHp * 0.1);
-    $('qReward').textContent = '❌ No point this time · +10% HP';
+    G.player.hp=pressure.fatal?0:Math.max(0,G.player.hp-pressure.damage);
+    $('qReward').textContent = '❌ No skill point · '+pressure.message;
   }
+  if(correct && pressure.reset)$('qReward').textContent+=' · '+pressure.message;
   var ex = $('qExplain');
   var head = correct ? '<b>Correct!</b> ' : '<b>Not quite.</b> ';
   var body = q.explainHtml ? q.explainHtml : (q.explain || 'Review this concept in your notes.');
@@ -4599,11 +4606,16 @@ function answerQuestion(idx){
   var btn = $('qContinueBtn');
   btn.style.display = 'inline-flex';
   btn.onclick = function(){
+    if(G!==questionRun || G.state!=='play' || !qState.active || qState.current!==q)return;
     qState.active = false;
     hide('questionOverlay');
     updateHud();
   };
   updateHud();
+  if(G.player.hp<=0){
+    qState.active=false;hide('questionOverlay');gameOver();
+    $('overSub').textContent=pressure.message+' Your question penalty ended this run.';
+  }
 }
 
 /* ---- diagram image retry (mirrors Defenders/Raiders) ---- */
