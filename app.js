@@ -46921,7 +46921,7 @@ const ARCADE_GAMES = [
   { page: 'defenders', ico: '🧪', name: 'Science Defenders', desc: 'Tower defense — answer MCQs to earn gold and build towers.' },
   { page: 'raiders', ico: '👾', name: 'Science Raiders', desc: 'Roguelite top-down shooter — clear rooms, answer questions to pick power-ups.' },
   { page: 'spire', ico: '🃏', name: 'Science Spire', desc: 'Endless deck-building climb — answer questions, beat bosses, open card packs.' },
-  { page: 'legends', ico: '⚔️', name: 'Science Legends', beta: true, desc: 'Top-down action RPG — three classes, big skill trees, a question every 20 seconds.' },
+  { page: 'legends', ico: '⚔️', name: 'Science Legends', beta: true, desc: 'Top-down action RPG — five classes, distinct skills, tactical enemies and a science question every 20 seconds.' },
   { page: 'slayers', ico: '🗡️', name: 'Science Slayers', beta: true, desc: 'Dungeon crawler — procedural floors, boss loot, questions power your actions.' },
   { page: 'hades', ico: '🔥', name: 'Hades Sanctuary', beta:true, desc:'Intricate elemental combat — five bank questions between rooms power healing and boon upgrades.' },
   { page:'grand-line',ico:'🃏',name:'Crew Defense',beta:true,freePlay:true,desc:'Collect 100 One Piece characters and deploy a crew of seven. Build chokepoints against waves from one, two or three entrances. Counter swarms with line, splash and area attacks, then train individual defenders. Answer three Science questions after every wave. Buy one-character packs with your reward points.' },
