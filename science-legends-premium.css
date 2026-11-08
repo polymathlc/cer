@@ -2,7 +2,7 @@
 #menuOverlay { background:radial-gradient(ellipse at 50% 15%,#203944aa,#080c14ed 75%);padding:20px; }
 #menuOverlay .panel.wide {max-width:1000px;background:#111d29;color:#edf4f7;border:1px solid #a5c6d33d;box-shadow:0 24px 90px #000a;}
 #menuOverlay .panel-pad {padding:0 28px 22px;}
-.legends-hero {position:relative;isolation:isolate;min-height:230px;display:flex;flex-direction:column;justify-content:flex-end;margin:0 -28px 22px;padding:34px 32px 26px;overflow:hidden;background:#182c3a url('assets/science-legends/expedition-cover.png') center 42%/cover;}
+.legends-hero {position:relative;isolation:isolate;min-height:230px;display:flex;flex-direction:column;justify-content:flex-end;margin:0 -28px 22px;padding:34px 32px 26px;overflow:hidden;background:#182c3a url('assets/science-legends/expedition-cover.webp') center 42%/cover;}
 .legends-hero::before {content:'';position:absolute;inset:0;z-index:-1;background:linear-gradient(90deg,#0a1523ed 5%,#10202da6 56%,#10202d12),linear-gradient(0deg,#111d29,transparent 50%);}
 .legends-hero .tag {align-self:flex-start;background:#ffcb7820;border:1px solid #e8be7759;color:#ffe1ac;font-size:.65rem;letter-spacing:.16em;}
 #menuOverlay .legends-hero h1 {font-size:clamp(2rem,5vw,3.3rem);letter-spacing:-.045em;line-height:1;margin:14px 0 12px;max-width:600px;color:#fff5df;text-shadow:0 3px 20px #0008;}

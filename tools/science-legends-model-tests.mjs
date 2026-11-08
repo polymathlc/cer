@@ -6,7 +6,7 @@ import models from '../science-legends-models.js';
 const html=fs.readFileSync(new URL('../science-legends.html',import.meta.url),'utf8');
 function fn(name){let start=html.indexOf('function '+name+'('),open=html.indexOf('{',start),depth=0;for(let i=open;i<html.length;i++){if(html[i]==='{')depth++;if(html[i]==='}'&&--depth===0)return html.slice(start,i+1);}throw Error(name);}
 test('upright hero contract preserves size and ground anchor in every class/facing/spin state',()=>{
-  const draws=[],w={G:null,heroSheets:[['idle','stride']],_ovrImgs:{},window:{},drawSpriteOr:(...args)=>draws.push(args)};
+  const draws=[],w={G:null,heroSheets:[['idle','stride']],customImage:()=>null,window:{},drawSpriteOr:(...args)=>draws.push(args)};
   vm.createContext(w);vm.runInContext(fn('drawActorModel')+'\n'+fn('drawHeroModel'),w);
   for(const cls of ['barb','sorc','beast','pala','ama'])for(const [fx,fy]of [[1,0],[-1,0],[0,1],[0,-1]])for(const spin of [null,{radius:100}]){
     w.G={cls,spin,player:{x:200,y:250,r:16,fx,fy,moving:true,animT:1}};w.drawHeroModel();
@@ -64,4 +64,18 @@ test('visible body picking reaches heads and follows front-to-back depth without
   const bounds=actor=>models.bodyBounds(actor,84,{x:.5,y:.95});
   assert.equal(models.pick([back],100,58,bounds),back);assert.equal(models.pick([back,front],100,80,bounds),front);
   front.dead=true;assert.equal(models.pick([back,front],100,80,bounds),back);assert.equal(models.pick([back],300,300,bounds),null);assert.equal(back.r,21);
+});
+test('unpacked body bounds use nominal source scale and the same mirrored foot anchor as rendering',()=>{
+  const frame={w:320,h:240,nominalWidth:256,nominalHeight:256,anchor:{x:.3,y:.9}},actor={x:100,y:120,r:16,fx:1};
+  assert.deepEqual(models.frameBounds(actor,80,frame),{x:70,y:68.5,w:100,h:75});
+  actor.fx=-1;assert.deepEqual(models.frameBounds(actor,80,frame),{x:30,y:68.5,w:100,h:75});
+  assert.equal(actor.r,16);
+});
+test('presentation snapshots exclude unavailable images and cannot adopt later live overrides or ground patterns',()=>{
+  const first={complete:true,naturalWidth:16},late={complete:false,naturalWidth:0},builtin={complete:true,naturalWidth:320};
+  const w={G:null,_ovrImgs:{brute:first,ground:first,slime:late},_barbBuiltin:builtin,groundPat:'first',buildGround(){},window:{LegendsArt:{groundReady:()=>true,ready:()=>true}},LegendsModels:{snapshot:()=>Object.freeze({hero:null})},LegendsActions:{snapshot:()=>Object.freeze({attacks:null})}};
+  w.LegendsArt=w.window.LegendsArt;vm.createContext(w);vm.runInContext(['validImage','customImage','ovr','snapshotPresentation'].map(fn).join('\n'),w);
+  const profile=w.snapshotPresentation();w.G={presentation:profile};w._ovrImgs.brute={complete:true,naturalWidth:32};w.groundPat='late';late.complete=true;late.naturalWidth=16;
+  assert.equal(w.ovr('brute'),first);assert.equal(w.ovr('brute',true),w._ovrImgs.brute);assert.equal(w.ovr('slime'),null);assert.equal(w.ovr('hero_barb'),builtin);assert.equal(profile.groundPattern,'first');assert.equal(profile.generatedGround,false);assert.ok(Object.isFrozen(profile)&&Object.isFrozen(profile.overrides));
+  const next=w.snapshotPresentation();assert.equal(next.overrides.brute,w._ovrImgs.brute);assert.equal(next.overrides.slime,late);assert.equal(next.groundPattern,'late');
 });

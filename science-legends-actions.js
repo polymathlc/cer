@@ -21,15 +21,16 @@
   function expire(state){state.actions=(state.actions||[]).filter(function(action){return state.time-action.start<action.life;});}
   function sample(action,time,reduced){var progress=Math.max(0,Math.min(1,(time-action.start)/action.life));return {frame:frame(progress,reduced),progress:progress,alpha:(1-progress*.65)*(reduced?.45:.8)};}
   function ready(sheet){var atlas=atlases[sheet||'attacks'];return !!atlas&&atlas.complete&&atlas.naturalWidth>0;}
-  function draw(ctx,action,time,reduced){
-    var sheet=action.sheet||'attacks',atlas=atlases[sheet];if(!ready(sheet))return false;var state=sample(action,time,reduced),w=atlas.naturalWidth/4,h=atlas.naturalHeight/4;
+  function snapshot(){var profile={};Object.keys(atlases).forEach(function(sheet){profile[sheet]=ready(sheet)?atlases[sheet]:null;});return Object.freeze(profile);}
+  function draw(ctx,action,time,reduced,profile){
+    var sheet=action.sheet||'attacks',atlas=profile?profile[sheet]:atlases[sheet];if(!atlas||!atlas.complete||!atlas.naturalWidth)return false;var state=sample(action,time,reduced),w=atlas.naturalWidth/4,h=atlas.naturalHeight/4;
     var size=Math.max(36,Math.min(reduced?180:340,action.r*2.1));
     var height=size*h/w;
     ctx.save();ctx.translate(action.x,action.y);if((sheet==='attacks'&&action.row===0)||(sheet==='elements'&&action.row===3))ctx.rotate(action.ang);
     ctx.globalAlpha=state.alpha;ctx.imageSmoothingEnabled=true;
     ctx.drawImage(atlas,state.frame*w,action.row*h,w,h,-size/2,-height/2,size,height);ctx.restore();return true;
   }
-  var api={frame:frame,emit:emit,emitElement:emitElement,familyForSkill:familyForSkill,expire:expire,sample:sample,ready:ready,draw:draw};
+  var api={frame:frame,emit:emit,emitElement:emitElement,familyForSkill:familyForSkill,expire:expire,sample:sample,ready:ready,snapshot:snapshot,draw:draw};
   if(typeof module==='object'&&module.exports)module.exports=api;root.LegendsActions=api;
-  if(typeof root.Image==='function')Object.keys(atlases).forEach(function(sheet){var image=atlases[sheet]=new root.Image();image.src='assets/science-legends/v2/'+(sheet==='elements'?'elements-clean':'attacks')+'.png';});
+  if(typeof root.Image==='function')Object.keys(atlases).forEach(function(sheet){var image=atlases[sheet]=new root.Image();image.src='assets/science-legends/v2/'+(sheet==='elements'?'elements-clean':'attacks')+'.webp';});
 })(typeof window==='object'?window:globalThis);

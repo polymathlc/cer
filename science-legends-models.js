@@ -24,7 +24,8 @@
   function enemyColumn(kind){return kind==='boss'?3:ENEMIES.indexOf(kind);}
   function sortActors(entries){return entries.slice().sort(function(a,b){return (a.actor.y+(a.actor.r||0))-(b.actor.y+(b.actor.r||0))||a.order-b.order;});}
   function bodyBounds(actor,size,anchor){anchor=anchor||{x:.5,y:.96};return {x:actor.x-(actor.fx<0?1-anchor.x:anchor.x)*size,y:actor.y+(actor.r||0)-anchor.y*size,w:size,h:size};}
-  function enemyBounds(actor,time,reduced,size){var column=enemyColumn(actor.kind),row=enemyFrame(actor,time,reduced),anchor=ready('enemy')&&column>=0?sheets.enemy.metadata[column][row]:null;return bodyBounds(actor,size,anchor);}
+  function frameBounds(actor,size,frame){var w=frame.w/frame.nominalWidth*size,h=frame.h/frame.nominalHeight*size;return {x:actor.x-(actor.fx<0?1-frame.anchor.x:frame.anchor.x)*w,y:actor.y+(actor.r||0)-frame.anchor.y*h,w:w,h:h};}
+  function enemyBounds(actor,time,reduced,size,profile){var column=enemyColumn(actor.kind),row=enemyFrame(actor,time,reduced),sheet=getSheet('enemy',profile),frame=sheet&&column>=0&&sheet.frames[column][row];return frame?frameBounds(actor,size,frame):bodyBounds(actor,size,{x:.5,y:1});}
   function pick(enemies,x,y,bounds){var queue=sortActors(enemies.map(function(actor,index){return {actor:actor,order:index};}));for(var i=queue.length-1;i>=0;i--){var actor=queue[i].actor;if(actor.dead||actor.hp<=0)continue;var box=bounds(actor);if(x>=box.x&&x<=box.x+box.w&&y>=box.y&&y<=box.y+box.h)return actor;}return null;}
   function statuses(actor){
     var list=[];
@@ -42,30 +43,45 @@
     if((actor.modelAttackUntil||0)>time)return 3;
     return actor.moving?(reduced?1:1+(Math.floor((time+(actor.modelPhase||0))*7)%2)):0;
   }
-  var sheets={hero:{columns:5,image:null,metadata:[],prepared:false},enemy:{columns:6,image:null,metadata:[],prepared:false},companion:{columns:4,image:null,metadata:[],prepared:false}};
-  function ready(kind){var sheet=sheets[kind||'hero'];return !!sheet&&!!sheet.image&&sheet.prepared&&sheet.image.complete&&sheet.image.naturalWidth>0;}
+  var sheets={hero:{columns:5,file:'heroes',image:null,frames:[],prepared:false},enemy:{columns:6,file:'enemies-clean',image:null,frames:[],prepared:false},companion:{columns:4,file:'companions',image:null,frames:[],prepared:false}};
+  function getSheet(kind,profile){var sheet=profile?profile[kind]:sheets[kind];return sheet&&sheet.prepared?sheet:null;}
+  function ready(kind){return !!getSheet(kind||'hero');}
+  function allReady(){return Object.keys(sheets).every(ready);}
+  function snapshot(){var profile={};Object.keys(sheets).forEach(function(kind){profile[kind]=getSheet(kind);});return Object.freeze(profile);}
+  function frameInfo(kind,column,row){var sheet=getSheet(kind),frame=sheet&&sheet.frames[column]&&sheet.frames[column][row];if(!frame)return null;return Object.freeze({x:frame.x,y:frame.y,w:frame.w,h:frame.h,anchor:Object.freeze({x:frame.anchor.x,y:frame.anchor.y}),nominalWidth:frame.nominalWidth,nominalHeight:frame.nominalHeight,pixels:frame.pixels,visiblePixels:frame.visiblePixels,core:Object.freeze(Object.assign({},frame.core))});}
   function prepare(sheet){
     if(sheet.prepared)return;
-    var atlas=sheet.image,canvas=root.document.createElement('canvas');canvas.width=atlas.naturalWidth;canvas.height=atlas.naturalHeight;
-    var context=canvas.getContext('2d',{willReadFrequently:true});context.drawImage(atlas,0,0);
-    sheet.metadata=Array.from({length:sheet.columns},function(_,column){var rows=[];for(var row=0;row<4;row++){
-      var rect=sourceRect(canvas.width,canvas.height,sheet.columns,column,row),w=Math.floor(rect.w),h=Math.floor(rect.h);
-      try{rows.push(footAnchor(context.getImageData(Math.floor(rect.x),Math.floor(rect.y),w,h).data,w,h));}catch(_){rows.push({x:.5,y:.96});}
-    }return rows;});
-    sheet.prepared=true;root.dispatchEvent(new Event('legendsmodelsready'));
+    var atlas=sheet.image;if(!atlas.naturalWidth||!atlas.naturalHeight||atlas.naturalWidth*atlas.naturalHeight>16777216){sheet.failed=true;return;}
+    var canvas=root.document.createElement('canvas');canvas.width=atlas.naturalWidth;canvas.height=atlas.naturalHeight;
+    try{
+      var context=canvas.getContext('2d',{willReadFrequently:true});context.drawImage(atlas,0,0);
+      var pixels=context.getImageData(0,0,canvas.width,canvas.height).data;
+      var unpacked=root.LegendsAtlas.extract(pixels,canvas.width,canvas.height,sheet.columns,4);
+      if(unpacked.missing.length)return;
+      sheet.frames=unpacked.frames.map(function(rows){return rows.map(function(frame){
+        var texture=root.document.createElement('canvas');texture.width=frame.w;texture.height=frame.h;
+        var target=texture.getContext('2d'),data=target.createImageData(frame.w,frame.h);data.data.set(root.LegendsAtlas.cropPixels(pixels,canvas.width,canvas.height,frame));target.putImageData(data,0,0);
+        // Coverage buffers are only needed during preparation, not every render.
+        var cached=Object.assign({},frame,{texture:texture});delete cached.coverage;return Object.freeze(cached);
+      });});
+      sheet.prepared=true;root.dispatchEvent(new Event('legendsmodelsready'));
+    }catch(_){sheet.failed=true;}
   }
-  function drawModel(ctx,kind,column,row,actor,size){
-    if(column<0||!ready(kind))return false;
-    var sheet=sheets[kind],atlas=sheet.image,rect=sourceRect(atlas.naturalWidth,atlas.naturalHeight,sheet.columns,column,row),anchor=sheet.metadata[column][row];
+  function drawModel(ctx,kind,column,row,actor,size,profile){
+    var sheet=getSheet(kind,profile);if(column<0||!sheet)return false;
+    var frame=sheet.frames[column][row];
+    if(!frame)return false;
+    var anchor=frame.anchor;
     size=size||72;ctx.save();ctx.translate(actor.x,actor.y+(actor.r||0));if(actor.fx<0)ctx.scale(-1,1);
-    ctx.imageSmoothingEnabled=true;ctx.drawImage(atlas,rect.x,rect.y,rect.w,rect.h,-anchor.x*size,-anchor.y*size,size,size);
+    var w=frame.w/frame.nominalWidth*size,h=frame.h/frame.nominalHeight*size;
+    ctx.imageSmoothingEnabled=true;ctx.drawImage(frame.texture,-anchor.x*w,-anchor.y*h,w,h);
     ctx.restore();return true;
   }
-  function drawHero(ctx,cls,actor,time,reduced,size){return drawModel(ctx,'hero',HEROES.indexOf(cls),stateFrame(actor,time,reduced),actor,size);}
-  function drawEnemy(ctx,actor,time,reduced,size){return drawModel(ctx,'enemy',enemyColumn(actor.kind),enemyFrame(actor,time,reduced),actor,size);}
-  function drawCompanion(ctx,actor,time,reduced,size,cls){var model=companionModel(actor.kind,cls);if(!model)return false;ctx.save();if(actor.kind==='decoy')ctx.globalAlpha=.55;var drawn=drawModel(ctx,model.sheet,model.column,stateFrame(actor,time,reduced),actor,size);ctx.restore();return drawn;}
-  var api={ready:ready,drawHero:drawHero,drawEnemy:drawEnemy,drawCompanion:drawCompanion,companionModel:companionModel,companionRole:companionRole,stateFrame:stateFrame,enemyFrame:enemyFrame,enemyColumn:enemyColumn,sourceRect:sourceRect,footAnchor:footAnchor,sortActors:sortActors,statuses:statuses,bodyBounds:bodyBounds,enemyBounds:enemyBounds,pick:pick};
+  function drawHero(ctx,cls,actor,time,reduced,size,profile){return drawModel(ctx,'hero',HEROES.indexOf(cls),stateFrame(actor,time,reduced),actor,size,profile);}
+  function drawEnemy(ctx,actor,time,reduced,size,profile){return drawModel(ctx,'enemy',enemyColumn(actor.kind),enemyFrame(actor,time,reduced),actor,size,profile);}
+  function drawCompanion(ctx,actor,time,reduced,size,cls,profile){var model=companionModel(actor.kind,cls);if(!model)return false;ctx.save();if(actor.kind==='decoy')ctx.globalAlpha=.55;var drawn=drawModel(ctx,model.sheet,model.column,stateFrame(actor,time,reduced),actor,size,profile);ctx.restore();return drawn;}
+  var api={ready:ready,allReady:allReady,snapshot:snapshot,frameInfo:frameInfo,drawHero:drawHero,drawEnemy:drawEnemy,drawCompanion:drawCompanion,companionModel:companionModel,companionRole:companionRole,stateFrame:stateFrame,enemyFrame:enemyFrame,enemyColumn:enemyColumn,sourceRect:sourceRect,footAnchor:footAnchor,sortActors:sortActors,statuses:statuses,bodyBounds:bodyBounds,frameBounds:frameBounds,enemyBounds:enemyBounds,pick:pick};
   if(typeof module==='object'&&module.exports)module.exports=api;
   root.LegendsModels=api;
-  if(typeof root.Image==='function'&&root.document)Object.keys(sheets).forEach(function(kind){var sheet=sheets[kind];sheet.image=new root.Image();sheet.image.onload=function(){prepare(sheet);};sheet.image.src='assets/science-legends/v2/'+({hero:'heroes',enemy:'enemies',companion:'companions'}[kind])+'.png';});
+  if(typeof root.Image==='function'&&root.document)Object.keys(sheets).forEach(function(kind){var sheet=sheets[kind];sheet.image=new root.Image();sheet.image.onload=function(){prepare(sheet);};sheet.image.src='assets/science-legends/v2/'+sheet.file+'.webp';});
 })(typeof window==='object'?window:globalThis);

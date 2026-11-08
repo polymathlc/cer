@@ -531,10 +531,10 @@ body.touch .sksel-btn { transform: none; left: auto; right: 16px; bottom: 90px; 
 body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:none!important;transition:none!important}
 @media(max-width:700px){.hint-bar{display:none}.battle-status{top:52px;max-width:calc(100% - 145px);font-size:.67rem;padding:6px 8px}.battle-map{width:116px;height:140px}.battle-map canvas{width:104px;height:104px}.qtimer{font-size:.7rem;white-space:nowrap}.pbars,body.touch .pbars{bottom:166px;width:165px}.skillbar{bottom:18px;left:calc(50% + 42px);gap:6px}.skill-slot{width:43px;height:46px;font-size:21px}.evade-btn{right:15px;bottom:85px;min-width:86px;min-height:44px}.hint-bar{bottom:127px}.sksel-btn,body.touch .sksel-btn{bottom:140px;right:15px;left:auto;transform:none}.joy{left:12px;bottom:18px;width:96px;height:96px}.battle-map span{font-size:9px}.descend-btn{top:145px;font-size:.75rem}}
 </style>
-<link rel="stylesheet" href="science-legends-premium.css?v=1.454.0">
+<link rel="stylesheet" href="science-legends-premium.css?v=1.455.0">
 <link rel="stylesheet" href="science-legends-sanctum.css?v=1.455.0">
-<link rel="stylesheet" href="science-expedition-accessibility.css?v=1">
-<script defer src="science-expedition-accessibility.js?v=1"></script>
+<link rel="stylesheet" href="science-expedition-accessibility.css?v=1.455.0">
+<script defer src="science-expedition-accessibility.js?v=1.455.0"></script>
 </head>
 <body>
 <div id="app">
@@ -727,9 +727,10 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
   </div>
 </div>
 
-<script src="science-feed-bridge.js"></script>
-<script src="science-legends-art.js?v=1.454.0"></script>
+<script src="science-feed-bridge.js?v=1.455.0"></script>
+<script src="science-legends-art.js?v=1.455.0"></script>
 <script src="science-legends-view.js?v=1.455.0"></script>
+<script src="science-legends-atlas.js?v=1.455.0"></script>
 <script src="science-legends-models.js?v=1.455.0"></script>
 <script src="science-legends-actions.js?v=1.455.0"></script>
 <script src="science-legends-ai.js?v=1.455.0"></script>
@@ -737,7 +738,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
 <script src="science-legends-icons.js?v=1.455.0"></script>
 <script src="science-legends-feedback.js?v=1.455.0"></script>
 <script src="science-legends-gestures.js?v=1.455.0"></script>
-<script src="science-legends-combat.js?v=1"></script>
+<script src="science-legends-combat.js?v=1.455.0"></script>
 <script>
 /* ============================================================================
  * SCIENCE LEGENDS (BETA) — top-down horde-action RPG with a science-MCQ pulse.
@@ -2121,7 +2122,7 @@ function newGame(cls){
   var c = CLASSES[cls];
   var feedOwner=JSON.stringify(scienceFeed.context());
   G = {
-    state: 'play', cls: cls, feedOwner:feedOwner,
+    state: 'play', cls: cls, feedOwner:feedOwner, presentation:snapshotPresentation(),
     player: {
       x: WORLD.w / 2, y: WORLD.h / 2, r: 16,
       hp: c.hp, maxHp: c.hp, levelHp: 0,
@@ -2361,7 +2362,7 @@ function screenToWorld(x,y){
   var view=G&&G.view?G.view:LegendsView.create(G?G.player.x:0,G?G.player.y:0,VW,VH,WORLD.w,WORLD.h);
   return LegendsView.screenToWorld(view,x,y);
 }
-function pickEnemyAt(x,y){if(!G)return null;return LegendsModels.pick(G.enemies,x,y,function(enemy){return LegendsModels.enemyBounds(enemy,G.time,lowMotion,Math.max(40,enemy.r*4));});}
+function pickEnemyAt(x,y){if(!G)return null;return LegendsModels.pick(G.enemies,x,y,function(enemy){var size=Math.max(40,enemy.r*4);return customImage(enemy.kind)?LegendsModels.bodyBounds(enemy,size,{x:.5,y:1}):LegendsModels.enemyBounds(enemy,G.time,lowMotion,size,G.presentation.models);});}
 function updateTargetPanel(){
   var panel=$('targetPanel');if(!G||G.state!=='play'){panel.hidden=true;return;}
   if(G.atkTarget&&(G.atkTarget.dead||G.atkTarget.hp<=0||G.enemies.indexOf(G.atkTarget)<0))G.atkTarget=null;
@@ -3682,7 +3683,7 @@ function update(dt){
 /* ---------------- RENDER ---------------- */
 var groundPat = null, _groundTileC = null;
 function buildGround(){
-  var im = ovr('ground');
+  var im = ovr('ground',true);
   if (im){ groundPat = ctx.createPattern(im, 'repeat'); return; }
   var c = _groundTileC;
   if (c){ groundPat = ctx.createPattern(c, 'repeat'); return; }
@@ -3782,19 +3783,19 @@ function drawActorModel(id,sheet,actor,size,flip){
 }
 function drawHeroModel(){
   var p=G.player,frame=p.moving?((p.animT*2|0)%2):0;
-  var custom=_ovrImgs['hero_'+G.cls];
-  if(!(custom&&custom.complete&&custom.naturalWidth)&&window.LegendsModels&&LegendsModels.drawHero(ctx,G.cls,p,G.time,lowMotion,72))return;
+  var custom=customImage('hero_'+G.cls);
+  if(!custom&&window.LegendsModels&&LegendsModels.drawHero(ctx,G.cls,p,G.time,lowMotion,72,G.presentation.models))return;
   drawActorModel('hero_'+G.cls,heroSheets[0][frame],p,72,p.fx<0);
 }
 function drawEnemyModel(e,size){
-  var custom=_ovrImgs[e.kind];
-  if(!(custom&&custom.complete&&custom.naturalWidth)&&window.LegendsModels&&LegendsModels.drawEnemy(ctx,e,G.time,lowMotion,size))return;
+  var custom=customImage(e.kind);
+  if(!custom&&window.LegendsModels&&LegendsModels.drawEnemy(ctx,e,G.time,lowMotion,size,G.presentation.models))return;
   var sprites=MOB_SPRITES[e.kind]||MOB_SPRITES.slime;
   drawActorModel(e.kind,sprites[(e.animT*2|0)%2],e,size,e.fx<0);
 }
 function drawPetModel(pet,size){
-  var id=pet.kind==='boarpet'?'boar':pet.kind,custom=_ovrImgs[id];
-  if(!(custom&&custom.complete&&custom.naturalWidth)&&LegendsModels.drawCompanion(ctx,pet,G.time,lowMotion,size,G.cls))return;
+  var id=pet.kind==='boarpet'?'boar':pet.kind,custom=customImage(id);
+  if(!custom&&LegendsModels.drawCompanion(ctx,pet,G.time,lowMotion,size,G.cls,G.presentation.models))return;
   drawActorModel(id,petSprite(id)[(pet.animT*2|0)%2],pet,size,pet.fx<0);
 }
 
@@ -3854,7 +3855,7 @@ function drawProjectileTrail(pr,st){
 function drawImpacts(){
   (G.impacts||[]).forEach(function(f){
     var k=clamp(f.t/f.life,0,1);
-    if(window.LegendsArt&&window.LegendsArt.drawImpact&&window.LegendsArt.drawImpact(ctx,f,k))return;
+    if(G.presentation.legacyArt&&window.LegendsArt&&window.LegendsArt.drawImpact&&window.LegendsArt.drawImpact(ctx,f,k))return;
     ctx.save();ctx.translate(f.x,f.y);ctx.rotate(f.ang);
     ctx.strokeStyle=f.color;ctx.fillStyle=f.color;
     ctx.globalAlpha=(1-k)*.8;ctx.lineWidth=(1-k)*2+1;
@@ -3871,12 +3872,13 @@ function drawImpacts(){
 }
 function drawProjectile(pr){
   if (pr.kind === 'boar'){
-    drawSpriteOr('boar', MOB_SPRITES.boar[(G.time * 8 | 0) % 2], pr.x, pr.y, 44, pr.vx < 0);
+    var boar={kind:'boarpet',x:pr.x,y:pr.y,r:0,fx:pr.vx,fy:pr.vy,moving:true,animT:G.time};
+    drawPetModel(boar,52);
     return;
   }
   var st = projStyle(pr);
   drawProjectileTrail(pr,st);
-  if(window.LegendsArt&&window.LegendsArt.drawProjectile&&window.LegendsArt.drawProjectile(ctx,pr,st,G.time))return;
+  if(G.presentation.legacyArt&&window.LegendsArt&&window.LegendsArt.drawProjectile&&window.LegendsArt.drawProjectile(ctx,pr,st,G.time))return;
   var ang = Math.atan2(pr.vy, pr.vx);
   ctx.save();
   ctx.translate(pr.x, pr.y);
@@ -4128,9 +4130,9 @@ function draw(){
   G.camX = camX; G.camY = camY;
   ctx.save();
   ctx.translate(-camX, -camY);
-  ctx.fillStyle = groundPat || '#3E4A3D';
+  ctx.fillStyle = G.presentation.groundPattern || '#3E4A3D';
   ctx.fillRect(camX - 260, camY - 260, VW + 520, VH + 520);
-  if(!ovr('ground') && window.LegendsArt && window.LegendsArt.drawGround) window.LegendsArt.drawGround(ctx,camX,camY,VW,VH);
+  if(G.presentation.generatedGround && window.LegendsArt && window.LegendsArt.drawGround) window.LegendsArt.drawGround(ctx,camX,camY,VW,VH);
   ctx.strokeStyle = '#1A1D21'; ctx.lineWidth = 22;
   ctx.strokeRect(11, 11, WORLD.w - 22, WORLD.h - 22);
   ctx.strokeStyle = '#5A5148'; ctx.lineWidth = 6;
@@ -4224,7 +4226,7 @@ function draw(){
     for (var h = 0; h < O.count; h++){
       var ha = O.ang + h * (Math.PI * 2 / O.count);
       var hx = p.x + Math.cos(ha) * oR, hy = p.y + Math.sin(ha) * oR;
-      if(window.LegendsArt&&window.LegendsArt.drawHammer&&window.LegendsArt.drawHammer(ctx,{x:hx,y:hy,ang:ha},G.time))continue;
+      if(G.presentation.legacyArt&&window.LegendsArt&&window.LegendsArt.drawHammer&&window.LegendsArt.drawHammer(ctx,{x:hx,y:hy,ang:ha},G.time))continue;
       ctx.save();
       ctx.translate(hx, hy);
       ctx.rotate(ha);
@@ -4236,7 +4238,7 @@ function draw(){
   G.projs.forEach(drawProjectile);
   G.eprojs.forEach(drawEnemyGlob);
   drawImpacts();
-  (G.actions||[]).forEach(function(action){LegendsActions.draw(ctx,action,G.time,lowMotion);});
+  (G.actions||[]).forEach(function(action){LegendsActions.draw(ctx,action,G.time,lowMotion,G.presentation.actions);});
   G.fx.forEach(function(f){
     var k = f.t / f.life;
     if (f.kind === 'p'){
@@ -4779,10 +4781,19 @@ var _ovrImgs = {};
 var BARB_BUILTIN_SRC = 'data:image/png;base64,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';
 var _barbBuiltin = new Image();
 _barbBuiltin.src = BARB_BUILTIN_SRC;
-function ovr(id){
-  var im = _ovrImgs[id];
-  if ((!im || !im.complete || !im.naturalWidth) && id === 'hero_barb') im = _barbBuiltin;
-  return (im && im.complete && im.naturalWidth) ? im : null;
+function validImage(im){return im&&im.complete&&im.naturalWidth>0?im:null;}
+function customImage(id,live){return live||!G||!G.presentation?validImage(_ovrImgs[id]):G.presentation.overrides[id]||null;}
+function ovr(id,live){
+  var im=customImage(id,live);
+  if(!im&&id==='hero_barb')im=live||!G||!G.presentation?validImage(_barbBuiltin):G.presentation.builtin;
+  return im;
+}
+/* Image decoding never changes an active arena. A new run adopts ready art. */
+function snapshotPresentation(){
+  buildGround();
+  var overrides={};Object.keys(_ovrImgs).forEach(function(id){var im=validImage(_ovrImgs[id]);if(im)overrides[id]=im;});
+  return Object.freeze({overrides:Object.freeze(overrides),builtin:validImage(_barbBuiltin),models:LegendsModels.snapshot(),groundPattern:groundPat,
+    generatedGround:!overrides.ground&&!!(window.LegendsArt&&LegendsArt.groundReady()),legacyArt:!!(window.LegendsArt&&LegendsArt.ready()),actions:LegendsActions.snapshot()});
 }
 function applyLegendsAssets(overrides){
   if (!overrides || typeof overrides !== 'object') return;
@@ -4843,7 +4854,7 @@ function classPreview(cls){
   var g = c.getContext('2d');
   var custom=_ovrImgs['hero_'+cls];
   if(!(custom&&custom.complete&&custom.naturalWidth)&&window.LegendsModels&&LegendsModels.drawHero(g,cls,{x:24,y:47,r:0,fx:1,moving:false},0,true,48))return c;
-  var im = ovr('hero_' + cls);
+  var im = ovr('hero_' + cls,true);
   g.imageSmoothingEnabled = !!im;
   g.drawImage(im || buildHeroSprites(CLASSES[cls].sprite)[0][0], 0, 0, 48, 48);
   return c;
