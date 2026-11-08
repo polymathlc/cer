@@ -17,13 +17,14 @@ async function open(failModels=false){
     const url=new URL(route.request().url());
     if(url.hostname!=='v2.test')return route.abort();
     if(failModels&&/v2\/(?:heroes|enemies)\.(?:png|webp)$/.test(url.pathname))return route.abort();
-    const filename=path.join(root,decodeURIComponent(url.pathname));
+    const review=/v2\/enemies\.(?:png|webp)$/.test(url.pathname)?process.env.LEGENDS_QA_ENEMY_ASSET:/v2\/heroes\.(?:png|webp)$/.test(url.pathname)?process.env.LEGENDS_QA_HERO_ASSET:null;
+    const filename=path.join(root,review||decodeURIComponent(url.pathname));
     return fs.existsSync(filename)&&fs.statSync(filename).isFile()?route.fulfill({path:filename}):route.abort();
   });
   await page.goto('http://v2.test/science-legends.html');
   await page.locator('.class-card').nth(1).click();await page.locator('#startBtn').click();
   await page.waitForFunction(()=>G&&G.time>.05&&typeof LegendsModels==='object'&&typeof LegendsActions==='object');
-  if(!failModels)await page.waitForFunction(()=>LegendsModels.ready('hero')&&LegendsModels.ready('enemy')&&LegendsActions.ready()&&LegendsActions.ready('elements'));
+  if(!failModels)await page.waitForFunction(()=>LegendsModels.ready('hero')&&LegendsModels.ready('enemy')&&LegendsModels.ready('companion')&&LegendsActions.ready()&&LegendsActions.ready('elements'));
   await page.evaluate(()=>{G.enemies=[];G.pets=[];G.spawnT=999;G.qTimer=-1000;G.player.hp=G.player.maxHp=100000;});
   return {context,page,errors};
 }
@@ -71,6 +72,31 @@ try{
   check(enemies.length===24&&enemies.every(Boolean),'All six enemy silhouettes render each generated animation state');
   await page.locator('#qaEnemyBoard').screenshot({path:path.join(output,'enemy-state-contact-sheet.png')});
   await page.evaluate(()=>$('qaEnemyBoard').remove());
+  const companions=await page.evaluate(()=>{
+    const board=document.createElement('canvas');board.id='qaCompanionBoard';board.width=800;board.height=600;
+    board.style.cssText='position:fixed;left:0;top:0;width:800px;height:600px;z-index:999999;';
+    const g=board.getContext('2d');g.fillStyle='#14212b';g.fillRect(0,0,800,600);g.font='12px sans-serif';const out=[];
+    for(const [column,kind] of ['wolf','bear','boarpet','hydra'].entries())for(let row=0;row<4;row++){
+      const actor={kind,x:column*195+98,y:row*140+110,r:15,fx:1,moving:row===1||row===2,modelAttackUntil:row===3?1:0};
+      out.push(LegendsModels.drawCompanion(g,actor,row===2?.2:0,false,90,'sorc'));
+      g.fillStyle='#77afaa';g.fillRect(actor.x-45,actor.y+15,90,1);g.fillStyle='#e7d5af';g.fillText(kind+' · '+row,column*195+25,row*140+137);
+    }
+    for(const kind of ['fdef','fmag','fpri','valkyrie','decoy'])out.push(LegendsModels.drawCompanion(g,{kind,x:20,y:20,r:10,fx:1},0,false,32,'sorc'));
+    document.body.appendChild(board);return out;
+  });
+  check(companions.length===21&&companions.every(Boolean),'Every beast animation and humanoid follower uses a generated model');
+  await page.locator('#qaCompanionBoard').screenshot({path:path.join(output,'companion-state-contact-sheet.png')});
+  await page.evaluate(()=>$('qaCompanionBoard').remove());
+  const override=await page.evaluate(async()=>{
+    const tile=document.createElement('canvas');tile.width=tile.height=16;const g=tile.getContext('2d');g.fillStyle='#d334e7';g.fillRect(0,0,16,16);
+    const image=new Image();image.src=tile.toDataURL();await image.decode();_ovrImgs.boar=image;
+    const original=ctx.drawImage,adapter=LegendsModels.drawCompanion;let seen=0,adapterCalls=0;
+    ctx.drawImage=function(...args){if(args[0]===image)seen++;return original.apply(this,args);};
+    LegendsModels.drawCompanion=function(...args){adapterCalls++;return adapter.apply(this,args);};
+    try{drawPetModel({kind:'boarpet',x:G.player.x,y:G.player.y,r:16,animT:0,fx:1},60);}finally{ctx.drawImage=original;LegendsModels.drawCompanion=adapter;delete _ovrImgs.boar;}
+    return seen===1&&adapterCalls===0;
+  });
+  check(override,'A boarpet respects the existing boar admin override instead of silently replacing it');
   const skills=await page.evaluate(()=>{
     const result=[];
     for(const [cls,sid] of [['barb','cleave'],['sorc','fireball'],['sorc','nova'],['sorc','orb'],['sorc','chain'],['ama','plague'],['pala','holybolt'],['ama','multishot']]){
