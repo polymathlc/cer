@@ -31,6 +31,7 @@ try{
   check(await page.locator('[data-gi-game="pirate-rift"]').evaluate(e=>document.activeElement===e),'row selection preserves keyboard focus');
   await page.locator('[data-gi-export]').click();const exported=await page.evaluate(()=>exports[0]);
   check(exported.csv.includes('Science Legends')&&exported.name.endsWith('.csv'),'CSV contains game aggregate rows');
+  check(exported.csv.includes('Answer sample capped')&&exported.csv.includes('"true"'),'CSV retains the sample coverage warning');
   check(!exported.csv.includes('admin')&&!exported.csv.includes('previous'),'CSV excludes account identities');
   await page.locator('[data-gi-days]').selectOption('7');check(await page.evaluate(()=>reads.length)===1,'narrowing dates reuses loaded window');
   await page.locator('[data-gi-days]').selectOption('90');await page.waitForFunction(()=>reads.length===2);check(await page.evaluate(()=>reads[1].limit)===20000,'wider dates preserve query bound');
