@@ -2249,7 +2249,7 @@ function wireCombatPolish(){
   $('motionToggle').addEventListener('change',function(){lowMotion=this.checked;document.body.classList.toggle('low-motion',lowMotion);try{localStorage.setItem('science_expedition_motion',lowMotion?'1':'0');}catch(e){}});
   $('evadeBtn').addEventListener('pointerdown',function(e){if(!activeGameSurface())return;e.preventDefault();e.stopPropagation();evade();});
   $('evadeBtn').addEventListener('click',function(e){if(e.detail===0)evade();});
-  window.addEventListener('blur',clearCombatInput);
+  window.addEventListener('blur',suspendCombat);
   document.addEventListener('visibilitychange',refreshGameSurface);
   window.addEventListener('pointercancel',clearCombatInput);
 }
