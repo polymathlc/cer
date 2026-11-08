@@ -27,11 +27,11 @@ jobs:
           PLAYWRIGHT_MODULE: ${{ runner.temp }}/legends-browser/node_modules/playwright/index.mjs
           GAME_SCREENSHOTS: ${{ runner.temp }}/legends-qa
         run: |
-          node tools/game-legends-slayers-browser.mjs
-          node tools/science-expedition-accessibility-browser.mjs
-          for script in tools/science-legends-*-browser.mjs; do
-            node "$script"
+          status=0
+          for script in tools/game-legends-slayers-browser.mjs tools/science-expedition-accessibility-browser.mjs tools/science-legends-*-browser.mjs; do
+            node "$script" || status=1
           done
+          exit "$status"
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: failure()
         with:
