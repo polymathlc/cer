@@ -153,7 +153,11 @@
     "dimensions": "unchanged",
     "alphaVerification": "exact match to source PNG for all transparent assets",
     "sourceBytes": 18445728,
-    "baseRuntimeBytes": 4092986
+    "baseRuntimeBytes": 4092986,
+    "selectedSourceBytes": 24869575,
+    "selectedRuntimeBytes": 5591450,
+    "selectedTextureCount": 11
   },
-  "variants": "direction-variants.json"
+  "variants": "direction-variants.json",
+  "sampling": "Nominal grid identifies each pose; runtime unpacks complete alpha-connected silhouettes to preserve full anatomy and reject neighboring fragments. Source artwork stays unchanged."
 }
