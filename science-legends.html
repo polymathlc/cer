@@ -719,6 +719,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
 
 <script src="science-feed-bridge.js"></script>
 <script src="science-legends-art.js?v=1.454.0"></script>
+<script src="science-legends-view.js?v=1.455.0"></script>
 <script src="science-legends-combat.js?v=1"></script>
 <script>
 /* ============================================================================
@@ -2270,6 +2271,10 @@ function moveInput(){
  * attack symbol): chase & auto-attack it. RIGHT-click (hold): fire your basic
  * attack at the crosshair. Skills 1-4 fire at / toward the crosshair. */
 var mouse = { sx: -200, sy: -200, wx: 0, wy: 0, active: false, over: null, lDown: false, rDown: false };
+function screenToWorld(x,y){
+  var view=G&&G.view?G.view:LegendsView.create(G?G.player.x:0,G?G.player.y:0,VW,VH,WORLD.w,WORLD.h);
+  return LegendsView.screenToWorld(view,x,y);
+}
 (function(){
   function pos(e){
     var r = canvas.getBoundingClientRect();
@@ -2279,14 +2284,14 @@ var mouse = { sx: -200, sy: -200, wx: 0, wy: 0, active: false, over: null, lDown
     if (e.pointerType !== 'mouse') return;
     pos(e);
     if (!mouse.active){ mouse.active = true; canvas.style.cursor = 'none'; }
-    if (mouse.lDown && G && !G.atkTarget) G.moveTarget = { x: (G.camX || 0) + mouse.sx, y: (G.camY || 0) + mouse.sy };
+    if (mouse.lDown && G && !G.atkTarget) G.moveTarget = screenToWorld(mouse.sx,mouse.sy);
   });
   canvas.addEventListener('pointerdown', function(e){
     if (e.pointerType !== 'mouse') return;
     pos(e);
     mouse.active = true; canvas.style.cursor = 'none';
     if (!G || G.state !== 'play' || overlayOpen()) return;
-    mouse.wx = (G.camX || 0) + mouse.sx; mouse.wy = (G.camY || 0) + mouse.sy;
+    var worldPoint=screenToWorld(mouse.sx,mouse.sy);mouse.wx=worldPoint.x;mouse.wy=worldPoint.y;
     if (e.button === 2){ mouse.rDown = true; return; }
     if (e.button !== 0) return;
     mouse.lDown = true;
@@ -3303,8 +3308,7 @@ function update(dt){
   G.time += dt;
   updateCombatReadability(dt);
   if (mouse.active){
-    mouse.wx = (G.camX || 0) + mouse.sx;
-    mouse.wy = (G.camY || 0) + mouse.sy;
+    var worldPoint=screenToWorld(mouse.sx,mouse.sy);mouse.wx=worldPoint.x;mouse.wy=worldPoint.y;
     mouse.over = null;
     if (mouse.sx >= 0){
       for (var moi = 0; moi < G.enemies.length; moi++){
@@ -3915,9 +3919,9 @@ function draw(){
   ctx.fillStyle = '#23262B';
   ctx.fillRect(0, 0, VW, VH);
   if (!G || !p) return;
-  var camX = clamp(p.x - VW / 2, 0, WORLD.w - VW), camY = clamp(p.y - VH / 2, 0, WORLD.h - VH);
+  var view=G.view=LegendsView.create(p.x,p.y,VW,VH,WORLD.w,WORLD.h);
+  var camX=view.x,camY=view.y;
   G.camX = camX; G.camY = camY;
-  if (G.shake > 0 && !lowMotion){ camX += rand(-1, 1) * G.shake * 14; camY += rand(-1, 1) * G.shake * 14; }
   ctx.save();
   ctx.translate(-camX, -camY);
   ctx.fillStyle = groundPat || '#3E4A3D';
