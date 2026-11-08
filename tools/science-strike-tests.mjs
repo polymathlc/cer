@@ -92,7 +92,7 @@ test('intentional question-feed pause keeps its explanation after mouse capture 
 test('FPS module remains syntactically valid and versioned', () => {
   const script = source.match(/<script type="module">([\s\S]*?)<\/script>/)[1];
   new vm.Script(script.replace(/^import .*;\n/gm, ''));
-  assert.match(source, /Science Strike v2\.0\.1/);
+  assert.match(source, /Science Strike v2\.1\.0/);
 });
 
 test('combat waits for confirmed pointer lock; duplicate confirmations are harmless', () => {
@@ -139,6 +139,11 @@ test('regression: a lock request the browser silently ignores hands Resume back 
   for (const fn of [...f.timers.values()]) fn();
   assert.match(f.element('pauseReason').textContent, /did not connect/);
   f.c.requestLock(); f.grant(); assert.equal(f.c.combatReady(), true);
+});
+
+test('every resume starts a short grace period before the world is back at full speed', () => {
+  const f = fixture(); f.c.requestLock(); f.grant();
+  assert.equal(f.c.G.resumeGrace, 1.2);
 });
 
 test('Resume while the browser already holds the lock resumes immediately', () => {

@@ -21,7 +21,7 @@ function fixture({ obstacle = () => null } = {}) {
       mods: {}, pProj: [], enemies: [], particles: [], casings: [] },
     skillLv: () => 0, classMods: () => ({ dmg: 1, rof: 1, range: 24, spread: 1, critMult: 2 }),
     obstacleAt: obstacle, lineOfSight: () => true, updateHud() {}, magSize: () => 1000,
-    mouseDown: false, sfx: new Proxy({}, { get: (_, key) => () => sounds.push(key) }),
+    mouseDown: false, adsHeld: false, strikeSettings: { crosshair: 1, invertY: false }, sfx: new Proxy({}, { get: (_, key) => () => sounds.push(key) }),
     wrapAngle: angle => Math.atan2(Math.sin(angle), Math.cos(angle)),
     spawnBeam: (...args) => beams.push(args),
     damageEnemy: (e, dmg, w, effects, crit) => { e.hp -= dmg; hits.push({ e, dmg, crit }); },
@@ -196,4 +196,51 @@ test('low-power ADS optics keep a crosshair while sniper scopes supply their own
     weapon.arch.scope = scope; arms = 0; c.drawCrosshair(); assert.ok(arms > 0, String(scope));
   }
   weapon.arch.scope = 3; arms = 0; c.drawCrosshair(); assert.equal(arms, 0);
+});
+
+test('a forgiving graze over a small bug never steals a shot aimed at the enemy behind it', () => {
+  const { c, hits, target, aimAtFraction, weapon } = fixture();
+  const far = target(10, { size: 1 }), near = target(4, { size: 0.6 });
+  aimAtFraction(far, 0.15);
+  const nearBand = c.strikeShotBand(near, c.strikeShotAim());
+  assert.ok(nearBand && nearBand.over, 'the shot only grazes over the small bug');
+  c.spawnBullet(0, weapon, 'bullet'); c.updatePProj(0.5);
+  assert.equal(hits[0].e, far); assert.equal(near.hp, 1000);
+});
+
+test('a level shot just over a small bug alone still counts as a body hit, never a crit', () => {
+  const { c, hits, target, weapon } = fixture();
+  const bug = target(4, { size: 0.6 });
+  const band = c.strikeShotBand(bug, c.strikeShotAim());
+  if (band && band.over) {
+    c.spawnBullet(0, weapon, 'bullet'); c.updatePProj(0.3);
+    assert.equal(hits[0].e, bug); assert.equal(hits[0].crit, false);
+  } else assert.ok(band, 'a level shot reaches the bug');
+});
+
+test('aim assist leaves a clean hit alone, bends a near miss and ignores a wild one', () => {
+  const { c, target, aimAtFraction } = fixture();
+  const far = target(20, { size: 1 });   // far enough that its body is narrower than the assist window
+  aimAtFraction(far, 0.5);
+  assert.equal(c.aimAssist(0), 0, 'already on target: unchanged');
+  const miss = 1.4 * Math.PI / 180;
+  const bent = c.aimAssist(miss);
+  assert.ok(Math.abs(bent) < miss * 0.5, 'a near miss is bent toward the target');
+  assert.equal(c.aimAssist(4 * Math.PI / 180), 4 * Math.PI / 180, 'a wild miss stays a miss');
+});
+
+test('a quiet low magazine tops itself up, and pulling the trigger cancels that top-up', () => {
+  const { c, weapon } = fixture();
+  c.magSize = () => 10; weapon.mag = 10; c.G.ammo = 2; c.G.sinceShot = 5;
+  c.strikeUpdateWeapon(1 / 60);
+  assert.ok(c.G.reloading > 0 && c.G.tacReload, 'auto reload starts when safe');
+  c.G.triggerQueued = 0.16; c.strikeUpdateWeapon(1 / 60);
+  assert.equal(c.G.ammo, 1, 'the queued shot fired instead of waiting for the reload');
+});
+
+test('auto reload never starts with a shot queued, while aiming, or with an enemy close', () => {
+  const { c, target } = fixture();
+  c.magSize = () => 10; c.G.ammo = 2;
+  c.G.sinceShot = 5; c.adsHeld = true; c.strikeUpdateWeapon(1 / 60); assert.equal(c.G.reloading, 0);
+  c.adsHeld = false; target(3); c.G.sinceShot = 5; c.strikeUpdateWeapon(1 / 60); assert.equal(c.G.reloading, 0);
 });
