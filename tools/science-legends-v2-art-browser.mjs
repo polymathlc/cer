@@ -56,6 +56,21 @@ try{
   check(['barb','sorc','beast','pala','ama'].every(cls=>new Set(actors.filter(a=>a.cls===cls).map(a=>a.hash)).size>=3), 'Every hero has visibly distinct generated idle, walk and attack frames');
   await page.locator('#qaActorBoard').screenshot({path:path.join(output,'hero-state-contact-sheet.png')});
   await page.evaluate(()=>$('qaActorBoard').remove());
+  const enemies=await page.evaluate(()=>{
+    const board=document.createElement('canvas');board.id='qaEnemyBoard';board.width=1000;board.height=600;
+    board.style.cssText='position:fixed;left:0;top:0;width:1000px;height:600px;z-index:999999;';
+    const g=board.getContext('2d');g.fillStyle='#14212b';g.fillRect(0,0,1000,600);g.font='12px sans-serif';
+    const out=[];
+    for(const [column,kind] of ['slime','imp','mite','brute','spitter','charger'].entries())for(let row=0;row<4;row++){
+      const actor={kind,x:column*165+82,y:row*140+110,r:15,fx:1,moving:row===1||row===2,modelAttackUntil:row===3?1:0};
+      out.push(LegendsModels.drawEnemy(g,actor,row===2?.2:0,false,90));
+      g.fillStyle='#77afaa';g.fillRect(actor.x-45,actor.y+15,90,1);g.fillStyle='#e7d5af';g.fillText(kind+' · '+row,column*165+25,row*140+137);
+    }
+    document.body.appendChild(board);return out;
+  });
+  check(enemies.length===24&&enemies.every(Boolean),'All six enemy silhouettes render each generated animation state');
+  await page.locator('#qaEnemyBoard').screenshot({path:path.join(output,'enemy-state-contact-sheet.png')});
+  await page.evaluate(()=>$('qaEnemyBoard').remove());
   const skills=await page.evaluate(()=>{
     const result=[];
     for(const [cls,sid] of [['barb','cleave'],['sorc','fireball'],['sorc','nova'],['sorc','orb'],['sorc','chain'],['ama','plague'],['pala','holybolt'],['ama','multishot']]){
@@ -87,6 +102,19 @@ try{
   });
   check(effects.records.length===32&&effects.records.every(r=>Math.abs((r[6]/r[7])-(r[2]/r[3]))<.001), 'Every VFX frame preserves its source aspect ratio');
   check(['attacks','elements'].every(sheet=>[0,1,2,3].every(row=>new Set(effects.hashes.filter(h=>h.sheet===sheet&&h.row===row).map(h=>h.hash)).size===4)), 'All eight effect families paint four distinct generated frames');
+  await page.evaluate(()=>{
+    const board=document.createElement('canvas');board.id='qaEffectBoard';board.width=900;board.height=760;
+    board.style.cssText='position:fixed;left:0;top:0;width:900px;height:760px;z-index:999999;';
+    const g=board.getContext('2d');g.fillStyle='#14212b';g.fillRect(0,0,900,760);g.font='12px sans-serif';
+    for(const [sheetIndex,sheet] of ['attacks','elements'].entries())for(let row=0;row<4;row++)for(let frame=0;frame<4;frame++){
+      const x=frame*220+110,y=(sheetIndex*4+row)*94+47;
+      LegendsActions.draw(g,{sheet,row,x,y,r:43,ang:0,start:0,life:1},frame*.25+.01,false);
+      g.fillStyle='#e7d5af';g.fillText(sheet+' '+row+'/'+frame,x-65,y+43);
+    }
+    document.body.appendChild(board);
+  });
+  await page.locator('#qaEffectBoard').screenshot({path:path.join(output,'effect-frame-contact-sheet.png')});
+  await page.evaluate(()=>$('qaEffectBoard').remove());
   await page.evaluate(()=>{G.actions=[];LegendsActions.emit(G,1,G.player.x,G.player.y,90,0,2);});
   await page.keyboard.press('Escape');
   const paused=await page.evaluate(()=>({time:G.time,frame:LegendsActions.sample(G.actions[0],G.time,false).frame,hp:G.enemies.map(e=>e.hp)}));
