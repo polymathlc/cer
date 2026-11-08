@@ -6,7 +6,7 @@
   // Art headings are measured in the authored cells, independently from the
   // world-space aim. A northeast javelin must be turned another 45 degrees to
   // travel east; a southwest fireball has the opposite authored direction.
-  var SOURCE_HEADINGS={fireball:Math.PI*.75,icebolt:-Math.PI*.25,sting:-Math.PI*.25,javelin:-Math.PI*.25,multishot:-Math.PI*.25,strafe:-Math.PI*.25,plague:-Math.PI*.25,fury:-Math.PI*.25,charge:-Math.PI*.25,stag:-Math.PI*.25,roll:-Math.PI*.25,bash:-Math.PI*.25};
+  var SOURCE_HEADINGS={fireball:Math.PI*.75,icebolt:-Math.PI*.25,sting:-Math.PI*.25,javelin:-Math.PI*.25,multishot:-Math.PI*.25,strafe:-Math.PI*.25,plague:-Math.PI*.25,fury:-Math.PI*.25,charge:-Math.PI*.25};
   var MULTI_BODY={axes:true,stampede:true,multishot:true,strafe:true,rain:true};
   // Every entry has its own authored atlas cell AND a readable native motif.
   // The native layer supplies precise hit geometry when art is absent or subdued.

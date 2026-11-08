@@ -11,7 +11,7 @@ function event(sid,options={}){return {sid,x:100,y:100,r:80,ang:.3,start:0,life:
 function paint(action,time=.3,reduced=false,images=profile){const c=recorder();actions.draw(c,action,time,reduced,images);return c;}
 
 test('41: directional generated art is calibrated against its authored heading',()=>{
-  for(const sid of ['javelin','plague','multishot','fireball','icebolt','sting','charge','stag']){
+  for(const sid of ['javelin','plague','multishot','fireball','icebolt','sting','charge']){
     const a=event(sid,{phase:'cast'}),heading=actions.recipe(sid).sourceHeading;
     assert.notEqual(heading,0,sid);
     assert.ok(Math.abs(actions.atlasRotation(a)+heading-a.ang)<1e-9);
@@ -19,6 +19,7 @@ test('41: directional generated art is calibrated against its authored heading',
     assert.ok(c.calls.some(x=>x[0]==='drawImage'));
   }
   assert.equal(actions.atlasRotation(event('holybolt')),0.3,'already horizontal Holy Bolt needs no extra turn');
+  for(const sid of ['stag','bash','roll'])assert.equal(actions.recipe(sid).sourceHeading,0,sid+' is authored eastward or radially');
 });
 
 test('42: flight overlays never multiply the native body or repaint a whole fan',()=>{
