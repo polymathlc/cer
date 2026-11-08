@@ -23,7 +23,8 @@ try{
    for(let frame=0;frame<30;frame++){update(1/120);if(frame%3===0)draw();}
    const brute=G.enemies.find(e=>e.kind==='brute'&&e.frozen<=0),spitter=G.enemies.find(e=>e.kind==='spitter'&&e.frozen<=0);
    if(brute)LegendsAI.beginHeavy(brute,p);if(spitter)LegendsAI.beginSpit(spitter,p.x-spitter.x,p.y-spitter.y);
-   G.atkTarget=brute||G.enemies[0];$('toastWrap').innerHTML='';updateCombatReadability(0);updateHud();updateBars();updateTargetPanel();draw();
+   G.atkTarget=brute||G.enemies[0];G.qTimer=7;p.hp=p.maxHp=CLASSES[G.cls].hp+G.stats.hpAdd+(p.levelHp||0);
+   $('toastWrap').innerHTML='';update(0);updateCombatReadability(0);updateHud();updateBars();updateTargetPanel();draw();
    const before={kills:G.kills,points:G.points,correct:G.correct,answered:G.answered,time:G.time};
    const times=[];for(let frame=0;frame<40;frame++){const t=performance.now();draw();times.push(performance.now()-t);}times.sort((a,b)=>a-b);
    G.state='qa-still';
