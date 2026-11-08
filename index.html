@@ -10913,6 +10913,7 @@ html { scroll-behavior:smooth; }
             <span class="ico">🏴‍☠️</span> Pirate Rift <span class="nav-beta">BETA</span>
           </div>
           <div class="nav-item" data-page="grand-line" onclick="navigateTo('grand-line')" title="Crew Defense — protect your ship and answer three Science questions after every wave"><span class="ico">🃏</span> Crew Defense <span class="nav-beta">TCG</span></div>
+          <div class="nav-item admin-only" data-page="gameinsights" onclick="navigateTo('gameinsights')"><span class="ico">📊</span> Games Insights</div>
           <div id="navTcgHome"></div>
           <div class="nav-tcg-wrap" id="navTcgWrap">
             <div class="nav-item" id="navTcg" data-page="tcg" onclick="navigateTo('tcg')" style="display:none;" title="Realm of Embers Trading Card Game — collect every card in the dex from booster packs bought with your points, build a team of 5 and auto-battle other trainers.">
@@ -12715,6 +12716,12 @@ html { scroll-behavior:smooth; }
       <div class="page-body" style="max-width:640px;">
         <div id="famSettingsContainer"></div>
       </div>
+    </div>
+
+    <!-- ===== PAGE: GAME INSIGHTS (Admin Only) ===== -->
+    <div class="page" id="page-gameinsights">
+      <div class="page-header"><div><div style="display:flex;align-items:center;gap:10px;"><button class="mobile-toggle" onclick="toggleSidebar()" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button><h2>Games Insights</h2></div><div class="subtitle">See what students choose, how they answer, and where to improve next</div></div></div>
+      <div class="page-body"><div id="gameInsightsRoot" aria-live="polite"></div></div>
     </div>
 
     <!-- ===== PAGE: STUDENT USAGE DASHBOARD (Admin Only) ===== -->
@@ -16829,6 +16836,7 @@ body.lore-reading { overflow: hidden; }
      before the page can paint, and the browser fetches and compiles it in
      parallel with the markup instead of afterwards. -->
 <script defer src="landing-motion.js"></script>
+<link rel="stylesheet" href="game-insights.css?v=1.458.0">
 <script defer src="rpg-svg-art.js"></script>
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>

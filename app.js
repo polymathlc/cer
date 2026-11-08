@@ -1,4 +1,5 @@
 import './worksheet-art.js?v=1';
+import { createGameInsightsController } from './game-insights.js?v=1.458.0';
 import './worksheet-art-editor.js?v=1';
 import './vendor/qrcode-generator.js';
 import './question-apps.js?v=1';
@@ -4394,6 +4395,7 @@ async function enterApp(user) {
   // Hidden while acting as a student: it changes the password of the account
   // actually signed in (the admin's), which is never what anyone wants here.
   if (cpBtn) cpBtn.style.display = (!_practiceAs && (user.providerData || []).some(p => p && p.providerId === 'password')) ? '' : 'none';
+  _gameInsightsController?.reset();
   currentUser = _practiceAs
     ? { uid: _practiceAs.uid, email: _practiceAs.email, name: _practiceAs.name, role: 'student' }
     : { uid: user.uid, email: user.email, name: displayName, role: roleOf };
@@ -6011,6 +6013,7 @@ async function loadAdminQuestions() {
 }
 
 onAuthStateChanged(auth, (user) => {
+  _gameInsightsController?.reset();
   pirateRiftPortal.close();
   grandLinePortal.close();
   rapidPreviewReset();
@@ -7134,6 +7137,7 @@ function navigateTo(page) {
   // so it is the admin's: `admin-only` on the nav item, deliberately not on
   // EMPLOYEE_PAGES, and this guard for arriving any other way.
   if (page === 'redlights' && !_isAdmin()) page = rpgHomePage();
+  if (page === 'gameinsights' && !_isAdmin()) page = rpgHomePage();
   if (page === 'summarysheets' && !_canAuthor()) page = rpgHomePage();
   // Science Quest game pages: respect the "Hide game" toggle, and leaving
   // the dungeon abandons the current run (rewards are kept).
@@ -7256,6 +7260,7 @@ function navigateTo(page) {
   if (page === 'topicalpractice') tpRenderTopics();
   if (page === 'community') renderCommunity();
   if (page === 'usage') loadUsageDashboard();
+  if (page === 'gameinsights') loadGameInsights();
   if (page === 'myreport') loadMyReport();
   if (page === 'flashcards') renderFlashcardsPage();
   if (page === 'familysettings') famRenderSettings();
@@ -48170,6 +48175,50 @@ let _usageStudentStats = {};
 // Two consecutive attempts closer than this are flagged as suspiciously fast.
 const RAPID_ATTEMPT_MS = 15000;
 
+// Read only aggregate game activity. Every query and late response is tied to
+// the current admin account; students cannot load the page through a handler.
+var _gameInsightsController;
+function loadGameInsights() {
+  if (!_isAdmin()) { _gameInsightsController?.reset(); return Promise.resolve(false); }
+  if (!_gameInsightsController) _gameInsightsController = createGameInsightsController({
+    document, getUser: () => currentUser, isAdmin: _isAdmin,
+    async loadRecords({ uid, since, limit: attemptLimit }) {
+      const current = () => _isAdmin() && currentUser?.uid === uid;
+      if (!current()) throw new Error('Admin access required.');
+      const [attempts, profiles, boards, retired] = await Promise.all([
+        getDocs(query(collection(db, 'questionAttempts'), where('timestamp', '>=', Timestamp.fromMillis(since)), orderBy('timestamp', 'desc'), limit(attemptLimit))),
+        getDocs(query(collection(db, 'userProfiles'), limit(5000))),
+        getDocs(query(collection(db, 'scienceGameLeaderboard'), limit(5000))),
+        getDoc(doc(db, 'users', uid, 'settings', 'retiredAccounts'))
+      ]);
+      if (!current()) throw new Error('The admin account changed.');
+      const dailySummaries = [];
+      for (const entry of boards.docs) {
+        const board = entry.data(), owner = entry.id;
+        for (const [day, games] of Object.entries(board.gameUsageDaily || {})) {
+          for (const [gameId, values] of Object.entries(games || {})) {
+            if (values && typeof values === 'object') dailySummaries.push({ ...values, uid: owner, day, gameId });
+          }
+        }
+      }
+      return {
+        attempts: attempts.docs.map(d => ({ ...d.data(), id: d.id })),
+        profiles: profiles.docs.map(d => ({ ...d.data(), id: d.id })), dailySummaries,
+        excludedUids: Object.entries((retired.exists() && retired.data().uids) || {}).filter(([, value]) => value).map(([id]) => id),
+        coverage: { attemptsTruncated: attempts.size >= attemptLimit, attemptLimit,
+          profilesTruncated: profiles.size >= 5000, boardsTruncated: boards.size >= 5000 }
+      };
+    },
+    download(csv, filename) {
+      if (!_isAdmin()) return;
+      const url = URL.createObjectURL(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8;' }));
+      const link = document.createElement('a'); link.href = url; link.download = filename; link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }, onError: error => console.warn('Game insights load', error)
+  });
+  return _gameInsightsController.open();
+}
+
 async function loadUsageDashboard() {
   if (!currentUser || currentUser.role !== 'admin') return;
 
@@ -88119,6 +88168,7 @@ window.snapMarkById = snapMarkById;
 window.loadNextQpQuestion = loadNextQpQuestion;
 // Usage Dashboard
 window.loadUsageDashboard = loadUsageDashboard;
+window.loadGameInsights = loadGameInsights;
 window.adminResetGameCredits = adminResetGameCredits;
 window.adminClawbackDuelPoints = adminClawbackDuelPoints;
 window.renderActivityAudit = renderActivityAudit;
