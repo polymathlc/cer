@@ -141,6 +141,11 @@ test('regression: a lock request the browser silently ignores hands Resume back 
   f.c.requestLock(); f.grant(); assert.equal(f.c.combatReady(), true);
 });
 
+test('every resume starts a short grace period before the world is back at full speed', () => {
+  const f = fixture(); f.c.requestLock(); f.grant();
+  assert.equal(f.c.G.resumeGrace, 1.2);
+});
+
 test('Resume while the browser already holds the lock resumes immediately', () => {
   const f = fixture(); f.document.pointerLockElement = f.canvas; f.c.G.paused = true;
   f.emit('resumeBtn', 'click'); assert.equal(f.c.combatReady(), true);

@@ -349,7 +349,7 @@
     </div>
     <div class="mission-card">
       <p><b>Your mission:</b> clear each wave, collect a better weapon and choose an upgrade. A science check pauses the action every 15 seconds of play.</p>
-      <p>Move with <b>W A S D</b>, aim with the <b>mouse</b>, click to shoot. <b>Shift</b> quicksteps out of danger. <b>Esc</b> pauses safely. Take your time with questions — enemies wait.</p>
+      <p>Move with <b>W A S D</b> or the <b>arrow keys</b>, aim with the <b>mouse</b>, click to shoot. <b>Space</b> (or Shift) quicksteps out of danger. <b>Esc</b> pauses safely. Take your time with questions — enemies wait.</p>
     </div>
     <p class="ready-status" id="strikeReadiness" role="status">Loading questions for your school level…</p>
     <button class="btn good" id="playBtn" style="font-size:1.15rem;padding:15px 42px;">▶ Start Run</button>
@@ -377,7 +377,7 @@
     <details class="settings" id="menuSettings"><summary>Aim &amp; comfort settings</summary><div class="strike-settings"></div></details>
     <details class="howto"><summary>Full guide: classes, loot, controls and rewards</summary>
       <b>🪙 Points:</b> every science question you answer in a run pays <b>points into your portal wallet</b> — 8 for a correct answer, 2 for a wrong one. They arrive the next time you open the portal, and buy Realm of Embers booster packs, Spire packs and everything in the shop.<br>
-      <b>Controls:</b> WASD move · <b>Shift quickstep</b> · mouse look (left/right AND up/down) · click shoot · <b>right-click aim/scope</b> · R reload · E pick up loot · <b>Q grenade</b> · <b>F class ability</b> · <b>I skill tree</b> · Esc pause<br><b>Dodge the warning:</b> amber sights lock before ranged enemies fire. Step aside or quickstep — it does not make you invincible.<br>
+      <b>Controls:</b> WASD / arrows move · <b>Space or Shift quickstep</b> · mouse look (left/right AND up/down) · click shoot · <b>right-click aim/scope</b> · R reload · E pick up loot · <b>Q grenade</b> · <b>F class ability</b> · <b>I skill tree</b> · Esc pause<br><b>Dodge the warning:</b> amber sights lock before ranged enemies fire. Step aside or quickstep — it does not make you invincible.<br>
       <b>Classes:</b> 🪖 Soldier (assault rifle, Bullet Time) · 🎯 Sniper (huge range, slow heavy shots, sees crit boxes, traps) · 🔧 Engineer (turrets, healing drones). Each class has a <b>100-node skill tree</b> with prerequisites — cores are banked and saved the instant you earn them, so you can stop any time and lose nothing.<br>
       <b>Bullets are real:</b> every shot streaks out of your muzzle as a glowing tracer and flies until it hits a monster, a tree trunk, or runs out of range. Enemies standing beside trees CAN be shot — only the trunk itself blocks bullets.<br>
       <b>Crosshair</b> blooms while you move and fire — stand still (or scope in) for accurate shots.<br>
@@ -423,7 +423,7 @@
     <div class="hud-chip" id="hudCores">⚛ 0</div>
     <div class="hud-chip" id="hudGrenade">💣 ×2 [Q]</div>
     <div class="hud-chip" id="hudAbility">✨ [F]</div>
-    <div class="hud-chip" id="hudDodge">↗ Quickstep ready [Shift]</div>
+    <div class="hud-chip" id="hudDodge">↗ Quickstep ready [Space/Shift]</div>
     <div class="hud-chip" id="hudSfx">🔊 [M]</div>
   </div>
   <div class="hud" id="skillBtn">🧠 Skills [I]</div>
@@ -465,7 +465,7 @@
     <div class="qcard" style="max-width:520px;text-align:center;">
       <h2 id="pauseTitle" style="margin-bottom:8px;">⏸ Paused — you are safe</h2>
       <p id="pauseReason" class="ready-status" role="status">Click Resume when you are ready.</p>
-      <div class="control-help"><kbd>W A S D</kbd> move · mouse aim · click shoot<br>Right-click scope · <kbd>R</kbd> reload · <kbd>E</kbd> collect<br><kbd>Q</kbd> grenade · <kbd>F</kbd> ability · <kbd>I</kbd> skills · <kbd>M</kbd> sound</div>
+      <div class="control-help"><kbd>W A S D</kbd> / arrows move · mouse aim · click shoot · <kbd>Space</kbd> quickstep<br>Right-click scope · <kbd>R</kbd> reload · <kbd>E</kbd> collect<br><kbd>Q</kbd> grenade · <kbd>F</kbd> ability · <kbd>I</kbd> skills · <kbd>M</kbd> sound</div>
       <details class="settings"><summary>Aim &amp; comfort settings</summary><div class="strike-settings"></div></details>
       <button class="btn good" id="resumeBtn">▶ Resume</button>
       <button class="btn warn" id="abandonBtn">Abandon run</button>
@@ -1944,6 +1944,7 @@ function fpsCancelRunForIdentityChange(showMenu = true) {
 const PAUSE_DEFAULT = 'Click Resume when you are ready. Enemies and the science countdown are paused.';
 const LOCK_WAIT_TEXT = 'Taking mouse control… if nothing happens, click Resume again.';
 const LOCK_RETRY_MS = 1500;
+const STRIKE_RESUME_GRACE = 1.2;
 let lockWatchT = 0;
 // A question (or the one loading), the weapon draft or the skill tree owns the screen.
 // The pause card must never sit on top of one of those: its Resume can't resume
@@ -1969,6 +1970,7 @@ function finishLock() {
   if (pointerLocked && combatReady()) return; // browsers may report a confirmed grant twice
   if (pointerLocked && lockWanted && G && !G.over && !strikeModalPending() && !document.hidden) {
     lockWanted = false; G.paused = false; clearTimeout(lockWatchT);
+    G.resumeGrace = STRIKE_RESUME_GRACE;   // a beat to re-aim before the world is back at full speed
     resetCombatInput(); lastT = performance.now();
     $('pauseOverlay').classList.remove('active');
     canvas.focus();
@@ -2042,7 +2044,7 @@ document.addEventListener('mousemove', e => {
   if (!combatReady()) return;
   const adsSens = (1 - .5 * (G.ads || 0)) * strikeSettings.sensitivity;
   G.player.dir += e.movementX * .0026 * adsSens;
-  G.player.pitch = Math.max(-150, Math.min(180, (G.player.pitch || 0) - e.movementY * .55 * adsSens));
+  G.player.pitch = Math.max(-150, Math.min(180, (G.player.pitch || 0) - e.movementY * 1.4 * adsSens));   // same angular speed as yaw (focal 540px)
   swayVX += e.movementX * .9; swayVY += e.movementY * .6;
 });
 function strikeTypingTarget(target) { return !!(target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))); }
@@ -2069,7 +2071,8 @@ document.addEventListener('keydown', e => {
   if (e.code === 'KeyE') tryPickup();
   if (e.code === 'KeyQ') throwGrenade();
   if (e.code === 'KeyF') useAbility();
-  if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') { e.preventDefault(); strikeQuickstep(); }
+  if (/^Arrow/.test(e.code) || e.code === 'Space') e.preventDefault();   // never scroll the page mid-fight
+  if (e.code === 'Space' || ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !e.repeat && !(G.dodgeCd > 0))) { e.preventDefault(); strikeQuickstep(); }
 });
 // Keep keyboard focus inside the current dialog, including rich diagram controls.
 document.addEventListener('keydown', e => {
@@ -2278,20 +2281,29 @@ function critBand(e) {
 function aimAssist(angle, aim = strikeShotAim()) {
   const P = aim;
   const win = 0.6 * Math.PI / 180;
-  let best = null, bestD = 1e9;
+  // A softer body window bends a near-miss toward the centre: wide from the hip, tighter when aiming.
+  const bodyWin = (1.5 - 0.7 * (G.ads || 0)) * Math.PI / 180;
+  let best = null, bestD = 1e9, body = null, bodyD = 1e9;
   for (const e of G.enemies) {
     if (e.hp <= 0) continue;
     const d0 = Math.hypot(e.x - P.x, e.y - P.y);
     if (d0 < 0.5 || d0 > effRange()) continue;
     const rel = wrapAngle(Math.atan2(e.y - P.y, e.x - P.x) - angle);
-    if (Math.abs(rel) > win) continue;
+    if (Math.abs(rel) > Math.max(win, bodyWin)) continue;
     if (!lineOfSight(P.x, P.y, e.x, e.y)) continue;
+    if (Math.abs(rel) <= bodyWin && strikeShotBand(e, aim) && d0 < bodyD) { bodyD = d0; body = e; }
+    if (Math.abs(rel) > win) continue;
     // the snap only helps if the frozen vertical aim actually crosses the
     // crit band at this range (same geometry updatePProj uses)
     if (!strikeShotBand(e, aim)?.crit) continue;
     if (d0 < bestD) { bestD = d0; best = e; }
   }
-  return best ? Math.atan2(best.y - P.y, best.x - P.x) : angle;
+  if (best) return Math.atan2(best.y - P.y, best.x - P.x);
+  if (body) {   // bend halfway, so a wild shot still misses and good aim still matters
+    const rel = wrapAngle(Math.atan2(body.y - P.y, body.x - P.x) - angle);
+    return angle + rel * 0.6;
+  }
+  return angle;
 }
 function spawnBullet(angle, w, kind, aim = strikeShotAim()) {
   const P = aim;
@@ -2539,7 +2551,7 @@ function rollDrop(e) {
 }
 function healPlayer(n) { G.player.hp = Math.min(G.player.maxHp, G.player.hp + n); updateHud(); }
 function damagePlayer(n, src) {
-  if (G.over) return;
+  if (G.over || G.resumeGrace > 0) return;   // no hits land while the player is still re-aiming
   n *= 1 - skillLv('juggernaut') * 0.05;
   if (G.mods.thorns && src && src.hp > 0) damageEnemy(src, Math.max(1, Math.round(n * 0.12 * G.mods.thorns)), null, false);   // drafted: Reactive Plating
   G.player.hp -= n;
@@ -3063,17 +3075,20 @@ function strikeMovementVector(dir, fwd, str) {
   return { x: (Math.cos(dir) * fwd - Math.sin(dir) * str) / length,
     y: (Math.sin(dir) * fwd + Math.cos(dir) * str) / length };
 }
+// WASD or the arrow keys: both drive the same walk.
+function strikeAxisFwd() { return (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0); }
+function strikeAxisStr() { return (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0); }
 function strikeQuickstep() {
   if (!combatReady() || G.dodgeCd > 0) return false;
-  const fwd = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0);
-  const str = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
+  const fwd = strikeAxisFwd();
+  const str = strikeAxisStr();
   G.dodgeVector = strikeMovementVector(G.player.dir, fwd || (!str ? 1 : 0), str);
   G.dodgeT = 0.18; G.dodgeCd = 2.4;
   paintStrikeQuickstep();
   return true;
 }
 function paintStrikeQuickstep() {
-  const label = G.dodgeCd > 0 ? '↗ Quickstep ' + G.dodgeCd.toFixed(1) + 's [Shift]' : '↗ Quickstep ready [Shift]';
+  const label = G.dodgeCd > 0 ? '↗ Quickstep ' + G.dodgeCd.toFixed(1) + 's [Space]' : '↗ Quickstep ready [Space/Shift]';
   const element = $('hudDodge');
   if (element.textContent !== label) element.textContent = label;
 }
@@ -3088,6 +3103,24 @@ function strikeReleaseCharge(enemy) {
   G.projectiles.push({ x: enemy.x, y: enemy.y, dx: Math.cos(aim) * 5.5, dy: Math.sin(aim) * 5.5,
     dmg: enemy.dmg * (enemy.shred > 0 ? 0.8 : 1), t: 4, src: enemy });
   enemy.chargeAim = null;
+}
+
+// Enemies shoulder each other apart instead of stacking into one unreadable blob.
+function strikeSeparateEnemies(wdt) {
+  const list = G.enemies, push = 1.5 * wdt;
+  for (let i = 0; i < list.length; i++) {
+    const a = list[i];
+    for (let j = i + 1; j < list.length; j++) {
+      const b = list[j];
+      const min = 0.5 * ((a.size || 1) + (b.size || 1)) * 0.6;
+      const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
+      if (d >= min) continue;
+      const nx = d > 1e-4 ? dx / d : Math.cos(i + j), ny = d > 1e-4 ? dy / d : Math.sin(i + j);
+      const step = Math.min(push, (min - d) / 2);
+      tryMove(a, a.x - nx * step, a.y - ny * step, 0.34);
+      tryMove(b, b.x + nx * step, b.y + ny * step, 0.34);
+    }
+  }
 }
 
 /* ════════════════ SIM ════════════════ */
@@ -3108,7 +3141,8 @@ function tick(now) {
   if (G.qTimerMs <= 0) { openQuestion(); render(); return; }
 
   // Bullet Time (Soldier F): the WORLD runs on wdt, the player mostly on dt
-  const wdt = dt * (G.timeSlow > 0 ? 0.35 : 1);
+  let wdt = dt * (G.timeSlow > 0 ? 0.35 : 1);
+  if (G.resumeGrace > 0) { G.resumeGrace = Math.max(0, G.resumeGrace - dt); wdt *= 0.3; }
   if (G.timeSlow > 0) G.timeSlow -= dt;
   if (G.focusT > 0) G.focusT -= dt;   // 🧠 FOCUS buff ticks down
   // kill combo window: 3s without a kill drops the chain
@@ -3124,14 +3158,15 @@ function tick(now) {
     else if (Math.ceil(G.cdF) !== prevSec) updateHud();
   }
   // aim-down-sights lerp (right mouse on scoped weapons)
-  const wantAds = adsHeld ? 1 : 0;
+  // Unscoped guns only tighten the spread: half the aim slowdown and half the walk penalty.
+  const wantAds = adsHeld ? (G.weapon && G.weapon.arch && G.weapon.arch.scope ? 1 : 0.5) : 0;
   G.ads += (wantAds - G.ads) * Math.min(1, dt * 9);
   if (G.ads < 0.01 && !wantAds) G.ads = 0;
 
   // Movement stays collision-checked during a quickstep, with no invulnerability.
   G.dodgeCd = Math.max(0, (G.dodgeCd || 0) - dt);
-  const fwd = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0);
-  const str = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
+  const fwd = strikeAxisFwd();
+  const str = strikeAxisStr();
   const dodgeTime = Math.min(dt, Math.max(0, G.dodgeT || 0));
   const movement = strikeMovementVector(P.dir, fwd, str);
   const moving = fwd !== 0 || str !== 0 || dodgeTime > 0;
@@ -3227,7 +3262,8 @@ function tick(now) {
       } else {
         e.atkCd -= wdt;
         // shred (corrosive): this enemy hits 20% softer while its armor is melting
-        if (d < 1.0 && e.atkCd <= 0 && !(e.windup > 0)) e.windup = 0.35;   // telegraph, then strike
+        // at most two swings telegraph at once, so a crowd can never land a surprise burst
+        if (d < 1.0 && e.atkCd <= 0 && !(e.windup > 0) && G.enemies.filter(o => o.windup > 0).length < 2) e.windup = 0.35;   // telegraph, then strike
       }
     } else {
       // idle wander
@@ -3238,6 +3274,7 @@ function tick(now) {
     }
   }
   G.enemies = G.enemies.filter(e => e.hp > 0);
+  strikeSeparateEnemies(wdt);
 
   // enemy projectiles (world time)
   for (const pr of G.projectiles) {
@@ -4770,6 +4807,17 @@ function buildDeployableSprites() {
 buildDeployableSprites();
 function drawCrosshair() {
   const cx = REND_W / 2, cy = REND_H / 2;
+  // resume grace: a shrinking ring tells the player the world is easing back in
+  if (G.resumeGrace > 0) {
+    const k = G.resumeGrace / STRIKE_RESUME_GRACE;
+    ctx.save();
+    ctx.globalAlpha = 0.35 + 0.5 * k;
+    ctx.strokeStyle = '#7ee08a'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(cx, cy, 34, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k); ctx.stroke();
+    ctx.fillStyle = '#d9ffe0'; ctx.font = 'bold 15px system-ui, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('Get ready', cx, cy + 58);
+    ctx.restore();
+  }
   // damage-direction arcs: red wedges at the screen edge pointing at attackers
   for (const dd of G.dmgDirs) {
     const rel = wrapAngle(dd.ang - G.player.dir);
