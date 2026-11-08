@@ -721,7 +721,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
   </div>
 </div>
 
-<script src="science-feed-bridge.js"></script>
+<script src="science-feed-bridge.js?v=1.455.0"></script>
 <script>
 /* ============================================================================
  * SCIENCE LEGENDS (BETA) — top-down horde-action RPG with a science-MCQ pulse.
@@ -4607,6 +4607,7 @@ function syncCombatLearner(){
 // The portal owns level, mastery, quality and shared repetition decisions.
 var acceptedFeedEvent=null;
 var scienceFeed = ScienceFeedBridge.create({
+  prefetch: true, // next question is fetched while this one is on screen
   onPool: function(rows, event){ acceptedFeedEvent=event||null; applyBankQuestions(rows); syncCombatLearner(); },
   onInvalidate: function(){
     syncCombatLearner();
@@ -4619,7 +4620,7 @@ async function openQuestion(){
   if(scienceFeedOpening || qState.active || !G || G.state!=='play') return;
   scienceFeedOpening=true;
   var waitingGame=G; G.state='feed-loading';
-  try { await scienceFeed.refresh(); } finally { scienceFeedOpening=false; }
+  try { await scienceFeed.ready(); } finally { scienceFeedOpening=false; }
   if(G!==waitingGame)return;
   if(G.state==='feed-loading')G.state='play';
   if (qState.active || !G || G.state !== 'play') return;

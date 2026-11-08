@@ -39,7 +39,7 @@ test('an empty startup bank reconnects until the class questions finish loading'
   const f=bridgeFixture(),pending=f.bridge.refresh();
   f.reply({questions:[],feedMessage:'Loading your class bank…'});await pending;
   assert.equal(f.bridge.take(),null);
-  f.tick(1000);const request=f.messages.at(-1).requestId;
+  f.tick(500);const request=f.messages.at(-1).requestId;
   assert.equal(f.messages.length,2,'empty startup responses do not strand the menu');
   f.reply({requestId:request,questions:[row('loaded')]});
   assert.equal(f.bridge.take().id,'loaded');assert.equal(f.timers.size,0,'success cancels recovery timers');
@@ -47,9 +47,9 @@ test('an empty startup bank reconnects until the class questions finish loading'
 
 test('recovery backs off and request timeouts retry without accepting expired replies',async()=>{
   const f=bridgeFixture(),pending=f.bridge.refresh(),oldRequest=f.messages.at(-1).requestId;
-  f.tick(8000);assert.equal(await pending,false);f.tick(1000);
-  f.reply({requestId:oldRequest,questions:[row('expired')]});assert.equal(f.pools.at(-1).length,0);
-  f.reply({questions:[]});f.tick(2000);f.reply({questions:[]});f.tick(4000);
+  f.tick(6000);assert.equal(await pending,false);f.tick(0);
+  f.reply({requestId:oldRequest,questions:[row('expired')]});assert.equal(f.pools.at(-1)?.length||0,0);
+  f.reply({questions:[]});f.tick(500);f.reply({questions:[]});f.tick(1000);
   f.reply({questions:[row('recovered')]});assert.equal(f.bridge.take().id,'recovered');
   assert.equal(f.timers.size,0);
 });
@@ -109,7 +109,7 @@ for(const file of ['science-defenders.html','science-raiders.html','science-lege
   const source=read(file),spire=file.includes('spire'),bank=spire?'QBANK':'QUESTION_BANK',apply=spire?'applyBank':'applyBankQuestions';
   for(const match of source.matchAll(/<script>([\s\S]*?)<\/script>/g))new vm.Script(match[1]);
   assert.match(source,/<script src="science-feed-bridge\.js(?:\?v=[\w.-]+)?"><\/script>/);
-  assert.match(source,/await scienceFeed\.refresh\(\)/);
+  assert.match(source,/await scienceFeed\.(?:refresh|ready)\(\)/);
   assert.match(source,/if\(!scienceFeed\.current\(qState\.current\)\) return;/);
   const selected=row('safe'),c=vm.createContext({ScienceFeedBridge:{},scienceFeed:{take:()=>selected,stamp:q=>q,message:()=> 'Connecting to your class question stream…'},G:{topic:'mixed'},
     [bank]:[row('old')],usingBank:false,usingBankQuestions:false,embedded:()=>true,rebuildTopicOptions(){},$:()=>({})});

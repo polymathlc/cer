@@ -4503,8 +4503,12 @@ function syncCombatLearner(){
 // The portal owns level, mastery, quality and shared repetition decisions.
 var acceptedFeedEvent=null;
 var scienceFeed = ScienceFeedBridge.create({
+  // Look-ahead: the next question is fetched while the current one is on
+  // screen, so a run never pauses to wait for the portal.
+  prefetch: true,
   onPool: function(rows, event){ acceptedFeedEvent=event||null; applyBankQuestions(rows); syncCombatLearner(); },
   onInvalidate: function(){
+    applyBankQuestions.connected=false;
     syncCombatLearner();
     if(typeof qState !== 'undefined' && qState){ qState.active=false; qState.current=null; qState.answered=true; }
     var overlay=document.getElementById('questionOverlay'); if(overlay) overlay.classList.remove('show');
@@ -4515,7 +4519,7 @@ async function openQuestion(){
   if(scienceFeedOpening || qState.active || !G || G.state!=='play') return;
   scienceFeedOpening=true;
   var waitingGame=G; G.state='feed-loading';
-  try { await scienceFeed.refresh(); } finally { scienceFeedOpening=false; }
+  try { await scienceFeed.ready(); } finally { scienceFeedOpening=false; }
   if(G!==waitingGame)return;
   if(G.state==='feed-loading')G.state='play';
   if (qState.active || !G || G.state !== 'play') return;
@@ -4641,7 +4645,11 @@ function applyBankQuestions(list){
   var cleaned=Array.isArray(list)?list:[];
   QUESTION_BANK.length=0; Array.prototype.push.apply(QUESTION_BANK,cleaned);
   usingBankQuestions=true;
-  $('menuFoot').textContent=cleaned.length ? 'Class question stream connected · Questions refresh throughout your run.' : (embedded() ? 'Connecting to your class question stream… Retrying automatically.' : 'Open Science Legends from the Science Learning Portal to receive your class questions.');
+  // Once this learner's stream has delivered, a momentary empty slot (the
+  // look-ahead being refilled, a question just taken) is not "connecting".
+  if(cleaned.length)applyBankQuestions.connected=true;
+  if(!cleaned.length && applyBankQuestions.connected && embedded())return;
+  $('menuFoot').textContent=(cleaned.length || applyBankQuestions.connected) ? 'Class question stream connected · Unlimited questions throughout your run.' : (embedded() ? 'Loading your class questions…' : 'Open Science Legends from the Science Learning Portal to receive your class questions.');
 }
 var _bankReqTries = 0;
 function requestBankQuestions(){

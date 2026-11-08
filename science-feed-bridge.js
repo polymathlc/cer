@@ -13,8 +13,12 @@
       // grade/quality gate and endless-cycle decision.
       function retry(delay) {
         if (root.parent === root || pending || retryTimer !== null) return;
-        var wait = delay == null ? Math.min(15000, 1000 * Math.pow(2, Math.min(retryCount++, 4))) : delay;
-        retryTimer = setTimeout(function () { retryTimer = null; refresh(); }, wait);
+        // Students must never sit on a "connecting" screen: retry quickly
+        // (0.5s, 1s, 2s, then every 3s) instead of backing off to 15 seconds.
+        var wait = delay == null ? Math.min(3000, 500 * Math.pow(2, Math.min(retryCount++, 3))) : delay;
+        // A retry only fetches; it never drops the question on screen, so an
+        // answer given while a retry runs is still recorded.
+        retryTimer = setTimeout(function () { retryTimer = null; request(); }, wait);
       }
       function settle(value) { if (pending) { clearTimeout(pending.timer); var resolve = pending.resolve; pending = null; resolve(value); } }
       function clear() { active = null; pool = []; if (options.onPool) options.onPool([]); }
@@ -46,30 +50,53 @@
         settle(true);
         if (!pool.length) retry();
       }
-      function refresh() {
+      // Ask the portal for the next question WITHOUT clearing the question
+      // that is on screen. Used by retries and by the look-ahead prefetch.
+      function request() {
         if (pending) return pending.promise;
         cancelRetry();
-        clear();
         if (root.parent === root) return Promise.resolve(false);
         var id = 'science-feed-' + (++sequence) + '-' + epoch;
         var resolve; var promise = new Promise(function (done) { resolve = done; });
         pending = { id: id, promise: promise, resolve: resolve, timer: setTimeout(function () {
-          message = 'Reconnecting to your class questions…'; clear(); settle(false); retry();
-        }, 8000) };
+          message = 'Reconnecting to your class questions…'; settle(false); retry(0);
+        }, 6000) };
         root.parent.postMessage({ type: 'SD_REQUEST_QUESTIONS', requestId: id }, root.location.origin);
         return promise;
+      }
+      // A fresh request: drops any held question first (the old behaviour,
+      // still used to reload credits and after a learner change).
+      function refresh() {
+        if (pending) return pending.promise;
+        cancelRetry();
+        clear();
+        return request();
+      }
+      // 🎮 Look-ahead (options.prefetch): as soon as a question is handed to
+      // the game, the next one is fetched in the background, so the next
+      // question opens instantly instead of waiting on the portal.
+      function prefetch() {
+        if (!options.prefetch || root.parent === root || pool.length || pending || retryTimer !== null) return;
+        setTimeout(function () { if (!pool.length && !pending) request(); }, 0);
+      }
+      // Resolve straight away when a question is already waiting; otherwise
+      // fetch one. Games call this right before they show a question.
+      function ready() {
+        if (pool.length) return Promise.resolve(true);
+        return request();
       }
       root.addEventListener('message', receive);
       return {
         refresh: refresh,
+        ready: ready,
         take: function (predicate) {
           var now = Date.now();
           // A question the portal RECYCLED (the arcade's endless cycle) is
           // due again by design, so the 15-minute repeat guard lets it through.
           var q = pool.find(function (item) { return (!predicate || predicate(item)) && (item.recycled === true || now - (shown.get(key + ':' + item.id) || 0) >= 900000); });
           pool = []; // Another question always asks the parent to re-evaluate.
-          if (q) shown.set(key + ':' + q.id, now);
-          else retry();
+          if (q) { shown.set(key + ':' + q.id, now); prefetch(); }
+          else retry(0);
           return q || null;
         },
         current: function (question) { return !!question && question === active && question.__feedKey === key && question.__feedEpoch === epoch; },

@@ -17,7 +17,7 @@ jobs:
         with:
           node-version: '24'
       - name: Verify mechanics, deterministic combat and endless question safeguards
-        run: node --test tools/game-legends-slayers-tests.mjs tools/science-legends-*-tests.mjs tools/science-feed-core-tests.mjs tools/science-feed-standalone-tests.mjs tools/science-feed-payload-tests.mjs tools/science-feeding-integration-tests.mjs
+        run: node --test tools/game-legends-slayers-tests.mjs tools/science-legends-*-tests.mjs tools/science-feed-core-tests.mjs tools/science-feed-standalone-tests.mjs tools/science-feed-payload-tests.mjs tools/science-feeding-integration-tests.mjs tools/science-feed-unlimited-tests.mjs
       - name: Install isolated browser runtime
         run: |
           npm install --prefix "$RUNNER_TEMP/legends-browser" --no-audit --no-fund playwright@1.62.1

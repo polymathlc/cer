@@ -41,6 +41,24 @@ browser suites, including camera, all skill variants, models, atlas isolation,
 tree/UI, touch, late-image stability and dense fights. Use `GAME_SCREENSHOTS` under
 `test-results/` for local browser artifacts.
 
+## 🎮 Unlimited game questions, no "Connecting…" wait (v1.454.1)
+
+Owner report: Science Legends sat on "Connecting to your class question stream… Retrying automatically."
+Three causes, three fixes:
+- **Empty game level.** `_scienceFeedGameLevel` returned `''` for an admin/teacher preview without a level (and
+  for a learner whose level is unset); the bridge then dropped every pool. Games now fall back to
+  `liveLevel(LEVEL_MAX)` (P6 while Sec 1 is retired). Practice keeps its strict level.
+- **Strict pick empty** (history could not sync, claim refused, window + fallback empty). `_sdQuestionsPayload`
+  now ends with a safety net: `_sdLastResortRows` (live bank MCQs, never Sec 1 / retired / unreleased / pending /
+  flagged / student-reported; sound + in-band first) and `_sdLastResortPick` (least recently served via
+  `_gqLoad` + per-sitting memory, random among ties), marked `recycled: true`.
+- **Waiting between questions.** `ScienceFeedBridge.create({ prefetch: true })` fetches the next question as soon
+  as one is taken; games call `scienceFeed.ready()` (instant when one is waiting). Retries use `request()`,
+  which never clears the question on screen; backoff is 0.5s→3s max, request timeout 6s. Legends and Slayers
+  opt in; Defenders/Raiders/Spire keep one request per question.
+
+Tests: `tools/science-feed-unlimited-tests.mjs` (in the Science Legends workflow).
+
 ## Science Legends: Emberwild combat and resilient question streams (v1.454.0)
 
 Science Legends uses `science-legends-combat.js` for a bounded 120 Hz simulation,
