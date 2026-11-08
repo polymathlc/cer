@@ -16,8 +16,8 @@ async function open(failModels=false){
   await page.route('**/*',route=>{
     const url=new URL(route.request().url());
     if(url.hostname!=='v2.test')return route.abort();
-    if(failModels&&/v2\/(?:heroes|enemies)\.(?:png|webp)$/.test(url.pathname))return route.abort();
-    const review=/v2\/enemies\.(?:png|webp)$/.test(url.pathname)?process.env.LEGENDS_QA_ENEMY_ASSET:/v2\/heroes\.(?:png|webp)$/.test(url.pathname)?process.env.LEGENDS_QA_HERO_ASSET:null;
+    if(failModels&&/v2\/(?:heroes|enemies)(?:-clean|-rear)?\.(?:png|webp)$/.test(url.pathname))return route.abort();
+    const review=/v2\/enemies(?:-clean)?\.(?:png|webp)$/.test(url.pathname)?process.env.LEGENDS_QA_ENEMY_ASSET:/v2\/heroes\.(?:png|webp)$/.test(url.pathname)?process.env.LEGENDS_QA_HERO_ASSET:null;
     const filename=path.join(root,review||decodeURIComponent(url.pathname));
     return fs.existsSync(filename)&&fs.statSync(filename).isFile()?route.fulfill({path:filename}):route.abort();
   });
