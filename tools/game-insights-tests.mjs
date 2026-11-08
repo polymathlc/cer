@@ -62,3 +62,40 @@ test('the production loader enforces access and canonical document identities be
  assert.equal(records.dailySummaries[0].uid,'real-account');assert.equal(records.dailySummaries[0].gameId,'legends');assert.equal(records.dailySummaries[0].day,'2026-11-09');
  context.currentUser={uid:'student',role:'student'};assert.equal(await context.loadGameInsights(),false);assert.equal(reads,3);
 });
+
+function clockController(initialTime,loader){
+ let time=initialTime,reads=0,user={uid:'admin',role:'admin'};
+ const h={innerHTML:'',replaceChildren(){this.innerHTML='';},querySelector(){return{};},querySelectorAll(){return[];}};
+ const controller=createGameInsightsController({document:{getElementById:()=>h},isAdmin:()=>user.role==='admin',getUser:()=>user,now:()=>time,
+  loadRecords:request=>{reads++;return loader?loader(request,reads,time):{attempts:Array.from({length:reads},(_,index)=>answer('player-'+index,'legends',time))};}});
+ return{controller,h,get reads(){return reads;},setTime:value=>time=value,setUser:value=>user=value};
+}
+
+test('fresh cache reuses its actual snapshot time; reopening after60seconds reads new activity',async()=>{
+ const f=clockController(now);assert.equal(await f.controller.open(),true);const original=f.h.innerHTML,csv=f.controller.exportCsv();
+ f.setTime(now+30000);assert.equal(await f.controller.open(),true);assert.equal(f.reads,1);assert.equal(f.h.innerHTML,original,'Cached records do not claim a new update time');assert.equal(f.controller.exportCsv(),csv,'Cached date boundaries and export stay pinned to the loaded snapshot');
+ f.setTime(now+60000);assert.equal(await f.controller.open(),true);assert.equal(f.reads,2);assert.notEqual(f.h.innerHTML,original,'Actual refreshed records get their new snapshot timestamp');assert.ok(f.controller.exportCsv().includes('"Science Legends","2","2"'),'New players and answers from the refreshed read enter actual ranking statistics');
+ assert.equal(await f.controller.open(true),true);assert.equal(f.reads,3,'Explicit refresh still reads inside theTTL');
+});
+
+test('a Singapore date boundary refreshes even within60seconds and pins the completed fetch timestamp',async()=>{
+ const before=Date.parse('2026-11-09T23:59:50+08:00'),f=clockController(before);
+ await f.controller.open();assert.ok(f.controller.exportCsv().includes('"2026-11-09"'));
+ f.setTime(before+20000);await f.controller.open();assert.equal(f.reads,2);assert.ok(f.controller.exportCsv().includes('"2026-11-10"'),'The new date window comes from a new read');
+ const updated=f.h.innerHTML;f.setTime(before+21000);await f.controller.open();assert.equal(f.reads,2);assert.equal(f.h.innerHTML,updated);
+});
+
+test('an expired-cache response still cannot render after the admin identity changes',async()=>{
+ let finish;const f=clockController(now,(request,read,time)=>read===1?{attempts:[answer('old','legends',time)]}:new Promise(resolve=>finish=resolve));
+ await f.controller.open();f.setTime(now+60001);const pending=f.controller.open();f.setUser({uid:'student',role:'student'});finish({attempts:[answer('new','fps',now+60001)]});
+ assert.equal(await pending,false);assert.equal(f.h.innerHTML,'');assert.equal(f.controller.exportCsv(),false);
+});
+
+
+test('a completed asynchronous read stamps its real fetch time rather than its request time',async()=>{
+ let finish;const f=clockController(now,()=>new Promise(resolve=>finish=resolve));
+ const pending=f.controller.open();f.setTime(now+5000);finish({attempts:[answer('new','legends',now+1000)]});await pending;
+ assert.ok(f.h.innerHTML.includes(new Date(now+5000).toLocaleString('en-SG',{timeZone:'Asia/Singapore'})),'Displayed updated time belongs to the completed snapshot');
+ assert.ok(f.controller.exportCsv().includes('"Science Legends","1","1"'),'Answers present at fetch completion are included');
+ f.setTime(now+60000);await f.controller.open();assert.equal(f.reads,1,'TTL begins at the actual completed fetch');
+});

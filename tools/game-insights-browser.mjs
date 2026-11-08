@@ -7,8 +7,8 @@ const {chromium}=await import(process.env.PLAYWRIGHT_MODULE?pathToFileURL(proces
 const now=Date.parse('2026-11-09T14:00:00+08:00');
 const fixture=`import {createGameInsightsController} from '/game-insights.js';
 window.user={uid:'admin',role:'admin'};window.reads=[];window.exports=[];window.fail=false;
-const now=${now};const a=(uid,mode,day,score=1)=>({uid,mode,timestamp:day+'T12:00:00+08:00',score,totalBlanks:1,ms:10000});
-window.controller=createGameInsightsController({document,getUser:()=>user,isAdmin:()=>user.role==='admin',now:()=>now,
+const now=${now};window.insightsClock=now;const a=(uid,mode,day,score=1)=>({uid,mode,timestamp:day+'T12:00:00+08:00',score,totalBlanks:1,ms:10000});
+window.controller=createGameInsightsController({document,getUser:()=>user,isAdmin:()=>user.role==='admin',now:()=>window.insightsClock,
 loadRecords:async request=>{reads.push(request);if(fail)throw Error('Synthetic offline boundary');return{attempts:[a('one','legends','2026-11-09'),a('one','legends','2026-11-08',0),a('two','legends','2026-11-07'),a('one','tcg-legends','2026-11-09'),a('admin','fps','2026-11-09'),a('old','fps','2026-11-09'),a('previous','legends','2026-10-10')],profiles:[{uid:'admin',role:'admin'},{uid:'old',retired:true}],dailySummaries:[{uid:'one',day:'2026-11-09',gameId:'legends',starts:2},{uid:'pirate',day:'2026-11-08',gameId:'pirate-rift',starts:3}],coverage:{attemptsTruncated:true,attemptLimit:20000}};},download:(csv,name)=>exports.push({csv,name})});
 await controller.open();window.ready=true;`;
 const html='<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/game-insights.css"><style>body{margin:0;font:15px Arial;background:#f6f8fb;color:#203552}.page-header,.page-body{padding:20px}.btn{padding:9px 13px;border:1px solid #aebed2;border-radius:8px;background:#fff;color:#24486e;cursor:pointer}</style><main id="page-gameinsights"><header class="page-header"><h1>Games Insights</h1><p>See what students choose, how they answer, and where to improve next</p></header><div class="page-body"><div id="gameInsightsRoot"></div></div></main><script type="module" src="/fixture.js"></script>';
@@ -35,12 +35,17 @@ try{
   check(!exported.csv.includes('admin')&&!exported.csv.includes('previous'),'CSV excludes account identities');
   await page.locator('[data-gi-days]').selectOption('7');check(await page.evaluate(()=>reads.length)===1,'narrowing dates reuses loaded window');
   await page.locator('[data-gi-days]').selectOption('90');await page.waitForFunction(()=>reads.length===2);check(await page.evaluate(()=>reads[1].limit)===20000,'wider dates preserve query bound');
+  const snapshot=await page.locator('.gi-updated').textContent();
+  await page.evaluate(async()=>{insightsClock+=30000;await controller.open();});
+  check(await page.evaluate(()=>reads.length)===2&&(await page.locator('.gi-updated').textContent())===snapshot,'fresh cached records retain their actual update time');
+  await page.evaluate(async()=>{insightsClock+=30000;await controller.open();});
+  check(await page.evaluate(()=>reads.length)===3&&(await page.locator('.gi-updated').textContent())!==snapshot,'reopening after60seconds reloads and truthfully updates the timestamp');
   check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'mobile document has no horizontal overflow');
   await page.screenshot({path:path.join(screenshots,'game-insights-'+width+'.png'),fullPage:true});
   await page.evaluate(()=>{user={uid:'student',role:'student'};return controller.open();});
   check((await page.locator('#gameInsightsRoot').textContent())==='','role change clears admin view');
   check(await page.evaluate(()=>controller.exportCsv())===false,'student cannot export');
-  check(await page.evaluate(()=>reads.length)===2,'student cannot start any query');
+  check(await page.evaluate(()=>reads.length)===3,'student cannot start any query');
   check(errors.length===0,'no script errors: '+errors.join(';'));
   await page.close();
  }

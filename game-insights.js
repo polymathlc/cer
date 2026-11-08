@@ -121,16 +121,16 @@ export function createGameInsightsController(env){
   async function open(force=false){
     if(!allowed()){reset();return false;}
     const uid=env.getUser().uid;if(owner!==uid){reset();owner=uid;}
-    const epoch=++generation,now=env.now?.()||Date.now();loading=true;render();
+    const epoch=++generation,now=env.now?.()??Date.now();loading=true;render();
     try{
-      if(force||!raw||raw.days<days){
+      if(force||!raw||raw.days<days||!finite(raw.fetchedAt)||now<raw.fetchedAt||now-raw.fetchedAt>=60000||dayOf(now)!==dayOf(raw.fetchedAt)){
         const since=Date.parse(dayOf(now)+'T00:00:00+08:00')-(days*2-1)*DAY;
         const result=await env.loadRecords({uid,days,since,limit:20000});
         if(!current(uid,epoch)){if(!allowed()||env.getUser()?.uid!==owner)reset();return false;}
-        raw={...result,days};
+        raw={...result,days,fetchedAt:env.now?.()??Date.now()};
       }
       if(!current(uid,epoch)){if(!allowed()||env.getUser()?.uid!==owner)reset();return false;}
-      data=aggregateGameInsights({...raw,now,days});loading=false;render();return true;
+      data=aggregateGameInsights({...raw,now:raw.fetchedAt,days});loading=false;render();return true;
     }catch(error){
       if(!current(uid,epoch)){if(!allowed()||env.getUser()?.uid!==owner)reset();return false;}loading=false;raw=null;data=null;
       const h=host();if(h){h.innerHTML='<div class="gi-empty" role="alert">Could not load game activity. Check your connection and try again.<p><button type="button" class="btn btn-outline" data-gi-retry>Try again</button></p></div>';h.querySelector('[data-gi-retry]').onclick=()=>open(true);}
