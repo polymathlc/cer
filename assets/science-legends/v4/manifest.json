@@ -1,0 +1,62 @@
+{
+  "version": "1.458.0",
+  "created": "2026-11-09",
+  "mode": "built-in image_gen",
+  "columns": [
+    "warden",
+    "hexer",
+    "broodling",
+    "sentinel"
+  ],
+  "rows": [
+    "idle",
+    "walkA",
+    "walkB",
+    "attack"
+  ],
+  "projection": "Fixed steep three-quarter overhead orthographic; front southeast, rear northwest; stable contact anchors.",
+  "loading": "Optional idle-preloaded atlases; snapshots pinned per run; base/native fallback when unavailable.",
+  "encoding": {
+    "format": "webp",
+    "quality": 90,
+    "alphaQuality": 100,
+    "effort": 6,
+    "resize": false,
+    "alphaPreservedExactly": true
+  },
+  "assets": [
+    {
+      "source": "enemies-elite.png",
+      "runtime": "enemies-elite.webp",
+      "columns": 4,
+      "rows": 4,
+      "width": 1254,
+      "height": 1254,
+      "prompt": "Use case: stylized-concept. Asset type: premium original action RPG ENEMY animation sprite atlas. Produce EXACTLY4 COLUMNS Ã—4 ROWS,16 complete full-body figures in an equal grid occupying the full image. Columns identify FOUR different enemies; rows are animation poses. Column1 WARDEN: broad squat stone-and-aged-bronze armored juggernaut with a heavy rectangular shield and compact spiked mace, gold cracks and red eye slit. Column2 HEXER: lean sinister violet-robed masked caster with hooked bone horns, teal curse crystal staff, ragged trailing cloth and long clawed hand. Column3 BROODLING: compact obsidian armored insect-crab with emerald egg sacs on its rounded back, six distinct legs and small sharp mandibles. Column4 SENTINEL: tall rust-bronze mechanical arbalist with a large compact crossbow, red monocular eye and a dark steel shoulder quiver. Each column retains exact identity,outfit,color,body scale and weapon. Rows top-to-bottom: ROW1 idle combat stance; ROW2 walking strideA; ROW3 opposite walking strideB; ROW4 distinctive attack anticipation (Warden raises mace behind shield,Hexer lifts staff,Broodling coils its legs,Sentinel aims arbalest). ALL figures face SOUTHEAST/bottom-right; fixed steep three-quarter overhead ORTHOGRAPHIC camera, identical across all16 cells. Premium hand-painted 3D fantasy sprites with crisp silhouette, metal bevels,fabric and chitin detail, moody rich colors suitable for a navy stone courtyard. This is original art. Every whole figure and weapon stays INSIDE central78percent of its own cell, ample transparent gutters, no cross-cell limbs/weapons. Every foot/contact point sits near85percent of cell height with stable floor anchors across poses. Maintain consistent scale within each column. Each complete figure isolated on TRUE TRANSPARENT ALPHA0 background, no floor, no shadow disk, no colored backdrop, no scenery, no cell borders, no text, no labels,numbers,logo or watermark. All16 figures fully visible. Uniform full square sheet. Do NOT change camera perspective for any pose.",
+      "encoding": {
+        "sourceSha256": "6ca06988aa2345af18cdd87a9df2cf5aa87d950f791005ce2a041434c5189677",
+        "runtimeSha256": "871e3843186a3213a82c3c4e47d2c80eb6be6cc6a6a192488f12a39007e3a9c6",
+        "sourceBytes": 2083738,
+        "runtimeBytes": 605386,
+        "alphaPreservedExactly": true
+      }
+    },
+    {
+      "source": "enemies-elite-rear.png",
+      "runtime": "enemies-elite-rear.webp",
+      "reference": "enemies-elite.png",
+      "columns": 4,
+      "rows": 4,
+      "width": 1254,
+      "height": 1254,
+      "prompt": "Use case: precise-object-edit. Input image role: reference animation atlas whose four EXACT enemy identities, clothes,armor,weapons,palette,body sizes,foot baseline,lighting and cell positions must remain. Generate a MATCHING REAR-VIEW enemy atlas, EXACT4columnsÃ—4rows and EXACT1280Ã—1280 dimensions. Columns remain stonebronze shield Warden/violet bonehorn Hexer with teal staff/obsidian emerald-eggsac Broodling/rustbronze crossbow Sentinel. Rows remain idle/walkA/walkB/attack anticipation. Rotate ONLY each creature's BODY YAW180degrees so ALL face NORTHWEST/top-left, showing their back armor,rear robes,back shell and quiver, with faces directed away. Do NOT rotate or tilt the camera. Preserve identical fixed steep three-quarter overhead ORTHOGRAPHIC projection,scale andlighting. Match every corresponding front-frame figure height and planted contact point to prevent zoom/popping onturn. Maintain complete weapons inside their cells, no cross-cell overlap, ample transparent padding. Broodling legs all visible and attached. Warden and Sentinel back armor and shield/quiver clearly recognizable. Transparent true alpha0 background, no floor, no shadowdisk, no matteplates behind creatures. No text,labels,gridlines,watermark or new characters. All16 fullbody sprites fit their exactcell. This is rear-view directional variant, not a redesign.",
+      "encoding": {
+        "sourceSha256": "5784e4846ea30fd73f20b2e140edceae0049eabc7f6afc8b42fbd1b897183528",
+        "runtimeSha256": "836cc3ddd90ce947a30d009c1fcde36f324025803aae3e211c1ddf100ccdadf9",
+        "sourceBytes": 1806780,
+        "runtimeBytes": 505018,
+        "alphaPreservedExactly": true
+      }
+    }
+  ]
+}

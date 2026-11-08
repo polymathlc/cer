@@ -32,12 +32,12 @@ async function open({ width = 1280, height = 900, reduced = false, failArt = fal
   });
   await page.goto('http://skill-visual.test/');
   const game = page.frames().find(frame => frame.url().includes('science-legends.html'));
-  await game.waitForFunction(() => typeof _gameCreditsReady === 'function' && _gameCreditsReady());
+  await game.waitForFunction(() => typeof _gameCreditsReady === 'function' && _gameCreditsReady(), null, { polling: 50 });
   await game.locator('#startBtn').click();
-  await game.waitForFunction(() => G && G.state === 'play');
-  if (!failArt) await game.waitForFunction(() => CLASS_ORDER.every(cls => LegendsActions.ready('fx-' + cls)) && LegendsActions.ready('whirlwind'));
-  if (!failArt) await game.waitForFunction(() => LegendsModels.allReady() && LegendsArt.ready() && LegendsArt.groundReady());
-  if (!failArt && !failIcons) await game.waitForFunction(() => LegendsIcons.ready());
+  await game.waitForFunction(() => G && G.state === 'play', null, { polling: 50 });
+  if (!failArt) await game.waitForFunction(() => CLASS_ORDER.every(cls => LegendsActions.ready('fx-' + cls)) && LegendsActions.ready('whirlwind'), null, { polling: 50 });
+  if (!failArt) await game.waitForFunction(() => LegendsModels.allReady() && LegendsArt.ready() && LegendsArt.groundReady(), null, { polling: 50 });
+  if (!failArt && !failIcons) await game.waitForFunction(() => LegendsIcons.ready(), null, { polling: 50 });
   await game.evaluate(() => {
     window.__visualQA = {
       hash(canvas) {

@@ -38,6 +38,7 @@ export function installPirateRiftPortal(env) {
     doc.removeEventListener('keydown', onKeyDown);
     doc.removeEventListener('fullscreenchange', onFullscreenChange);
     win.removeEventListener('focus', sync);
+    win.removeEventListener('message', onGameStarted);
     doc.removeEventListener('visibilitychange', sync);
     if (doc.fullscreenElement && currentOverlay.contains(doc.fullscreenElement)) {
       try { Promise.resolve(doc.exitFullscreen?.()).catch(() => {}); } catch (_) {}
@@ -52,6 +53,13 @@ export function installPirateRiftPortal(env) {
   }
   function sync() {
     if (overlay && identity() !== sessionIdentity) close();
+  }
+  function onGameStarted(event) {
+    const d = event?.data;
+    if (event?.origin !== win.location.origin || !overlay?.isConnected || !frame || event.source !== frame.contentWindow
+      || identity() !== sessionIdentity || env.getUser()?.role !== 'student' || d?.type !== 'CER_GAME_STARTED'
+      || d.game !== 'pirate-rift' || typeof d.runId !== 'string' || !/^[A-Za-z0-9_.:-]{1,128}$/.test(d.runId)) return;
+    try { env.onRunStarted?.(d.runId); } catch (_) {}
   }
   function onKeyDown(event) {
     if (event.key === 'Escape' && overlay?.contains(event.target)) { event.preventDefault(); close(); }
@@ -88,13 +96,14 @@ export function installPirateRiftPortal(env) {
     frame = doc.createElement('iframe'); frame.title = 'One Piece: Pirate Rift action RPG';
     frame.setAttribute('allow', 'fullscreen; autoplay'); frame.setAttribute('referrerpolicy', 'no-referrer');
     const url = new URL('./pirate-rift.html', win.location.href);
-    url.searchParams.set('v', '1.0.0'); url.searchParams.set('subject', subject); url.searchParams.set('profile', pirateRiftScope(sessionIdentity));
+    url.searchParams.set('v', '1.0.2'); url.searchParams.set('subject', subject); url.searchParams.set('profile', pirateRiftScope(sessionIdentity));
     frame.src = url.href; overlay.append(frame);
     inertElements = [...doc.body.children].map(element => [element, element.inert]);
     for (const [element] of inertElements) element.inert = true;
     priorOverflow = doc.body.style.overflow; doc.body.style.overflow = 'hidden'; doc.body.append(overlay);
     doc.addEventListener('keydown', onKeyDown); doc.addEventListener('fullscreenchange', onFullscreenChange);
     win.addEventListener('focus', sync); doc.addEventListener('visibilitychange', sync);
+    win.addEventListener('message', onGameStarted);
     frame.addEventListener('load', sync); frame.focus(); return true;
   }
   return { open, close, sync, allowed };

@@ -19,12 +19,12 @@ function world(slug, functions){
   const nodes=new Map();const node=id=>{if(!nodes.has(id))nodes.set(id,{hidden:true,style:{},classList:{add(){},remove(){},contains(){return false;}},getContext(){return {fillRect(){},beginPath(){},arc(){},fill(){}}},width:150,height:150});return nodes.get(id);};
   const state={G:{state:'play',player:{x:100,y:100,r:16,fx:0,fy:1,dashT:0,hp:100},evadeTrail:[],enemies:[],ap:10},
     keys:{w:true},joyVec:{on:true,x:1,y:0},mouse:{lDown:true,rDown:true},lowMotion:false,
-    $:node,overlayOpen:()=>false,moveInput:()=>({x:3,y:4}),ringFx(){},sfx(){},Event:class{},window:{dispatchEvent(){}},
+    $:node,activeGameSurface:()=>true,failedCastFeedback:()=>{},overlayOpen:()=>false,moveInput:()=>({x:3,y:4}),ringFx(){},sfx(){},Event:class{},window:{dispatchEvent(){}},
     noteAction(n){state.G.ap-=n;if(state.G.ap===0)state.G.state='feed-loading';},
     nextDepth(){state.G.wave=(state.G.wave||1)+1;state.G.stairs=null;},
     clamp:(n,a,b)=>Math.max(a,Math.min(b,n)),dist2:(x,y,a,b)=>(x-a)**2+(y-b)**2,
     WORLD:{w:2300,h:2300},TILE:46,MAPW:50,MAPH:50,map:null,Math,Uint8Array};
-  vm.createContext(state);if(slug==='legends'&&functions.includes('clearCombatInput')){state.skillGesture={};vm.runInContext(fn(source(slug),'cancelSkillGesture'),state);}for(const f of functions)vm.runInContext(fn(source(slug),f),state);return state;
+  vm.createContext(state);if(slug==='legends'&&functions.includes('clearCombatInput')){state.skillGesture={};state.sceneRevision=0;vm.runInContext(fn(source(slug),'cancelSkillGesture')+'\n'+fn(source(slug),'invalidateScene'),state);}for(const f of functions)vm.runInContext(fn(source(slug),f),state);return state;
 }
 for(const slug of ['legends','slayers']){
   test(`${slug}: full shipped inline script parses`,()=>{const s=source(slug);new vm.Script(s.split('<script>')[1].split('</script>')[0]);});
@@ -36,7 +36,7 @@ for(const slug of ['legends','slayers']){
   });
   test(`${slug}: opening overlays resets mouse, joystick, keyboard and queued movement`,()=>{
     const w=world(slug,['clearCombatInput','show','hide']);w.G.moveTarget={x:4,y:5};w.G.atkTarget={};w.show('pauseOverlay');assert.deepEqual(Object.keys(w.keys),[]);assert.equal(w.joyVec.on,false);assert.equal(w.mouse.rDown,false);assert.equal(w.mouse.lDown,false);assert.equal(w.G.moveTarget,null);assert.equal(w.G.atkTarget,null);
-    if(slug==='legends')assert.equal(w.skillGesture,null);
+    if(slug==='legends'){assert.equal(w.skillGesture,null);assert.equal(w.sceneRevision,1);w.hide('pauseOverlay');assert.equal(w.sceneRevision,2);}
   });
   test(`${slug}: charge warning commits the direction before the enemy moves`,()=>{
     const w=world(slug,['lockCharge']);const e={speed:100};w.lockCharge(e,3,4);assert.equal(e.chargeSt,1);assert.equal(e.chargeT,.7);assert.equal(e.cvx,276);assert.equal(e.cvy,368);

@@ -94,7 +94,7 @@ try{
   const override=await page.evaluate(async()=>{
     const tile=document.createElement('canvas');tile.width=tile.height=16;const g=tile.getContext('2d');g.fillStyle='#d334e7';g.fillRect(0,0,16,16);
     const image=new Image();image.src=tile.toDataURL();await image.decode();_ovrImgs.boar=image;
-    const previousGame=G,previousSheets=heroSheets;newGame(G.cls);heroSheets=buildHeroSprites(CLASSES[G.cls].sprite);
+    const previousGame=G,previousSheets=heroSheets;newGame(G.cls);heroSheets=buildHeroSprites(CLASSES[G.cls].sprite);draw();
     const original=ctx.drawImage,adapter=LegendsModels.drawCompanion;let seen=0,adapterCalls=0;
     ctx.drawImage=function(...args){if(args[0]===image)seen++;return original.apply(this,args);};
     LegendsModels.drawCompanion=function(...args){adapterCalls++;return adapter.apply(this,args);};
@@ -103,7 +103,7 @@ try{
   });
   check(override,'A boarpet respects the boar administrator override that was ready when its run started');
   const stampede=await page.evaluate(()=>{
-    const previousGame=G,previousSheets=heroSheets;newGame(G.cls);heroSheets=buildHeroSprites(CLASSES[G.cls].sprite);
+    const previousGame=G,previousSheets=heroSheets;newGame(G.cls);heroSheets=buildHeroSprites(CLASSES[G.cls].sprite);draw();
     const p=G.player,pr={kind:'boar',sid:'stampede',x:p.x+40,y:p.y,vx:500,vy:125,r:15,life:1.5,dmg:20,pierce:99};
     const before=JSON.stringify(pr),original=ctx.drawImage;let expected=null,actual=null,phase='expected';
     ctx.drawImage=function(...args){if(phase==='expected')expected=args[0];else actual=args[0];return original.apply(this,args);};

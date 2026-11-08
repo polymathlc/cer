@@ -1,10 +1,10 @@
 name: Pirate Rift checks
 on:
   pull_request:
-    paths: ['pirate-rift*', 'assets/pirate-rift/**', 'index.html', 'app.js', 'tools/pirate-rift*', '.github/workflows/pirate-rift.yml']
+    paths: ['pirate-rift*', 'assets/pirate-rift/**', 'index.html', 'app.js', 'game-usage.js', 'tools/pirate-rift*', '.github/workflows/pirate-rift.yml']
   push:
     branches: [main]
-    paths: ['pirate-rift*', 'assets/pirate-rift/**', 'index.html', 'app.js', 'tools/pirate-rift*', '.github/workflows/pirate-rift.yml']
+    paths: ['pirate-rift*', 'assets/pirate-rift/**', 'index.html', 'app.js', 'game-usage.js', 'tools/pirate-rift*', '.github/workflows/pirate-rift.yml']
 permissions:
   contents: read
 jobs:

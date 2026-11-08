@@ -41,6 +41,8 @@ export const collection = (base, ...p) => ({path:[base?.path,...p].filter(Boolea
 export const query = (ref, ...filters) => ({...ref,filters});
 export const where = (...args) => args;
 export const increment = n => ({increment:n});
+export const deleteField = () => ({deleteField:true});
+export const serverTimestamp = () => ({serverTimestamp:true});
 export const Timestamp = {now:()=>({seconds:Date.now()/1000})};
 export async function getDoc(ref){
  const m=window.__mock;
@@ -125,7 +127,7 @@ async function pageFor({ bankRows = bank, pending = false, lock = 'success', mob
       if (artUnavailable) return route.abort();
       return route.fulfill({ contentType: file.endsWith('.webp') ? 'image/webp' : 'image/png', body: fs.readFileSync(new URL(file, root)) });
     }
-    if (/^(?:science-feed-(core|mastery|variety|quality)|science-strike-feed|student-question-history|game-question-pressure)\.js$/.test(file))
+    if (/^(?:science-feed-(core|mastery|variety|quality)|science-strike-feed|student-question-history|game-question-pressure|game-usage)\.js$/.test(file))
       return route.fulfill({ contentType: 'application/javascript', body: fs.readFileSync(new URL(file, root), 'utf8') });
     return route.abort();
   });
@@ -150,6 +152,7 @@ async function checkClean(session) {
   check(session.errors.length === 0, `No uncaught browser errors: ${session.errors.join('; ')}`);
   check(session.external.length === 0, `No real external requests: ${session.external.join('; ')}`);
   const writes = await session.page.evaluate(() => window.__mock.writes);
+  if(await session.page.evaluate(()=>!!window.__strikeQA.run))check(writes.some(w=>w.value.gameUsageDaily),'A real Strike start records a merged daily launch');
   check(writes.every(w => w.path === 'scienceGameLeaderboard/learner' && w.options?.merge === true || w.path === 'questionAttempts'), 'Only expected mocked own leaderboard/attempt writes; hero document untouched');
 }
 

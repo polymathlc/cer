@@ -15,12 +15,15 @@ for(const dir of ['battle-avatars','card-art']){
 }
 for(const f of fs.readdirSync(path.join(root,'assets/realm-of-embers/heroes'))){assets['hero:'+f.replace(/\.webp$/,'')]= '/assets/realm-of-embers/heroes/'+f;}
 const fixture=`
+import {createGameUsageRecorder} from './game-usage.js';
 import {scienceTcgIdentity,scienceTcgIdentityText,scienceTcgSkillPath} from './science-tcg-identity.js';
 import {applyScienceTcgSignature,scienceTcgBrandedDamage,scienceTcgAbsorbBarrier} from './science-tcg-runtime.js';
 import {createTcgMedia} from './tcg-media.js';
 const tcgMedia=createTcgMedia({storageKey:'test-tcg-audio'});tcgMedia.installControls(document);
 const assets=${JSON.stringify(assets)};
 const APP_VERSION='test',currentUser={uid:'test',name:'P6 learner',role:'student'}, db={};
+const usageStarts=[];const usageRecorder=createGameUsageRecorder({getActor:()=>({uid:currentUser.uid,role:currentUser.role,key:'learner'}),write:event=>usageStarts.push(event.gameId)});
+const recordGameStart=(id,run)=>usageRecorder.start(id,run);window.usageStarts=usageStarts;
 const _tcgConfig={duelReleased:true,legendsReleased:true},_tcgArt={};
 const model={cards:{},levels:{},merges:{},team:['c149','c150','c151','c200','c201'],gold:0,duel:{},legends:{}};
 const rpgState={tcg:model,gold:0,gameScores:{}};
@@ -158,6 +161,10 @@ try{
   await page.evaluate(()=>{duelClose();void qa.tcgRunBattle(['c149','c150','c151','c200','c201'],{name:'P6 learner'},{name:'Local sparring squad',tcgTeam:['c141','c142','c143','c144','c145'],ghost:true});});
   await page.waitForSelector('#tcgbStage',{timeout:6000}).catch(e=>{throw Error(errors.join('; ')||e.message)});await page.waitForTimeout(2350);await shot('07-arena');
   ok(await page.locator('#tcgbStage .tcgb-unit').count()===10,'Arena renders original ten-card match with upgrade controls');
+  await page.evaluate(()=>tcgCloseBattle());
+  await page.evaluate(()=>{void qa.tcgRunBattle(['c149','c150','c151','c200','c201'],{name:'P6 learner'},{name:'Dungeon keeper',tcgTeam:['c141','c142','c143','c144','c145'],dungeon:true});});
+  await page.waitForSelector('#tcgbStage');
+  ok(await page.evaluate(()=>['tcg-train','tcg-duel','tcg-siege','tcg-legends','tcg-arena','tcg-dungeon'].every(id=>usageStarts.includes(id))),'All six real TCG run starts reach the collector; menu openings are not starts');
   await page.evaluate(()=>tcgCloseBattle());
   ok(await page.evaluate(()=>qa.media.settings.voices===0),'Leaving the arena clears procedural voices');
   ok(errors.length===0,'No production handler errors: '+errors.join('; '));

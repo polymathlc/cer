@@ -2,6 +2,48 @@
 
 Guidance for Claude when working in this repo.
 
+## Admin Games Insights and Science Legends refinement (v1.458.0)
+
+The administrator-only **Games Insights** tab ranks all seventeen game modes by
+observed player accounts and reports accuracy, returning accounts, question
+activity, trends and recorded launches. Keep navigation, data loading, rendering
+and CSV export independently role-guarded. `game-usage.js` records actual student
+run starts, once per run, through deferred merge-only writes to the owner's
+existing leaderboard document. Menu opens and previews do not count. Preserve
+identity checks, foreign/stale-frame rejection, profile-switch retirement and
+bounded reads. Starts are available only from this release; historical questions
+do not establish playtime or completed runs. See `docs/game-insights.md`.
+
+`docs/science-legends-50-rounds.json` records fifty independent feedback,
+implementation and verification rounds. Legends uses dirty HUD updates, cached
+static scenery, worker-based atlas extraction with fallback, spatial combat
+queries, bounded audio and effects, and independent 120 Hz simulation and
+60/120 Hz presentation. Paused overlays and inactive portal surfaces stop world
+rendering; visibility changes clear held input and simulation debt. Browser blur
+still opens the manual pause overlay. Never resume a manually paused run merely
+because its iframe becomes visible.
+
+Keep cosmetic randomness separate from combat randomness. Preserve the fixed
+camera, truthful physical projectiles, source orientation, cast/contact/expiry
+phases, reduced-motion support and actual target geometry. Repeated critical
+hits cannot continually renew hit stop and slow the game clock. Small impacts
+must not evict major Meteor or area effects from the bounded visual queue.
+
+`science-legends-variety.js` adds Wardens, Hexers, Broodlings and Sentinels with
+counterable commitments, capped spawn composition, volatile elites and a Tyrant
+health phase. Rendering cannot emit attacks. Control effects interrupt pending
+attacks and disarm hatches/death bursts; hatchlings give no loot or XP. The v4
+front/rear enemy sheets are optional, pinned per run, and excluded from base-art
+readiness. Source PNGs, runtime WebP files and exact built-in image-generation
+prompts are in `assets/science-legends/v4/manifest.json`.
+
+The controlled final benchmarks and the isolated Balanced-60 stall are retained
+beside the round ledger. HUD mutations, idle work, startup long tasks and
+Whirlwind clock slowdown improved. Dense actor painting remains the main cost;
+do not claim a universal FPS gain or discard the unreproduced stall. CI runs
+the focused units and real browser suites for all classes, roles, mobile UX,
+visibility, worker fallbacks and all seventeen launch paths.
+
 ## All question games: escalating wrong-answer consequences (v1.457.0)
 
 `game-question-pressure.js` owns the shared run-local policy: consecutive misses

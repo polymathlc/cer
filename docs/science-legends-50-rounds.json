@@ -1,0 +1,1296 @@
+{
+  "schemaVersion": 1,
+  "targetRounds": 50,
+  "completedRounds": 50,
+  "task": "Science Legends measured lag, UX, animation, enemy variety and skill texture improvements",
+  "baseline": {
+    "captured": "2026-11-09",
+    "artifact": "docs/science-legends-50-baseline.json",
+    "conditions": "Local real production page with generated art, headless Edge, desktop 1280×900/DPR1 and mobile 390×844/DPR2; mobile CPU throttled 4×. Instrumented work counts are controlled comparisons, not a claim about every device or universal FPS.",
+    "denseMobile": {
+      "windowMs": 2013.5,
+      "simulationSteps": 245,
+      "drawCpuMs": 662,
+      "imageDraws": 22533,
+      "radialGradients": 1456,
+      "attributeMutations": 2959,
+      "childMutations": 1754
+    },
+    "pausedMobile": {
+      "windowMs": 1207.9,
+      "worldPaints": 146,
+      "drawCpuMs": 335,
+      "imageDraws": 14600
+    },
+    "treeMobile": {
+      "windowMs": 1209.9,
+      "worldPaints": 144,
+      "drawCpuMs": 347
+    },
+    "startupMobile": {
+      "allArtReadyMs": 2712.2,
+      "longTaskMaxMs": 358,
+      "imageBytes": 14471568
+    },
+    "hitStop": {
+      "wallSeconds": 3.0073,
+      "simulationSeconds": 2.375,
+      "ratio": 0.78974495,
+      "reducedMotionRatio": 0.99976672
+    }
+  },
+  "rounds": [
+    {
+      "number": 1,
+      "area": "Health and experience HUD",
+      "feedback": "Stable health and experience are rewritten every120 Hz step; mobile baseline logged4713DOM mutations in2seconds.",
+      "acceptance": [
+        "Stable health/XP/status produces no repeated DOM mutations.",
+        "Damage/healing remain immediate and accessible."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "34adef8",
+        "files": [
+          "science-legends.html",
+          "science-legends-performance.js"
+        ],
+        "change": "Added cached HUD nodes and value-diffed health, experience, status and ARIA updates."
+      },
+      "verification": {
+        "command": "node tools/science-legends-performance-browser.mjs",
+        "result": "23 independent observed-work assertions passed across rounds 1–10. Existing health, target, gesture, projection, facing, late-source and all-skill visual browser regressions also passed; 36 model/combat/view/action unit tests passed.",
+        "benchmark": "docs/science-legends-50-after-r10.json"
+      }
+    },
+    {
+      "number": 2,
+      "area": "Skill cooldown HUD",
+      "feedback": "Every substep queries cooldown elements, traversesclosest parents, and rewrites ready names/ARIA.",
+      "acceptance": [
+        "No cooldown DOM rediscovery during simulation substeps.",
+        "Ready skills produce no redundant mutations; real cooldown values remain accurate."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "34adef8",
+        "files": [
+          "science-legends.html",
+          "science-legends-performance.js"
+        ],
+        "change": "Cached cooldown node records when the hotbar is rendered and stopped rediscovering or rewriting unchanged labels."
+      },
+      "verification": {
+        "command": "node tools/science-legends-performance-browser.mjs",
+        "result": "23 independent observed-work assertions passed across rounds 1–10. Existing health, target, gesture, projection, facing, late-source and all-skill visual browser regressions also passed; 36 model/combat/view/action unit tests passed.",
+        "benchmark": "docs/science-legends-50-after-r10.json"
+      }
+    },
+    {
+      "number": 3,
+      "area": "Timers and battle status",
+      "feedback": "Question/wave/evade labels and battleStatus innerHTML are rewritten even when the displayed value is unchanged.",
+      "acceptance": [
+        "No mutations when displayed timersecond/wave/ready state is unchanged.",
+        "Transitions update at their actual displayed boundary."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "34adef8",
+        "files": [
+          "science-legends.html",
+          "science-legends-performance.js"
+        ],
+        "change": "Only writes question seconds, wave status and evade display when the actual displayed value changes."
+      },
+      "verification": {
+        "command": "node tools/science-legends-performance-browser.mjs",
+        "result": "23 independent observed-work assertions passed across rounds 1–10. Existing health, target, gesture, projection, facing, late-source and all-skill visual browser regressions also passed; 36 model/combat/view/action unit tests passed.",
+        "benchmark": "docs/science-legends-50-after-r10.json"
+      }
+    },
+    {
+      "number": 4,
+      "area": "Target panel",
+      "feedback": "Target visibility/name/type/HP/effects are rewritten repeatedly even when the target has not changed.",
+      "acceptance": [
+        "Unchanged target panel causes zero mutation in thirty refreshes.",
+        "Damage, statuses and target switches refresh immediately."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "34adef8",
+        "files": [
+          "science-legends.html",
+          "science-legends-performance.js"
+        ],
+        "change": "Value-diffed target visibility, name, type, health and effects while preserving immediate target transitions."
+      },
+      "verification": {
+        "command": "node tools/science-legends-performance-browser.mjs",
+        "result": "23 independent observed-work assertions passed across rounds 1–10. Existing health, target, gesture, projection, facing, late-source and all-skill visual browser regressions also passed; 36 model/combat/view/action unit tests passed.",
+        "benchmark": "docs/science-legends-50-after-r10.json"
+      }
+    },
+    {
+      "number": 5,
+      "area": "Depth-correct pointer picking",
+      "feedback": "Every hover pick maps and sorts the full enemy array to identify the frontmost body.",
+      "acceptance": [
+        "Pick preserves frontmost depth and original tie order.",
+        "No map/sort allocation occurs within a pick."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "34adef8",
+        "files": [
+          "science-legends-models.js"
+        ],
+        "change": "Replaced map/sort picking with a linear frontmost-depth selection that preserves original tie order."
+      },
+      "verification": {
+        "command": "node tools/science-legends-performance-browser.mjs",
+        "result": "23 independent observed-work assertions passed across rounds 1–10. Existing health, target, gesture, projection, facing, late-source and all-skill visual browser regressions also passed; 36 model/combat/view/action unit tests passed.",
+        "benchmark": "docs/science-legends-50-after-r10.json"
+      }
+    },
+    {
+      "number": 6,
+      "area": "Hover sampling",
+      "feedback": "Mouseover picking occurs in each120Hz simulation substep rather than once per paint.",
+      "acceptance": [
+        "Eighty substeps produce at most one hover pick.",
+        "Pointer-down selects a newly pointed actor immediately."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "34adef8",
+        "files": [
+          "science-legends.html",
+          "science-legends-performance.js"
+        ],
+        "change": "Moved hover picking to the render loop while retaining immediate pointer-down picking."
+      },
+      "verification": {
+        "command": "node tools/science-legends-performance-browser.mjs",
+        "result": "23 independent observed-work assertions passed across rounds 1–10. Existing health, target, gesture, projection, facing, late-source and all-skill visual browser regressions also passed; 36 model/combat/view/action unit tests passed.",
+        "benchmark": "docs/science-legends-50-after-r10.json"
+      }
+    },
+    {
+      "number": 7,
+      "area": "Frozen overlay rendering",
+      "feedback": "Paused dense and tree scenes repaint roughly145times/1.2s, costing335–347ms mobile CPU despite frozen simulation.",
+      "acceptance": [
+        "Frozen pause/tree scenes paint at most once after settling.",
+        "Explicit draw(), resize, resume and input redraw remain correct."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "34adef8",
+        "files": [
+          "science-legends.html",
+          "science-legends-performance.js"
+        ],
+        "change": "Added scene invalidation so frozen pause, menu, hidden and opaque-overlay scenes stop repeated world paints."
+      },
+      "verification": {
+        "command": "node tools/science-legends-performance-browser.mjs",
+        "result": "23 independent observed-work assertions passed across rounds 1–10. Existing health, target, gesture, projection, facing, late-source and all-skill visual browser regressions also passed; 36 model/combat/view/action unit tests passed.",
+        "benchmark": "docs/science-legends-50-after-r10.json"
+      }
+    },
+    {
+      "number": 8,
+      "area": "Courtyard decoration cache",
+      "feedback": "Visible landmark lights create approximatelyseven gradients per paint on mobile andsixteen ondesktop.",
+      "acceptance": [
+        "Twenty landmark paints create at most two gradients total.",
+        "Tiles remain anchored in world coordinates; flames may animate independently."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "34adef8",
+        "files": [
+          "science-legends.html",
+          "science-legends-performance.js"
+        ],
+        "change": "Cached a DPR-scoped static courtyard decoration tile; animated flames remain separate and world anchored."
+      },
+      "verification": {
+        "command": "node tools/science-legends-performance-browser.mjs",
+        "result": "23 independent observed-work assertions passed across rounds 1–10. Existing health, target, gesture, projection, facing, late-source and all-skill visual browser regressions also passed; 36 model/combat/view/action unit tests passed.",
+        "benchmark": "docs/science-legends-50-after-r10.json"
+      }
+    },
+    {
+      "number": 9,
+      "area": "Atmosphere cache",
+      "feedback": "The full-viewport vignette gradient is recreated everypaint.",
+      "acceptance": [
+        "Twenty atmosphere paints create at most one gradient.",
+        "Viewport size andDPR changes invalidate the cache."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "34adef8",
+        "files": [
+          "science-legends.html",
+          "science-legends-performance.js"
+        ],
+        "change": "Cached the atmosphere gradient by viewport dimensions and DPR."
+      },
+      "verification": {
+        "command": "node tools/science-legends-performance-browser.mjs",
+        "result": "23 independent observed-work assertions passed across rounds 1–10. Existing health, target, gesture, projection, facing, late-source and all-skill visual browser regressions also passed; 36 model/combat/view/action unit tests passed.",
+        "benchmark": "docs/science-legends-50-after-r10.json"
+      }
+    },
+    {
+      "number": 10,
+      "area": "Visible actor work",
+      "feedback": "Actor queues/entries are rebuilt everypaint andpets are drawn even far beyond the viewport.",
+      "acceptance": [
+        "Offscreen pets are culled before model rendering.",
+        "Stable actors reuse queue work without changing foot-depth order or labels."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "34adef8",
+        "files": [
+          "science-legends.html",
+          "science-legends-performance.js"
+        ],
+        "change": "Reused actor queue entries and render-order storage and culled offscreen companions."
+      },
+      "verification": {
+        "command": "node tools/science-legends-performance-browser.mjs",
+        "result": "23 independent observed-work assertions passed across rounds 1–10. Existing health, target, gesture, projection, facing, late-source and all-skill visual browser regressions also passed; 36 model/combat/view/action unit tests passed.",
+        "benchmark": "docs/science-legends-50-after-r10.json"
+      }
+    },
+    {
+      "number": 11,
+      "area": "Impact pause budget",
+      "feedback": "Normal-motion forced-crit Whirlwind advances 2.375 simulation seconds / 3.007 wall seconds (79% speed); reduced-motion runs at100%.",
+      "acceptance": [
+        "Sustained critical channel maintains at least95% simulation/wall progress.",
+        "Heavy hits remain visibly impactful; fixedstep damage/collisions stay correct."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "8bd601f",
+        "files": [
+          "science-legends-combat.js",
+          "science-legends.html"
+        ],
+        "change": "Continuous channel ticks keep visible impacts without repeated hit-stop; dramatic stops have a global cooldown. The fixed-step clock now consumes remaining wall time when a stop is requested midframe instead of discarding that time and charging it again."
+      },
+      "verification": {
+        "command": "node tools/science-legends-impact-budget-browser.mjs; node --test tools/science-legends-combat-tests.mjs",
+        "result": "Six real-game browser checks and16combat unit tests passed. All30nearby foes still receive sustained critical damage.",
+        "before": {
+          "normalRatio": 0.78974495,
+          "reducedRatio": 0.99976672
+        },
+        "after": {
+          "normalWallSeconds": 2.5017,
+          "normalSimulationSeconds": 2.5,
+          "normalRatio": 0.99932046,
+          "reducedRatio": 1.00029244
+        }
+      }
+    },
+    {
+      "number": 12,
+      "area": "Responsive atlas preparation",
+      "feedback": "Preparing all actor atlases synchronously caused startup long tasks up to 358 ms in the throttled-mobile baseline.",
+      "acceptance": [
+        "Prepare complete actor frames off the main thread with bounded queued work.",
+        "A tested synchronous failure fallback and run-pinned sources remain correct."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "853bbe4",
+        "files": [
+          "science-legends-atlas-worker.js",
+          "science-legends-models.js"
+        ],
+        "change": "Transferred bitmap decoding/readback and whole-silhouette extraction into one reusable worker with RGBA and synchronous fallbacks, idle retirement and per-run source pinning."
+      },
+      "verification": {
+        "command": "node tools/science-legends-worker-browser.mjs",
+        "result": "39 independent browser checks: zero normal-path main-thread extraction/readbacks; exact120-frame pixel/anchor parity across normal, unsupported, blocked, postMessage throw, bitmap reject/throw and RGBA fallback paths; idle retirement and late-ready run pinning pass.",
+        "artifact": "test-results/legends-50-worker-r12/worker-preparation.json"
+      }
+    },
+    {
+      "number": 13,
+      "area": "Precise actor visibility",
+      "feedback": "After the first ten fixes, actor drawing still consumes 429 of 639 ms of dense draw CPU; the broad 180px center margin draws many fully offscreen bodies.",
+      "acceptance": [
+        "Fully offscreen model/contact bounds issue no model draw.",
+        "Edge-crossing limbs, feet and shadows remain visible and correctly depth sorted."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "853bbe4",
+        "files": [
+          "science-legends.html",
+          "science-legends-models.js"
+        ],
+        "change": "Culled enemy and companion bodies from actual extracted model/contact bounds while retaining edge-crossing feet and limbs."
+      },
+      "verification": {
+        "command": "node tools/science-legends-culling-browser.mjs",
+        "result": "156 combined actor/FX checks at1280/DPR1 and390/DPR2 trace native painted image quads for six legacy enemies, front/rear and idle/walk/attack. Fully outside actors make0modelcalls; crossing silhouettes remain."
+      }
+    },
+    {
+      "number": 14,
+      "area": "Offscreen visual effects",
+      "feedback": "Eighty fully offscreen projectiles raised dense draw work to 718 ms in a 1.6-second synthetic stress window.",
+      "acceptance": [
+        "Skip fully offscreen projectiles, trails, effects, texts and impacts.",
+        "Any warning or large blast intersecting the viewport still draws."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "853bbe4",
+        "files": [
+          "science-legends.html"
+        ],
+        "change": "Skipped offscreen projectile, complete-trail, effect, impact, text, orb, hammer and zone paint work while conservatively retaining crossing chains and large warnings."
+      },
+      "verification": {
+        "command": "node tools/science-legends-culling-browser.mjs",
+        "result": "80 fully offscreen projectiles make0channel/image/stroke calls. Crossing trails/chains and large warnings centered outside the viewport remain painted; drawing changes no HP/kills/question/time state."
+      }
+    },
+    {
+      "number": 15,
+      "area": "Spatial combat queries",
+      "feedback": "Homing and swept collisions scan every enemy for every projectile; 80 projectiles against 140 foes consumed 112–146 ms per 1.6-second controlled window.",
+      "acceptance": [
+        "Use a shared bounded spatial broadphase for swept, homing and area queries.",
+        "Results agree with brute force for fast sweeps, moving/large targets, dead entries and tie order."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "853bbe4",
+        "files": [
+          "science-legends-spatial.js",
+          "science-legends.html"
+        ],
+        "change": "Added lazy dirty spatial broadphase for actual swept, homing, radius and arc queries, preserving original hit order and invalidating before movement-triggered retaliation."
+      },
+      "verification": {
+        "command": "node tools/science-legends-spatial-browser.mjs",
+        "result": "7 real integration checks:250radius and250arc queries match brute-force order,20fast sweeps hit the same first targets, homing ties preserved; mean candidates2.05/max5 versus140enemies. Independent Guardian retaliation repro caught stale index during movement and now damages the moved mite to940HP."
+      }
+    },
+    {
+      "number": 16,
+      "area": "Smooth cooldown presentation",
+      "feedback": "After the first ten fixes, the dense scene still emits 1063 attribute mutations per two seconds, chiefly continuously changing cooldown shade transforms.",
+      "acceptance": [
+        "Reduce active shade DOM update frequency while retaining smooth visible progress.",
+        "Readiness, direct refreshes, labels and accessible values remain immediate and truthful."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "853bbe4",
+        "files": [
+          "science-legends.html"
+        ],
+        "change": "Paused compositor cooldown animations seek actual simulation progress once per paint; reduced-motion/unsupported fallback quantizes inline shading to10Hz and old loadout animations cancel."
+      },
+      "verification": {
+        "command": "node tools/science-legends-feedback-browser.mjs",
+        "result": "Independent native animation/style checks at1280/390/320: four active cooldowns produce0inline shade mutations across120steps; progress matches actual cooldown, pause stays exact, loadout replacement cancels old animations, fallback is bounded and ready states update immediately. R20 caption acceptance remains separate."
+      }
+    },
+    {
+      "number": 17,
+      "area": "Impact audio budget",
+      "feedback": "A real Frost Nova hitting 100 surviving foes constructed 101 WebAudio oscillators in a single cast, taking 13.6 ms on the desktop baseline.",
+      "acceptance": [
+        "Bound simultaneous hit voices and repeated hit cues, and disconnect ended audio nodes.",
+        "Skill, defeat, level and question feedback cues remain available."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "853bbe4",
+        "files": [
+          "science-legends.html"
+        ],
+        "change": "Gated overlapping combat cues, bounded total/combat audio voices, retained important feedback, disconnected ended nodes and removed gameplay random consumption from pitch."
+      },
+      "verification": {
+        "command": "node tools/science-legends-audio-browser.mjs",
+        "result": "9 native audio checks: actual100-target Frost Nova schedules2voices rather than101 and damages all100; total peak12, correct/wrong/death/level survive saturation, muted creates0nodes, pitch consumes0gameplay random, all41oscillator and41gain nodes actually disconnect."
+      }
+    },
+    {
+      "number": 18,
+      "area": "Readable rapid damage",
+      "feedback": "Rapid multi-hit channels continually replace floating numbers, producing overlapping tick piles instead of a readable per-enemy result.",
+      "acceptance": [
+        "Coalesce rapid per-enemy callouts into readable totals.",
+        "Actual health loss and critical emphasis remain truthful; rendering applies no damage."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "853bbe4",
+        "files": [
+          "science-legends.html"
+        ],
+        "change": "Coalesced rapid same-target damage callouts over220ms without changing damage; retained critical emphasis and capped active text with safe eviction/expiry references."
+      },
+      "verification": {
+        "command": "node tools/science-legends-feedback-browser.mjs",
+        "result": "Actual21hits sum27HPdamage into1accurate critical-emphasized callout; later batch starts separately,60text cap and expired/evicted/restarted references do not corrupt newer callouts at1280/390/320."
+      }
+    },
+    {
+      "number": 19,
+      "area": "Crowd health and status readability",
+      "feedback": "Ordinary tiny or almost-full health bars and status labels cover dense groups and add work while selected threats need stronger priority.",
+      "acceptance": [
+        "Retain selected, boss and elite health/status cues.",
+        "Ordinary near-player damage/status feedback stays readable with bounded clutter."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "853bbe4",
+        "files": [
+          "science-legends.html"
+        ],
+        "change": "Prioritized important threat labels and bounded ordinary crowd health/status bars to12mobile/24desktop with local overlap suppression."
+      },
+      "verification": {
+        "command": "node tools/science-legends-feedback-browser.mjs",
+        "result": "Native fillRect tracing verifies ordinary bar budget and actual painted selected/hovered/elite/boss/committed-attack bars at1280/390/320; no reliance on internal selection counters."
+      }
+    },
+    {
+      "number": 20,
+      "area": "Mobile threat captions",
+      "feedback": "The 390px baseline shows the SPIT caption underneath the bottom hotbar and overlapping resource controls.",
+      "acceptance": [
+        "Keep imminent threat captions in the visible combat area above controls.",
+        "Warning geometry still points at the actual source/impact and is not hidden by skill effects."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "853bbe4",
+        "files": [
+          "science-legends.html"
+        ],
+        "change": "Replaced mobile warning-label three-pass bouncing with a nearest obstacle-free horizontal/vertical interval solver, preserving the true world anchor and leader."
+      },
+      "verification": {
+        "command": "node tools/science-legends-feedback-browser.mjs",
+        "result": "45 combined feedback checks across1280x900,390x844 and320x568. All38 actual canvas-painted captions stay in the viewport and avoid real visible HUD controls; the initial320px overlap was reproduced and fixed. Source anchors remain exact."
+      }
+    },
+    {
+      "number": 21,
+      "area": "Warden guard counterplay",
+      "feedback": "The legacy roster has no directional defender or timed guard-break opening.",
+      "acceptance": [
+        "A real frontal guard reduces damage; flanks, heavy breaks and recovery expose it."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "441515b",
+        "relatedCommits": [
+          "263018d",
+          "3b85f88",
+          "7cf4306",
+          "9100dea"
+        ],
+        "files": [
+          "science-legends-variety.js",
+          "science-legends.html"
+        ],
+        "change": "Added actual directional Warden guard, flank damage, heavy guard break and exposed recovery."
+      },
+      "verification": {
+        "command": "node tools/science-legends-variety-visual-browser.mjs",
+        "result": "31 evaluator-owned actual-runtime/native-pixel checks pass: real guard/flank/break damage, locked/interruptible curse, bounded rewardless hatch, committed dodgeable volley, delayed volatile/disarm, one-way three-circle Tyrant, progression/global cap, late optional-source pinning, all32distinct role poses with planted feet/upright scale/painted bounds/picking and320/390keyboard guide. Contact sheet visually inspected. Actual pet bite and ranged projectile both preserve front7/rear20 guard damage using the pet source."
+      }
+    },
+    {
+      "number": 22,
+      "area": "Hexer committed curse",
+      "feedback": "Ranged variety needs an avoidable locked ground attack with a meaningful interrupt.",
+      "acceptance": [
+        "Lock the target location during windup; moving avoids it and stun/freeze retires it."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "441515b",
+        "relatedCommits": [
+          "263018d",
+          "3b85f88",
+          "7cf4306",
+          "9100dea"
+        ],
+        "files": [
+          "science-legends-variety.js",
+          "science-legends.html"
+        ],
+        "change": "Added committed locked-location Hexer curse, avoidable timing, slow and real freeze/stun/heavy interruption."
+      },
+      "verification": {
+        "command": "node tools/science-legends-variety-visual-browser.mjs",
+        "result": "31 evaluator-owned actual-runtime/native-pixel checks pass: real guard/flank/break damage, locked/interruptible curse, bounded rewardless hatch, committed dodgeable volley, delayed volatile/disarm, one-way three-circle Tyrant, progression/global cap, late optional-source pinning, all32distinct role poses with planted feet/upright scale/painted bounds/picking and320/390keyboard guide. Contact sheet visually inspected. Actual pet bite and ranged projectile both preserve front7/rear20 guard damage using the pet source."
+      }
+    },
+    {
+      "number": 23,
+      "area": "Broodling hatching",
+      "feedback": "Enemy deaths need a distinct crowd-control decision without recursive or reward-farming offspring.",
+      "acceptance": [
+        "Spawn at most two rewardless nonrecursive mites; frozen/stunned death prevents hatch and global cap holds."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "441515b",
+        "relatedCommits": [
+          "263018d",
+          "3b85f88",
+          "7cf4306",
+          "9100dea"
+        ],
+        "files": [
+          "science-legends-variety.js",
+          "science-legends.html"
+        ],
+        "change": "Added bounded rewardless Broodling hatchlings with spawn grace and frozen/stunned death prevention."
+      },
+      "verification": {
+        "command": "node tools/science-legends-variety-visual-browser.mjs",
+        "result": "31 evaluator-owned actual-runtime/native-pixel checks pass: real guard/flank/break damage, locked/interruptible curse, bounded rewardless hatch, committed dodgeable volley, delayed volatile/disarm, one-way three-circle Tyrant, progression/global cap, late optional-source pinning, all32distinct role poses with planted feet/upright scale/painted bounds/picking and320/390keyboard guide. Contact sheet visually inspected. Actual pet bite and ranged projectile both preserve front7/rear20 guard damage using the pet source."
+      }
+    },
+    {
+      "number": 24,
+      "area": "Sentinel projectile commitment",
+      "feedback": "Existing spitters do not offer a committed crossbow burst with a clear recovery window.",
+      "acceptance": [
+        "Telegraph locked burst geometry, preserve dodge timing and interruption, and avoid instant hits."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "441515b",
+        "relatedCommits": [
+          "263018d",
+          "3b85f88",
+          "7cf4306",
+          "9100dea"
+        ],
+        "files": [
+          "science-legends-variety.js",
+          "science-legends.html"
+        ],
+        "change": "Added Sentinel committed three-bolt lanes, interruptible windup and recovery."
+      },
+      "verification": {
+        "command": "node tools/science-legends-variety-visual-browser.mjs",
+        "result": "31 evaluator-owned actual-runtime/native-pixel checks pass: real guard/flank/break damage, locked/interruptible curse, bounded rewardless hatch, committed dodgeable volley, delayed volatile/disarm, one-way three-circle Tyrant, progression/global cap, late optional-source pinning, all32distinct role poses with planted feet/upright scale/painted bounds/picking and320/390keyboard guide. Contact sheet visually inspected. Actual pet bite and ranged projectile both preserve front7/rear20 guard damage using the pet source."
+      }
+    },
+    {
+      "number": 25,
+      "area": "Staged encounter composition",
+      "feedback": "Adding roles without bounded composition would produce clutter and unbounded ranged pressure.",
+      "acceptance": [
+        "Weighted progression introduces roles in stages with role/ranged/global caps including adds."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "441515b",
+        "relatedCommits": [
+          "263018d",
+          "3b85f88",
+          "7cf4306",
+          "9100dea"
+        ],
+        "files": [
+          "science-legends-variety.js",
+          "science-legends.html"
+        ],
+        "change": "Added staged weighted automatic composition with role/ranged/global caps, safe children and deferred boss at cap."
+      },
+      "verification": {
+        "command": "node tools/science-legends-variety-visual-browser.mjs",
+        "result": "31 evaluator-owned actual-runtime/native-pixel checks pass: real guard/flank/break damage, locked/interruptible curse, bounded rewardless hatch, committed dodgeable volley, delayed volatile/disarm, one-way three-circle Tyrant, progression/global cap, late optional-source pinning, all32distinct role poses with planted feet/upright scale/painted bounds/picking and320/390keyboard guide. Contact sheet visually inspected. Actual pet bite and ranged projectile both preserve front7/rear20 guard damage using the pet source."
+      }
+    },
+    {
+      "number": 26,
+      "area": "Volatile elite counterplay",
+      "feedback": "Elite variety needs an actual mechanic rather than only larger stats or tinted sprites.",
+      "acceptance": [
+        "A capped delayed death warning can be disarmed; pause/end/frozen death cannot produce late unfair damage."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "441515b",
+        "relatedCommits": [
+          "263018d",
+          "3b85f88",
+          "7cf4306",
+          "9100dea"
+        ],
+        "files": [
+          "science-legends-variety.js",
+          "science-legends.html"
+        ],
+        "change": "Added capped volatile elite affix with delayed avoidable death warning and control-effect disarm."
+      },
+      "verification": {
+        "command": "node tools/science-legends-variety-visual-browser.mjs",
+        "result": "31 evaluator-owned actual-runtime/native-pixel checks pass: real guard/flank/break damage, locked/interruptible curse, bounded rewardless hatch, committed dodgeable volley, delayed volatile/disarm, one-way three-circle Tyrant, progression/global cap, late optional-source pinning, all32distinct role poses with planted feet/upright scale/painted bounds/picking and320/390keyboard guide. Contact sheet visually inspected. Actual pet bite and ranged projectile both preserve front7/rear20 guard damage using the pet source."
+      }
+    },
+    {
+      "number": 27,
+      "area": "Tyrant second phase",
+      "feedback": "The boss lacks a health-triggered change in attack rhythm and geometry.",
+      "acceptance": [
+        "One-way55% transition uses three locked impact circles, readable recovery and bounded adds."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "441515b",
+        "relatedCommits": [
+          "263018d",
+          "3b85f88",
+          "7cf4306",
+          "9100dea"
+        ],
+        "files": [
+          "science-legends-variety.js",
+          "science-legends.html"
+        ],
+        "change": "Added one-way55% Tyrant phase with three locked ground hazards and bounded adds."
+      },
+      "verification": {
+        "command": "node tools/science-legends-variety-visual-browser.mjs",
+        "result": "31 evaluator-owned actual-runtime/native-pixel checks pass: real guard/flank/break damage, locked/interruptible curse, bounded rewardless hatch, committed dodgeable volley, delayed volatile/disarm, one-way three-circle Tyrant, progression/global cap, late optional-source pinning, all32distinct role poses with planted feet/upright scale/painted bounds/picking and320/390keyboard guide. Contact sheet visually inspected. Actual pet bite and ranged projectile both preserve front7/rear20 guard damage using the pet source."
+      }
+    },
+    {
+      "number": 28,
+      "area": "Optional role model art",
+      "feedback": "The four new enemy roles need distinct premium silhouettes without blocking startup or changing feet/picking mid-run.",
+      "acceptance": [
+        "Load optional front/rear four-pose atlases outside critical readiness; pin each run, preserve planted feet, fallback and picking."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "441515b",
+        "relatedCommits": [
+          "263018d",
+          "3b85f88",
+          "7cf4306",
+          "9100dea"
+        ],
+        "files": [
+          "science-legends-variety.js",
+          "science-legends.html",
+          "science-legends-models.js",
+          "assets/science-legends/v4/enemies-elite.webp",
+          "assets/science-legends/v4/enemies-elite-rear.webp"
+        ],
+        "change": "Integrated four original front/rear four-pose role models, idle optional loading, whole-silhouette extraction and per-run source pinning with fallback."
+      },
+      "verification": {
+        "command": "node tools/science-legends-variety-visual-browser.mjs",
+        "result": "31 evaluator-owned actual-runtime/native-pixel checks pass: real guard/flank/break damage, locked/interruptible curse, bounded rewardless hatch, committed dodgeable volley, delayed volatile/disarm, one-way three-circle Tyrant, progression/global cap, late optional-source pinning, all32distinct role poses with planted feet/upright scale/painted bounds/picking and320/390keyboard guide. Contact sheet visually inspected. Actual pet bite and ranged projectile both preserve front7/rear20 guard damage using the pet source."
+      }
+    },
+    {
+      "number": 29,
+      "area": "Role transition feedback",
+      "feedback": "New AI phases require visual feedback that corresponds to real guard breaks, interruption and recovery.",
+      "acceptance": [
+        "Bounded cues and telegraphs match actual state transitions and never mutate combat from drawing."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "441515b",
+        "relatedCommits": [
+          "263018d",
+          "3b85f88",
+          "7cf4306",
+          "9100dea"
+        ],
+        "files": [
+          "science-legends-variety.js",
+          "science-legends.html"
+        ],
+        "change": "Tied guard shards, interruption, exposed windows, role tells and hit feedback to actual state transitions and bounded visual lifetimes."
+      },
+      "verification": {
+        "command": "node tools/science-legends-variety-visual-browser.mjs",
+        "result": "31 evaluator-owned actual-runtime/native-pixel checks pass: real guard/flank/break damage, locked/interruptible curse, bounded rewardless hatch, committed dodgeable volley, delayed volatile/disarm, one-way three-circle Tyrant, progression/global cap, late optional-source pinning, all32distinct role poses with planted feet/upright scale/painted bounds/picking and320/390keyboard guide. Contact sheet visually inspected. Actual pet bite and ranged projectile both preserve front7/rear20 guard damage using the pet source."
+      }
+    },
+    {
+      "number": 30,
+      "area": "Enemy intelligence guide",
+      "feedback": "Players need actionable names, tells and counters for the expanded roster.",
+      "acceptance": [
+        "Expose a usable keyboard/mobile guide covering the four roles, affix and boss phases with actual counterplay."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "441515b",
+        "relatedCommits": [
+          "263018d",
+          "3b85f88",
+          "7cf4306",
+          "9100dea"
+        ],
+        "files": [
+          "science-legends-variety.js",
+          "science-legends.html"
+        ],
+        "change": "Added keyboard/mobile enemy field guide and live selected-target counterplay."
+      },
+      "verification": {
+        "command": "node tools/science-legends-variety-visual-browser.mjs",
+        "result": "31 evaluator-owned actual-runtime/native-pixel checks pass: real guard/flank/break damage, locked/interruptible curse, bounded rewardless hatch, committed dodgeable volley, delayed volatile/disarm, one-way three-circle Tyrant, progression/global cap, late optional-source pinning, all32distinct role poses with planted feet/upright scale/painted bounds/picking and320/390keyboard guide. Contact sheet visually inspected. Actual pet bite and ranged projectile both preserve front7/rear20 guard damage using the pet source."
+      }
+    },
+    {
+      "number": 31,
+      "area": "Presentation random isolation",
+      "feedback": "Lightning draw jitter consumes the same random stream as combat, so extra paints can change later crit/spawn/drop outcomes. Actual same-seed360-tick Chain Lightning/Nova replay produced gold71 with0draws,70 with3draws/tick,74 with1draw+mute and70 with2draws+reducedmotion; later spawn kind/elite state and critical sequence also diverged.",
+      "acceptance": [
+        "Identical seeded inputs and simulation ticks yield identical HP/crit/drop/spawn decisions across extra draws, mute and reduced motion."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "441515b",
+        "relatedCommits": [],
+        "files": [
+          "science-legends.html"
+        ],
+        "change": "Separated cosmetic random state and made draw-time lightning deterministic so presentation choices cannot change gameplay rolls."
+      },
+      "verification": {
+        "command": "node tools/science-legends-session-browser.mjs",
+        "result": "15 evaluator-owned checks pass. Actual360-tick seeded Chain/Nova replay has identical HP/crit/spawn/drop/gold across0/extra draws, mute and reduced motion. Real parent publisher freezes a CSS-hidden iframe with document.hidden=false, clears held keys, rejects sibling/wrong-origin signals, blocks hidden input, preserves manual pause and resumes without catch-up; IO fallback passes."
+      }
+    },
+    {
+      "number": 32,
+      "area": "Inactive portal surface",
+      "feedback": "A CSS-hidden game iframe kept painting and simulating with W held:36 extra paints in350ms and document.hidden remainedfalse.",
+      "acceptance": [
+        "Real parent messages and IO fallback stop hidden update/paint, clear input, preserve manual pause and resume without catch-up."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "441515b",
+        "relatedCommits": [
+          "26909aa",
+          "8a9bdee"
+        ],
+        "files": [
+          "science-legends.html",
+          "app.js"
+        ],
+        "change": "Integrated strict same-origin parent active-surface messages and IntersectionObserver/document gates, input/debt clearing and safe automatic return preserving manual pause."
+      },
+      "verification": {
+        "command": "node tools/science-legends-session-browser.mjs",
+        "result": "15 evaluator-owned checks pass. Actual360-tick seeded Chain/Nova replay has identical HP/crit/spawn/drop/gold across0/extra draws, mute and reduced motion. Real parent publisher freezes a CSS-hidden iframe with document.hidden=false, clears held keys, rejects sibling/wrong-origin signals, blocks hidden input, preserves manual pause and resumes without catch-up; IO fallback passes. Follow-up8a9bdee preserves legacy manual pause on window blur while parent/IO inactivity remains independent."
+      }
+    },
+    {
+      "number": 33,
+      "area": "Explicit paint cadence",
+      "feedback": "The renderer paints at host refresh even though costly actor drawing dominates dense mobile CPU.",
+      "acceptance": [
+        "Offer bounded60/120Hz presentation independent of120Hz physics, with stable camera, aim, collision and truthful quality controls."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "441515b",
+        "relatedCommits": [],
+        "files": [
+          "science-legends.html"
+        ],
+        "change": "Added explicit Balanced60/High120Hz presentation cadence, then fixed a reproduced floating modulo bug with stable epsilon-safe next-paint deadlines;120Hz simulation remains independent."
+      },
+      "verification": {
+        "command": "node tools/science-legends-ux-browser.mjs",
+        "result": "50 evaluator-owned native DOM/pixel/keyboard/simulation checks pass at1280/DPR1,390/DPR2 and320/DPR2. Six host/cadence combinations preserve movement/fast collisions/world scale. Eight tree keys cause18/24mutations rather than5840 and0node removals. Mobile graph519/700and241/424px with visible tips. Menu identity, actual learn/equip points+locked route, bounded dirty status, truthful summary and44px controls pass. Final native screenshot pixels keep names bright above cooldown shade. Hint recedes at12active seconds or successful aimed release, restart restores it, rejected cooldown casts do not dismiss it, and pause retains aiming help."
+      }
+    },
+    {
+      "number": 34,
+      "area": "Incremental skill-tree navigation",
+      "feedback": "Eight ArrowDown presses rebuilt the whole graph eight times:5840 mutations and1472 removed top-level nodes.",
+      "acceptance": [
+        "Selecting and navigating reuse graph nodes, preserve focus and update only changed selection/detail state."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "441515b",
+        "relatedCommits": [],
+        "files": [
+          "science-legends.html"
+        ],
+        "change": "Retained graph/edge/button nodes and diffed selection/rank/search/detail updates instead of rebuilding176nodes per keypress."
+      },
+      "verification": {
+        "command": "node tools/science-legends-ux-browser.mjs",
+        "result": "50 evaluator-owned native DOM/pixel/keyboard/simulation checks pass at1280/DPR1,390/DPR2 and320/DPR2. Six host/cadence combinations preserve movement/fast collisions/world scale. Eight tree keys cause18/24mutations rather than5840 and0node removals. Mobile graph519/700and241/424px with visible tips. Menu identity, actual learn/equip points+locked route, bounded dirty status, truthful summary and44px controls pass. Final native screenshot pixels keep names bright above cooldown shade. Hint recedes at12active seconds or successful aimed release, restart restores it, rejected cooldown casts do not dismiss it, and pause retains aiming help."
+      }
+    },
+    {
+      "number": 35,
+      "area": "Mobile skill-tree space",
+      "feedback": "The390px tree header consumes289px and tooltips use graph-wide rather than visible-viewport clamping.",
+      "acceptance": [
+        "Compact controls leave usable graph height and tooltips stay visible at320/390px without covering the selected action."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "441515b",
+        "relatedCommits": [],
+        "files": [
+          "science-legends.html",
+          "science-legends-refinement.css"
+        ],
+        "change": "Compacted mobile tree controls and clamped tips/details to the visible scrolled graph viewport."
+      },
+      "verification": {
+        "command": "node tools/science-legends-ux-browser.mjs",
+        "result": "50 evaluator-owned native DOM/pixel/keyboard/simulation checks pass at1280/DPR1,390/DPR2 and320/DPR2. Six host/cadence combinations preserve movement/fast collisions/world scale. Eight tree keys cause18/24mutations rather than5840 and0node removals. Mobile graph519/700and241/424px with visible tips. Menu identity, actual learn/equip points+locked route, bounded dirty status, truthful summary and44px controls pass. Final native screenshot pixels keep names bright above cooldown shade. Hint recedes at12active seconds or successful aimed release, restart restores it, rejected cooldown casts do not dismiss it, and pause retains aiming help."
+      }
+    },
+    {
+      "number": 36,
+      "area": "Stable class and follower menu",
+      "feedback": "Selecting a class rebuilds all cards and portrait canvases, losing the focused button.",
+      "acceptance": [
+        "Reuse menu card and portrait nodes while preserving keyboard focus and selected class/follower semantics."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "441515b",
+        "relatedCommits": [],
+        "files": [
+          "science-legends.html"
+        ],
+        "change": "Retained class/follower cards and portrait canvases while updating selected/ARIA state and preserving keyboard focus."
+      },
+      "verification": {
+        "command": "node tools/science-legends-ux-browser.mjs",
+        "result": "50 evaluator-owned native DOM/pixel/keyboard/simulation checks pass at1280/DPR1,390/DPR2 and320/DPR2. Six host/cadence combinations preserve movement/fast collisions/world scale. Eight tree keys cause18/24mutations rather than5840 and0node removals. Mobile graph519/700and241/424px with visible tips. Menu identity, actual learn/equip points+locked route, bounded dirty status, truthful summary and44px controls pass. Final native screenshot pixels keep names bright above cooldown shade. Hint recedes at12active seconds or successful aimed release, restart restores it, rejected cooldown casts do not dismiss it, and pause retains aiming help."
+      }
+    },
+    {
+      "number": 37,
+      "area": "Learn and equip journey",
+      "feedback": "The locked-skill picker only toasts and a newly learned skill with four occupied slots has no direct equip path.",
+      "acceptance": [
+        "Show actual prerequisites and route learning into an explicit slot choice without silently replacing a chosen skill or spending twice."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "441515b",
+        "relatedCommits": [],
+        "files": [
+          "science-legends.html"
+        ],
+        "change": "Added prerequisite routing and an explicit learn-to-equip slot choice with accessible feedback, stable point accounting and no silent full-build replacement."
+      },
+      "verification": {
+        "command": "node tools/science-legends-ux-browser.mjs",
+        "result": "50 evaluator-owned native DOM/pixel/keyboard/simulation checks pass at1280/DPR1,390/DPR2 and320/DPR2. Six host/cadence combinations preserve movement/fast collisions/world scale. Eight tree keys cause18/24mutations rather than5840 and0node removals. Mobile graph519/700and241/424px with visible tips. Menu identity, actual learn/equip points+locked route, bounded dirty status, truthful summary and44px controls pass. Final native screenshot pixels keep names bright above cooldown shade. Hint recedes at12active seconds or successful aimed release, restart restores it, rejected cooldown casts do not dismiss it, and pause retains aiming help."
+      }
+    },
+    {
+      "number": 38,
+      "area": "Persistent combat status",
+      "feedback": "Active buff lifetimes, follower respawn and dangerous wrong-answer pressure have no persistent battle readout.",
+      "acceptance": [
+        "Show bounded truthful status/timers for actual effects, follower state and wrong-answer streak without per-step DOM churn."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "441515b",
+        "relatedCommits": [
+          "b1fed39"
+        ],
+        "files": [
+          "science-legends.html",
+          "science-legends-refinement.css"
+        ],
+        "change": "Added bounded actual combat-condition chips with complete ARIA list, buff/shield/slow/follower timers and wrong-streak danger. Explicitly warns at streak4 that the next wrong ends the run."
+      },
+      "verification": {
+        "command": "node tools/science-legends-ux-browser.mjs",
+        "result": "50 evaluator-owned native DOM/pixel/keyboard/simulation checks pass at1280/DPR1,390/DPR2 and320/DPR2. Six host/cadence combinations preserve movement/fast collisions/world scale. Eight tree keys cause18/24mutations rather than5840 and0node removals. Mobile graph519/700and241/424px with visible tips. Menu identity, actual learn/equip points+locked route, bounded dirty status, truthful summary and44px controls pass. Final native screenshot pixels keep names bright above cooldown shade. Hint recedes at12active seconds or successful aimed release, restart restores it, rejected cooldown casts do not dismiss it, and pause retains aiming help."
+      }
+    },
+    {
+      "number": 39,
+      "area": "Readable hotbar and cast response",
+      "feedback": "Mobile hints compete for combat space, cooldown labels obscure names, and casting a cooling skill silently returns.",
+      "acceptance": [
+        "Keep skill states legible and controls usable; failed casts give throttled actionable feedback and hints can recede."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "441515b",
+        "relatedCommits": [
+          "b1fed39"
+        ],
+        "files": [
+          "science-legends.html",
+          "science-legends-refinement.css"
+        ],
+        "change": "Added useful throttled failed-cast feedback,44px mobile targets, bright nameplates above the cooldown shade and a touch tutorial that recedes after successful aim or12active seconds, resets per run and remains accessible in pause."
+      },
+      "verification": {
+        "command": "node tools/science-legends-ux-browser.mjs",
+        "result": "50 evaluator-owned native DOM/pixel/keyboard/simulation checks pass at1280/DPR1,390/DPR2 and320/DPR2. Six host/cadence combinations preserve movement/fast collisions/world scale. Eight tree keys cause18/24mutations rather than5840 and0node removals. Mobile graph519/700and241/424px with visible tips. Menu identity, actual learn/equip points+locked route, bounded dirty status, truthful summary and44px controls pass. Final native screenshot pixels keep names bright above cooldown shade. Hint recedes at12active seconds or successful aimed release, restart restores it, rejected cooldown casts do not dismiss it, and pause retains aiming help."
+      }
+    },
+    {
+      "number": 40,
+      "area": "Actionable run summary",
+      "feedback": "The end screen lacks elapsed time, accuracy percentage and equipped build; abandonment can use an inaccurate defeat cause.",
+      "acceptance": [
+        "Report actual elapsed/accuracy/build/endcause and preserve replay/menu/reward flows."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "441515b",
+        "relatedCommits": [],
+        "files": [
+          "science-legends.html",
+          "science-legends-refinement.css"
+        ],
+        "change": "Added actual active elapsed time, accuracy, final equipped build/follower and truthful combat/question/abandon end cause."
+      },
+      "verification": {
+        "command": "node tools/science-legends-ux-browser.mjs",
+        "result": "50 evaluator-owned native DOM/pixel/keyboard/simulation checks pass at1280/DPR1,390/DPR2 and320/DPR2. Six host/cadence combinations preserve movement/fast collisions/world scale. Eight tree keys cause18/24mutations rather than5840 and0node removals. Mobile graph519/700and241/424px with visible tips. Menu identity, actual learn/equip points+locked route, bounded dirty status, truthful summary and44px controls pass. Final native screenshot pixels keep names bright above cooldown shade. Hint recedes at12active seconds or successful aimed release, restart restores it, rejected cooldown casts do not dismiss it, and pause retains aiming help."
+      }
+    },
+    {
+      "number": 41,
+      "area": "Authored directional heading",
+      "feedback": "Generated javelin art points northeast while the renderer assumes east before applying travel rotation.",
+      "acceptance": [
+        "Explicit recipe source headings align real texture transforms with actual projectile travel."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "8c6a6dd",
+        "relatedCommits": [
+          "567c3f2"
+        ],
+        "files": [
+          "science-legends-actions.js",
+          "science-legends.html"
+        ],
+        "change": "Calibrated measured authored directional source headings; removed speculative Stag/Bash/Roll offsets after direct source-art audit."
+      },
+      "verification": {
+        "command": "node tools/science-legends-skill-acceptance-browser.mjs; node tools/science-legends-skill-texture-browser.mjs",
+        "result": "78 evaluator-owned actual-pixel/paint checks and58 real-runtime skill checks pass on final heading correction. All60casts are compact/visible/pure; source-pixel javelin principal axis aligns in4directions; native Multishot paints one shaft per physical arrow, no fan. Flight lifetime/pause/expiry and six reduced-motion sustained cues pass. Actual contacts damage all10stacked foes, latched target/descent and five actual dash endpoints match, real Meteor remains painted after100small contacts, art failure/reduced-motion fallback works. Original802visual assertions and240-combination stress also passed."
+      }
+    },
+    {
+      "number": 42,
+      "area": "One visible projectile body",
+      "feedback": "Each Multishot/Strafe/axes/Stampede projectile redraws a full multi-object atlas motif, multiplying apparent bodies beyond physics.",
+      "acceptance": [
+        "Keep generated cast bursts but render one physical body with one material wake per actual projectile."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "567c3f2",
+        "relatedCommits": [],
+        "files": [
+          "science-legends-actions.js",
+          "science-legends.html"
+        ],
+        "change": "Kept generated cast bursts while restricting owned flight effects to one native physical body with a material wake."
+      },
+      "verification": {
+        "command": "node tools/science-legends-skill-acceptance-browser.mjs; node tools/science-legends-skill-texture-browser.mjs",
+        "result": "78 evaluator-owned actual-pixel/paint checks and58 real-runtime skill checks pass on final heading correction. All60casts are compact/visible/pure; source-pixel javelin principal axis aligns in4directions; native Multishot paints one shaft per physical arrow, no fan. Flight lifetime/pause/expiry and six reduced-motion sustained cues pass. Actual contacts damage all10stacked foes, latched target/descent and five actual dash endpoints match, real Meteor remains painted after100small contacts, art failure/reduced-motion fallback works. Original802visual assertions and240-combination stress also passed."
+      }
+    },
+    {
+      "number": 43,
+      "area": "Flight texture lifetime",
+      "feedback": "A live flying projectile cycles anticipation/impact/fade frames and fades during its final220ms before removal.",
+      "acceptance": [
+        "Hold active flight appearance until actual removal; preserve reduced-motion and source pinning."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "567c3f2",
+        "relatedCommits": [],
+        "files": [
+          "science-legends-actions.js",
+          "science-legends.html"
+        ],
+        "change": "Held active flight frame/opacity until actual projectile removal instead of looping anticipation/impact/fade."
+      },
+      "verification": {
+        "command": "node tools/science-legends-skill-acceptance-browser.mjs; node tools/science-legends-skill-texture-browser.mjs",
+        "result": "78 evaluator-owned actual-pixel/paint checks and58 real-runtime skill checks pass on final heading correction. All60casts are compact/visible/pure; source-pixel javelin principal axis aligns in4directions; native Multishot paints one shaft per physical arrow, no fan. Flight lifetime/pause/expiry and six reduced-motion sustained cues pass. Actual contacts damage all10stacked foes, latched target/descent and five actual dash endpoints match, real Meteor remains painted after100small contacts, art failure/reduced-motion fallback works. Original802visual assertions and240-combination stress also passed."
+      }
+    },
+    {
+      "number": 44,
+      "area": "Phase-correct caster gestures",
+      "feedback": "Generic cast effects can draw a full target zone, shield or heal motif at the caster before that effect exists.",
+      "acceptance": [
+        "Use compact class/skill cast sigils at the caster and reserve actual area motifs for their real sites."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "567c3f2",
+        "relatedCommits": [],
+        "files": [
+          "science-legends-actions.js",
+          "science-legends.html"
+        ],
+        "change": "Replaced oversized caster-site effects with compact clipped generated gestures and class/skill casting sigils."
+      },
+      "verification": {
+        "command": "node tools/science-legends-skill-acceptance-browser.mjs; node tools/science-legends-skill-texture-browser.mjs",
+        "result": "78 evaluator-owned actual-pixel/paint checks and58 real-runtime skill checks pass on final heading correction. All60casts are compact/visible/pure; source-pixel javelin principal axis aligns in4directions; native Multishot paints one shaft per physical arrow, no fan. Flight lifetime/pause/expiry and six reduced-motion sustained cues pass. Actual contacts damage all10stacked foes, latched target/descent and five actual dash endpoints match, real Meteor remains painted after100small contacts, art failure/reduced-motion fallback works. Original802visual assertions and240-combination stress also passed."
+      }
+    },
+    {
+      "number": 45,
+      "area": "Lightning path honesty",
+      "feedback": "A generic forked atlas at the origin can suggest branches beyond actual victim segments.",
+      "acceptance": [
+        "Draw only copied actual chain segments with layered lightning and local contact sparks."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "567c3f2",
+        "relatedCommits": [],
+        "files": [
+          "science-legends-actions.js",
+          "science-legends.html"
+        ],
+        "change": "Rendered copied actual victim segments with layered lightning/local sparks, eliminating generic phantom fork art."
+      },
+      "verification": {
+        "command": "node tools/science-legends-skill-acceptance-browser.mjs; node tools/science-legends-skill-texture-browser.mjs",
+        "result": "78 evaluator-owned actual-pixel/paint checks and58 real-runtime skill checks pass on final heading correction. All60casts are compact/visible/pure; source-pixel javelin principal axis aligns in4directions; native Multishot paints one shaft per physical arrow, no fan. Flight lifetime/pause/expiry and six reduced-motion sustained cues pass. Actual contacts damage all10stacked foes, latched target/descent and five actual dash endpoints match, real Meteor remains painted after100small contacts, art failure/reduced-motion fallback works. Original802visual assertions and240-combination stress also passed."
+      }
+    },
+    {
+      "number": 46,
+      "area": "Contact-specific impacts",
+      "feedback": "Small projectile collisions reuse complete weapon or cast motifs, including multi-arrow fans.",
+      "acceptance": [
+        "Explicit contact/burst metadata selects compact local impacts versus true area explosion artwork."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "567c3f2",
+        "relatedCommits": [],
+        "files": [
+          "science-legends-actions.js",
+          "science-legends.html"
+        ],
+        "change": "Added explicit contact/burst phase metadata so small collisions paint compact material sparks and true area explosions retain area art."
+      },
+      "verification": {
+        "command": "node tools/science-legends-skill-acceptance-browser.mjs; node tools/science-legends-skill-texture-browser.mjs",
+        "result": "78 evaluator-owned actual-pixel/paint checks and58 real-runtime skill checks pass on final heading correction. All60casts are compact/visible/pure; source-pixel javelin principal axis aligns in4directions; native Multishot paints one shaft per physical arrow, no fan. Flight lifetime/pause/expiry and six reduced-motion sustained cues pass. Actual contacts damage all10stacked foes, latched target/descent and five actual dash endpoints match, real Meteor remains painted after100small contacts, art failure/reduced-motion fallback works. Original802visual assertions and240-combination stress also passed."
+      }
+    },
+    {
+      "number": 47,
+      "area": "Generated targeted descent",
+      "feedback": "Targeted Meteor/Hawk/Fist/Rain warning phases use basic placeholders before generated impact artwork.",
+      "acceptance": [
+        "Use generated anticipation/release textures at the latched target with simulation-progress descent and no early impact frame."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "567c3f2",
+        "relatedCommits": [],
+        "files": [
+          "science-legends-actions.js",
+          "science-legends.html"
+        ],
+        "change": "Added generated anticipation/release descent at actual latched Meteor/Hawk/Fist/Rain targets without early impact frames."
+      },
+      "verification": {
+        "command": "node tools/science-legends-skill-acceptance-browser.mjs; node tools/science-legends-skill-texture-browser.mjs",
+        "result": "78 evaluator-owned actual-pixel/paint checks and58 real-runtime skill checks pass on final heading correction. All60casts are compact/visible/pure; source-pixel javelin principal axis aligns in4directions; native Multishot paints one shaft per physical arrow, no fan. Flight lifetime/pause/expiry and six reduced-motion sustained cues pass. Actual contacts damage all10stacked foes, latched target/descent and five actual dash endpoints match, real Meteor remains painted after100small contacts, art failure/reduced-motion fallback works. Original802visual assertions and240-combination stress also passed."
+      }
+    },
+    {
+      "number": 48,
+      "area": "Actual dash arrival path",
+      "feedback": "Arrival effects can show an abstract additional burst rather than the movement actually completed.",
+      "acceptance": [
+        "Use bounded wake/footprints from recorded start to actual endpoint without extending or changing swept collision."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "567c3f2",
+        "relatedCommits": [],
+        "files": [
+          "science-legends-actions.js",
+          "science-legends.html"
+        ],
+        "change": "Retained actual dash start/end coordinates and painted only the final bounded travelled segment."
+      },
+      "verification": {
+        "command": "node tools/science-legends-skill-acceptance-browser.mjs; node tools/science-legends-skill-texture-browser.mjs",
+        "result": "78 evaluator-owned actual-pixel/paint checks and58 real-runtime skill checks pass on final heading correction. All60casts are compact/visible/pure; source-pixel javelin principal axis aligns in4directions; native Multishot paints one shaft per physical arrow, no fan. Flight lifetime/pause/expiry and six reduced-motion sustained cues pass. Actual contacts damage all10stacked foes, latched target/descent and five actual dash endpoints match, real Meteor remains painted after100small contacts, art failure/reduced-motion fallback works. Original802visual assertions and240-combination stress also passed."
+      }
+    },
+    {
+      "number": 49,
+      "area": "Sustained duration cues",
+      "feedback": "Buff, shield and aura textures do not communicate their remaining simulation lifetime.",
+      "acceptance": [
+        "Subtle nonstrobing remaining-duration runes follow actual lifetime, with functional reduced-motion expiry cues."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "567c3f2",
+        "relatedCommits": [],
+        "files": [
+          "science-legends-actions.js",
+          "science-legends.html"
+        ],
+        "change": "Added subtle remaining-lifetime runes to sustained effects with functional reduced-motion expiry cues."
+      },
+      "verification": {
+        "command": "node tools/science-legends-skill-acceptance-browser.mjs; node tools/science-legends-skill-texture-browser.mjs",
+        "result": "78 evaluator-owned actual-pixel/paint checks and58 real-runtime skill checks pass on final heading correction. All60casts are compact/visible/pure; source-pixel javelin principal axis aligns in4directions; native Multishot paints one shaft per physical arrow, no fan. Flight lifetime/pause/expiry and six reduced-motion sustained cues pass. Actual contacts damage all10stacked foes, latched target/descent and five actual dash endpoints match, real Meteor remains painted after100small contacts, art failure/reduced-motion fallback works. Original802visual assertions and240-combination stress also passed."
+      }
+    },
+    {
+      "number": 50,
+      "area": "Important impact retention",
+      "feedback": "A visible long-lived Meteor/AoE can be evicted from the FIFO effect queue by24small projectile contacts while almost its full lifetime remains.",
+      "acceptance": [
+        "Bound the queue while retaining important arrivals/AoE during contact floods; coalesce nearby same-skill contact sparks without suppressing distinct distant hits or changing damage."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "567c3f2",
+        "relatedCommits": [],
+        "files": [
+          "science-legends-actions.js",
+          "science-legends.html"
+        ],
+        "change": "Added bounded priority effect retention and nearby45ms/12px contact coalescing so small hit floods do not evict important Meteor/arrival/AoE effects."
+      },
+      "verification": {
+        "command": "node tools/science-legends-skill-acceptance-browser.mjs; node tools/science-legends-skill-texture-browser.mjs",
+        "result": "78 evaluator-owned actual-pixel/paint checks and58 real-runtime skill checks pass on final heading correction. All60casts are compact/visible/pure; source-pixel javelin principal axis aligns in4directions; native Multishot paints one shaft per physical arrow, no fan. Flight lifetime/pause/expiry and six reduced-motion sustained cues pass. Actual contacts damage all10stacked foes, latched target/descent and five actual dash endpoints match, real Meteor remains painted after100small contacts, art failure/reduced-motion fallback works. Original802visual assertions and240-combination stress also passed."
+      }
+    }
+  ],
+  "notes": [
+    "Only implemented and independently verified rounds count toward completedRounds.",
+    "Remaining rounds will be added from concrete evaluation feedback after earlier batches are rechecked; a list of assertions does not itself constitute fifty improvement rounds.",
+    "Wall-time benchmarks are advisory and controlled before/after comparisons; deterministic regressions check redundant work and behavior instead of machine-specific millisecond limits.",
+    "Role-intro screenshot fixture spawned all four new roles at once after start; normal minWave4/5/6/7 introductions are staggered by40-second waves. Field guide/live counters provide complete counterplay beyond brief toasts."
+  ],
+  "afterRound10": {
+    "artifact": "docs/science-legends-50-after-r10.json",
+    "denseMobile": {
+      "windowMs": 2005.4,
+      "simulationSteps": 245,
+      "updateCpuMs": 302,
+      "drawCpuMs": 639,
+      "attributeMutations": 1063,
+      "childMutations": 14,
+      "radialGradients": 0
+    },
+    "pausedMobile": {
+      "worldPaints": 0,
+      "drawCpuMs": 0
+    },
+    "treeMobile": {
+      "worldPaints": 0,
+      "drawCpuMs": 0
+    },
+    "menuMobile": {
+      "worldPaints": 0,
+      "attributeMutations": 0
+    },
+    "interpretation": "Frozen-world and redundant UI work was removed. Dense actor rendering remains the largest cost. Host refresh cadence varied between captures, so no universal FPS percentage is inferred."
+  },
+  "finalBenchmark": {
+    "highRefreshArtifact": "docs/science-legends-50-final-high120.json",
+    "balancedArtifact": "docs/science-legends-50-final-balanced60.json",
+    "retainedOutlierArtifact": "docs/science-legends-50-final-balanced60-outlier.json",
+    "conditions": "Same local real page/Edge, exact100 legacy mixed actors and4pets,1280x900/DPR1 desktop and390x844/DPR2 mobile with4x CPU throttle. The stress fixture reconstructs original composition directly so new encounter quotas cannot reduce the workload. High120 and defaultBalanced60 are reported separately. RepeatBalanced60 uses low-overhead CDP CPU sampling.",
+    "mobileHigh120": {
+      "windowMs": 2012.5,
+      "simulationSteps": 248,
+      "worldPaints": 198,
+      "updateCpuMs": 336,
+      "drawCpuMs": 700,
+      "drawMaxMs": 11,
+      "attributes": 81,
+      "children": 15,
+      "radialGradients": 0,
+      "enemyCount": 100,
+      "petCount": 4,
+      "startupMs": 1958.1,
+      "startupMaxLongTaskMs": 145
+    },
+    "mobileBalanced60": {
+      "windowMs": 2004.2,
+      "simulationSteps": 249,
+      "worldPaints": 120,
+      "updateCpuMs": 298,
+      "drawCpuMs": 460,
+      "drawMaxMs": 11,
+      "attributes": 83,
+      "children": 13,
+      "radialGradients": 0,
+      "denseLongTasks": 0,
+      "enemyCount": 100,
+      "petCount": 4,
+      "startupMs": 1778.2,
+      "startupMaxLongTaskMs": 150
+    },
+    "frozen": {
+      "menuMutations": 0,
+      "pauseWorldPaints": 0,
+      "treeWorldPaints": 0
+    },
+    "limitations": [
+      "Headless host refresh changed from about120Hz in the first baseline to about100Hz in final captures; timings are advisory, not universal FPS percentages.",
+      "Balanced60 intentionally paints less while120Hz simulation stays unchanged; this is a quality/cadence tradeoff, not an invented FPS improvement.",
+      "Dense actor rendering remains the largest cost. High-refresh draw CPU was700ms versus662ms in the initial baseline despite reduced redundant work; broad dense-render speedup is not claimed.",
+      "The first Balanced60 capture had an unexplained737ms draw stall and147simulation steps in2seconds. The retained outlier is published alongside a controlled profiled repeat with no dense longtasks and249steps; the cause was not reproduced or attributed to a runtime fix.",
+      "Optional role art adds about1.11MB after idle scheduling and can finish after the critical startup capture. No critical readiness dependency was added.",
+      "Timing captures preceded the final b1fed39 label-contrast/tutorial/streak wording correction, which changes presentation only; targeted50UX and45feedback checks passed afterward."
+    ]
+  }
+}

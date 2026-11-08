@@ -37,7 +37,7 @@ try {
       return new URL(await page.locator('iframe').getAttribute('src'));
     };
     const initial = await open();
-    assert.equal(initial.searchParams.get('subject'),subject); assert.equal(initial.searchParams.get('v'),'1.0.0');
+    assert.equal(initial.searchParams.get('subject'),subject); assert.equal(initial.searchParams.get('v'),'1.0.2');
     assert.match(initial.searchParams.get('profile'),/^p[0-9a-f]{16}$/); assert.ok(!initial.href.includes('private-account-one'));
     assert.equal(await page.locator('iframe').getAttribute('referrerpolicy'),'no-referrer');
     assert.equal(await page.locator('[role="dialog"]').count(),1);

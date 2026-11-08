@@ -512,7 +512,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app-check.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, getDocs, collection, addDoc, Timestamp, increment, query, where, onSnapshot, runTransaction } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, getDocs, collection, addDoc, Timestamp, increment, deleteField, serverTimestamp, query, where, onSnapshot, runTransaction } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
+import { createGameUsageRecorder, createGameUsageWriter } from './game-usage.js?v=1.458.0';
 
 import { buildScienceFeedContext, planScienceQuestions, evaluateScienceFit, scienceQuestionContentKey, scienceQuestionIsSec1 } from './science-feed-core.js?v=sec1-retired-1';
 import { createStudentQuestionHistory } from './student-question-history.js?v=1';
@@ -1674,6 +1675,21 @@ function paintStrikeReadiness() {
   $('playBtn').setAttribute('aria-describedby', 'strikeReadiness creditLine');
   return issue;
 }
+var fpsGameUsageRecorder;
+function fpsRecordGameStart(run) {
+  try {
+    if (!fpsGameUsageRecorder) fpsGameUsageRecorder = createGameUsageRecorder({
+      getActor: () => currentUser?.role === 'student' && !ADMIN_EMAILS.includes(currentUser.email)
+        ? { uid: currentUser.uid, role: 'student', key: fpsFeedKey() } : null,
+      write: createGameUsageWriter({
+        read: async uid => { const snap = await getDoc(doc(db, 'scienceGameLeaderboard', uid)); return snap.exists() ? snap.data() : {}; },
+        merge: (uid, patch) => setDoc(doc(db, 'scienceGameLeaderboard', uid), patch, { merge: true }),
+        increment, remove: deleteField, stamp: serverTimestamp
+      })
+    });
+    return fpsGameUsageRecorder.start('fps', run);
+  } catch (_) { return Promise.resolve(false); }
+}
 function startRun() {
   if (G && !G.over) return;  // one start, one credit, even on a double-click
   if (paintStrikeReadiness()) return;
@@ -1737,6 +1753,7 @@ function startRun() {
   lastT = performance.now();
   cancelAnimationFrame(raf);
   raf = requestAnimationFrame(tick);
+  try { fpsRecordGameStart(G); } catch (_) {}
 }
 
 function luckNow() {

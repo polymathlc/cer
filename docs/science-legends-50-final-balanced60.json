@@ -1,0 +1,761 @@
+[
+  {
+    "cfg": {
+      "label": "desktop",
+      "width": 1280,
+      "height": 900,
+      "dpr": 1,
+      "throttle": 1,
+      "paintCadence": 60
+    },
+    "load": {
+      "now": 696.7999999523163,
+      "tasks": [
+        {
+          "start": 49.39999997615814,
+          "duration": 129
+        }
+      ],
+      "images": [
+        {
+          "name": "courtyard-slate.webp",
+          "size": 239826,
+          "duration": 19.5
+        },
+        {
+          "name": "arcane-atlas.webp",
+          "size": 741094,
+          "duration": 46.89999997615814
+        },
+        {
+          "name": "enemies-clean.webp",
+          "size": 481200,
+          "duration": 21.699999928474426
+        },
+        {
+          "name": "heroes.webp",
+          "size": 606966,
+          "duration": 56.299999952316284
+        },
+        {
+          "name": "companions.webp",
+          "size": 580354,
+          "duration": 59.799999952316284
+        },
+        {
+          "name": "enemies-rear.webp",
+          "size": 477730,
+          "duration": 34.299999952316284
+        },
+        {
+          "name": "companions-rear.webp",
+          "size": 476706,
+          "duration": 36.59999990463257
+        },
+        {
+          "name": "heroes-rear.webp",
+          "size": 533702,
+          "duration": 65.19999992847443
+        },
+        {
+          "name": "elements-clean.webp",
+          "size": 663460,
+          "duration": 70.39999997615814
+        },
+        {
+          "name": "attacks.webp",
+          "size": 794454,
+          "duration": 76.79999995231628
+        },
+        {
+          "name": "fx-barb.webp",
+          "size": 1032642,
+          "duration": 91.5
+        },
+        {
+          "name": "fx-sorc.webp",
+          "size": 973878,
+          "duration": 82.29999995231628
+        },
+        {
+          "name": "fx-ama.webp",
+          "size": 931236,
+          "duration": 96.89999997615814
+        },
+        {
+          "name": "whirlwind.webp",
+          "size": 972772,
+          "duration": 102.39999997615814
+        },
+        {
+          "name": "fx-pala.webp",
+          "size": 966544,
+          "duration": 107.59999990463257
+        },
+        {
+          "name": "fx-beast.webp",
+          "size": 1173278,
+          "duration": 114
+        },
+        {
+          "name": "icons-barb.webp",
+          "size": 524722,
+          "duration": 85.39999997615814
+        },
+        {
+          "name": "icons-sorc.webp",
+          "size": 513384,
+          "duration": 37.700000047683716
+        },
+        {
+          "name": "icons-beast.webp",
+          "size": 476830,
+          "duration": 40.5
+        },
+        {
+          "name": "icons-pala.webp",
+          "size": 481306,
+          "duration": 60.800000071525574
+        },
+        {
+          "name": "icons-ama.webp",
+          "size": 497746,
+          "duration": 66.40000009536743
+        },
+        {
+          "name": "expedition-cover.webp",
+          "size": 331738,
+          "duration": 68.89999997615814
+        },
+        {
+          "name": "enemies-elite-rear.webp",
+          "size": 505018,
+          "duration": 7.5
+        },
+        {
+          "name": "enemies-elite.webp",
+          "size": 605386,
+          "duration": 10.599999904632568
+        }
+      ],
+      "heap": 30229452
+    },
+    "menu": {
+      "label": "menu",
+      "elapsed": 1202.7000000476837,
+      "frames": 121,
+      "medianFrame": 10.100000000000136,
+      "p95Frame": 10.5,
+      "longFrames": 0,
+      "longTasks": [],
+      "stats": {},
+      "canvas": {},
+      "mutations": {
+        "attrs": 0,
+        "text": 0,
+        "child": 0
+      },
+      "heap": 38288585
+    },
+    "empty": {
+      "label": "empty-combat",
+      "elapsed": 1607.5,
+      "frames": 153,
+      "medianFrame": 10.099999999999909,
+      "p95Frame": 10.5,
+      "longFrames": 0,
+      "longTasks": [],
+      "stats": {
+        "updateCombatReadability": {
+          "calls": 193,
+          "ms": 2.0000003576278687,
+          "max": 0.19999992847442627
+        },
+        "updatePets": {
+          "calls": 193,
+          "ms": 0,
+          "max": 0
+        },
+        "buildGrid": {
+          "calls": 193,
+          "ms": 0.10000002384185791,
+          "max": 0.10000002384185791
+        },
+        "updateEnemies": {
+          "calls": 193,
+          "ms": 0.2999999523162842,
+          "max": 0.10000002384185791
+        },
+        "updateProjectiles": {
+          "calls": 193,
+          "ms": 0.10000002384185791,
+          "max": 0.10000002384185791
+        },
+        "updateBars": {
+          "calls": 193,
+          "ms": 2.6999998092651367,
+          "max": 0.10000002384185791
+        },
+        "updateSkillCds": {
+          "calls": 193,
+          "ms": 0.9000000953674316,
+          "max": 0.10000002384185791
+        },
+        "update": {
+          "calls": 193,
+          "ms": 8.799999952316284,
+          "max": 0.20000004768371582
+        },
+        "updateTargetPanel": {
+          "calls": 15,
+          "ms": 0,
+          "max": 0
+        },
+        "drawArenaLandmarks": {
+          "calls": 93,
+          "ms": 4.299999952316284,
+          "max": 0.20000004768371582
+        },
+        "drawActors": {
+          "calls": 93,
+          "ms": 1.8999998569488525,
+          "max": 0.10000002384185791
+        },
+        "drawAtmosphere": {
+          "calls": 93,
+          "ms": 0.20000004768371582,
+          "max": 0.10000002384185791
+        },
+        "draw": {
+          "calls": 93,
+          "ms": 10.299999594688416,
+          "max": 0.2999999523162842
+        }
+      },
+      "canvas": {
+        "drawImage": 1488
+      },
+      "mutations": {
+        "attrs": 2,
+        "text": 0,
+        "child": 5
+      },
+      "heap": 40990332
+    },
+    "dense": {
+      "label": "100-enemies-mixed-skills",
+      "elapsed": 2010.5,
+      "frames": 201,
+      "medianFrame": 10.100000000000364,
+      "p95Frame": 10.5,
+      "longFrames": 0,
+      "longTasks": [],
+      "stats": {
+        "updateCombatReadability": {
+          "calls": 250,
+          "ms": 2.3000001907348633,
+          "max": 0.20000004768371582
+        },
+        "updatePets": {
+          "calls": 250,
+          "ms": 5.299999475479126,
+          "max": 0.3999999761581421
+        },
+        "buildGrid": {
+          "calls": 250,
+          "ms": 5.899999976158142,
+          "max": 0.2999999523162842
+        },
+        "updateEnemies": {
+          "calls": 250,
+          "ms": 27.500000596046448,
+          "max": 0.6000000238418579
+        },
+        "updateProjectiles": {
+          "calls": 250,
+          "ms": 7.900000095367432,
+          "max": 0.3999999761581421
+        },
+        "updateBars": {
+          "calls": 250,
+          "ms": 4.500000476837158,
+          "max": 0.10000002384185791
+        },
+        "updateSkillCds": {
+          "calls": 250,
+          "ms": 3.899999737739563,
+          "max": 0.19999992847442627
+        },
+        "update": {
+          "calls": 250,
+          "ms": 58.00000071525574,
+          "max": 1.100000023841858
+        },
+        "updateTargetPanel": {
+          "calls": 19,
+          "ms": 0,
+          "max": 0
+        },
+        "drawArenaLandmarks": {
+          "calls": 121,
+          "ms": 5,
+          "max": 0.20000004768371582
+        },
+        "drawActors": {
+          "calls": 121,
+          "ms": 59.19999980926514,
+          "max": 1.0999999046325684
+        },
+        "drawAtmosphere": {
+          "calls": 121,
+          "ms": 0.19999992847442627,
+          "max": 0.10000002384185791
+        },
+        "draw": {
+          "calls": 121,
+          "ms": 94.69999957084656,
+          "max": 2.100000023841858
+        }
+      },
+      "canvas": {
+        "drawImage": 16024,
+        "fillText": 3531,
+        "strokeText": 1944
+      },
+      "mutations": {
+        "attrs": 83,
+        "text": 0,
+        "child": 14
+      },
+      "heap": 6153219,
+      "enemyCount": 100,
+      "petCount": 4
+    },
+    "paused": {
+      "label": "paused-dense",
+      "elapsed": 1205.7000000476837,
+      "frames": 117,
+      "medianFrame": 10.100000000000364,
+      "p95Frame": 10.5,
+      "longFrames": 1,
+      "longTasks": [],
+      "stats": {},
+      "canvas": {},
+      "mutations": {
+        "attrs": 0,
+        "text": 0,
+        "child": 0
+      },
+      "heap": 5306922
+    },
+    "tree": {
+      "label": "skill-tree-dense",
+      "elapsed": 1208.2999999523163,
+      "frames": 117,
+      "medianFrame": 10.099999999998545,
+      "p95Frame": 10.5,
+      "longFrames": 1,
+      "longTasks": [],
+      "stats": {},
+      "canvas": {},
+      "mutations": {
+        "attrs": 0,
+        "text": 0,
+        "child": 0
+      },
+      "heap": 5426719
+    },
+    "errors": []
+  },
+  {
+    "cfg": {
+      "label": "mobile-cpu4",
+      "width": 390,
+      "height": 844,
+      "dpr": 2,
+      "throttle": 4,
+      "paintCadence": 60
+    },
+    "load": {
+      "now": 1778.2000000476837,
+      "tasks": [
+        {
+          "start": 468.60000002384186,
+          "duration": 82
+        },
+        {
+          "start": 555,
+          "duration": 150
+        },
+        {
+          "start": 722.1000000238419,
+          "duration": 128
+        },
+        {
+          "start": 852.3000000715256,
+          "duration": 113
+        },
+        {
+          "start": 967.8999999761581,
+          "duration": 117
+        },
+        {
+          "start": 1085.8000000715256,
+          "duration": 129
+        },
+        {
+          "start": 1216.2000000476837,
+          "duration": 129
+        },
+        {
+          "start": 1346.8000000715256,
+          "duration": 124
+        }
+      ],
+      "images": [
+        {
+          "name": "arcane-atlas.webp",
+          "size": 741094,
+          "duration": 36.5
+        },
+        {
+          "name": "courtyard-slate.webp",
+          "size": 239826,
+          "duration": 17.699999928474426
+        },
+        {
+          "name": "heroes.webp",
+          "size": 606966,
+          "duration": 37.299999952316284
+        },
+        {
+          "name": "enemies-clean.webp",
+          "size": 481200,
+          "duration": 17.5
+        },
+        {
+          "name": "companions.webp",
+          "size": 580354,
+          "duration": 29.300000071525574
+        },
+        {
+          "name": "heroes-rear.webp",
+          "size": 533702,
+          "duration": 43.299999952316284
+        },
+        {
+          "name": "enemies-rear.webp",
+          "size": 477730,
+          "duration": 23.399999976158142
+        },
+        {
+          "name": "companions-rear.webp",
+          "size": 476706,
+          "duration": 25.59999990463257
+        },
+        {
+          "name": "attacks.webp",
+          "size": 794454,
+          "duration": 45
+        },
+        {
+          "name": "elements-clean.webp",
+          "size": 663460,
+          "duration": 48.39999997615814
+        },
+        {
+          "name": "fx-barb.webp",
+          "size": 1032642,
+          "duration": 59.5
+        },
+        {
+          "name": "fx-sorc.webp",
+          "size": 973878,
+          "duration": 53.60000002384186
+        },
+        {
+          "name": "fx-beast.webp",
+          "size": 1173278,
+          "duration": 83.29999995231628
+        },
+        {
+          "name": "fx-pala.webp",
+          "size": 966544,
+          "duration": 76.5
+        },
+        {
+          "name": "fx-ama.webp",
+          "size": 931236,
+          "duration": 65.69999992847443
+        },
+        {
+          "name": "whirlwind.webp",
+          "size": 972772,
+          "duration": 70.5
+        },
+        {
+          "name": "expedition-cover.webp",
+          "size": 331738,
+          "duration": 301.39999997615814
+        },
+        {
+          "name": "icons-barb.webp",
+          "size": 524722,
+          "duration": 89.5
+        },
+        {
+          "name": "icons-sorc.webp",
+          "size": 513384,
+          "duration": 86.70000004768372
+        },
+        {
+          "name": "icons-beast.webp",
+          "size": 476830,
+          "duration": 91.5
+        },
+        {
+          "name": "icons-pala.webp",
+          "size": 481306,
+          "duration": 93.29999995231628
+        },
+        {
+          "name": "icons-ama.webp",
+          "size": 497746,
+          "duration": 95.39999997615814
+        }
+      ],
+      "heap": 11492294
+    },
+    "menu": {
+      "label": "menu",
+      "elapsed": 1205.7999999523163,
+      "frames": 110,
+      "medianFrame": 10.199999999999818,
+      "p95Frame": 10.5,
+      "longFrames": 1,
+      "longTasks": [
+        {
+          "start": 1939.6000000238419,
+          "duration": 122
+        }
+      ],
+      "stats": {},
+      "canvas": {},
+      "mutations": {
+        "attrs": 0,
+        "text": 0,
+        "child": 0
+      },
+      "heap": 11259435
+    },
+    "empty": {
+      "label": "empty-combat",
+      "elapsed": 1606.8000000715256,
+      "frames": 159,
+      "medianFrame": 10.199999999999818,
+      "p95Frame": 10.500000000000455,
+      "longFrames": 0,
+      "longTasks": [],
+      "stats": {
+        "updateCombatReadability": {
+          "calls": 195,
+          "ms": 7.900000214576721,
+          "max": 0.5
+        },
+        "updatePets": {
+          "calls": 195,
+          "ms": 0.5999999046325684,
+          "max": 0.19999992847442627
+        },
+        "buildGrid": {
+          "calls": 195,
+          "ms": 0.39999985694885254,
+          "max": 0.19999992847442627
+        },
+        "updateEnemies": {
+          "calls": 195,
+          "ms": 0.49999988079071045,
+          "max": 0.19999992847442627
+        },
+        "updateProjectiles": {
+          "calls": 195,
+          "ms": 0.3999999761581421,
+          "max": 0.20000004768371582
+        },
+        "updateBars": {
+          "calls": 195,
+          "ms": 13.100000143051147,
+          "max": 0.30000007152557373
+        },
+        "updateSkillCds": {
+          "calls": 195,
+          "ms": 4.400000333786011,
+          "max": 0.30000007152557373
+        },
+        "update": {
+          "calls": 195,
+          "ms": 42.100000739097595,
+          "max": 0.8999999761581421
+        },
+        "drawArenaLandmarks": {
+          "calls": 96,
+          "ms": 18.000001549720764,
+          "max": 0.5
+        },
+        "drawActors": {
+          "calls": 96,
+          "ms": 13.399999260902405,
+          "max": 0.5
+        },
+        "drawAtmosphere": {
+          "calls": 96,
+          "ms": 1.399999737739563,
+          "max": 0.20000004768371582
+        },
+        "draw": {
+          "calls": 96,
+          "ms": 54.299999594688416,
+          "max": 1.2000000476837158
+        },
+        "updateTargetPanel": {
+          "calls": 15,
+          "ms": 0.6000000238418579,
+          "max": 0.20000004768371582
+        }
+      },
+      "canvas": {
+        "drawImage": 672
+      },
+      "mutations": {
+        "attrs": 2,
+        "text": 0,
+        "child": 5
+      },
+      "heap": 13210716
+    },
+    "dense": {
+      "label": "100-enemies-mixed-skills",
+      "elapsed": 2004.2000000476837,
+      "frames": 208,
+      "medianFrame": 9.399999999999636,
+      "p95Frame": 10.5,
+      "longFrames": 0,
+      "longTasks": [],
+      "stats": {
+        "updateCombatReadability": {
+          "calls": 249,
+          "ms": 18.200000166893005,
+          "max": 0.6000000238418579
+        },
+        "updatePets": {
+          "calls": 249,
+          "ms": 17.59999966621399,
+          "max": 1.1999999284744263
+        },
+        "buildGrid": {
+          "calls": 249,
+          "ms": 24.49999964237213,
+          "max": 0.3999999761581421
+        },
+        "updateEnemies": {
+          "calls": 249,
+          "ms": 149.70000076293945,
+          "max": 2.1999999284744263
+        },
+        "updateProjectiles": {
+          "calls": 249,
+          "ms": 34.799999833106995,
+          "max": 2.399999976158142
+        },
+        "updateBars": {
+          "calls": 249,
+          "ms": 21.400001168251038,
+          "max": 0.7000000476837158
+        },
+        "updateSkillCds": {
+          "calls": 249,
+          "ms": 19.199999809265137,
+          "max": 1.100000023841858
+        },
+        "update": {
+          "calls": 249,
+          "ms": 298.20000064373016,
+          "max": 3.399999976158142
+        },
+        "updateTargetPanel": {
+          "calls": 19,
+          "ms": 0.20000004768371582,
+          "max": 0.20000004768371582
+        },
+        "drawArenaLandmarks": {
+          "calls": 120,
+          "ms": 19.20000123977661,
+          "max": 0.5
+        },
+        "drawActors": {
+          "calls": 120,
+          "ms": 256.10000014305115,
+          "max": 4.399999976158142
+        },
+        "drawAtmosphere": {
+          "calls": 120,
+          "ms": 1.5999997854232788,
+          "max": 0.20000004768371582
+        },
+        "draw": {
+          "calls": 120,
+          "ms": 459.800000667572,
+          "max": 10.600000023841858
+        }
+      },
+      "canvas": {
+        "drawImage": 9022,
+        "fillText": 3211,
+        "strokeText": 1835
+      },
+      "mutations": {
+        "attrs": 83,
+        "text": 0,
+        "child": 13
+      },
+      "heap": 5978066,
+      "enemyCount": 100,
+      "petCount": 4
+    },
+    "paused": {
+      "label": "paused-dense",
+      "elapsed": 1207.5,
+      "frames": 122,
+      "medianFrame": 10.100000000000364,
+      "p95Frame": 10.5,
+      "longFrames": 0,
+      "longTasks": [],
+      "stats": {},
+      "canvas": {},
+      "mutations": {
+        "attrs": 0,
+        "text": 0,
+        "child": 0
+      },
+      "heap": 6151304
+    },
+    "tree": {
+      "label": "skill-tree-dense",
+      "elapsed": 1202.2000000476837,
+      "frames": 120,
+      "medianFrame": 10.199999999998909,
+      "p95Frame": 10.600000000000364,
+      "longFrames": 0,
+      "longTasks": [],
+      "stats": {},
+      "canvas": {},
+      "mutations": {
+        "attrs": 0,
+        "text": 0,
+        "child": 0
+      },
+      "heap": 5597375
+    },
+    "errors": []
+  }
+]

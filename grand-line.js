@@ -233,6 +233,7 @@ function persistCollection(){
 function beginBattle(encounter){
   if(purchasePending){toast('Resume your pending purchase in the Card shop before starting a defense.');return;}if(!current()||adminPending||savePending||unsavedLearning)return;const next=createDefense(collection,{encounter,seed:uuid('defense')});if(!next){toast('Choose up to seven unlocked crew members and an available harbor.');return;}
   placementInput?.cancel();battle=next;lastOutcome='';buildMode='crew';placementArmed=false;selectedTowerCell='';placementNotice='';rosterOpen=false;placementPreviewKey='';placementPreview=null;selectedPreviewSkillId='';selectedAllyId=next.allies[0]?.id||'';selectedPadId='';selectedSummonId='';summonMode=false;hoverPadId='';defensePaused=false;busyUntil=0;lastFrame=0;lastHud=0;learningPending=null;go('battle');sound();
+  post({type:'CER_GAME_STARTED',game:'grand-line',runId:battle.id});
 }
 function startWave(){if(!battle||busy()||learningPending?.waiting)return false;placementInput?.cancel();const result=startDefenseWave(battle);if(result){clearPlacement();rosterOpen=false;selectedPreviewSkillId='';defensePaused=false;lastFrame=0;sound();renderBattle();}return result;}
 function selectDefender(id){if(!battle?.allies.some(u=>u.id===id))return;selectedAllyId=id;selectedPreviewSkillId='';selectedTowerCell='';placementNotice='';summonMode=false;buildMode='crew';placementArmed=canPrepare();placementPreviewKey='';selectedPadId=battle.allies.find(u=>u.id===id).padId;renderBattle();}

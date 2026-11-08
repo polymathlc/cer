@@ -30,7 +30,7 @@ test('both sidebar and game hub launch the new adventure while Hades remains ava
 });
 
 test('authentication, navigation and learner changes dispose or invalidate the active frame', () => {
-  assert.match(app, /onAuthStateChanged\(auth, (?:async )?\(user\) => \{\s*(?:hadesMathBeta.close\(\);\s*)?pirateRiftPortal\.close\(\)/);
+  assert.match(app, /onAuthStateChanged\(auth, (?:async )?\(user\) => \{\s*(?:_gameInsightsController\?\.reset\(\);\s*)?(?:hadesMathBeta.close\(\);\s*)?pirateRiftPortal\.close\(\)/);
   if (science) {
     // Execute the actual listener as well as preserving the close-first source
     // contract: both auth paths must close the frame before entering the next
@@ -42,6 +42,7 @@ test('authentication, navigation and learner changes dispose or invalidate the a
     let whiteboardStops = 0, questFrameResets = 0;
     vm.runInNewContext(listener, {
       auth: {}, onAuthStateChanged: (_auth, fn) => { callback = fn; },
+      _gameInsightsController: { reset: noop },
       rapidPreviewReset: noop, pirateRiftPortal: { close: () => events.push('close') },
       grandLinePortal: { close: noop }, wsArtResetForUser: noop, ainsteinStopAdminWork: noop,
       wsCoverResetForUser: user => coverResets.push(user?.uid || ''),

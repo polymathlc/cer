@@ -26,7 +26,10 @@ async function settledSpireRoom(frame,floor){
  const markup=section(index,'    <div class="page" id="page-adventure">','    <!-- ===== PAGE: LEADERBOARD');
  const advSource=section(app,'// ---- Adventure mode (idle side-scrolling','// ---- Static event wiring');
  const fixture=`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}body{display:block;padding:18px;background:#e9eef5}.page{display:block!important}.page-body{padding:0!important}.page-header{padding:0 0 16px}.mobile-toggle{display:none!important}.subtitle{max-width:880px}.adv-card{max-width:980px;margin:auto}</style></head><body>${markup}<script>
- window.facts={credits:3,payouts:[],saves:0};
+ window.facts={credits:3,payouts:[],saves:0,gameStarts:[]};
+ ${read('game-usage.js').replace(/^export /gm,'')}
+ const usageRecorder=createGameUsageRecorder({getActor:()=>({uid:currentUser.uid,role:'student',key:learnerKey}),write:event=>facts.gameStarts.push(event.gameId)});
+ const recordGameStart=(id,run)=>usageRecorder.start(id,run);
  const $=id=>document.getElementById(id);let currentUser={uid:'fixture',name:'Explorer'},learnerKey='child',learnerLevel='P4';
  let rpgState={equipment:{weapon:'wood_sword',pet:'loyal_pup'},stats:{},dungeonFloor:1};
  const _scienceFeedKey=()=>learnerKey,_scienceFeedLevel=()=>learnerLevel;
@@ -153,6 +156,7 @@ async function settledSpireRoom(frame,floor){
   await page.evaluate(()=>fixture.switchChild());await page.waitForTimeout(150);assert.equal(await page.evaluate(()=>fixture.snapshot().hp),undefined);assert.deepEqual(await page.evaluate(()=>facts.payouts),[],'Switching learners does not publish the old run rewards');
   await page.evaluate(()=>fixture.startArena());assert.equal(await page.evaluate(()=>facts.credits),2,'Ghost Arena retains free entry');await page.evaluate(()=>fixture.winArena());await page.waitForFunction(()=>fixture.snapshot().hp===undefined);assert.deepEqual(await page.evaluate(()=>facts.payouts),[],'Winning a free Ghost Arena duel pays no currency or XP');
   await page.evaluate(()=>{fixture.startArena();fixture.endWithEffects();});await page.waitForTimeout(650);assert.equal(await page.locator('#advFx > *,#advHero .rpg-float').count(),0,'Ending a run removes in-flight visual effects');
+  assert.ok(await page.evaluate(()=>facts.gameStarts.includes('adventure')&&facts.gameStarts.includes('ghost-arena')),'Real Adventure and Ghost Arena starts reach the collector');
   assert.deepEqual(errors,[]);assert.deepEqual(requests,[]);console.log('Browser passed: Spire delayed profile/credits, stale metadata, learner switching, targeting, complete forecast turn, two endless boss transitions, bounded global maps, one-credit continuation, finite question bank, score checkpoints and ending with a delayed reply; Adventure pause/guard/manual basics, mobile bounds, learner cancellation, free Arena rewards and exit effects; desktop/mobile screenshots.');console.log('Screenshots: '+shots);
  }finally{await browser.close();}
 }

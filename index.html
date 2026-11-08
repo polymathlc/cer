@@ -297,9 +297,9 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-  <link rel="modulepreload" href="app.js?v=1.457.0">
+  <link rel="modulepreload" href="app.js?v=1.458.0">
 <!-- 🙋 Consults (v1.446.0): the archive window shared with Study Buddy, Ans Key and the Maths portal. -->
-<link rel="stylesheet" href="consult-answer.css?v=1.457.0">
+<link rel="stylesheet" href="consult-answer.css?v=1.458.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- The "Your next lightbulb moment" card (practice-preview.js) asks the sample service for its
@@ -322,7 +322,7 @@
      preview copy these links with media="all"). quest-frames.css is loaded the
      same non-blocking way. -->
 <link rel="stylesheet" media="print" href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Pixelify+Sans:wght@400..700&display=swap">
-<link rel="stylesheet" media="print" onload="this.media='all'" href="quest-frames.css?v=1.457.0">
+<link rel="stylesheet" media="print" onload="this.media='all'" href="quest-frames.css?v=1.458.0">
 
 <!-- Tailwind, prebuilt. This used to be <script src="cdn.tailwindcss.com">:
      the Play CDN, which ships a full CSS compiler to the browser, scans the
@@ -10913,6 +10913,7 @@ html { scroll-behavior:smooth; }
             <span class="ico">🏴‍☠️</span> Pirate Rift <span class="nav-beta">BETA</span>
           </div>
           <div class="nav-item" data-page="grand-line" onclick="navigateTo('grand-line')" title="Crew Defense — protect your ship and answer three Science questions after every wave"><span class="ico">🃏</span> Crew Defense <span class="nav-beta">TCG</span></div>
+          <div class="nav-item admin-only" data-page="gameinsights" onclick="navigateTo('gameinsights')"><span class="ico">📊</span> Games Insights</div>
           <div id="navTcgHome"></div>
           <div class="nav-tcg-wrap" id="navTcgWrap">
             <div class="nav-item" id="navTcg" data-page="tcg" onclick="navigateTo('tcg')" style="display:none;" title="Realm of Embers Trading Card Game — collect every card in the dex from booster packs bought with your points, build a team of 5 and auto-battle other trainers.">
@@ -12717,6 +12718,12 @@ html { scroll-behavior:smooth; }
       </div>
     </div>
 
+    <!-- ===== PAGE: GAME INSIGHTS (Admin Only) ===== -->
+    <div class="page" id="page-gameinsights">
+      <div class="page-header"><div><div style="display:flex;align-items:center;gap:10px;"><button class="mobile-toggle" onclick="toggleSidebar()" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button><h2>Games Insights</h2></div><div class="subtitle">See what students choose, how they answer, and where to improve next</div></div></div>
+      <div class="page-body"><div id="gameInsightsRoot" aria-live="polite"></div></div>
+    </div>
+
     <!-- ===== PAGE: STUDENT USAGE DASHBOARD (Admin Only) ===== -->
     <div class="page" id="page-usage">
       <div class="page-header">
@@ -13249,7 +13256,7 @@ html { scroll-behavior:smooth; }
           </div>
           <div class="subtitle">Tower Defense MCQ — answer 3 science questions before each round. Every question also pays 🪙 points into your wallet for booster packs.</div>
         </div>
-        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;"><div class="game-pts" title="Points the questions in this game have paid you this run. Spend them on Realm of Embers booster packs, Spire packs and the shop."><span class="ico">🪙</span><b data-game-pts>0</b><span class="lbl">points this run</span></div><a class="btn btn-outline" href="science-defenders.html?v=1.457.0" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a></div>
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;"><div class="game-pts" title="Points the questions in this game have paid you this run. Spend them on Realm of Embers booster packs, Spire packs and the shop."><span class="ico">🪙</span><b data-game-pts>0</b><span class="lbl">points this run</span></div><a class="btn btn-outline" href="science-defenders.html?v=1.458.0" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a></div>
       </div>
       <iframe id="defendersFrame" class="embed-frame" title="Science Defenders — Tower Defense MCQ"></iframe>
     </div>
@@ -13263,7 +13270,7 @@ html { scroll-behavior:smooth; }
           </div>
           <div class="subtitle">Roguelite top-down shooter — clear rooms, answer science questions to pick power-ups. Every question also pays 🪙 points into your wallet for booster packs.</div>
         </div>
-        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;"><div class="game-pts" title="Points the questions in this game have paid you this run. Spend them on Realm of Embers booster packs, Spire packs and the shop."><span class="ico">🪙</span><b data-game-pts>0</b><span class="lbl">points this run</span></div><a class="btn btn-outline" href="science-raiders.html?v=1.457.0" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a></div>
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;"><div class="game-pts" title="Points the questions in this game have paid you this run. Spend them on Realm of Embers booster packs, Spire packs and the shop."><span class="ico">🪙</span><b data-game-pts>0</b><span class="lbl">points this run</span></div><a class="btn btn-outline" href="science-raiders.html?v=1.458.0" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a></div>
       </div>
       <iframe id="raidersFrame" class="embed-frame" title="Science Raiders — Roguelite Shooter MCQ"></iframe>
     </div>
@@ -13279,7 +13286,7 @@ html { scroll-behavior:smooth; }
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <div class="game-pts" title="Points the questions in this game have paid you this run. Spend them on Realm of Embers booster packs, Spire packs and the shop."><span class="ico">🪙</span><b data-game-pts>0</b><span class="lbl">points this run</span></div><button class="btn btn-primary" id="spireBookBtn" type="button" style="font-size:0.82rem;">🃏 Spellbook &amp; Packs</button>
-          <a class="btn btn-outline" href="science-spire.html?v=1.457.0" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a>
+          <a class="btn btn-outline" href="science-spire.html?v=1.458.0" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a>
         </div>
       </div>
       <iframe id="spireFrame" class="embed-frame" title="Science Spire — Deck-building MCQ Roguelike"></iframe>
@@ -13294,7 +13301,7 @@ html { scroll-behavior:smooth; }
           </div>
           <div class="subtitle">Top-down action RPG — pick a class, grow a Diablo-style skill tree, and answer a science question every 20 seconds. Beta: no game leaderboard yet, but questions still count.</div>
         </div>
-        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;"><div class="game-pts" title="Points the questions in this game have paid you this run. Spend them on Realm of Embers booster packs, Spire packs and the shop."><span class="ico">🪙</span><b data-game-pts>0</b><span class="lbl">points this run</span></div><a class="btn btn-outline admin-only" href="science-legends.html?v=1.457.0" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a></div>
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;"><div class="game-pts" title="Points the questions in this game have paid you this run. Spend them on Realm of Embers booster packs, Spire packs and the shop."><span class="ico">🪙</span><b data-game-pts>0</b><span class="lbl">points this run</span></div><a class="btn btn-outline admin-only" href="science-legends.html?v=1.458.0" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a></div>
       </div>
       <iframe id="legendsFrame" class="embed-frame" title="Science Legends — Top-Down Action RPG MCQ (BETA)"></iframe>
     </div>
@@ -13308,7 +13315,7 @@ html { scroll-behavior:smooth; }
           </div>
           <div class="subtitle">Dungeon crawler — procedural floors, idle monster packs, boss loot, and questions powered by action points: answer wrong and you fight the next turn on ⅓ actions.</div>
         </div>
-        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;"><div class="game-pts" title="Points the questions in this game have paid you this run. Spend them on Realm of Embers booster packs, Spire packs and the shop."><span class="ico">🪙</span><b data-game-pts>0</b><span class="lbl">points this run</span></div><a class="btn btn-outline admin-only" href="science-slayers.html?v=1.457.0" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a></div>
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;"><div class="game-pts" title="Points the questions in this game have paid you this run. Spend them on Realm of Embers booster packs, Spire packs and the shop."><span class="ico">🪙</span><b data-game-pts>0</b><span class="lbl">points this run</span></div><a class="btn btn-outline admin-only" href="science-slayers.html?v=1.458.0" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a></div>
       </div>
       <iframe id="slayersFrame" class="embed-frame" title="Science Slayers — Dungeon Crawler MCQ (BETA)"></iframe>
     </div>
@@ -16829,16 +16836,17 @@ body.lore-reading { overflow: hidden; }
      before the page can paint, and the browser fetches and compiles it in
      parallel with the markup instead of afterwards. -->
 <script defer src="landing-motion.js"></script>
+<link rel="stylesheet" href="game-insights.css?v=1.458.0">
 <script defer src="rpg-svg-art.js"></script>
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
 <script defer src="shape-snap.js"></script>
-<script defer src="pwa-install.js?v=1.457.0"></script>
-  <script src="worksheet-cover.js?v=1.457.0"></script>
-  <script src="quest-frames.js?v=1.457.0"></script>
-  <script defer src="consult-answer.js?v=1.457.0"></script>
-  <script defer src="consult-bridge.js?v=1.457.0"></script>
-  <script src="game-question-pressure.js?v=1.457.0"></script>
-  <script type="module" src="app.js?v=1.457.0"></script>
+<script defer src="pwa-install.js?v=1.458.0"></script>
+  <script src="worksheet-cover.js?v=1.458.0"></script>
+  <script src="quest-frames.js?v=1.458.0"></script>
+  <script defer src="consult-answer.js?v=1.458.0"></script>
+  <script defer src="consult-bridge.js?v=1.458.0"></script>
+  <script src="game-question-pressure.js?v=1.458.0"></script>
+  <script type="module" src="app.js?v=1.458.0"></script>
 </body>
 </html>
