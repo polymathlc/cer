@@ -35,3 +35,10 @@ test('six enemy archetypes select unique columns and halt locomotion under contr
   assert.equal(models.enemyFrame({moving:true,chargeSt:1},.15,false),3);
   assert.equal(models.enemyFrame({moving:true,modelAttackUntil:1},.15,false),3);
 });
+test('actor depth follows planted feet, remains stable at ties and never mutates simulation arrays',()=>{
+  const hero={y:100,r:16},rear={y:80,r:15},front={y:120,r:15},pet={y:100,r:16};
+  const entries=[{actor:hero,order:0},{actor:front,order:1},{actor:rear,order:2},{actor:pet,order:3}];
+  assert.deepEqual(models.sortActors(entries).map(e=>e.actor),[rear,hero,pet,front]);
+  assert.equal(entries[0].actor,hero);assert.equal(entries[1].actor,front);
+  front.y=70;assert.deepEqual(models.sortActors(entries).map(e=>e.actor),[front,rear,hero,pet]);
+});

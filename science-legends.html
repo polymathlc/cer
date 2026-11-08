@@ -3939,6 +3939,36 @@ function petSprite(kind){
   if (MOB_SPRITES[kind]) return MOB_SPRITES[kind];
   return MOB_SPRITES.wolf;
 }
+function actorHeight(entry){return entry.kind==='hero'?72:entry.kind==='enemy'?Math.max(40,entry.actor.r*4):entry.actor.r*3.4;}
+function drawActors(camX,camY){
+  var p=G.player,queue=[{kind:'hero',actor:p,order:0}];
+  G.enemies.forEach(function(e,i){if(!e.dead&&e.hp>0&&e.x>camX-180&&e.x<camX+VW+180&&e.y>camY-180&&e.y<camY+VH+180)queue.push({kind:'enemy',actor:e,order:i+1});});
+  G.pets.forEach(function(pt,i){if(pt.hp>0)queue.push({kind:'pet',actor:pt,order:1000+i});});
+  // Ground contacts always sit below every upright model.
+  queue.forEach(function(entry){var actor=entry.actor;ctx.save();ctx.globalAlpha=.28;ctx.fillStyle='#000';ctx.beginPath();ctx.ellipse(actor.x,actor.y+actor.r,actor.r*.95,actor.r*.38,0,0,Math.PI*2);ctx.fill();ctx.restore();
+    if(entry.kind==='enemy'&&actor.elite){ctx.save();ctx.strokeStyle=actor.boss?'#e1acff':'#ffd674';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(actor.x,actor.y+actor.r,actor.r+6,(actor.r+6)*.45,0,0,Math.PI*2);ctx.stroke();ctx.restore();}
+  });
+  drawHeroGround();
+  var sorted=LegendsModels.sortActors(queue);G.renderOrder=sorted.map(function(entry){return entry.actor;});
+  sorted.forEach(function(entry){var actor=entry.actor,size=actorHeight(entry);
+    if(entry.kind==='hero')drawHeroModel();
+    else if(entry.kind==='enemy'){
+      drawEnemyModel(actor,size);
+      if(actor.frozen>0){ctx.save();ctx.globalAlpha=.28;ctx.fillStyle='#80deea';ctx.beginPath();ctx.ellipse(actor.x,actor.y-actor.r*.2,actor.r+4,size*.44,0,0,Math.PI*2);ctx.fill();ctx.restore();}
+    }else{var petId=actor.kind==='boarpet'?'boar':actor.kind;drawActorModel(petId,petSprite(petId)[(actor.animT*2|0)%2],actor,size,false);}
+  });
+  // Labels are a final pass, never covered by a nearer body sprite.
+  queue.forEach(function(entry){var actor=entry.actor;if(entry.kind==='hero'||actor.hp>=actor.maxHp)return;var width=actor.r*2.2,y=actor.y+actor.r-actorHeight(entry)-8;
+    ctx.fillStyle='#07121be6';ctx.fillRect(actor.x-width/2-1,y-1,width+2,6);ctx.fillStyle=entry.kind==='pet'?'#81c784':actor.boss?'#ce93d8':'#ef7770';ctx.fillRect(actor.x-width/2,y,width*clamp(actor.hp/actor.maxHp,0,1),4);
+  });
+}
+function drawHeroGround(){
+  var p=G.player;ctx.save();
+  if(G.abuffs.length||G.insightT>0){ctx.globalAlpha=.35;ctx.strokeStyle=G.insightT>0?'#ffd54f':'#ff8a65';ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(p.x,p.y+12,26,12,0,0,Math.PI*2);ctx.stroke();}
+  if(p.shield>0){ctx.globalAlpha=.4;ctx.strokeStyle='#4fc3f7';ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(p.x,p.y+7,27,19,0,0,Math.PI*2);ctx.stroke();}
+  if(G.spin){var flame=G.stats.mods['pw.flamespin'];ctx.globalAlpha=.45;ctx.strokeStyle=flame?'#ff5722':'#ffcc80';ctx.lineWidth=4;ctx.beginPath();ctx.ellipse(p.x,p.y,G.spin.radius*G.stats.area,G.spin.radius*G.stats.area*.7,0,0,Math.PI*2);ctx.stroke();}
+  ctx.restore();
+}
 function draw(){
   var p = G ? G.player : null;
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
@@ -3982,73 +4012,7 @@ function draw(){
     ctx.fillStyle = '#fff'; ctx.fillRect(o.x - 1.5, o.y + Math.sin(o.t * 5) * 3 - 4, 3, 8); ctx.fillRect(o.x - 4, o.y + Math.sin(o.t * 5) * 3 - 1.5, 8, 3);
   });
   var m0 = camX - 80, m1 = camX + VW + 80, n0 = camY - 80, n1 = camY + VH + 80;
-  G.enemies.forEach(function(e){
-    if (e.x < m0 || e.x > m1 || e.y < n0 || e.y > n1) return;
-    var size = Math.max(40,e.r * 4);
-    ctx.globalAlpha = 0.25;
-    ctx.fillStyle = '#000';
-    ctx.beginPath(); ctx.ellipse(e.x, e.y + e.r * 0.9, e.r * 0.9, e.r * 0.4, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.globalAlpha = 1;
-    drawEnemyModel(e,size);
-    if (e.frozen > 0){
-      ctx.globalAlpha = 0.45; ctx.fillStyle = '#80DEEA';
-      ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 4, 0, Math.PI * 2); ctx.fill();
-      ctx.globalAlpha = 1;
-    }
-    if (e.elite && !e.boss){
-      ctx.strokeStyle = '#FFD54F'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 5, 0, Math.PI * 2); ctx.stroke();
-    }
-    if (e.hp < e.maxHp){
-      var w = e.r * 2.2;
-      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(e.x - w / 2, e.y - e.r - 12, w, 4);
-      ctx.fillStyle = e.boss ? '#CE93D8' : '#EF5350'; ctx.fillRect(e.x - w / 2, e.y - e.r - 12, w * clamp(e.hp / e.maxHp, 0, 1), 4);
-    }
-  });
-  G.pets.forEach(function(pt){
-    ctx.globalAlpha = 0.25; ctx.fillStyle = '#000';
-    ctx.beginPath(); ctx.ellipse(pt.x, pt.y + pt.r * 0.9, pt.r * 0.9, pt.r * 0.4, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.globalAlpha = 1;
-    var petId = pt.kind === 'boarpet' ? 'boar' : pt.kind;
-    drawSpriteOr(petId, petSprite(petId)[(pt.animT * 2 | 0) % 2], pt.x, pt.y, pt.r * 3.4, false);
-    if (pt.kind === 'wolf' && (G.stats.mods['pw.packlord'] || G.stats.mods['pw.beastgod'])){
-      ctx.globalAlpha = 0.3; ctx.strokeStyle = '#FF7043'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.r + 4, 0, Math.PI * 2); ctx.stroke();
-      ctx.globalAlpha = 1;
-    }
-    if (pt.hp < pt.maxHp){
-      var w2 = pt.r * 2;
-      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(pt.x - w2 / 2, pt.y - pt.r - 10, w2, 3);
-      ctx.fillStyle = '#81C784'; ctx.fillRect(pt.x - w2 / 2, pt.y - pt.r - 10, w2 * clamp(pt.hp / pt.maxHp, 0, 1), 3);
-    }
-  });
-  // hero
-  ctx.globalAlpha = 0.3; ctx.fillStyle = '#000';
-  ctx.beginPath(); ctx.ellipse(p.x, p.y + 16, 15, 6, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.globalAlpha = 1;
-  if (G.abuffs.length || G.insightT > 0){
-    ctx.globalAlpha = 0.35;
-    ctx.strokeStyle = G.insightT > 0 ? '#FFD54F' : '#FF8A65';
-    ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(p.x, p.y, 26 + Math.sin(G.time * 6) * 3, 0, Math.PI * 2); ctx.stroke();
-    ctx.globalAlpha = 1;
-  }
-  if (p.shield > 0){
-    ctx.globalAlpha = 0.4; ctx.strokeStyle = '#4FC3F7'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(p.x, p.y, 24, 0, Math.PI * 2); ctx.stroke();
-    ctx.globalAlpha = 1;
-  }
-  drawHeroModel();
-  if (G.spin){
-    var flame = G.stats.mods['pw.flamespin'];
-    ctx.globalAlpha = 0.35; ctx.strokeStyle = flame ? '#FF5722' : '#FFCC80'; ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.arc(p.x, p.y, G.spin.radius * G.stats.area, 0, Math.PI * 2); ctx.stroke();
-    if (flame){
-      ctx.strokeStyle = '#FFAB91'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(p.x, p.y, G.spin.radius * G.stats.area * 0.7 + Math.sin(G.time * 20) * 6, 0, Math.PI * 2); ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-  }
+  drawActors(camX,camY);
   // melee weapon swing: eased sweep with a motion trail, weapon on top
   if (G.swing && !G.spin){
     var sw = G.swing;

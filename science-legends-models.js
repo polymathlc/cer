@@ -15,6 +15,7 @@
     return {x:sum?sumX/sum/width:.5,y:bottom/height};
   }
   function enemyColumn(kind){return kind==='boss'?3:ENEMIES.indexOf(kind);}
+  function sortActors(entries){return entries.slice().sort(function(a,b){return (a.actor.y+(a.actor.r||0))-(b.actor.y+(b.actor.r||0))||a.order-b.order;});}
   function enemyFrame(actor,time,reduced){
     if(actor.frozen>0||actor.stun>0)return 0;
     if(actor.chargeSt===1)return 3;
@@ -42,7 +43,7 @@
   }
   function drawHero(ctx,cls,actor,time,reduced,size){return drawModel(ctx,'hero',HEROES.indexOf(cls),stateFrame(actor,time,reduced),actor,size);}
   function drawEnemy(ctx,actor,time,reduced,size){return drawModel(ctx,'enemy',enemyColumn(actor.kind),enemyFrame(actor,time,reduced),actor,size);}
-  var api={ready:ready,drawHero:drawHero,drawEnemy:drawEnemy,stateFrame:stateFrame,enemyFrame:enemyFrame,enemyColumn:enemyColumn,sourceRect:sourceRect,footAnchor:footAnchor};
+  var api={ready:ready,drawHero:drawHero,drawEnemy:drawEnemy,stateFrame:stateFrame,enemyFrame:enemyFrame,enemyColumn:enemyColumn,sourceRect:sourceRect,footAnchor:footAnchor,sortActors:sortActors};
   if(typeof module==='object'&&module.exports)module.exports=api;
   root.LegendsModels=api;
   if(typeof root.Image==='function'&&root.document)Object.keys(sheets).forEach(function(kind){var sheet=sheets[kind];sheet.image=new root.Image();sheet.image.onload=function(){prepare(sheet);};sheet.image.src='assets/science-legends/v2/'+(kind==='hero'?'heroes':'enemies')+'.png';});

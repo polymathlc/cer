@@ -49,6 +49,9 @@ try {
       G.enemies = []; G.pets = []; G.spawnT = 999;
       const p = G.player;
       const e = spawnEnemy('slime', false); e.x = p.x + 95; e.y = p.y; e.speed = 0; e.hp = e.maxHp = 10000;
+      const back=spawnEnemy('imp',false),front=spawnEnemy('imp',false);
+      back.x=front.x=p.x;back.y=p.y-50;front.y=p.y+50;back.speed=front.speed=0;
+      draw();const depth=G.renderOrder.indexOf(back)<G.renderOrder.indexOf(p)&&G.renderOrder.indexOf(p)<G.renderOrder.indexOf(front);
       G.projs.push({ kind:'fire', sid:'fireball', x:p.x + 40, y:p.y, vx:420, vy:0, r:10, dmg:100, radius:100, life:1, pierce:0 });
       combatImpact(e, 100, { crit:true, color:'#FF8A65', impactX:1, impactY:0 });
       const target = document.createElement('canvas'); target.width=400;target.height=150;
@@ -58,10 +61,11 @@ try {
       const hit = LegendsArt.drawImpact(g, {x:250,y:70,ang:0,r:34,strong:true,color:'#FF8A65'}, .2);
       const hammer = LegendsArt.drawHammer(g, {x:330,y:70}, 0);
       const pixels = g.getImageData(0,0,400,150).data;
-      return { handled:fire&&ice&&hit&&hammer, painted:pixels.some((v,i)=>i%4===3&&v>0), ground:LegendsArt.drawGround(g,0,0,400,150) };
+      return { handled:fire&&ice&&hit&&hammer, painted:pixels.some((v,i)=>i%4===3&&v>0), ground:LegendsArt.drawGround(g,0,0,400,150),depth };
     });
     check(rendered.handled && rendered.painted, `${width}: generated projectiles, impacts and hammers actually paint pixels`);
     check(rendered.ground, `${width}: generated ground texture renders through its cached pattern`);
+    check(rendered.depth, `${width}: actual renderer layers rear enemy, hero and front enemy by ground feet`);
     await page.waitForFunction(() => G.projs.length === 0 && G.enemies[0]?.hp < 10000);
     check(await page.evaluate(() => G.impacts.length <= 48), `${width}: real explosion resolves with bounded impact effects`);
     await page.evaluate(() => { G.player.hp=G.player.maxHp; G.qTimer=0; draw(); });
