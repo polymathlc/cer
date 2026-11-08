@@ -533,6 +533,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
 </style>
 <link rel="stylesheet" href="science-legends-premium.css?v=1.455.0">
 <link rel="stylesheet" href="science-legends-sanctum.css?v=1.455.0">
+<link rel="stylesheet" href="science-legends-icons.css?v=1.455.0">
 <link rel="stylesheet" href="science-expedition-accessibility.css?v=1.455.0">
 <script defer src="science-expedition-accessibility.js?v=1.455.0"></script>
 </head>
@@ -1847,7 +1848,7 @@ function nodeKindLabel(nd){
     : nd.kind === 'branch' ? 'Branch' : nd.kind === 'unlock' ? 'New skill' : nd.kind === 'rank' ? 'Skill rank' : 'Passive';
 }
 function skillIconHtml(sid){return LegendsIcons.markup(sid,SKILLS[sid]);}
-function treeIconHtml(node){var sid=node.fx&&(node.fx.unlock||node.fx.skill)||node.ultInfo&&node.ultInfo.sid||node.sm&&node.sm.sid||node.mod&&node.mod.split('.')[0];return sid&&SKILLS[sid]?skillIconHtml(sid):node.icon;}
+function treeIconHtml(node){return LegendsIcons.treeMarkup(node,SKILLS);}
 function nodeReqMsgs(nd){
   var r = nodeRank(nd.id);
   var msgs = [];

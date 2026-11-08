@@ -1,0 +1,23 @@
+/* A distinct 4 × 3 atlas per class; readiness is independent for each image. */
+.legend-skill-icon{isolation:isolate;line-height:1;}
+.legend-skill-icon .icon-art{display:none;background-size:400% 300%;background-repeat:no-repeat;pointer-events:none;}
+.legend-skill-icon .icon-fallback{visibility:visible;line-height:1;}
+.legends-icons-ready-barb [data-icon-class="barb"] .icon-art,
+.legends-icons-ready-sorc [data-icon-class="sorc"] .icon-art,
+.legends-icons-ready-beast [data-icon-class="beast"] .icon-art,
+.legends-icons-ready-pala [data-icon-class="pala"] .icon-art,
+.legends-icons-ready-ama [data-icon-class="ama"] .icon-art{display:block;}
+.legends-icons-ready-barb [data-icon-class="barb"] .icon-fallback,
+.legends-icons-ready-sorc [data-icon-class="sorc"] .icon-fallback,
+.legends-icons-ready-beast [data-icon-class="beast"] .icon-fallback,
+.legends-icons-ready-pala [data-icon-class="pala"] .icon-fallback,
+.legends-icons-ready-ama [data-icon-class="ama"] .icon-fallback{visibility:hidden;}
+.legend-node-symbol{display:inline-grid;place-items:center;width:38px;height:38px;font-size:24px;line-height:1;}
+.icon-kind-badge{position:absolute;z-index:1;top:-5px;right:-6px;min-width:16px;height:15px;padding:0 3px;display:grid;place-items:center;border:1px solid #99c8db;border-radius:4px;background:#122c3e;color:#e6f9ff;font:800 9px/1 system-ui,sans-serif;box-shadow:0 1px 3px #000b;letter-spacing:0;}
+.icon-kind-enh .icon-kind-badge{border-color:#c2a0fa;background:#312046;color:#f2e5ff;}
+.icon-kind-ult .icon-kind-badge{border-color:#f4d08a;background:#503619;color:#fff0ba;}
+.icon-kind-unlock .icon-kind-badge{border-color:#a2d7b9;background:#18392d;color:#dcffe4;font-size:14px;}
+#treeOverlay .tnode.k-enh .legend-skill-icon,
+#treeOverlay .tnode.k-branch .legend-skill-icon{width:32px;height:32px;}
+#treeOverlay .tp-ico .icon-kind-badge{top:-6px;right:-8px;}
+.class-card .sk .legend-skill-icon{width:20px;height:20px;}
