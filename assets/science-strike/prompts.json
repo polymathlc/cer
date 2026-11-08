@@ -1,0 +1,51 @@
+[
+  {
+    "file": "reactor-panorama.webp",
+    "use_case": "stylized-concept",
+    "tool": "built-in image_gen",
+    "transparent_background": false,
+    "prompt": "Use case: stylized-concept. Asset type: wide 3:1 game environment panorama, background art for Science Strike FPS. Primary request: an atmospheric science fiction research valley, clean painterly 3D game art. A luminous teal reactor tower and low distant research buildings nestled in rocky mountains with alien trees, broken pale moon in hazy deep blue sky, warm amber practical lights. Composition: distant skyline only across the bottom quarter; generous clear sky occupying upper three quarters; wide continuous landscape, no close foreground objects or characters, horizon straight, no camera tilt. Palette: midnight blue, petrol teal, desaturated slate rock, amber accents. High quality readable forms with rich materials, no words, UI, watermark or logos."
+  },
+  {
+    "file": "enemy-sentinel.png",
+    "use_case": "stylized-concept",
+    "tool": "built-in image_gen",
+    "transparent_background": true,
+    "prompt": "Use case: stylized-concept. Asset type: transparent full body enemy sprite for Science Strike FPS. Primary request: one imposing rogue science research security robot, standing front facing in combat stance, high-end stylized 3D game render. Chunky ivory and dark navy armor, glowing amber single visor and reactor core, hydraulic limbs, compact shoulder plates, mechanical hands. Composition: portrait 3:4 full body centered, entire head and feet visible with small margin, head center around 22 percent from top and feet near bottom. Clear distinct silhouette, front view, neutral perspective, no floor shadow, no environment, no words/UI/logo/watermark. Actual transparent background."
+  },
+  {
+    "file": "enemy-stalker.png",
+    "use_case": "stylized-concept",
+    "tool": "built-in image_gen",
+    "transparent_background": true,
+    "prompt": "Use case: stylized-concept. Asset type: transparent enemy sprite for Science Strike FPS. Primary request: one low crouching alien six-legged crawler, frontal three-quarter game sprite, emerald chitin armor plates over charcoal biomechanical joints, luminous amber pair of eyes and small teal toxic sacs. Premium stylized 3D game rendering, expressive menacing but suitable for a school science arcade, no gore. Composition: square canvas, whole creature with all six legs visible, eyes around 55 percent from top, feet near bottom, centered clean silhouette, no ground shadow or scenery. No text/UI/logo/watermark. Actual transparent background."
+  },
+  {
+    "file": "weapon-blaster.png",
+    "use_case": "stylized-concept",
+    "tool": "built-in image_gen",
+    "transparent_background": true,
+    "prompt": "Use case: stylized-concept. Asset type: transparent first-person held weapon model sprite, Science Strike FPS. Primary request: one compact futuristic science blaster viewed from behind in a first person shooter camera; muzzle points toward upper-left vanishing point, grip and rear receiver occupy lower-right. No hands or person. Ivory ceramic shell, graphite metal, teal energy cell, small amber status light, convincing layered beveled construction, premium stylized 3D render. Wide 3:2 canvas with whole weapon visible, muzzle at x=18%,y=25%, rear at x=85%,y=78%. Deep perspective down barrel, do not use a flat side view. Sharp readable silhouette, no writing/logo/UI/background or watermark, actual transparency."
+  },
+  {
+    "file": "weapon-assault.png",
+    "use_case": "stylized-concept",
+    "tool": "built-in image_gen",
+    "transparent_background": true,
+    "prompt": "Use case: stylized-concept. Asset type: transparent first-person held weapon model sprite, Science Strike FPS. Primary request: one futuristic automatic research carbine, viewed from behind in first person shooter camera; barrel points toward upper-left vanishing point, rear receiver and stock lower-right. No hands or person. Dark graphite receiver, ivory ceramic armor panels, glowing teal power conduits, orange magazine, compact holographic sight. Premium stylized 3D game render with crisp hard surface materials. Wide 3:2 canvas, whole gun visible with margins, muzzle at x=18%,y=25%, rear stock at x=85%,y=78%. Strong foreshortened perspective looking down gun, no flat side view. No text/logo/UI/background/watermark. Actual transparent background."
+  },
+  {
+    "file": "weapon-scatter.png",
+    "use_case": "stylized-concept",
+    "tool": "built-in image_gen",
+    "transparent_background": true,
+    "prompt": "Use case: stylized-concept. Asset type: transparent first-person held weapon model sprite for Science Strike FPS. Primary request: one heavy futuristic double-barrel scattergun, viewed from behind in first person shooter camera, two thick barrels point toward upper-left vanishing point, big receiver and stock occupy lower-right. No hands or person. Heavy dark graphite and warm bronze chassis, ivory shell plates, glowing orange chamber, thick ribbed pump, premium stylized 3D game render. Wide 3:2 canvas with entire gun visible, muzzle at x=18%,y=25%, rear at x=85%,y=78%. Strong foreshortened perspective looking down weapon, no flat side view. Clean silhouette, no text/logo/UI/background/watermark, actual transparent background."
+  },
+  {
+    "file": "weapon-rail.png",
+    "use_case": "stylized-concept",
+    "tool": "built-in image_gen",
+    "transparent_background": true,
+    "prompt": "Use case: stylized-concept. Asset type: transparent first-person held weapon model sprite for Science Strike FPS. Primary request: one long futuristic precision rail rifle, viewed from behind in first person shooter camera; long twin magnet rails converge toward upper-left vanishing point, angular rear receiver and stock lower-right. No hands or person. Ivory ceramic and dark navy metal, bright cyan rail coils, amber small scope lens, slender deliberate silhouette. Premium stylized 3D game render. Wide 3:2 canvas with whole weapon visible, muzzle at x=18%,y=25%, rear at x=85%,y=78%. Strong foreshortened perspective looking down gun, no flat side view. No text/logo/UI/background/watermark. Actual transparency."
+  }
+]

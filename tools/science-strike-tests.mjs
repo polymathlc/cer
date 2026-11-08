@@ -92,7 +92,7 @@ test('intentional question-feed pause keeps its explanation after mouse capture 
 test('FPS module remains syntactically valid and versioned', () => {
   const script = source.match(/<script type="module">([\s\S]*?)<\/script>/)[1];
   new vm.Script(script.replace(/^import .*;\n/gm, ''));
-  assert.match(source, /Science Strike v1\.9\.4/);
+  assert.match(source, /Science Strike v2\.0\.0/);
 });
 
 test('combat waits for confirmed pointer lock; duplicate confirmations are harmless', () => {
@@ -250,7 +250,7 @@ test('a current failed diagram withdraws safely without recording a wrong answer
   assert.equal(f.counts.record, 0); assert.match(f.element('pauseReason').textContent, /diagram could not load/);
 });
 
-test('every weapon muzzle remains visible in hip fire, ADS, recoil and reduced-motion modes', () => {
+test('generated and fallback weapon muzzles remain visible in hip fire, ADS, recoil and reduced-motion modes', () => {
   let matrix = [1, 0, 0, 1, 0, 0], stack = [], muzzle;
   const point = (x, y) => ({ x: matrix[0] * x + matrix[2] * y + matrix[4], y: matrix[1] * x + matrix[3] * y + matrix[5] });
   const ctx = {
@@ -258,20 +258,26 @@ test('every weapon muzzle remains visible in hip fire, ADS, recoil and reduced-m
     translate(x, y) { const p = point(x, y); matrix[4] = p.x; matrix[5] = p.y; },
     rotate(r) { const [a,b,c,d,e,f] = matrix, co = Math.cos(r), si = Math.sin(r); matrix = [a*co+c*si,b*co+d*si,c*co-a*si,d*co-b*si,e,f]; },
     scale(x, y) { matrix[0] *= x; matrix[1] *= x; matrix[2] *= y; matrix[3] *= y; },
+    drawImage() { muzzle = point(0, 0); },
     beginPath() {}, closePath() {}, roundRect() {}, fill() {}, stroke() {}, arc() {}, ellipse() {}, moveTo() {}, lineTo() {}, quadraticCurveTo() {}, fillRect() {},
   };
   const c = vm.createContext({ ctx, Math, performance: { now: () => 1000 }, REND_W: 960, REND_H: 540, bobT: .3, swayX: 12, swayY: 10,
-    strikeSettings: { reducedMotion: false }, G: null });
-  vm.runInContext(cut('const ARCHETYPES = [', 'const PREFIX =') + cut('function drawGunModel(g, w)', '// full-model sprite cache') + cut('function drawViewModel()', '// sniper/AR scope:'), c);
+    strikeSettings: { reducedMotion: false }, G: null, Image: class {} });
+  vm.runInContext(cut('const ARCHETYPES = [', 'const PREFIX =')
+    + cut('const strikeWeaponArt = {}', '// full-model sprite cache')
+    + cut('function drawGeneratedViewWeapon(', 'function drawViewModel()')
+    + cut('function drawViewModel()', '// sniper/AR scope:'), c);
   const realDraw = c.drawGunModel;
   c.drawGunModel = (canvas, weapon) => { const x = realDraw(canvas, weapon); muzzle = point(x - 6, -12); return x; };
   const archetypes = vm.runInContext('ARCHETYPES', c);
-  for (const arch of archetypes) for (const reducedMotion of [false, true]) for (const ads of [0, 1]) for (const gunKick of [0, 1]) {
+  const models = vm.runInContext('strikeWeaponArt', c);
+  for (const generated of [false, true]) for (const arch of archetypes) for (const reducedMotion of [false, true]) for (const ads of [0, 1]) for (const gunKick of [0, 1]) {
+    for (const model of Object.values(models)) Object.assign(model, { ready: generated, width: 1024, height: 1024 });
     c.strikeSettings.reducedMotion = reducedMotion;
     c.G = { weapon: { arch, rarity: { color: '#fff' }, element: 'none' }, ads, gunKick, reloading: 0, casings: [], particles: [] };
     c.drawViewModel();
-    const label = `${arch.key}, reducedMotion=${reducedMotion}, ADS=${ads}, recoil=${gunKick}`;
-    assert.ok(muzzle.x > 20 && muzzle.x < 940 && muzzle.y > 300 && muzzle.y < 525, `${label}: muzzle ${JSON.stringify(muzzle)}`);
+    const label = `${arch.key}, generated=${generated}, reducedMotion=${reducedMotion}, ADS=${ads}, recoil=${gunKick}`;
+    assert.ok(muzzle.x > 20 && muzzle.x < 940 && muzzle.y > (generated ? 250 : 300) && muzzle.y < 525, `${label}: muzzle ${JSON.stringify(muzzle)}`);
     assert.equal(stack.length, 0, 'canvas transform stack stays balanced');
   }
 });

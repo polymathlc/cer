@@ -80,7 +80,7 @@ const auth = `export const getAuth=()=>({}); export class GoogleAuthProvider{}
 export function onAuthStateChanged(_,callback){window.__mock.authCallback=callback;setTimeout(()=>callback(null),0);}
 export async function signInWithPopup(){return window.__mock.authCallback({uid:'learner',email:'learner@example.test',displayName:'Test Learner'});}`;
 
-async function pageFor({ bankRows = bank, pending = false, lock = 'success', mobile = false, objectives, topics, attempts = [], reports = [] } = {}) {
+async function pageFor({ bankRows = bank, pending = false, lock = 'success', mobile = false, objectives, topics, attempts = [], reports = [], artUnavailable = false } = {}) {
   const context = await browser.newContext({ viewport: mobile ? { width: 390, height: 844 } : { width: 1280, height: 900 },
     ...(mobile ? { isMobile: true, hasTouch: true } : {}) });
   const page = await context.newPage(), errors = [], external = [];
@@ -117,8 +117,13 @@ async function pageFor({ bankRows = bank, pending = false, lock = 'success', mob
       // Read-only observation plus scenario setup: the next real animation frame
       // opens the question/draft, and all user actions go through real DOM events.
       const seam = `\nwindow.__strikeQA={get run(){return G;},get ready(){return fpsFeedReady;},candidate:fpsQuestionCandidate,take:nextQuestion,refresh:loadQuestions,clearFeed:fpsFeedClear,get db(){return fpsFeedBank;},get current(){return currentUser;},get cap(){return studentLevelCap;},get credits(){return creditsLeft();},get skills(){return skillsOpen;},get pointer(){return pointerLocked;},get keys(){return keys;},get meta(){return meta;},get rows(){return questions;},get mouse(){return {fire:mouseDown,ads:adsHeld};},get state(){return {run:!!G,paused:G?.paused,over:G?.over,q:G?.activeQ?.id,total:G?.qTotal,correct:G?.qCorrect,ammo:G?.ammo,timer:G?.qTimerMs,x:G?.player.x,y:G?.player.y};},openDraft,answerQuestion};\n`;
-      html = html.slice(0, closing) + seam + html.slice(closing);
+      const artSeam = `\nwindow.__strikeArtQA={get weapons(){return strikeWeaponArt;},get world(){return strikeWorldArt;},get archetypes(){return ARCHETYPES;},family:strikeWeaponFamily,equip:equipWeapon,render};\n`;
+      html = html.slice(0, closing) + seam + artSeam + html.slice(closing);
       return route.fulfill({ contentType: 'text/html', body: html });
+    }
+    if (/^assets\/science-strike\/[a-z0-9-]+\.(png|webp)$/.test(file) && fs.existsSync(new URL(file, root))) {
+      if (artUnavailable) return route.abort();
+      return route.fulfill({ contentType: file.endsWith('.webp') ? 'image/webp' : 'image/png', body: fs.readFileSync(new URL(file, root)) });
     }
     if (/^(?:science-feed-(core|mastery|variety|quality)|science-strike-feed|student-question-history)\.js$/.test(file))
       return route.fulfill({ contentType: 'application/javascript', body: fs.readFileSync(new URL(file, root), 'utf8') });
@@ -419,6 +424,101 @@ try {
   check(new Set(openers).size>1,'Different controlled fresh starts vary the first database MCQ in Science Strike');
   check(new Set(openingSets).size>1,'Short Science Strike sessions vary the chosen set, not just the order of a fixed pair');
   console.log('PASS randomized standalone feed: seeded fresh starts vary, current-grade peers remain distinct and school priority is preserved');
+
+  const artwork = await pageFor();
+  await artwork.page.waitForFunction(() => {
+    const a = window.__strikeArtQA;
+    return ['blaster', 'assault', 'scatter', 'rail'].every(key => a.weapons[key]?.ready)
+      && a.world.panorama?.naturalWidth > 0 && a.world.sentinel?.generated && a.world.stalker?.generated;
+  });
+  check(await artwork.page.evaluate(() => {
+    const a = window.__strikeArtQA;
+    return a.archetypes.length === 12 && a.archetypes.every(arch => a.weapons[a.family(arch.key)]?.ready);
+  }), 'Every weapon archetype resolves to a decoded generated weapon model');
+  check(await artwork.page.evaluate(() => {
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    return Object.values(window.__strikeArtQA.weapons).every(({ image }) => {
+      g.clearRect(0, 0, 64, 64); g.drawImage(image, 0, 0, 64, 64);
+      const pixels = g.getImageData(0, 0, 64, 64).data;
+      let clear = 0, opaque = 0;
+      for (let i = 3; i < pixels.length; i += 4) { if (pixels[i] < 16) clear++; if (pixels[i] > 200) opaque++; }
+      return clear > 100 && opaque > 100;
+    });
+  }), 'Generated weapon cutouts have usable visible artwork and transparent backgrounds');
+  await artwork.page.locator('#playBtn').click();
+  await artwork.page.waitForFunction(() => !window.__strikeQA.run.paused);
+  await artwork.page.keyboard.press('Escape');
+  await artwork.page.waitForFunction(() => window.__strikeQA.run.paused && !window.__strikeQA.pointer);
+  await artwork.page.evaluate(() => {
+    const g = window.__strikeQA.run;
+    Object.assign(g.player, { x: 1.5, y: 1.5, dir: 0, pitch: 0 });
+    Object.assign(g, { banner: null, flash: 0, gunKick: 0, viewKick: 0, yawKick: 0, ads: 0, reloading: 0 });
+    g.enemies = g.enemies.slice(0, 2).map((enemy, i) => ({ ...enemy,
+      type: i ? 'crawler' : 'sentinel', x: i ? 6 : 7.5, y: i ? 0.5 : 1.5,
+      size: i ? 0.8 : 1.1, hp: 100, maxHp: 100, minion: false, elite: false, boss: false,
+      spawnT: 0, hitFlash: 0, windup: 0, charge: 0, stun: 0,
+    }));
+    document.querySelector('#pauseOverlay').classList.remove('active');
+  });
+  const rendered = [];
+  for (const key of ['blaster', 'assault', 'scatter', 'rail']) {
+    rendered.push(await artwork.page.evaluate(key => {
+      const q = window.__strikeArtQA, g = window.__strikeQA.run;
+      const arch = q.archetypes.find(a => a.key === key);
+      q.equip({ ...g.weapon, arch, name: 'Generated ' + arch.name, dmg: arch.dmg, mag: arch.mag, rof: arch.rof, reload: arch.reload });
+      const expected = q.weapons[q.family(key)].image;
+      const enemies = [q.world.sentinel.frames, q.world.stalker.frames];
+      const original = CanvasRenderingContext2D.prototype.drawImage;
+      let usedModel = false; const seenEnemies = new Set();
+      CanvasRenderingContext2D.prototype.drawImage = function (image, ...args) {
+        if (image === expected) usedModel = true;
+        enemies.forEach((frames, family) => { if (frames.includes(image)) seenEnemies.add(family); });
+        return original.call(this, image, ...args);
+      };
+      try { q.render(); } finally { CanvasRenderingContext2D.prototype.drawImage = original; }
+      const c = document.querySelector('#gameCanvas');
+      const pixels = c.getContext('2d').getImageData(c.width / 2, c.height - 180, c.width / 2, 180).data;
+      let hash = 2166136261;
+      for (const value of pixels) hash = Math.imul(hash ^ value, 16777619);
+      return { hash: hash >>> 0, usedModel, usedEnemies: seenEnemies.size };
+    }, key));
+    await shot(artwork.page, `art-${key}`);
+  }
+  check(rendered.every(result => result.usedModel), 'The production viewmodel draws each decoded generated weapon image');
+  check(rendered.every(result => result.usedEnemies === 2), 'Both generated enemy families are drawn inside the production battlefield');
+  check(new Set(rendered.map(result => result.hash)).size === 4, 'Four generated weapon families produce distinct held-weapon renders');
+  check(await artwork.page.evaluate(() => {
+    const q = window.__strikeArtQA;
+    window.__strikeQA.run.ads = 1;
+    const original = CanvasRenderingContext2D.prototype.drawImage;
+    let modelAlpha = null;
+    CanvasRenderingContext2D.prototype.drawImage = function(image, ...args) {
+      if (image === q.weapons.rail.image) modelAlpha = this.globalAlpha;
+      return original.call(this, image, ...args);
+    };
+    try { q.render(); } finally { CanvasRenderingContext2D.prototype.drawImage = original; }
+    return modelAlpha !== null && modelAlpha < .01;
+  }), 'The full sniper scope fades the held weapon out of its sight picture');
+  await shot(artwork.page, 'art-rail-aim');
+  await artwork.page.evaluate(() => {
+    const g = window.__strikeQA.run;
+    g.ads = 0; g.reloading = 0.5; g.reloadTotal = 1;
+    window.__strikeArtQA.render();
+  });
+  await shot(artwork.page, 'art-reload');
+  await checkClean(artwork); await artwork.context.close();
+  console.log('PASS generated artwork: panorama, enemy families, transparent weapon cutouts, all archetypes, held models, ADS and reload');
+
+  const fallback = await pageFor({ artUnavailable: true });
+  await fallback.page.waitForFunction(() => window.__strikeArtQA.world.failed.length >= 3);
+  await fallback.page.locator('#playBtn').click();
+  await fallback.page.waitForFunction(() => !window.__strikeQA.run.paused);
+  await fallback.page.mouse.down(); await fallback.page.waitForTimeout(80); await fallback.page.mouse.up();
+  check(await fallback.page.evaluate(() => window.__strikeQA.run.ammo < window.__strikeQA.run.weapon.mag), 'Asset download failure retains playable procedural fallback and shooting');
+  await shot(fallback.page, 'art-network-fallback');
+  await checkClean(fallback); await fallback.context.close();
+  console.log('PASS artwork network failure: fallback rendering and combat remain available without uncaught errors');
 
 } finally {
   await browser.close();
