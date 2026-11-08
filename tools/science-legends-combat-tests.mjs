@@ -18,12 +18,12 @@ function fn(name){
 function projectileWorld(){
   const damage=[],damageOpts=[],explosions=[],hurt=[];
   const w={LegendsCombat:combat,LegendsActions:actions,WeakSet,Math,lowMotion:false,WORLD:{w:2300,h:2300},
-    G:{projs:[],eprojs:[],zones:[],orbs:[],enemies:[],player:{x:100,y:300,r:16},stats:{mods:{}}},
+    G:{time:0,projs:[],eprojs:[],zones:[],orbs:[],enemies:[],player:{x:100,y:300,r:16},stats:{mods:{}}},
     dist2:(x,y,a,b)=>(x-a)**2+(y-b)**2,rollCrit:()=>({mult:1,crit:false}),
     dealDamage:(e,n,opts)=>{e.hp-=n;damage.push(e);damageOpts.push(opts);if(e.hp<=0)e.dead=true;},
     explode:(x,y,r,n)=>explosions.push({x,y,r,n}),hurtPlayer:n=>hurt.push(n),healPlayer(){},
     hasEnh:()=>false,applyBleed(){},enemiesInRadius:()=>[],rand:(a,b)=>(a+b)/2,damage,damageOpts,explosions,hurt};
-  vm.createContext(w);vm.runInContext(fn('projectileTrail')+'\n'+fn('updateProjectiles'),w);return w;
+  vm.createContext(w);vm.runInContext(fn('skillFx')+'\n'+fn('projectileTrail')+'\n'+fn('updateProjectiles'),w);return w;
 }
 const enemy=(x,hp=100)=>({x,y:100,r:4,hp,dead:false});
 const projectile=(extra={})=>({kind:'basic',x:100,y:100,r:2,vx:10000,vy:0,life:1,dmg:10,pierce:0,...extra});
@@ -59,8 +59,9 @@ test('projectiles use only their remaining flight time but resolve hits before e
   assert.equal(w.damage.length,0);assert.equal(w.G.projs.length,0);
 });
 test('fireballs detonate at first contact, not at an overshot endpoint',()=>{
-  const w=projectileWorld();w.G.enemies=[enemy(180),enemy(130)];w.G.projs=[projectile({kind:'fire',radius:70})];
+  const w=projectileWorld();w.G.enemies=[enemy(180),enemy(130)];w.G.projs=[projectile({kind:'fire',sid:'fireball',radius:70})];
   w.updateProjectiles(.01);assert.equal(w.explosions.length,1);close(w.explosions[0].x,124);
+  assert.equal(w.G.actions[0].sid,'fireball');close(w.G.actions[0].x,124);assert.equal(w.G.actions[0].r,70);
 });
 test('enemy projectiles also cannot tunnel through the player',()=>{
   const w=projectileWorld();w.G.player={x:130,y:100,r:4};w.G.eprojs=[projectile({dmg:7})];

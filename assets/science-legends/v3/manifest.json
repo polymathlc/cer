@@ -1,0 +1,440 @@
+{
+  "version": "1.456.0",
+  "created": "2026-11-09",
+  "mode": "built-in image_gen",
+  "description": "Sixty distinct skill icons, sixty four-phase skill sequences and eight-phase Whirlwind. Original PNGs preserved; runtime WebP encoding only, no resizing or pixel edits.",
+  "encoding": {
+    "format": "webp",
+    "quality": 90,
+    "alphaQuality": 100,
+    "effort": 6,
+    "resize": false
+  },
+  "layout": {
+    "icons": "row-major 4×3, twelve distinct skills per class",
+    "effects": "8×6; skill2r uses columns0–3, skill2r+1 columns4–7; anticipation/release/impact/fade",
+    "whirlwind": "4×2; eight frames row-major"
+  },
+  "assets": [
+    {
+      "name": "icons-barb",
+      "source": "icons-barb.png",
+      "runtime": "icons-barb.webp",
+      "mode": "built-in image_gen",
+      "transparent_background": true,
+      "prompt": "Use case: stylized-concept. Asset type: production action RPG skill icon atlas for Barbarian. Create twelve entirely different premium painted fantasy skill emblems. Image is exactly a full 4 COLUMN by 3 ROW uniform grid, read LEFT TO RIGHT then TOP TO BOTTOM. Every icon centered inside its equal grid cell, each emblem fits within central 76 percent of cell leaving real transparent padding. There is NO external margin beyond this per-cell padding. All cells same size. Rich polished metal highlights, legible silhouette at 32px, dark indigo inset circular medallion with slim aged bronze rim. Each emblem vivid and unique. All surrounding space actual transparent alpha, no background or grid lines. NO text, labels, numbers, letters or watermark. Subjects by cell in exact order: 1. Cleave: a broad axe carving a crimson crescent; 2. Whirlwind: two axes within a silver spiral cyclone; 3. Charge: an armored shoulder with forward speed streaks; 4. War Cry: an open roaring mouth and amber shockwaves; 5. Ground Slam: a hammer shattering cracked ground; 6. Throwing Axes: two flying small axes crossing; 7. Iron Skin: a steel skin plate with blue highlights; 8. Rampage: a clenched red fist with jagged energy; 9. Earthquake: broken earth slabs and a glowing orange fissure; 10. Executioner: a heavy execution blade descending; 11. Blade Ward: three orbiting sharpened silver blades; 12. Berserk: a fierce horned skull burning red. Ensure all 12 cells present, no duplicated art. Consistent straight-on icon view. This is an original game art style, not copied franchise art.",
+      "grid": {
+        "columns": 4,
+        "rows": 3
+      },
+      "skills": [
+        "cleave",
+        "whirlwind",
+        "charge",
+        "warcry",
+        "slam",
+        "axes",
+        "ironskin",
+        "rampage",
+        "quake",
+        "execute",
+        "bladestorm",
+        "berserk"
+      ],
+      "encoding": {
+        "sourceSha256": "fa6a459323e2fca6cfb03ac8e8ce923c5918acff77472120a62bf2471d8a4148",
+        "runtimeSha256": "983c3984cf7ea7262b2fda972353e8b474d28a450e0bd69be56fcf6f2835992f",
+        "sourceBytes": 2453492,
+        "runtimeBytes": 524722,
+        "dimensions": [
+          1448,
+          1086
+        ],
+        "alphaPreservedExactly": true
+      }
+    },
+    {
+      "name": "icons-sorc",
+      "source": "icons-sorc.png",
+      "runtime": "icons-sorc.webp",
+      "mode": "built-in image_gen",
+      "transparent_background": true,
+      "prompt": "Use case: stylized-concept. Asset type: production action RPG skill icon atlas for Sorcerer. Create twelve entirely different premium painted fantasy skill emblems. Image is exactly a full 4 COLUMN by 3 ROW uniform grid, read LEFT TO RIGHT then TOP TO BOTTOM. Every icon centered inside its equal grid cell, each emblem fits within central 76 percent of cell leaving real transparent padding. There is NO external margin beyond this per-cell padding. All cells same size. Rich polished metal highlights, legible silhouette at 32px, dark indigo inset circular medallion with slim aged bronze rim. Each emblem vivid and unique. All surrounding space actual transparent alpha, no background or grid lines. NO text, labels, numbers, letters or watermark. Subjects by cell in exact order: 1. Fireball: an orange fireball with a long flame tail; 2. Chain Lightning: forked electric blue lightning linking three sparks; 3. Frost Nova: a six pointed icy radial explosion; 4. Meteor: a descending incandescent meteor with stony core; 5. Ice Shard: a sharp turquoise ice shard; 6. Thunderstorm: a small thundercloud striking beneath; 7. Blizzard: a snowstorm of icy flakes over a frozen shard; 8. Teleport: two violet portal apertures connected; 9. Arcane Barrier: a faceted violet arcane shield; 10. Fire Hydra: a three headed tiny flaming serpent; 11. Arcane Orb: a brilliant violet orb with orbiting rings; 12. Combustion: a red flame igniting from a white core. Ensure all 12 cells present, no duplicated art. Consistent straight-on icon view. This is an original game art style, not copied franchise art.",
+      "grid": {
+        "columns": 4,
+        "rows": 3
+      },
+      "skills": [
+        "fireball",
+        "chain",
+        "nova",
+        "meteor",
+        "icebolt",
+        "storm",
+        "blizzard",
+        "teleport",
+        "barrier",
+        "hydra",
+        "orb",
+        "combust"
+      ],
+      "encoding": {
+        "sourceSha256": "ffdda662377a740cd098960c7ba1d3014a0fc2c512f24c3d72a8660ad20d3539",
+        "runtimeSha256": "f13ef0a6c8dff264068761d811ac7a3e6c83725970e1f67e8b0161eb67480e4d",
+        "sourceBytes": 2352171,
+        "runtimeBytes": 513384,
+        "dimensions": [
+          1448,
+          1086
+        ],
+        "alphaPreservedExactly": true
+      }
+    },
+    {
+      "name": "icons-beast",
+      "source": "icons-beast.png",
+      "runtime": "icons-beast.webp",
+      "mode": "built-in image_gen",
+      "transparent_background": true,
+      "prompt": "Use case: stylized-concept. Asset type: production action RPG skill icon atlas for Beast Master. Create twelve entirely different premium painted fantasy skill emblems. Image is exactly a full 4 COLUMN by 3 ROW uniform grid, read LEFT TO RIGHT then TOP TO BOTTOM. Every icon centered inside its equal grid cell, each emblem fits within central 76 percent of cell leaving real transparent padding. There is NO external margin beyond this per-cell padding. All cells same size. Rich polished metal highlights, legible silhouette at 32px, dark indigo inset circular medallion with slim aged bronze rim. Each emblem vivid and unique. All surrounding space actual transparent alpha, no background or grid lines. NO text, labels, numbers, letters or watermark. Subjects by cell in exact order: 1. Summon Wolf: a silver wolf head with spectral cyan fur; 2. Stampede: three charging wild beast silhouettes; 3. Raven Swarm: three black ravens in a green spiral; 4. Primal Frenzy: a red claw paw with wild amber energy; 5. Venom Dart: a poison green dart and a single droplet; 6. Entangling Vines: coiling thorned vines grasping a boot; 7. Hawk Dive: a golden hawk diving claws first; 8. Summon Boar: a sturdy brown boar head with ivory tusks; 9. Nature's Mend: a cupped green leaf holding a healing drop; 10. Primal Roar: a roaring beast maw framed by gold sound waves; 11. Locust Swarm: a cloud of many small lime locusts; 12. Spirit Stag: a white spectral stag with large branching antlers. Ensure all 12 cells present, no duplicated art. Consistent straight-on icon view. This is an original game art style, not copied franchise art.",
+      "grid": {
+        "columns": 4,
+        "rows": 3
+      },
+      "skills": [
+        "wolf",
+        "stampede",
+        "ravens",
+        "frenzy",
+        "sting",
+        "vines",
+        "hawk",
+        "boarpet",
+        "mend",
+        "roar",
+        "locusts",
+        "stag"
+      ],
+      "encoding": {
+        "sourceSha256": "4cccbd231bbee62d247164493931397b2e10ccb8b79d20cddfbc4b6a654d70b0",
+        "runtimeSha256": "0e144378dc9bd1a8b0856e6a4c390a2f6e08600d03e7f6e75a4288f0439d0a21",
+        "sourceBytes": 2313354,
+        "runtimeBytes": 476830,
+        "dimensions": [
+          1448,
+          1086
+        ],
+        "alphaPreservedExactly": true
+      }
+    },
+    {
+      "name": "icons-pala",
+      "source": "icons-pala.png",
+      "runtime": "icons-pala.webp",
+      "mode": "built-in image_gen",
+      "transparent_background": true,
+      "prompt": "Use case: stylized-concept. Asset type: production action RPG skill icon atlas for Paladin. Create twelve entirely different premium painted fantasy skill emblems. Image is exactly a full 4 COLUMN by 3 ROW uniform grid, read LEFT TO RIGHT then TOP TO BOTTOM. Every icon centered inside its equal grid cell, each emblem fits within central 76 percent of cell leaving real transparent padding. There is NO external margin beyond this per-cell padding. All cells same size. Rich polished metal highlights, legible silhouette at 32px, dark indigo inset circular medallion with slim aged bronze rim. Each emblem vivid and unique. All surrounding space actual transparent alpha, no background or grid lines. NO text, labels, numbers, letters or watermark. Subjects by cell in exact order: 1. Holy Strike: a golden sword striking a white star; 2. Blessed Hammers: two orbiting golden war hammers; 3. Zeal: three rapid sword slash streaks; 4. Consecration: a glowing consecrated gold ground seal; 5. Shield Bash: a broad shield thrusting forward; 6. Holy Bolt: a white gold radiant projectile bolt; 7. Aura: Retribution: a thorned sun halo of retribution; 8. Lay on Hands: a luminous open healing hand; 9. Fist of the Heavens: a mighty golden fist descending with heavenly beam; 10. Judgement: a gold balance scale and radial judgement light; 11. Divine Aegis: a golden shield with a central blue gemstone; 12. War Banner: a crimson war banner with a gold spear. Ensure all 12 cells present, no duplicated art. Consistent straight-on icon view. This is an original game art style, not copied franchise art.",
+      "grid": {
+        "columns": 4,
+        "rows": 3
+      },
+      "skills": [
+        "smite",
+        "hammers",
+        "zeal",
+        "consecrate",
+        "bash",
+        "holybolt",
+        "retribution",
+        "lay",
+        "fist",
+        "judgement",
+        "aegis",
+        "banner"
+      ],
+      "encoding": {
+        "sourceSha256": "cb4b2a9d12a377dd477d02a2badad70177cc56fb4c821562bfa63532beb7aadb",
+        "runtimeSha256": "8b28d60014c022a87f2c9bbf2a59542d42f027a1819824455df4884bf2895568",
+        "sourceBytes": 2383249,
+        "runtimeBytes": 481306,
+        "dimensions": [
+          1448,
+          1086
+        ],
+        "alphaPreservedExactly": true
+      }
+    },
+    {
+      "name": "icons-ama",
+      "source": "icons-ama.png",
+      "runtime": "icons-ama.webp",
+      "mode": "built-in image_gen",
+      "transparent_background": true,
+      "prompt": "Use case: stylized-concept. Asset type: production action RPG skill icon atlas for Amazon. Create twelve entirely different premium painted fantasy skill emblems. Image is exactly a full 4 COLUMN by 3 ROW uniform grid, read LEFT TO RIGHT then TOP TO BOTTOM. Every icon centered inside its equal grid cell, each emblem fits within central 76 percent of cell leaving real transparent padding. There is NO external margin beyond this per-cell padding. All cells same size. Rich polished metal highlights, legible silhouette at 32px, dark indigo inset circular medallion with slim aged bronze rim. Each emblem vivid and unique. All surrounding space actual transparent alpha, no background or grid lines. NO text, labels, numbers, letters or watermark. Subjects by cell in exact order: 1. Power Javelin: a single silver power javelin with golden trail; 2. Multishot: a wide fan of five arrows; 3. Strafe: a bow firing a rapid repeated arrow stream; 4. Plague Javelin: a green venomous javelin and poison droplets; 5. Lightning Fury: a branching lightning javelin; 6. Evasive Roll: a curled evasion silhouette and sweeping dust arc; 7. Summon Valkyrie: a winged golden armored warrior helm; 8. Decoy: a translucent blue duplicate humanoid silhouette; 9. Arrow Rain: many arrows raining diagonally downward; 10. Spike Trap: three sharp iron spikes rising from a trap; 11. Eagle Eye: a keen eagle eye in gold feathers; 12. Binding Net: a woven rope net thrown open. Ensure all 12 cells present, no duplicated art. Consistent straight-on icon view. This is an original game art style, not copied franchise art.",
+      "grid": {
+        "columns": 4,
+        "rows": 3
+      },
+      "skills": [
+        "javelin",
+        "multishot",
+        "strafe",
+        "plague",
+        "fury",
+        "roll",
+        "valk",
+        "decoy",
+        "rain",
+        "trap",
+        "eagle",
+        "net"
+      ],
+      "encoding": {
+        "sourceSha256": "c61db9f7781d82093ae33b6ae788b8fceff274ab779e5b878b015606dc29e370",
+        "runtimeSha256": "892f2ead0e657af865d63c78bbd5b6e372dca5d5b5d92e9926ed262f74fd1c81",
+        "sourceBytes": 2448053,
+        "runtimeBytes": 497746,
+        "dimensions": [
+          1448,
+          1086
+        ],
+        "alphaPreservedExactly": true
+      }
+    },
+    {
+      "name": "fx-barb",
+      "source": "fx-barb.png",
+      "runtime": "fx-barb.webp",
+      "mode": "built-in image_gen",
+      "transparent_background": true,
+      "prompt": "Use case: stylized-concept. Asset type: transparent animated VFX sprite atlas for an original premium action RPG, Barbarian class. Create a landscape sprite sheet in EXACTLY 8 COLUMNS and 6 ROWS, all 48 equal cells occupy the entire image. Consistent fixed top-down three-quarter combat projection. Transparent alpha everywhere except visual effects, no backgrounds, no frames, no labels, no text, no watermark, no interface, no characters. Effects entirely contained in central 70% of each cell with transparent margin; never overlap cells. Every skill has FOUR SUCCESSIVE animation frames: anticipation, full release, impactful peak, dissipating trail. Row 1 left4cells skill1, right4cells skill2; row2 skills3/4; row3 skills5/6; row4 skills7/8; row5 skills9/10; row6 skills11/12. ALL SIX ROWS MUST APPEAR. Each four-frame sequence retains center and size with a clearly evolving shape. Readable detailed painted 2.5D fantasy spell effects, metallic blade edges or crisp magical energy, rich restrained colors, bright core and soft translucent trails. Skill sequences in exact row-major order: 1 Cleave: wide crimson steel axe crescent; 2 Whirlwind: swirling silver blades and dusty cyclone; 3 Charge: forward amber shoulder streak; 4 War Cry: expanding amber jagged sound waves; 5 Ground Slam: explosive earthen stone shards; 6 Throwing Axes: pair of spinning metal throwing axes; 7 Iron Skin: faceted blue steel protective shell; 8 Rampage: angry crimson fist sparks; 9 Earthquake: orange earth fissure and floating stones; 10 Executioner: heavy descending red execution slash; 11 Blade Ward: three rotating blue steel ward blades; 12 Berserk: fierce red lightning aura. Full grid edge-to-edge, no extra outer margin. Camera orientation stays identical for all frames. No solid rectangular cell backgrounds.",
+      "grid": {
+        "columns": 8,
+        "rows": 6
+      },
+      "skills": [
+        "cleave",
+        "whirlwind",
+        "charge",
+        "warcry",
+        "slam",
+        "axes",
+        "ironskin",
+        "rampage",
+        "quake",
+        "execute",
+        "bladestorm",
+        "berserk"
+      ],
+      "encoding": {
+        "sourceSha256": "f51ba3fda3bbc33c01c7cc77f534996ae5f4f1fc806314ba3c56b4aa506a5fb8",
+        "runtimeSha256": "ba9fc95f1eac0987f377d2415f14d9b5155680c05d7cebc2264166b5e4909c29",
+        "sourceBytes": 3013968,
+        "runtimeBytes": 1032642,
+        "dimensions": [
+          1448,
+          1086
+        ],
+        "alphaPreservedExactly": true
+      }
+    },
+    {
+      "name": "fx-sorc",
+      "source": "fx-sorc.png",
+      "runtime": "fx-sorc.webp",
+      "mode": "built-in image_gen",
+      "transparent_background": true,
+      "prompt": "Use case: stylized-concept. Asset type: transparent animated VFX sprite atlas for an original premium action RPG, Sorcerer class. Create a landscape sprite sheet in EXACTLY 8 COLUMNS and 6 ROWS, all 48 equal cells occupy the entire image. Consistent fixed top-down three-quarter combat projection. Transparent alpha everywhere except visual effects, no backgrounds, no frames, no labels, no text, no watermark, no interface, no characters. Effects entirely contained in central 70% of each cell with transparent margin; never overlap cells. Every skill has FOUR SUCCESSIVE animation frames: anticipation, full release, impactful peak, dissipating trail. Row 1 left4cells skill1, right4cells skill2; row2 skills3/4; row3 skills5/6; row4 skills7/8; row5 skills9/10; row6 skills11/12. ALL SIX ROWS MUST APPEAR. Each four-frame sequence retains center and size with a clearly evolving shape. Readable detailed painted 2.5D fantasy spell effects, metallic blade edges or crisp magical energy, rich restrained colors, bright core and soft translucent trails. Skill sequences in exact row-major order: 1 Fireball: flame projectile with orange core and tapered tail; 2 Chain Lightning: branching blue white lightning arcs; 3 Frost Nova: radial crystalline blue ice explosion; 4 Meteor: descending rocky ember meteor and hot impact; 5 Ice Shard: razor cyan ice shard with frosty trail; 6 Thunderstorm: blue thundercloud and lightning pillars; 7 Blizzard: cascading ice flakes and sharp icicles; 8 Teleport: paired violet teleport portals and trailing wisps; 9 Arcane Barrier: faceted violet translucent barrier; 10 Fire Hydra: three-headed fiery serpent apparition; 11 Arcane Orb: violet arcane energy sphere and orbital rings; 12 Combustion: bursting white-hot red combustion flame. Full grid edge-to-edge, no extra outer margin. Camera orientation stays identical for all frames. No solid rectangular cell backgrounds.",
+      "grid": {
+        "columns": 8,
+        "rows": 6
+      },
+      "skills": [
+        "fireball",
+        "chain",
+        "nova",
+        "meteor",
+        "icebolt",
+        "storm",
+        "blizzard",
+        "teleport",
+        "barrier",
+        "hydra",
+        "orb",
+        "combust"
+      ],
+      "encoding": {
+        "sourceSha256": "98428140ad075a8576fd519744a41359a52ab5b66e2860928c4292b294be9589",
+        "runtimeSha256": "17ba215e3ce0ad52d376ca91f62ffa02e3fe78df691cfe7f88a3887983877076",
+        "sourceBytes": 3293176,
+        "runtimeBytes": 973878,
+        "dimensions": [
+          1448,
+          1086
+        ],
+        "alphaPreservedExactly": true
+      }
+    },
+    {
+      "name": "fx-beast",
+      "source": "fx-beast-clear.png",
+      "runtime": "fx-beast.webp",
+      "mode": "built-in image_gen",
+      "transparent_background": true,
+      "prompt": "Use case: stylized-concept. Asset type: transparent animated VFX sprite atlas for an original premium action RPG, Beast Master class. Create a landscape sprite sheet in EXACTLY 8 COLUMNS and 6 ROWS, all 48 equal cells occupy the entire image. Consistent fixed top-down three-quarter combat projection. Transparent alpha everywhere except visual effects, no backgrounds, no frames, no labels, no text, no watermark, no interface, no characters. Effects entirely contained in central 70% of each cell with transparent margin; never overlap cells. Every skill has FOUR SUCCESSIVE animation frames: anticipation, full release, impactful peak, dissipating trail. Row 1 left4cells skill1, right4cells skill2; row2 skills3/4; row3 skills5/6; row4 skills7/8; row5 skills9/10; row6 skills11/12. ALL SIX ROWS MUST APPEAR. Each four-frame sequence retains center and size with a clearly evolving shape. Readable detailed painted 2.5D fantasy spell effects, metallic blade edges or crisp magical energy, rich restrained colors, bright core and soft translucent trails. Skill sequences in exact row-major order: 1 Summon Wolf: spectral silver wolf paw and wolf silhouette; 2 Stampede: charging ghostly beast stampede; 3 Raven Swarm: black raven feathers circling with green light; 4 Primal Frenzy: red claw slashes and amber primal fury; 5 Venom Dart: pointed green venom dart and droplets; 6 Entangling Vines: thorned green vines sprouting and tightening; 7 Hawk Dive: golden hawk feather dive and claw impact; 8 Summon Boar: brown spectral tusked boar apparition; 9 Nature's Mend: emerald healing leaves and sparkling dew; 10 Primal Roar: gold beast-roar cone and jagged sound shards; 11 Locust Swarm: lime locust silhouettes and swirling insect wisps; 12 Spirit Stag: white cyan stag antlers apparition and forward hoof streak. Full grid edge-to-edge, no extra outer margin. Camera orientation stays identical for all frames. No solid rectangular cell backgrounds.",
+      "grid": {
+        "columns": 8,
+        "rows": 6
+      },
+      "skills": [
+        "wolf",
+        "stampede",
+        "ravens",
+        "frenzy",
+        "sting",
+        "vines",
+        "hawk",
+        "boarpet",
+        "mend",
+        "roar",
+        "locusts",
+        "stag"
+      ],
+      "original": "fx-beast.png",
+      "cleanup": {
+        "mode": "built-in image_gen edit",
+        "prompt": "Use case: background-extraction. Edit this VFX sprite atlas ONLY to remove ALL of its white/light grey solid background and all thin grid separators. Make every non-effect pixel actual transparent alpha0. Retain the exact8columns×6rows grid, exact dimensions1448×1086, identical positions and silhouettes of all48frames and all their colors. Keep wolf, ravens, boar, stag, leaves, lightning and other white luminous parts of the actual effects visible; separate white glowing effects from the neutral background carefully. No new content, no changes to sequence/order/projection. All blank cell corners and gutters must be truly transparent alpha0, no white or black matte. Preserve translucent feathered spell edges. Export a genuine transparent PNG, no checkerboard texture.",
+        "invariants": "Unchanged dimensions, skill order, projection and cell positions; remove neutral matte and preserve effect alpha.",
+        "firstOutput": "fx-beast-clean.png",
+        "finalPass": {
+          "mode": "built-in image_gen edit",
+          "input": "fx-beast-clean.png",
+          "prompt": "Use case: background-extraction. This sprite atlas still has unwanted light gray rectangular/pill-shaped BACKDROPS behind almost every effect. Remove those completely. Especially the wolf, stampede, ravens, frenzy-claws and boar sequences: preserve ONLY the wolves, charging beasts, birds, claws, boars and their narrow colored motion trails. ALL neutral white and gray fog/fill/cloud/cell backdrop must become fully transparent alpha0, including inside the former rounded rectangular blocks. No shadows or floor patches. Treat this like precisely cutting out each colored subject for compositing on very dark game ground. Keep the white WOLF and white STAG subject silhouettes, but their surroundings must be empty transparent. Preserve exact original1448×1086 size and8×6cell positions/subjects/order, no new frames/art/text. Leaf, vine and insect effects keep only actual colored leaves/vines/insects and narrow colored trails; absolutely no white luminous solid mass behind them. Genuine transparent PNG with sparse pixels outside subjects, no matte or checkerboard."
+        }
+      },
+      "encoding": {
+        "sourceSha256": "d807ea2bef0a6c05ceb1357cf4812b177a388370a621e906a160051d274ad84d",
+        "runtimeSha256": "f96e2dab494c93745433be6dd2f2fa84fc49de5b2e9aa58a5cf8e579a3a2f282",
+        "sourceBytes": 3662582,
+        "runtimeBytes": 1173278,
+        "dimensions": [
+          1448,
+          1086
+        ],
+        "alphaPreservedExactly": true
+      }
+    },
+    {
+      "name": "fx-pala",
+      "source": "fx-pala-clean.png",
+      "runtime": "fx-pala.webp",
+      "mode": "built-in image_gen",
+      "transparent_background": true,
+      "prompt": "Use case: stylized-concept. Asset type: transparent animated VFX sprite atlas for an original premium action RPG, Paladin class. Create a landscape sprite sheet in EXACTLY 8 COLUMNS and 6 ROWS, all 48 equal cells occupy the entire image. Consistent fixed top-down three-quarter combat projection. Transparent alpha everywhere except visual effects, no backgrounds, no frames, no labels, no text, no watermark, no interface, no characters. Effects entirely contained in central 70% of each cell with transparent margin; never overlap cells. Every skill has FOUR SUCCESSIVE animation frames: anticipation, full release, impactful peak, dissipating trail. Row 1 left4cells skill1, right4cells skill2; row2 skills3/4; row3 skills5/6; row4 skills7/8; row5 skills9/10; row6 skills11/12. ALL SIX ROWS MUST APPEAR. Each four-frame sequence retains center and size with a clearly evolving shape. Readable detailed painted 2.5D fantasy spell effects, metallic blade edges or crisp magical energy, rich restrained colors, bright core and soft translucent trails. Skill sequences in exact row-major order: 1 Holy Strike: gold radiant sword slash; 2 Blessed Hammers: two orbiting golden hammers with curved trails; 3 Zeal: three rapid white gold sword streaks; 4 Consecration: gold consecration sun sigil on the ground; 5 Shield Bash: heavy golden shield thrust and sparks; 6 Holy Bolt: pointed white gold holy energy bolt; 7 Aura: Retribution: gold thorned sun retribution halo; 8 Lay on Hands: golden healing palm and floating motes; 9 Fist of the Heavens: gold fist silhouette descending in a heavenly beam; 10 Judgement: radial golden judgement rays; 11 Divine Aegis: blue gemstone enclosed in golden shield facets; 12 War Banner: crimson gold war banner unfurling in radiant wind. Full grid edge-to-edge, no extra outer margin. Camera orientation stays identical for all frames. No solid rectangular cell backgrounds.",
+      "grid": {
+        "columns": 8,
+        "rows": 6
+      },
+      "skills": [
+        "smite",
+        "hammers",
+        "zeal",
+        "consecrate",
+        "bash",
+        "holybolt",
+        "retribution",
+        "lay",
+        "fist",
+        "judgement",
+        "aegis",
+        "banner"
+      ],
+      "original": "fx-pala.png",
+      "cleanup": {
+        "mode": "built-in image_gen edit",
+        "prompt": "Use case: background-extraction. Edit this VFX sprite atlas ONLY to remove ALL of its white/light grey solid background and ALL thin grid separators. Make every non-effect pixel actual transparent alpha0. Retain the exact8columns×6rows grid, exact dimensions1448×1086, identical positions and silhouettes of all48frames and all their colors. Keep glowing white/golden parts of the actual effects visible; separate light spells from neutral blank background carefully. Remove every neutral white/grey fog disk behind the objects; keep only the spell and its colored trails. No new content, no changes to sequence/order/projection. All blank cell corners and gutters must be truly transparent alpha0, no white or black matte. Preserve translucent feathered edges. Export a genuine transparent PNG, no checkerboard texture.",
+        "invariants": "Unchanged dimensions, skill order, projection and cell positions; remove neutral matte and preserve effect alpha."
+      },
+      "encoding": {
+        "sourceSha256": "f785a171d1e8ae0d1bc6b8432c6746efe1abfd02ff3b7f5363cbe7c7b7a6552e",
+        "runtimeSha256": "6fe8e240c9f5eb4c4d3e80eafc2fad91e6b3239fc4ae75d5e6c0fd38feaf6006",
+        "sourceBytes": 2545629,
+        "runtimeBytes": 966544,
+        "dimensions": [
+          1448,
+          1086
+        ],
+        "alphaPreservedExactly": true
+      }
+    },
+    {
+      "name": "fx-ama",
+      "source": "fx-ama-clean.png",
+      "runtime": "fx-ama.webp",
+      "mode": "built-in image_gen",
+      "transparent_background": true,
+      "prompt": "Use case: stylized-concept. Asset type: transparent animated VFX sprite atlas for an original premium action RPG, Amazon class. Create a landscape sprite sheet in EXACTLY 8 COLUMNS and 6 ROWS, all 48 equal cells occupy the entire image. Consistent fixed top-down three-quarter combat projection. Transparent alpha everywhere except visual effects, no backgrounds, no frames, no labels, no text, no watermark, no interface, no characters. Effects entirely contained in central 70% of each cell with transparent margin; never overlap cells. Every skill has FOUR SUCCESSIVE animation frames: anticipation, full release, impactful peak, dissipating trail. Row 1 left4cells skill1, right4cells skill2; row2 skills3/4; row3 skills5/6; row4 skills7/8; row5 skills9/10; row6 skills11/12. ALL SIX ROWS MUST APPEAR. Each four-frame sequence retains center and size with a clearly evolving shape. Readable detailed painted 2.5D fantasy spell effects, metallic blade edges or crisp magical energy, rich restrained colors, bright core and soft translucent trails. Skill sequences in exact row-major order: 1 Power Javelin: long silver javelin with amber trail; 2 Multishot: fan of five amber arrows; 3 Strafe: stream of swift silver arrows; 4 Plague Javelin: poison green javelin with toxic splashes; 5 Lightning Fury: electric blue forked javelin lightning; 6 Evasive Roll: low rolling crescent of sand and air; 7 Summon Valkyrie: golden wing and armored valkyrie apparition; 8 Decoy: translucent cyan humanoid decoy afterimages; 9 Arrow Rain: diagonal barrage of falling arrows; 10 Spike Trap: sharp steel trap spikes bursting from earth; 11 Eagle Eye: gold feather eye aura and precise sight rays; 12 Binding Net: rope net spreading open with blue binding sparks. Full grid edge-to-edge, no extra outer margin. Camera orientation stays identical for all frames. No solid rectangular cell backgrounds.",
+      "grid": {
+        "columns": 8,
+        "rows": 6
+      },
+      "skills": [
+        "javelin",
+        "multishot",
+        "strafe",
+        "plague",
+        "fury",
+        "roll",
+        "valk",
+        "decoy",
+        "rain",
+        "trap",
+        "eagle",
+        "net"
+      ],
+      "original": "fx-ama.png",
+      "cleanup": {
+        "mode": "built-in image_gen edit",
+        "prompt": "Use case: background-extraction. Edit this VFX sprite atlas ONLY to remove ALL of its white/light grey solid background and ALL thin grid separators. Make every non-effect pixel actual transparent alpha0. Retain the exact8columns×6rows grid, exact dimensions1448×1086, identical positions and silhouettes of all48frames and all their colors. Keep glowing white/golden parts of the actual effects visible; separate light spells from neutral blank background carefully. Remove every neutral white/grey fog disk behind the objects; keep only the spell and its colored trails. No new content, no changes to sequence/order/projection. All blank cell corners and gutters must be truly transparent alpha0, no white or black matte. Preserve translucent feathered edges. Export a genuine transparent PNG, no checkerboard texture.",
+        "invariants": "Unchanged dimensions, skill order, projection and cell positions; remove neutral matte and preserve effect alpha."
+      },
+      "encoding": {
+        "sourceSha256": "c6d19a2f2769b7c27aacef135978369b237be9eaa59238ea7d4d26d1ad81f98f",
+        "runtimeSha256": "7ca36cb57257e55173d66c041e3fed37d38280963ebc36437739e71e8d5ed2ae",
+        "sourceBytes": 2358951,
+        "runtimeBytes": 931236,
+        "dimensions": [
+          1448,
+          1086
+        ],
+        "alphaPreservedExactly": true
+      }
+    },
+    {
+      "name": "whirlwind",
+      "source": "whirlwind.png",
+      "runtime": "whirlwind.webp",
+      "mode": "built-in image_gen",
+      "transparent_background": true,
+      "prompt": "Use case: stylized-concept. Asset type: transparent eight-frame Whirlwind weapon cyclone animation for a premium original action RPG. EXACT 4 COLUMNS by 2 ROWS uniform full-image sprite grid, 8 equal cells, sequence left to right row1 then row2. Same fixed slightly elevated 3/4 ground projection in every frame. A dynamic cyclone of TWO spinning curved steel battleaxes around an EMPTY CENTER, multiple asymmetrical silver crescent blade trails, scattered gold sparks, airborne stone chips, smoky sand and crimson wind ribbons. Successive 8 frames visibly advance weapon angles, sweeping trails and particle positions to form a continuous rapid spin loop. Strong irregular energy, dynamic depth, varied streak lengths. NO plain full circle, no complete circular outline. No person, no body, no hero sprite, no camera rotation. Keep constant footprint and focal center at middle of each cell, entire effect within central80percent, ample real transparent alpha gutters, nothing overlaps neighboring cells. Premium sharp hand-painted 2.5D fantasy VFX, cool polished steel and warm sand with red accents. Only effects on fully transparent background. No text, numbers, grid lines, watermark or interface. All 8 frames complete and same size. Sheet occupies full image with no external border.",
+      "grid": {
+        "columns": 4,
+        "rows": 2
+      },
+      "skills": [
+        "whirlwind"
+      ],
+      "encoding": {
+        "sourceSha256": "dbd1e26371861e79f8f12743e41278e04171786527969bed1368390b8cf4e465",
+        "runtimeSha256": "4a1cbbc35f5fca9df004e15b364e11f5468d90bf61366da959f4840e66aaec81",
+        "sourceBytes": 3212248,
+        "runtimeBytes": 972772,
+        "dimensions": [
+          1774,
+          887
+        ],
+        "alphaPreservedExactly": true
+      }
+    }
+  ]
+}

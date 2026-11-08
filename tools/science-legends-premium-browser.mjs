@@ -17,7 +17,7 @@ async function open(width, failArt = false) {
   await page.route('**/*', route => {
     const url = new URL(route.request().url());
     if (url.hostname !== 'legends.test') return route.abort();
-    if (failArt && /(?:arcane-atlas|courtyard-slate|skill-icons)\.(?:png|webp)$/.test(url.pathname)) return route.abort();
+    if (failArt && /(?:arcane-atlas|courtyard-slate|skill-icons|icons-(?:barb|sorc|beast|pala|ama))\.(?:png|webp)$/.test(url.pathname)) return route.abort();
     const filename = path.join(root, decodeURIComponent(url.pathname));
     if (!fs.existsSync(filename)) { missing.push(url.pathname); return route.abort(); }
     return route.fulfill({ path: filename });
@@ -45,7 +45,7 @@ try {
     await page.locator('#startBtn').click();
     await page.waitForFunction(() => G && G.time > .05);
     await page.waitForFunction(()=>LegendsIcons.ready());
-    check(await page.locator('#skillBar .icon-art').first().evaluate(el=>getComputedStyle(el).display==='block'&&getComputedStyle(el).backgroundImage.includes('skill-icons.webp')),`${width}: generated skill icons actually paint on the combat bar`);
+    check(await page.locator('#skillBar .icon-art').first().evaluate(el=>getComputedStyle(el).display==='block'&&getComputedStyle(el).backgroundImage.includes('icons-sorc.webp')&&getComputedStyle(el).backgroundSize==='400% 300%'),`${width}: generated individual skill icons actually paint on the combat bar`);
     check(await page.locator('#skillBar .skill-slot').first().evaluate(el=>el.tagName==='BUTTON'&&el.getAttribute('aria-label').includes('Fireball')),`${width}: named skill controls work as native keyboard buttons`);
     check(await page.evaluate(()=>{G.cds[G.slots[0]]=2.5;updateSkillCds();return $('skillBar').querySelector('.cd-value').textContent==='3'&&getComputedStyle($('skillBar').querySelector('.cd-value')).transform==='none'&&$('skillBar').querySelector('.cd-shade').style.transform.includes('scaleY');}),`${width}: numeric cooldown remains legible while only its progress shade scales`);
     check(await page.evaluate(() => G.cls === 'sorc'), `${width}: selected hero starts a real run`);
