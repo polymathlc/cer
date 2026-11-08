@@ -1,9 +1,12 @@
 {
-  "version": "2.2.2",
+  "version": "2.2.3",
   "upstreamRepository": "polymathlc/hades",
   "upstreamCommit": "02e9537dfcc380baae6bec32e399db319b304426",
-  "gameSha256": "388921825e518e719649e1111868a8aa1a085acea0c2c07f0e758b4b0bf66d06",
-  "parentSha256": "26ada74a186d6950b3306b2227f458e36d7d9bf5e54e660a8d42809d1fcf3c5e",
+  "gameSha256": "6d4786393e6c6dc51262e0a8ee146cc6f33ede2376b6f6f4537c511e0f49dda0",
+  "parentSha256": "55d347e87a78ca59e72ac5a1dab1557612e0b6294738ac61e113e601cfb7ece9",
   "sourcePatch": "hades-game.source.patch",
-  "sourcePatchSha256": "3aaef35c67e27c8ad240e24b3f62b2113bfd494fb8dd26bdde485dbfc21a84e1"
+  "sourcePatchSha256": "fba8ade996ae886536b6463625f45d9b36b033de5ef8342bb63f88ad2f5d8db8",
+  "questionPressureSource": "game-question-pressure.js",
+  "questionPressureSha256": "9572474c91fbc616cc2ddbe1c8d9440c8ecb92d4c11499afd58210c06fb49ea7",
+  "questionPressureVersion": "1.457.0"
 }

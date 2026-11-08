@@ -1,3 +1,4 @@
+import './game-question-pressure.js?v=1.457.0';
 import { CHARACTERS, CHARACTER_BY_ID, ENCOUNTERS, MAX_CREW_SIZE } from './grand-line-data.js?v=3.5.0';
 import { statsFor, getCrewSynergies, getCaptainAuras } from './grand-line-core.js?v=3.5.0';
 export { getCaptainAuras } from './grand-line-core.js?v=3.5.0';
@@ -84,7 +85,7 @@ export function createDefense(collection, options = {}) {
     elapsed: 0, waveTime: 0, accumulator: 0, spawnTotal: 0, spawned: 0, remainingToSpawn: 0,
     spawnTimer: 0, defeatedThisWave: 0, leakedThisWave: 0, waveProgress: 0,
     effects: [], projectiles: [], supplies: 100, trainingPoints: 0, reserve: {}, log: [], eventSequence: 0, pendingOutcome: null, learning: null, learningBoost: null,
-    rewardedRounds: [], roundResults: [], outcomeCommitted: false,
+    rewardedRounds: [], roundResults: [], outcomeCommitted: false, questionPressure: globalThis.GameQuestionPressure.create(),
     stats: { damageDealt: 0, kills: 0, leaks: 0, skillsUsed: 0, turns: 0, waves: 0, rounds: 0, simulatedSeconds: 0 } };
   for (let i = 0; i < b.allies.length; i++) Object.assign(b.allies[i], pointOf(DEFENSE_DEFAULT_PADS[i]), { padId: DEFENSE_DEFAULT_PADS[i].id });
   refreshCrewStats(b);
@@ -690,10 +691,34 @@ export function advanceDefense(b, deltaSeconds) {
   return steps > 0;
 }
 
+// Only final, ordered grades for this wave reach this path; combat defenses do
+// not protect the ship from the learning consequence.
+export function applyDefenseQuestionAnswer(b, correct, questionIndex) {
+  if (!b || b.status !== 'learning' || !b.learning || b.learning.completed || typeof correct !== 'boolean') return false;
+  const grades = b.learning.grades ||= [];
+  if (!Number.isInteger(questionIndex) || questionIndex !== grades.length || questionIndex >= 3) return false;
+  grades.push(correct);
+  const pressure = globalThis.GameQuestionPressure.answer(b.questionPressure, correct, b.ship.maxHp);
+  const previousHp = b.ship.hp;
+  b.ship.hp = pressure.fatal ? 0 : Math.max(0, b.ship.hp - pressure.damage);
+  b.questionPressureFeedback = pressure.message;
+  if (pressure.message) log(b, pressure.message.replace('health', 'ship life'));
+  if (pressure.fatal || (pressure.damage > 0 && previousHp > 0 && b.ship.hp <= 0)) {
+    b.questionPressure.failed = true;
+    b.ship.hp = 0; b.status = 'defeat'; b.pendingOutcome = 'defeat';
+    b.learning.completed = true; b.learningBoost = null; b.accumulator = 0;
+    b.collection.stats.correctAnswers += grades.filter(Boolean).length;
+    log(b, 'The ship is lost. Consecutive wrong answers ended this defense.');
+  }
+  return { ...pressure, fatal: b.status === 'defeat' };
+
+}
+
 export function completeDefenseLearning(b, answer = {}) {
   if (!b || b.status !== 'learning' || !b.learning || b.learning.completed || b.rewardedRounds.includes(b.round) ||
       answer.total !== 3 || !Number.isInteger(answer.correct) || answer.correct < 0 || answer.correct > 3 ||
       answer.round !== b.round) return false;
+  if (b.learning.grades?.length && (b.learning.grades.length !== 3 || b.learning.grades.filter(Boolean).length !== answer.correct)) return false;
   b.learning.completed = true; b.rewardedRounds.push(b.round);
   b.collection.stats.correctAnswers += answer.correct;
   const trainingGranted = 1 + answer.correct, suppliesGranted = 20 + answer.correct * 5;

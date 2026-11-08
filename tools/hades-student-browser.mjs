@@ -28,7 +28,7 @@ const server=http.createServer((req,res)=>{
  const pathname=new URL(req.url,'http://localhost').pathname;
  if(pathname==='/'){res.setHeader('content-type','text/html');res.end(fixture);}
  else if(pathname==='/hades-game.html'){res.setHeader('content-type','text/html');res.end('<script>window.messages=[];addEventListener("message",e=>messages.push(e.data));window.send=d=>parent.postMessage(d,location.origin);</script>');}
- else if(['/hades-display.js','/hades-learning-parent.js'].includes(pathname)){res.setHeader('content-type','text/javascript');res.end(fs.readFileSync(path.join(root,pathname.slice(1))));}
+ else if(['/hades-display.js','/hades-learning-parent.js','/game-question-pressure.js'].includes(pathname)){res.setHeader('content-type','text/javascript');res.end(fs.readFileSync(path.join(root,pathname.slice(1))));}
  else res.writeHead(404).end();
 });
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));

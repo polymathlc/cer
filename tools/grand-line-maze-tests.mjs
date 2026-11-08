@@ -9,7 +9,7 @@ const coreUrl = moduleUrl(replaceImport(await readFile(new URL('../grand-line-co
 const gridUrl = moduleUrl(await readFile(new URL('../grand-line-defense-grid.js', import.meta.url), 'utf8'));
 const profilesUrl = moduleUrl(await readFile(new URL('../grand-line-defense-profiles.js', import.meta.url), 'utf8'));
 let source = await readFile(new URL('../grand-line-defense.js', import.meta.url), 'utf8');
-for (const [name, url] of [['grand-line-data', dataUrl], ['grand-line-core', coreUrl], ['grand-line-defense-grid', gridUrl], ['grand-line-defense-profiles', profilesUrl]]) source = replaceImport(source, name, url);
+for (const [name, url] of [['game-question-pressure', new URL('../game-question-pressure.js', import.meta.url).href], ['grand-line-data', dataUrl], ['grand-line-core', coreUrl], ['grand-line-defense-grid', gridUrl], ['grand-line-defense-profiles', profilesUrl]]) source = replaceImport(source, name, url);
 const { createCollection, addCard } = await import(coreUrl);
 const { CHARACTERS, DEFENSE_GRID, DEFENSE_ENTRIES, DEFENSE_PADS, DEFENSE_DEFAULT_PADS, DEFENSE_TERRAIN, MAZE_TOWER_COST, MAZE_TOWER_REFUND,
   MAX_MAZE_TOWERS, createDefense, startDefenseWave, advanceDefense, completeDefenseLearning, getDefenseRoute,

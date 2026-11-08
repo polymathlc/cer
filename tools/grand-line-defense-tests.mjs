@@ -8,7 +8,7 @@ const replaceImport = (source, name, url) => source.replace(new RegExp(`(['"])\\
 const coreUrl = moduleUrl(replaceImport(await readFile(new URL('../grand-line-core.js', import.meta.url), 'utf8'), 'grand-line-data', dataUrl));
 const profilesUrl = moduleUrl(await readFile(new URL('../grand-line-defense-profiles.js', import.meta.url), 'utf8'));
 const gridUrl = moduleUrl(await readFile(new URL('../grand-line-defense-grid.js', import.meta.url), 'utf8'));
-const source = replaceImport(replaceImport(replaceImport(replaceImport(await readFile(new URL('../grand-line-defense.js', import.meta.url), 'utf8'), 'grand-line-data', dataUrl), 'grand-line-core', coreUrl), 'grand-line-defense-profiles', profilesUrl), 'grand-line-defense-grid', gridUrl);
+const source = replaceImport(replaceImport(replaceImport(replaceImport(replaceImport(await readFile(new URL('../grand-line-defense.js', import.meta.url), 'utf8'), 'grand-line-data', dataUrl), 'grand-line-core', coreUrl), 'grand-line-defense-profiles', profilesUrl), 'grand-line-defense-grid', gridUrl), 'game-question-pressure', new URL('../game-question-pressure.js', import.meta.url).href);
 const { createCollection, addCard, setTeam } = await import(coreUrl);
 const { CHARACTERS, DEFENSE_PATH, DEFENSE_PADS, DEFENSE_DEFAULT_PADS, DEFENSE_STAGES, createDefense, placeDefender, startDefenseWave,
   advanceDefense, completeDefenseLearning, defenseSkillCooldown, defenseStatusDuration, defensePointAt, defenseEnemyPointAt, getDefenseTargets,

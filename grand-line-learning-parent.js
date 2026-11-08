@@ -1,5 +1,6 @@
+import './game-question-pressure.js?v=1.457.0';
 // Shared GrandLine learning bridge. The portal owns the question bank, answer keys,
-// grading and history. The embedded game receives only a completed round score.
+// grading and history. The game receives ordered final boolean grades and completed round scores; answer keys stay here.
 export const GRAND_LINE_QUESTION_COUNT = 3;
 // The question's own option label (A–D on a Sec 1 question), carried on the
 // bank row; a row without labels is numbered as before.
@@ -95,6 +96,11 @@ export function createGrandLineLearningController(config) {
       } finally { if (session === s) s.saving = false; }
       return true;
     }
+    if (d.type === 'GLTCG_PRESSURE_DEFEAT') {
+      const active = s.activePressure;
+      if (!active || d.requestId !== active.requestId || d.round !== active.round) return false;
+      active.ended = true; config.cancelPresentation?.(); return true;
+    }
     if (d.type !== 'GLTCG_ROUND_REQUEST' || !validRound(d.round)) return false;
     if (s.completed.has(d.round)) {
       send(event.source, { ...s.completed.get(d.round), requestId: d.requestId }); return true;
@@ -107,6 +113,13 @@ export function createGrandLineLearningController(config) {
     }
     if (s.busy) return false;
     s.busy = true; const revision = generation;
+    const pressureEnabled = d.pressure === 1 && token(d.runId);
+    const runId = d.runId;
+    if (pressureEnabled && s.pressureRunId !== runId) {
+      s.pressureRunId = runId; s.pressure = globalThis.GameQuestionPressure.create();
+    }
+    const activePressure = pressureEnabled ? { requestId: d.requestId, round: d.round, ended: false } : null;
+    s.activePressure = activePressure;
     const blocked = message => send(s.source, { type: 'GLTCG_ROUND_BLOCKED', requestId: d.requestId,
       sessionId: s.id, round: d.round, message });
     try {
@@ -122,7 +135,7 @@ export function createGrandLineLearningController(config) {
       let index = 0, correct = 0, marking = false;
       const graded = new Map();
       const grade = async (questionIndex, choice, ms) => {
-        if (marking || !current(s) || revision !== generation || questionIndex !== index || !Number.isInteger(choice)) return null;
+        if (marking || activePressure?.ended || !current(s) || revision !== generation || questionIndex !== index || !Number.isInteger(choice)) return null;
         const q = questions[index]; if (!q || choice < 0 || choice >= q.options.length) return null;
         if (graded.has(index)) return graded.get(index);
         let result;
@@ -137,18 +150,31 @@ export function createGrandLineLearningController(config) {
         } else result = { correct: choice === q.answer, answer: q.answer, explainHtml: q.explainHtml || '' };
         // Claim before the write: rapid clicks cannot double-count history.
         graded.set(index, result); if (result.correct) correct++;
-        index++;
+        const gradedIndex = index++;
+        if (pressureEnabled) {
+          const pressure = globalThis.GameQuestionPressure.answer(s.pressure, result.correct, 100);
+          const summary = pressure.correct ? (pressure.reset ? 'Correct — wrong-answer streak reset.' : '')
+            : pressure.fatal ? 'Five wrong answers in a row — game over.'
+            : `Wrong-answer streak ${pressure.streak}/5: lose ${Math.round(pressure.rate * 100)}% of maximum life. `
+              + (pressure.streak === 4 ? 'The next wrong answer ends the run.' : 'A correct answer resets the streak.');
+          result = { ...result, pressure: { streak: pressure.streak, fatal: pressure.fatal, message: summary } };
+          graded.set(gradedIndex, result);
+          if (pressure.fatal) activePressure.ended = true;
+          send(s.source, { type: 'GLTCG_QUESTION_RESULT', requestId: d.requestId, sessionId: s.id,
+            round: d.round, questionIndex: gradedIndex, correct: result.correct });
+        }
         try { await config.recordAnswer?.({ question: q, correct: result.correct, choice,
           ms: Math.max(0, Math.min(3600000, Math.round(Number(ms) || 0))), round: d.round, sessionId: s.id }); }
         catch (error) { config.onRecordError?.(error); }
         if (!current(s) || revision !== generation) return null;
         return result;
       };
-      const finished = await config.presentQuestions({ subject: config.subject, questions, grade,
+      const finished = await config.presentQuestions({ subject: config.subject, questions, grade, pressureEnabled,
         isCurrent: () => current(s) && revision === generation,
         imageFailed: (q, url) => { if (current(s) && revision === generation) config.onImageFailure?.(q, url); },
         questionUnavailable: (q, reason) => { if (current(s) && revision === generation) config.onQuestionUnavailable?.(q, reason); } });
       if (!current(s) || revision !== generation) return false;
+      if (activePressure?.ended) return true;
       if (!finished || index !== GRAND_LINE_QUESTION_COUNT) { blocked('The round is paused. Complete three available questions to continue.'); return true; }
       const result = { type: 'GLTCG_ROUND_RESULT', requestId: d.requestId, sessionId: s.id, round: d.round,
         ...grandLineLearningReward(correct) };
@@ -235,7 +261,7 @@ export function installGrandLineLearningParent(config) {
     if (previousFocus?.isConnected) previousFocus.focus(); previousFocus = null;
   }
   function make(tag, cls, text) { const node = doc.createElement(tag); if (cls) node.className = cls; if (text != null) node.textContent = text; return node; }
-  async function presentQuestions({ subject, questions, grade, isCurrent, imageFailed, questionUnavailable }) {
+  async function presentQuestions({ subject, questions, grade, pressureEnabled, isCurrent, imageFailed, questionUnavailable }) {
     close(); previousFocus = doc.activeElement;
     if (!doc.getElementById('grand-line-learning-style')) { const style = make('style'); style.id = 'grand-line-learning-style'; style.textContent = DIALOG_CSS; doc.head.append(style); }
     overlay = make('div', 'grand-line-learning-overlay');
@@ -251,6 +277,7 @@ export function installGrandLineLearningParent(config) {
       const top = make('div','grand-line-learning-top'); top.append(make('span','',subject + ' · Wave'), make('span','',`Question ${index + 1} of 3`));
       const heading = make('h2','',q.topic || subject + ' question'); heading.id = 'grand-line-learning-title';
       const copy = make('p','grand-line-learning-copy','Answer all three questions to complete this wave. Correct answers strengthen your crew in the next wave.');
+      if (pressureEnabled) copy.textContent += ' ' + globalThis.GameQuestionPressure.rules;
       const stem = make('div','grand-line-learning-stem'); stem.innerHTML = sanitizeGrandLineQuestionHtml(q.html,doc);
       const options = make('div','grand-line-learning-options');
       const feedback = make('div','grand-line-learning-feedback'); feedback.setAttribute('aria-live','polite');
@@ -282,6 +309,8 @@ export function installGrandLineLearningParent(config) {
           if (answer.correct) score++;
           buttons[answer.answer].dataset.correct = 'true'; if (!answer.correct) button.dataset.wrong = 'true';
           feedback.textContent = answer.correct ? 'Correct. ' : `The correct answer is ${optionLabel(q, answer.answer)}. `;
+          if (answer.pressure?.message) feedback.append(make('p','grand-line-learning-pressure',answer.pressure.message));
+          if (answer.pressure?.fatal) { next.textContent = 'Return to game'; next.onclick = () => close(); }
           if (answer.explainHtml) { const explanation = make('div'); explanation.innerHTML = sanitizeGrandLineQuestionHtml(answer.explainHtml,doc); feedback.append(explanation); }
           if (index === 2) feedback.append(make('p','grand-line-learning-reward',grandLineLearningRewardSummary(score)));
           next.hidden = false; next.focus();
