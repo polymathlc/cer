@@ -569,6 +569,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
       <div class="resource-details"><span id="healthState"></span><span id="shieldState" hidden></span><span id="insightState" hidden></span></div>
     </div>
     <div class="skillbar" id="skillBar" style="display:none;"></div>
+    <div class="touch-aim-hint">Hold a skill + drag to aim.<br>Return to its button to cancel.</div>
     <button class="sksel-btn" id="skillSelBtn" type="button" style="display:none;" title="Choose which 4 of your 12 skills sit on the bar (K)">🎯 Select Skill</button>
     <div class="hint-bar" id="hintBar"><b>Space</b> evade · Move: <b>WASD</b> or <b>click</b> the ground · <b>Click an enemy</b> / hold <b>right-click</b> to attack · Skills <b>1–4</b> fire at the crosshair · <b>T</b> tree · <b>K</b> skills · <b>B</b> armory</div>
     <div class="joy" id="joy"><div class="base"></div><div class="knob" id="joyKnob"></div></div>
@@ -587,6 +588,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
         <details class="legends-guide"><summary>Controls &amp; how to play</summary><ul class="how">
           <li data-ico="💨"><strong>Space / Evade</strong>: dodge in your movement direction (5-second cooldown). Step out of the <strong>orange charge lane</strong> before its ring fills. Leaving the game pauses combat.</li>
           <li data-ico="🕹️">Move with <strong>WASD / arrows</strong>, or <strong>click the ground</strong> to walk there. <strong>Click an enemy</strong> to attack it, hold <strong>right-click</strong> to fire at the crosshair, and skills <strong>1–4 fire at the crosshair</strong>.</li>
+          <li data-ico="🎯">On touch screens, <strong>hold a skill and drag</strong> to preview its aim. <strong>Release to cast</strong>, or return to the skill button to cancel. Your other thumb can keep moving.</li>
           <li data-ico="✨">Each class knows <strong>12 skills</strong> — unlock, rank, branch and crown them with 1-of-3 <strong>ULTIMATES</strong> in a huge <strong>skill tree (T)</strong>, then pick your <strong>4</strong> with 🎯 <strong>Select Skill (K)</strong>.</li>
           <li data-ico="🧪">Every <strong>20s</strong>: a science MCQ. Correct = <strong>+1 skill point</strong>, a heal and an Insight damage surge.</li>
           <li data-ico="🎁">Spend app points on <strong>loot boxes</strong> in the <strong>Armory (B)</strong> — permanent helm, armour, gloves, greaves, rings &amp; amulet. Unique and Mythic gear carries <strong>skill-changing powers</strong>.</li>
@@ -734,6 +736,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
 <script src="science-legends-tree.js?v=1.455.0"></script>
 <script src="science-legends-icons.js?v=1.455.0"></script>
 <script src="science-legends-feedback.js?v=1.455.0"></script>
+<script src="science-legends-gestures.js?v=1.455.0"></script>
 <script src="science-legends-combat.js?v=1"></script>
 <script>
 /* ============================================================================
@@ -2114,6 +2117,7 @@ var chosenClass = 'barb';
 var G = null;
 
 function newGame(cls){
+  cancelSkillGesture();
   var c = CLASSES[cls];
   var feedOwner=JSON.stringify(scienceFeed.context());
   G = {
@@ -2150,6 +2154,7 @@ var COMBAT_BUILD = 'expedition-2';
 var lowMotion = false;
 try { var motionPref=localStorage.getItem('science_expedition_motion'); lowMotion=motionPref===null ? !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) : motionPref==='1'; } catch(e){}
 function clearCombatInput(){
+  cancelSkillGesture();
   keys={};
   if(typeof joyVec!=='undefined'){joyVec.on=false;joyVec.x=0;joyVec.y=0;}
   if(typeof mouse!=='undefined' && mouse){mouse.lDown=false;mouse.rDown=false;}
@@ -2252,6 +2257,7 @@ window.addEventListener('keydown', function(e){
   var k=e.key.toLowerCase();
   if(e.repeat)return;
   if(qState && qState.active){if(k>='1'&&k<='8'){e.preventDefault();var qi=parseInt(k,10)-1;if(qState.current && qi<qState.current.options.length)answerQuestion(qi);}return;}
+  if(k==='escape'&&skillGesture){e.preventDefault();cancelSkillGesture();return;}
   if(k==='p'||k==='escape'){e.preventDefault();togglePause();return;}
   if(k==='t'&&$('treeOverlay').classList.contains('show')){e.preventDefault();toggleTree();return;}
   if(overlayOpen())return;
@@ -2323,6 +2329,34 @@ function moveInput(){
  * attack symbol): chase & auto-attack it. RIGHT-click (hold): fire your basic
  * attack at the crosshair. Skills 1-4 fire at / toward the crosshair. */
 var mouse = { sx: -200, sy: -200, wx: 0, wy: 0, active: false, over: null, lDown: false, rDown: false };
+var skillGesture=null;
+function cancelSkillGesture(){skillGesture=null;}
+function beginSkillGesture(event,index,button){var sid=G&&G.slots[index];if(!G||G.state!=='play'||overlayOpen()||!sid||!skillUnlocked(sid)||(G.cds[sid]||0)>0){castSkill(index);return;}cancelSkillGesture();skillGesture=LegendsGestures.begin(G,index,sid,event.pointerId,event.clientX,event.clientY);skillGesture.button=button;try{button.setPointerCapture(event.pointerId);}catch(_){} }
+function gestureWorldPoint(gesture){var rect=canvas.getBoundingClientRect();return screenToWorld((gesture.x-rect.left)*VW/Math.max(1,rect.width),(gesture.y-rect.top)*VH/Math.max(1,rect.height));}
+function finishSkillGesture(event){var gesture=skillGesture;if(!gesture||event.pointerId!==gesture.pointerId)return;LegendsGestures.move(gesture,event.clientX,event.clientY);var button=$('skillBar').querySelector('[data-skill="'+gesture.slot+'"]')||gesture.button,stage=$('stage').getBoundingClientRect();
+  var mode=LegendsGestures.finish(gesture,{owner:G||{},sid:G&&G.slots[gesture.slot],pointerId:event.pointerId,running:!!G&&G.state==='play',blocked:overlayOpen()||document.hidden||qState.active,stage:stage,button:button.getBoundingClientRect()});cancelSkillGesture();if(mode==='cancel')return;
+  if(mode==='tap'){castSkill(gesture.slot);return;}var point=gestureWorldPoint(gesture),old={active:mouse.active,sx:mouse.sx,sy:mouse.sy,wx:mouse.wx,wy:mouse.wy};
+  var screen=LegendsView.worldToScreen(G.view,point.x,point.y);Object.assign(mouse,{active:true,sx:screen.x,sy:screen.y,wx:point.x,wy:point.y});try{castSkill(gesture.slot);}finally{Object.assign(mouse,old);}
+}
+window.addEventListener('pointermove',function(event){if(skillGesture&&event.pointerId===skillGesture.pointerId){event.preventDefault();LegendsGestures.move(skillGesture,event.clientX,event.clientY);}});
+window.addEventListener('pointerup',finishSkillGesture);
+window.addEventListener('pointercancel',function(event){if(skillGesture&&event.pointerId===skillGesture.pointerId)cancelSkillGesture();});
+function skillGestureGeometry(){
+  if(!skillGesture||skillGesture.owner!==G||overlayOpen())return null;var sid=skillGesture.sid,def=SKILLS[sid],p=G.player,sp=def.p,u=ultN(sid),area=G.stats.area*(1+skillSm(sid).area),point=skillGesture.dragged?gestureWorldPoint(skillGesture):{x:p.x+p.fx*180,y:p.y+p.fy*180},dx=point.x-p.x,dy=point.y-p.y,d=Math.hypot(dx,dy)||1;
+  var geometry={type:def.type,sid:sid,x:p.x,y:p.y,r:p.r+10,ang:Math.atan2(dy,dx),label:'SELF'};
+  if(def.type==='target'||def.type==='zone'&&sp.at!=='self'){var range=def.type==='target'?sp.seek:520;geometry.x=p.x+dx/d*Math.min(d,range);geometry.y=p.y+dy/d*Math.min(d,range);geometry.r=sp.radius*area*(def.type==='zone'&&hasEnh(sid,1)?1.3:1);geometry.label='TARGET';}
+  else if(def.type==='arc'){geometry.r=sp.range*area*(hasEnh(sid,2)?1.3:1)*(u===2?1.4:1);geometry.arc=sp.arc*(hasEnh(sid,2)?1.3:1);geometry.label='DIRECTION';}
+  else if(def.type==='dash'||def.type==='proj'){geometry.range=def.type==='dash'?sp.dist:Math.min(500,(sp.speed||420)*1.4);geometry.label='DIRECTION';}
+  else if(def.type==='nova'){geometry.r=sp.radius*area*(hasEnh(sid,(sid==='nova'||sid==='net')?2:1)?1.3:1)*(u===1?1.5:1);if((sid==='slam'||sid==='judgement')&&G.stats.mods['pw.titan'])geometry.r*=1.5;if(sid==='nova'&&G.stats.mods['pw.frostking'])geometry.r*=1.4;}
+  else if(def.type==='spin')geometry.r=sp.radius*(u===2?1.4:1)*(1+skillSm(sid).area);
+  else if(def.type==='aura')geometry.r=sp.radius*area*(((hasEnh(sid,1)&&/^(storm|retribution|bladestorm)$/.test(sid))||(hasEnh(sid,2)&&/^(ravens|locusts)$/.test(sid)))?1.3:1);
+  else if(def.type==='orbit')geometry.r=sp.radius*area*(hasEnh(sid,2)?1.3:1)*(u===3?1.35:1);
+  else if(def.type==='chain')geometry.r=sp.range*area;else if(sp.radius)geometry.r=sp.radius*area;else if(sp.stunR)geometry.r=sp.stunR*area;
+  var rect=($('skillBar').querySelector('[data-skill="'+skillGesture.slot+'"]')||skillGesture.button).getBoundingClientRect();geometry.cancel=skillGesture.dragged&&LegendsGestures.inside(skillGesture.x,skillGesture.y,rect);return geometry;
+}
+function drawSkillGesture(){var geometry=skillGestureGeometry();if(!geometry)return;var p=G.player;ctx.save();ctx.strokeStyle=geometry.cancel?'#ffb69e':'#fff0bd';ctx.fillStyle=geometry.cancel?'#e9856b22':'#fff0bd12';ctx.lineWidth=2.5;ctx.setLineDash([8,5]);
+  ctx.beginPath();if(geometry.range){ctx.moveTo(p.x,p.y);ctx.lineTo(p.x+Math.cos(geometry.ang)*geometry.range,p.y+Math.sin(geometry.ang)*geometry.range);}else if(geometry.arc){ctx.moveTo(p.x,p.y);ctx.arc(p.x,p.y,geometry.r,geometry.ang-geometry.arc/2,geometry.ang+geometry.arc/2);ctx.closePath();}else ctx.arc(geometry.x,geometry.y,geometry.r,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.setLineDash([]);
+  ctx.font='800 10px system-ui';ctx.textAlign='center';ctx.fillStyle='#071522';ctx.fillRect(p.x-85,p.y+p.r+22,170,18);ctx.fillStyle=geometry.cancel?'#ffb69e':'#fff0bd';ctx.fillText(geometry.cancel?'RETURNED TO SKILL · CANCEL':SKILLS[geometry.sid].name+' · '+geometry.label,p.x,p.y+p.r+35);ctx.restore();}
 function screenToWorld(x,y){
   var view=G&&G.view?G.view:LegendsView.create(G?G.player.x:0,G?G.player.y:0,VW,VH,WORLD.w,WORLD.h);
   return LegendsView.screenToWorld(view,x,y);
@@ -4067,7 +4101,7 @@ function drawHeroGround(){
   var p=G.player;ctx.save();
   if(G.abuffs.length||G.insightT>0){ctx.globalAlpha=.35;ctx.strokeStyle=G.insightT>0?'#ffd54f':'#ff8a65';ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(p.x,p.y+12,26,12,0,0,Math.PI*2);ctx.stroke();}
   if(p.shield>0){ctx.globalAlpha=.4;ctx.strokeStyle='#4fc3f7';ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(p.x,p.y+7,27,19,0,0,Math.PI*2);ctx.stroke();}
-  if(G.spin){var flame=G.stats.mods['pw.flamespin'];ctx.globalAlpha=.45;ctx.strokeStyle=flame?'#ff5722':'#ffcc80';ctx.lineWidth=4;ctx.beginPath();ctx.ellipse(p.x,p.y,G.spin.radius*G.stats.area,G.spin.radius*G.stats.area*.7,0,0,Math.PI*2);ctx.stroke();}
+  if(G.spin){var flame=G.stats.mods['pw.flamespin'];ctx.globalAlpha=.45;ctx.strokeStyle=flame?'#ff5722':'#ffcc80';ctx.lineWidth=4;ctx.beginPath();ctx.ellipse(p.x,p.y,G.spin.radius,G.spin.radius,0,0,Math.PI*2);ctx.stroke();}
   ctx.restore();
 }
 function drawEnemyTelegraphs(){
@@ -4246,6 +4280,7 @@ function draw(){
       }
     }
   });
+  drawSkillGesture();
   drawEnemyTelegraphs();
   G.texts.forEach(function(t){
     ctx.globalAlpha = 1 - t.t / 0.8;
@@ -4340,7 +4375,7 @@ function renderSkillBar(){
   bar.innerHTML = html;
   Array.prototype.forEach.call(bar.querySelectorAll('.skill-slot'), function(el){
     var index=parseInt(el.getAttribute('data-skill'),10),sid=G.slots[index];el.setAttribute('aria-label',sid?SKILLS[sid].name+(skillUnlocked(sid)?' ready':' locked'):'Empty skill slot '+(index+1));
-    el.addEventListener('pointerdown', function(e){ e.preventDefault();el.focus({preventScroll:true}); castSkill(index); });
+    el.addEventListener('pointerdown', function(e){ e.preventDefault();el.focus({preventScroll:true});if(e.pointerType==='touch'||e.pointerType==='pen')beginSkillGesture(e,index,el);else castSkill(index); });
     el.addEventListener('click',function(e){if(e.detail===0)castSkill(index);});
   });
   updateSkillCds();
