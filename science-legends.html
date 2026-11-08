@@ -571,7 +571,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
       <div class="resource-details"><span id="healthState"></span><span id="shieldState" hidden></span><span id="insightState" hidden></span></div><div id="combatStates" class="combat-states" aria-label="Active combat conditions" hidden></div><div id="castFeedback" class="cast-feedback" role="status" aria-live="polite" hidden></div>
     </div>
     <div class="skillbar" id="skillBar" style="display:none;"></div>
-    <div class="touch-aim-hint">Hold a skill + drag to aim.<br>Return to its button to cancel.</div>
+    <div class="touch-aim-hint" id="touchAimHint">Hold a skill + drag to aim.<br>Return to its button to cancel.</div>
     <button class="sksel-btn" id="skillSelBtn" type="button" style="display:none;" title="Choose which 4 of your 12 skills sit on the bar (K)">🎯 Select Skill</button>
     <div class="hint-bar" id="hintBar"><b>WASD</b> / click: move · Click foe / right-click: attack · <b>1–4</b>: skills · <b>Space</b>: evade · <b>T</b>: tree · <b>K</b>: equip</div>
     <div class="joy" id="joy"><div class="base"></div><div class="knob" id="joyKnob"></div></div>
@@ -702,7 +702,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
       <div class="panel"><div class="panel-pad center">
         <h2>⏸ Paused</h2>
         <label class="motion-control"><input id="motionToggle" type="checkbox"> Reduce motion and screen shake</label><label class="motion-control">Animation detail <select id="paintCadence"><option value="60">Balanced · 60 Hz</option><option value="120">High refresh · 120 Hz</option></select></label>
-        <details id="enemyGuide" style="text-align:left;margin:12px 0"><summary>Enemy field guide · tells and counters</summary><div id="enemyGuideEntries"></div></details><p class="sub">The horde holds its breath.</p>
+        <details id="combatControls" class="combat-controls"><summary>Movement and skill controls</summary><p>Move with WASD / arrows or click the ground. Click a foe to attack, or hold right-click to fire at the crosshair. Use 1–4 for skills and Space to evade.</p><p>On touch screens, hold a skill and drag to aim. Release to cast. Return to its button before release to cancel. Tap a skill for a quick cast. T opens the skill tree; K chooses equipped skills.</p></details><details id="enemyGuide" style="text-align:left;margin:12px 0"><summary>Enemy field guide · tells and counters</summary><div id="enemyGuideEntries"></div></details><p class="sub">The horde holds its breath.</p>
         <div class="row" style="justify-content:center;">
           <button class="btn btn-primary" id="resumeBtn" type="button">▶ Resume</button>
           <button class="btn btn-outline" id="quitBtn" type="button">Abandon run</button>
@@ -2126,12 +2126,12 @@ function newGame(cls){
     insightT: 0, empowerT: 0, slamN: 0, tempestN: 0,
     pwT: { stormcall: 0, cataclysm: 0, starfall: 0, avatar: 0 },
     followerRespawn: 0,
-    cheatUsed: false, phoenixUsed: false, hitEnemies: null, shake: 0,
+    aimHintDismissed:false,cheatUsed: false, phoenixUsed: false, hitEnemies: null, shake: 0,
     impacts: [], actions:[], accumulator: 0, hitStop: 0, impactCooldown: 0
   };
   computeStats();
   treeSel = null;treeFocus=null;treeQuery='';$('treeSearch').value='';
-  spawnFollower();
+  spawnFollower();updateTouchAimHint();
 }
 
 
@@ -2170,7 +2170,7 @@ function evade(){
 function combatStateEntries(){
   var entries=[],p=G.player,streak=G.questionPressure&&G.questionPressure.wrongStreak||0,seen=new Set();
   function add(key,text,tone){if(!seen.has(key)){seen.add(key);entries.push({key:key,text:text,tone:tone||'good'});}}
-  if(streak)add('pressure','Wrong streak '+streak+'/5 · correct resets','danger');
+  if(streak)add('pressure',streak>=4?(streak>=5?'5 wrong · Run ended':'4 wrong · Next wrong ends run'):'Wrong streak '+streak+'/5 · correct resets','danger');
   if(p.hazardSlowT>0)add('slow','Slowed '+Math.ceil(p.hazardSlowT)+'s','danger');
   if(G.followerRespawn>0)add('follower',FOLLOWERS[G.follower||META.follower].name+' returns '+Math.ceil(G.followerRespawn)+'s','neutral');
   if(p.shield>0&&p.shieldT>0)add('shield','Shield '+Math.ceil(p.shieldT)+'s');
@@ -2188,7 +2188,9 @@ function updateCombatStates(){
 function failedCastFeedback(text){
   if((G.castFeedbackNext||0)>G.time)return;G.castFeedbackNext=G.time+.8;G.castFeedback={text:text,until:G.time+2.2};updateCombatStates();
 }
+function updateTouchAimHint(){if(!G)return;LegendsPerformance.hidden($('touchAimHint'),G.state!=='play'||G.aimHintDismissed||G.time>=12);}
 function updateCombatReadability(dt){
+  if(!G.aimHintDismissed&&G.time>=12){G.aimHintDismissed=true;updateTouchAimHint();}
   var p=G.player;
   LegendsFeedback.update(G,dt,lowMotion);
   LegendsActions.expire(G);
@@ -2198,7 +2200,7 @@ function updateCombatReadability(dt){
   G.evadeTrail=(G.evadeTrail||[]).filter(function(t){t.life-=dt;return t.life>0;});
   G.enemies.forEach(function(e){e.hitFlash=Math.max(0,(e.hitFlash||0)-dt);e.impactCd=Math.max(0,(e.impactCd||0)-dt);});
   G.readabilityT=(G.readabilityT||0)-dt;if(G.readabilityT>0)return;G.readabilityT=.1;
-  updateTargetPanel();updateCombatStates();
+  updateTargetPanel();updateCombatStates();updateTouchAimHint();
   var b=$('evadeBtn');LegendsPerformance.style(b,'display','');LegendsPerformance.disabled(b,p.evadeCd>0);
   LegendsPerformance.html(b,p.evadeCd>0 ? 'Evade '+(Math.ceil(p.evadeCd*10)/10).toFixed(1)+'s<small>Recharging</small>' : 'Evade<small>Space · READY</small>');
   var status=$('battleStatus');LegendsPerformance.style(status,'display','');
@@ -2365,7 +2367,7 @@ function gestureWorldPoint(gesture){var rect=canvas.getBoundingClientRect();retu
 function finishSkillGesture(event){var gesture=skillGesture;if(!gesture||event.pointerId!==gesture.pointerId)return;LegendsGestures.move(gesture,event.clientX,event.clientY);var button=$('skillBar').querySelector('[data-skill="'+gesture.slot+'"]')||gesture.button,stage=$('stage').getBoundingClientRect();
   var mode=LegendsGestures.finish(gesture,{owner:G||{},sid:G&&G.slots[gesture.slot],pointerId:event.pointerId,running:!!G&&G.state==='play',blocked:overlayOpen()||!activeGameSurface()||qState.active,stage:stage,button:button.getBoundingClientRect()});cancelSkillGesture();if(mode==='cancel')return;
   if(mode==='tap'){castSkill(gesture.slot);return;}var point=gestureWorldPoint(gesture),old={active:mouse.active,sx:mouse.sx,sy:mouse.sy,wx:mouse.wx,wy:mouse.wy};
-  var screen=LegendsView.worldToScreen(G.view,point.x,point.y);Object.assign(mouse,{active:true,sx:screen.x,sy:screen.y,wx:point.x,wy:point.y});try{castSkill(gesture.slot);}finally{Object.assign(mouse,old);}
+  var screen=LegendsView.worldToScreen(G.view,point.x,point.y);Object.assign(mouse,{active:true,sx:screen.x,sy:screen.y,wx:point.x,wy:point.y});var beforeCastCd=G.cds[gesture.sid]||0;try{castSkill(gesture.slot);if(beforeCastCd<=0&&(G.cds[gesture.sid]||0)>0){G.aimHintDismissed=true;updateTouchAimHint();}}finally{Object.assign(mouse,old);}
 }
 window.addEventListener('pointermove',function(event){if(!activeGameSurface())return;if(skillGesture&&event.pointerId===skillGesture.pointerId){event.preventDefault();LegendsGestures.move(skillGesture,event.clientX,event.clientY);}});
 window.addEventListener('pointerup',finishSkillGesture);
