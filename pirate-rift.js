@@ -62,6 +62,7 @@ function start(id=selected) {
   portrait($('hero-medallion'),id);
   for(const button of document.querySelectorAll('[data-slot]')) {const ability=game.character.abilities[Number(button.dataset.slot)];button.querySelector('strong').textContent=ability.name;button.title=ability.description;}
   canvas.focus({preventScroll:true});sound('click');renderer.resize();updateHUD(true);
+  if(parent!==window)parent.postMessage({type:'CER_GAME_STARTED',game:'pirate-rift',runId:globalThis.crypto?.randomUUID?.()||'rift-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)},location.origin);
 }
 function returnToCrew() { captureRecord();game=null;dialog='';manuallyPaused=false;clearInput();$('dialog-layer').hidden=true;$('hud').hidden=true;$('crew-screen').hidden=false;selectCharacter(selected);$('begin-button').focus(); }
 function currentTarget() {

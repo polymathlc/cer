@@ -1,5 +1,6 @@
 import './worksheet-art.js?v=1';
 import { createGameInsightsController } from './game-insights.js?v=1.458.0';
+import { createGameUsageRecorder, createGameUsageWriter } from './game-usage.js?v=1.458.0';
 import './worksheet-art-editor.js?v=1';
 import './vendor/qrcode-generator.js';
 import './question-apps.js?v=1';
@@ -20,8 +21,8 @@ let ainsteinLive = null;
 let ainsteinVoiceEpoch = 0;
 let ainsteinVoiceReady = false;
 import { createAinsteinAdminAgent } from './ainstein-admin-agent.js?v=1';
-import { installPirateRiftPortal } from "./pirate-rift-portal.js?v=1.0.0";
-import { installGrandLinePortal } from "./grand-line-portal.js?v=3.5.2";
+import { installPirateRiftPortal } from "./pirate-rift-portal.js?v=1.0.2";
+import { installGrandLinePortal } from "./grand-line-portal.js?v=3.5.3";
 import { createGrandLineScienceAdapter } from "./grand-line-science-adapter.js?v=question-history-1";
 import { createGrandLineEconomy, createGrandLineRpgCommit, createGrandLineRpgSaveGate } from "./grand-line-economy.js?v=3.5.0";
 const grandLineRpgSaveGate = createGrandLineRpgSaveGate({getUser:()=>currentUser,flush:()=>rpgSave()});
@@ -35,6 +36,7 @@ const grandLinePortal=installGrandLinePortal({
         :Promise.resolve(localStorage.setItem('scienceQuestRpg:'+uid,JSON.stringify(state)))})
   }),
   subject:'Science',getUser:()=>currentUser,getLevel:_scienceFeedGameLevel,getProfileKey:()=>JSON.stringify([_scienceFeedKey(),familyProfile.activeStudent]),
+  onRunStarted: runId => recordGameStart('grand-line', 'grand-line:' + runId),
   getPreviewLevel:()=>LEVEL_DEFAULT_CAP,isLevel:isLevelCode,notify:message=>showToast(message,'error'),
   beforeOpen:()=>{pirateRiftPortal.close();if(document.getElementById('page-hades')?.classList.contains('active'))navigateTo('arcade');else _hadesResetLearning('Grand Line Chronicles was opened.');},
   openRift:()=>openPirateRift(),getRiftFrame:()=>document.querySelector('.pirate-rift-portal iframe'),
@@ -48,6 +50,7 @@ window.openGrandLine=()=>grandLinePortal.open();
 // account, family learner and level only when the player opens the adventure.
 const pirateRiftPortal = installPirateRiftPortal({
   subject: 'science', getUser: () => currentUser, getLevel: _scienceFeedGameLevel,
+  onRunStarted: runId => recordGameStart('pirate-rift', 'pirate-rift:' + runId),
   getProfileKey: () => JSON.stringify([_scienceFeedKey(), familyProfile.activeStudent]),
   notify: message => showToast(message, 'error'),
   beforeOpen: () => {
@@ -48219,6 +48222,43 @@ function loadGameInsights() {
   return _gameInsightsController.open();
 }
 
+var _gameUsageRecorder;
+function recordGameStart(gameId, runToken) {
+  try {
+    if (!_gameUsageRecorder) _gameUsageRecorder = createGameUsageRecorder({
+      getActor: () => currentUser?.role === 'student' && !_isAdmin() && !_practiceAs
+        ? { uid: currentUser.uid, role: 'student', key: _scienceFeedKey() } : null,
+      write: createGameUsageWriter({
+        read: async uid => { const snap = await getDoc(doc(db, 'scienceGameLeaderboard', uid)); return snap.exists() ? snap.data() : {}; },
+        merge: (uid, patch) => setDoc(doc(db, 'scienceGameLeaderboard', uid), patch, { merge: true }),
+        increment, remove: deleteField, stamp: serverTimestamp
+      })
+    });
+    return _gameUsageRecorder.start(gameId, runToken);
+  } catch (_) { return Promise.resolve(false); }
+}
+
+function recordGameStartMessage(ev) {
+  const d = ev?.data;
+  if (ev?.origin !== location.origin || !d || typeof d !== 'object') return false;
+  if (d.type === 'SD_PLAY_START') {
+    if (!_scienceFeedGameMessageCurrent(d, ev.source)) return false;
+    const modes = ['defenders','raiders','spire','legends','slayers'];
+    const mode = modes.find(id => document.getElementById(id + 'Frame')?.contentWindow === ev.source);
+    if (!mode || d.mode !== mode) return false;
+    try { const run = ev.source.G; return run && typeof run === 'object' ? recordGameStart(mode, run) : false; }
+    catch (_) { return false; }
+  }
+  if (d.type === 'HADES_HELLO') {
+    const frame = document.getElementById('hadesFrame');
+    if (!_hadesAllowed() || !_hadesPreviewLevel() || !frame?.getAttribute('src') || ev.source !== frame.contentWindow
+      || !document.getElementById('page-hades')?.classList.contains('active')
+      || typeof d.requestId !== 'string' || !/^[A-Za-z0-9_.:-]{1,128}$/.test(d.requestId)) return false;
+    return recordGameStart('hades', 'hades:' + d.requestId);
+  }
+  return false;
+}
+
 async function loadUsageDashboard() {
   if (!currentUser || currentUser.role !== 'admin') return;
 
@@ -61292,6 +61332,7 @@ function advStart() {
   $("advHero").innerHTML = advHeroHtml();
   $("advSkillbar").innerHTML = advSkillbarHtml(adv.skills);
   advWalk();
+  try { recordGameStart('adventure', adv); } catch (_) {}
 }
 const RPG_DRAFTS = [
   { id: "fire", icon: "🔥", name: "Flame Soul", desc: "+30% fire damage this run", el: "fire" },
@@ -61378,6 +61419,7 @@ function advStartArena(row) {
     mods: { atkPct: 0, goldPct: 0, cdr: 0, dr: 0, leech: 0, el: {} },
     arena: { row, stats: g, skill: g.weapon && RPG_SKILLS[g.weapon] ? { def: RPG_SKILLS[g.weapon], readyAt: advNow() + 4000 } : null } };
   advInitTactics();
+  try { recordGameStart('ghost-arena', adv); } catch (_) {}
   const run = adv;
   adv.loopId = setInterval(() => { if (adv !== run) { clearInterval(run.loopId); return; } advTick(); }, ADV_TICK_MS);
   adv.rafOn = true;
@@ -62444,7 +62486,13 @@ function _hadesPreviewProfile() { if (!_isAdmin()) return undefined; const level
 function _hadesResetLearning(message) {
   _hadesDisplay?.destroy(); _hadesDisplay = null;
   _hadesBridge?.invalidate(message || 'The preview changed. Start a new run to continue.');
-  const frame = document.getElementById('hadesFrame'); if (frame?.getAttribute('src')) frame.removeAttribute('src');
+  const frame = document.getElementById('hadesFrame');
+  if (frame?.getAttribute('src')) {
+    frame.removeAttribute('src');
+    // A new learner gets a new WindowProxy: queued HELLO/grade events from the
+    // old document cannot be accepted as starts for the replacement profile.
+    if (frame.cloneNode && frame.replaceWith) frame.replaceWith(frame.cloneNode(false));
+  }
 }
 async function _hadesScienceQuestions() {
   if (!_hadesAllowed() || !_hadesPreviewLevel()) return [];
@@ -63251,6 +63299,7 @@ async function _sdQuestionsPayload(source) {
 window.addEventListener('message', function (ev) {
   const d = ev && ev.data;
   if (!d) return;
+  if (d.type === 'HADES_HELLO') { recordGameStartMessage(ev); return; }
   if (d.type === 'SD_REQUEST_QUESTIONS') {
     if (ev.origin !== location.origin || !['defendersFrame', 'raidersFrame', 'spireFrame', 'legendsFrame', 'slayersFrame'].some(id => document.getElementById(id)?.contentWindow === ev.source)) return;
     (async () => {
@@ -63295,6 +63344,7 @@ window.addEventListener('message', function (ev) {
     })();
   } else if (d.type === 'SD_PLAY_START') {
     if (!_scienceFeedGameMessageCurrent(d, ev.source)) return;
+    recordGameStartMessage(ev);
     _spendCredit();
     _gamePtsReset();   // the header readout counts THIS run
     try { ev.source && ev.source.postMessage({ type: 'SD_PLAYS_LEFT', playsLeft: _playsLeftPayload() }, '*'); } catch (e) {}
@@ -69976,6 +70026,7 @@ function tcgTrainCard(id) {
   const servedMap = _tcgServedLoad();
   const ordered = _tcgShuffle(pool).sort((a, b) => (servedMap[a.id] || 0) - (servedMap[b.id] || 0));
   _tcgQuiz = { id, pool: ordered, i: 0, answered: false, cur: null, focus: 100, over: false };
+  try { recordGameStart('tcg-train', _tcgQuiz); } catch (_) {}
   const c = TCG_BY_ID[id];
   const o = document.createElement('div');
   o.className = 'tcg-overlay'; o.id = 'tcgTrainOverlay';
@@ -72206,6 +72257,7 @@ function duelStart() {
     reapT: 0
   };
   duelSfxPrime();                 // the run opens from a click, so the audio may be woken here
+  try { recordGameStart('tcg-duel', duelRun); } catch (_) {}
   // Say what you are up against. A student who loses to a board clear and is
   // never told it was coming learns nothing; one who is told learns to hold a
   // card back next time.
@@ -74680,6 +74732,7 @@ function emsStart() {
   const served = _tcgServedLoad();
   emsRun.pool = _tcgShuffle(pool).sort((a, b) => (served[a.id] || 0) - (served[b.id] || 0));
   emsRun.poolI = 0;
+  try { recordGameStart('tcg-siege', emsRun); } catch (_) {}
   const grid = document.getElementById('emsGrid');
   if (grid) {
     let cells = '';
@@ -76012,6 +76065,7 @@ function elgStart(cardId) {
   const served = _tcgServedLoad();
   elgRun.pool = _tcgShuffle(pool).sort((a, b) => (served[a.id] || 0) - (served[b.id] || 0));
   elgBindInput();
+  try { recordGameStart('tcg-legends', elgRun); } catch (_) {}
   elgPrepFx(elgRun);   // key + cache the element FX frames for this hero
   elgRenderSkills();
   elgBanner('Wave 1 — survive!', 2000);
@@ -77557,6 +77611,7 @@ async function tcgRunBattle(myTeam, me, opp) {
     + '</div>';
   document.body.appendChild(o);
   const stage = document.getElementById('tcgbStage');
+  try { recordGameStart(opp.dungeon ? 'tcg-dungeon' : 'tcg-arena', _tcgBattle); } catch (_) {}
   await tcgSleep(2100); // VS splash
   let round = 0;
   while (round < 30) {

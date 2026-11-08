@@ -1,10 +1,10 @@
 name: Science Legends combat and learning checks
 on:
   pull_request:
-    paths: ['science-legends*', 'science-slayers.html', 'science-expedition-*', 'science-feed-*.js', 'assets/science-legends/**', 'docs/science-legends-20-rounds.json', 'app.js', 'game-question-pressure.js', 'index.html', 'quest-frames.js', 'tools/science-legends-*', 'tools/science-expedition-*', 'tools/game-legends-slayers-*', 'tools/science-feed*', '.github/workflows/science-legends.yml']
+    paths: ['science-legends*', 'science-slayers.html', 'science-expedition-*', 'science-feed-*.js', 'assets/science-legends/**', 'docs/science-legends-20-rounds.json', 'app.js', 'game-usage.js', 'game-question-pressure.js', 'index.html', 'quest-frames.js', 'tools/science-legends-*', 'tools/science-expedition-*', 'tools/game-legends-slayers-*', 'tools/science-feed*', '.github/workflows/science-legends.yml']
   push:
     branches: [main]
-    paths: ['science-legends*', 'science-slayers.html', 'science-expedition-*', 'science-feed-*.js', 'assets/science-legends/**', 'docs/science-legends-20-rounds.json', 'app.js', 'game-question-pressure.js', 'index.html', 'quest-frames.js', 'tools/science-legends-*', 'tools/science-expedition-*', 'tools/game-legends-slayers-*', 'tools/science-feed*', '.github/workflows/science-legends.yml']
+    paths: ['science-legends*', 'science-slayers.html', 'science-expedition-*', 'science-feed-*.js', 'assets/science-legends/**', 'docs/science-legends-20-rounds.json', 'app.js', 'game-usage.js', 'game-question-pressure.js', 'index.html', 'quest-frames.js', 'tools/science-legends-*', 'tools/science-expedition-*', 'tools/game-legends-slayers-*', 'tools/science-feed*', '.github/workflows/science-legends.yml']
 permissions:
   contents: read
 jobs:
