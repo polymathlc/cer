@@ -2445,6 +2445,7 @@ function combatImpact(e, amount, opts){
   if(!Number.isFinite(dx)||!Number.isFinite(dy)){dx=e.x-G.player.x;dy=e.y-G.player.y;}
   var d=Math.hypot(dx,dy)||1,ang=Math.atan2(dy,dx),strong=!!(opts.crit||e.hp<=0||opts.knock);
   var color=opts.color||(opts.crit?'#ffe4a1':'#b5efff');
+  if(opts.element)elementFx(opts.element,e.x,e.y,30,ang,.28);
   if(/^(#80deea|#81d4fa|#70dbff)$/i.test(color))actionFx(2,e.x,e.y,26,ang,.24);
   else if(/^(#b388ff|#ba94ff|#ce93d8)$/i.test(color))actionFx(3,e.x,e.y,28,ang,.3);
   var impacts=G.impacts||(G.impacts=[]);
@@ -2682,6 +2683,7 @@ function burst(x, y, n, color){
   }
 }
 function actionFx(row,x,y,r,ang,duration){if(window.LegendsActions)LegendsActions.emit(G,row,x,y,r,ang,duration);}
+function elementFx(family,x,y,r,ang,duration){if(window.LegendsActions)LegendsActions.emitElement(G,family,x,y,r,ang,duration);}
 function slashFx(x, y, ang, r, color){ actionFx(0,x,y,r,ang,.24);G.fx.push({ kind: 'slash', x: x, y: y, ang: ang, r: r, t: 0, life: 0.18, color: color || '#FFE082' }); }
 function ringFx(x, y, r, color){ if(/^(#80deea|#81d4fa)$/i.test(color||''))actionFx(2,x,y,r,0,.4);G.fx.push({ kind: 'ring', x: x, y: y, r: r, t: 0, life: 0.4, color: color || '#80DEEA' }); }
 function boltFx(pts, color){ G.fx.push({ kind: 'bolt', pts: pts, t: 0, life: 0.22, color: color || '#FFF176' }); }
@@ -2759,7 +2761,7 @@ function doChain(fromX, fromY, dmg, bounces, range, jump, fork, stunS){
     hit[bi] = true;
     pts.push({ x: best.x, y: best.y });
     var cr = rollCrit();
-    dealDamage(best, dmg * cr.mult, { crit: cr.crit, color: '#FFF176' });
+    dealDamage(best, dmg * cr.mult, { crit: cr.crit, color: '#FFF176',element:'lightning' });
     if (stunS) best.stun = Math.max(best.stun, stunS);
     if (cr.crit && fork){
       var forks = 0;
@@ -2770,7 +2772,7 @@ function doChain(fromX, fromY, dmg, bounces, range, jump, fork, stunS){
           hit[k] = true; forks++;
           boltFx([{ x: best.x, y: best.y }, { x: fe.x, y: fe.y }], '#FFF176');
           var c2 = rollCrit();
-          dealDamage(fe, dmg * 0.7 * c2.mult, { crit: c2.crit, noSplash: true, color: '#FFF176' });
+          dealDamage(fe, dmg * 0.7 * c2.mult, { crit: c2.crit, noSplash: true, color: '#FFF176',element:'lightning' });
         }
       }
     }
@@ -2810,6 +2812,7 @@ function castSkill(idx){
   } else fd = faceDir();
   var ang = Math.atan2(fd.y, fd.x);
   if(sid==='orb'||sid==='teleport')actionFx(3,p.x,p.y,38,ang,.32);
+  if(LegendsActions.familyForSkill(sid)==='arrow')elementFx('arrow',p.x+fd.x*30,p.y+fd.y*30,26,ang,.18);
   switch (def.type) {
     case 'arc': {
       var range = sp.range * area * (hasEnh(sid, 2) ? 1.3 : 1) * (u === 2 ? 1.4 : 1);
@@ -2820,7 +2823,7 @@ function castSkill(idx){
         slashFx(p.x + fd.x * 40, p.y + fd.y * 40, ang, range, sid === 'smite' ? '#FFF59D' : '#FFB74D');
         enemiesInArc(p.x, p.y, ang, range, arcW).forEach(function(e){
           var cr = rollCrit();
-          dealDamage(e, aDmg * k * cr.mult, { crit: cr.crit, knock: { x: p.x, y: p.y, f: 160 } });
+          dealDamage(e, aDmg * k * cr.mult, { crit: cr.crit, element:LegendsActions.familyForSkill(sid),knock: { x: p.x, y: p.y, f: 160 } });
           if (hasEnh(sid, 1)) applyBleed(e, aDmg * k * (sid === 'execute' ? 0.8 : 0.4), 3);
           if (sp.stun) e.stun = Math.max(e.stun, sp.stun);
         });
@@ -3028,11 +3031,12 @@ function fireBasic(dx, dy){
     if (slam){ slashFx(p.x + p.fx * 34, p.y + p.fy * 34, ang, range, '#FF7043'); G.shake = 0.3; sfx('boom'); }
     enemiesInArc(p.x, p.y, ang, range, c.atk.arc * (slam ? 1.5 : 1)).forEach(function(e){
       var cr = rollCrit();
-      dealDamage(e, c.atk.dmg * mult * (slam ? 3 : 1) * cr.mult, { crit: cr.crit, basic: true, knock: slam ? { x: p.x, y: p.y, f: 220 } : null });
+      dealDamage(e, c.atk.dmg * mult * (slam ? 3 : 1) * cr.mult, { crit: cr.crit, basic: true,element:G.cls==='pala'?'holy':null, knock: slam ? { x: p.x, y: p.y, f: 220 } : null });
       didHit = true;
     });
   } else {
     var sp2 = 520;
+    if(G.cls==='ama')elementFx('arrow',p.x+p.fx*28,p.y+p.fy*28,24,Math.atan2(p.fy,p.fx),.18);
     var emp = false;
     if (G.stats.mods['cap.empower'] && G.empowerT <= 0){ emp = true; G.empowerT = 4; }
     var pierce = (emp ? 999 : 0) + (G.stats.mods['cap.windforce'] ? 1 : 0) + (G.stats.basicPierce || 0);
@@ -3076,7 +3080,10 @@ function basicAttack(dt){
 /* ---------------- PROJECTILES, ZONES, ORBS ---------------- */
 function explode(x, y, radius, dmg, opts){
   opts = opts || {};
-  actionFx(1,x,y,radius,0,.36);
+  var element=opts.poison?'poison':opts.element||'fire';
+  if(element==='poison')elementFx('poison',x,y,radius,0,.4);else actionFx(element==='arcane'?3:1,x,y,radius,0,.36);
+  if(element==='poison'&&!opts.color)opts.color='#a0d65d';
+  if(element==='arcane'&&!opts.color)opts.color='#ba94ff';
   ringFx(x, y, radius, opts.color || '#FF8A65');
   burst(x, y, 14, opts.color || '#FFAB91');
   sfx('boom');
@@ -3127,7 +3134,7 @@ function updateProjectiles(dt){
       if (pr.kind === 'fire'){
         pr.exploded = true;
         var burn2 = pr.sid === 'fireball' && hasEnh('fireball', 1);
-        explode(pr.x, pr.y, pr.radius, pr.dmg, { burn: burn2, poison: pr.poison, poisonStrong: pr.sid === 'plague' && hasEnh('plague', 1), slow: pr.sid === 'orb' && hasEnh('orb', 1) });
+        explode(pr.x, pr.y, pr.radius, pr.dmg, { element:LegendsActions.familyForSkill(pr.sid),burn: burn2, poison: pr.poison, poisonStrong: pr.sid === 'plague' && hasEnh('plague', 1), slow: pr.sid === 'orb' && hasEnh('orb', 1) });
         if (pr.sid === 'fireball' && hasEnh('fireball', 2)){
           for (var s = 0; s < 3; s++){
             var sa = rand(0, Math.PI * 2);
@@ -3139,7 +3146,7 @@ function updateProjectiles(dt){
       }
       var cr = pr.pet ? { mult: 1, crit: false } : rollCrit();
       if (pr.healOwner) healPlayer(1);
-      dealDamage(e, pr.dmg * cr.mult, { crit: cr.crit || pr.emp, basic: pr.basic, pet: pr.pet, impactX:pr.vx,impactY:pr.vy,
+      dealDamage(e, pr.dmg * cr.mult, { crit: cr.crit || pr.emp, basic: pr.basic, pet: pr.pet,element:pr.poison?'poison':pr.basic&&G.cls==='ama'?'arrow':LegendsActions.familyForSkill(pr.sid),impactX:pr.vx,impactY:pr.vy,
         color: pr.kind === 'boar' ? '#BCAAA4' : pr.sid==='icebolt'?'#94e7ff':pr.sid==='holybolt'?'#fff4a1':'#B39DDB', knock: pr.kind === 'boar' ? { x: pr.x - pr.vx, y: pr.y - pr.vy, f: 190 } : null });
       if (pr.stunHit) e.stun = Math.max(e.stun, pr.stunHit);
       if (pr.slow) e.slowT = Math.max(e.slowT || 0, pr.slow);
@@ -3153,7 +3160,7 @@ function updateProjectiles(dt){
     }
     if(!dead){pr.x=nextX;pr.y=nextY;dead=pr.life<=0||pr.x<10||pr.y<10||pr.x>WORLD.w-10||pr.y>WORLD.h-10;}
     if (dead){
-      if (pr.kind === 'fire' && !pr.exploded) explode(pr.x, pr.y, pr.radius, pr.dmg, { poison: pr.poison, poisonStrong: pr.sid === 'plague' && hasEnh('plague', 1) });
+      if (pr.kind === 'fire' && !pr.exploded) explode(pr.x, pr.y, pr.radius, pr.dmg, { element:LegendsActions.familyForSkill(pr.sid),poison: pr.poison, poisonStrong: pr.sid === 'plague' && hasEnh('plague', 1) });
       G.projs.splice(i, 1);
     }
   }
@@ -3490,7 +3497,7 @@ function update(dt){
     if (A.tick <= 0){
       A.tick = 0.3 / (G.stats.mods['pw.swarmqueen'] ? 2 : 1);
       enemiesInRadius(p.x, p.y, A.radius).forEach(function(e){
-        dealDamage(e, A.dps * 0.3, { color: A.visual === 'storm' ? '#FFF176' : A.visual === 'holy' ? '#FFF59D' : '#90A4AE' });
+        dealDamage(e, A.dps * 0.3, { element:LegendsActions.familyForSkill(A.sid),color: A.visual === 'storm' ? '#FFF176' : A.visual === 'holy' ? '#FFF59D' : '#90A4AE' });
       });
     }
     if (A.t <= 0) G.auras.splice(au, 1);
@@ -3509,7 +3516,7 @@ function update(dt){
         if (dist2(hx, hy, he.x, he.y) < (16 + he.r) * (16 + he.r)){
           O.hitCd.set(he,G.time + 0.5);
           var hcr = rollCrit();
-          dealDamage(he, O.dmg * hcr.mult, { crit: hcr.crit, color: '#FFF59D' });
+          dealDamage(he, O.dmg * hcr.mult, { crit: hcr.crit, color: '#FFF59D',element:'holy' });
         }
       }
     }

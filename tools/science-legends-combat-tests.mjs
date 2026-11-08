@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import combat from '../science-legends-combat.js';
+import actions from '../science-legends-actions.js';
 
 const source=readFileSync(new URL('../science-legends.html',import.meta.url),'utf8');
 function fn(name){
@@ -15,13 +16,13 @@ function fn(name){
   throw Error(`Unclosed ${name}`);
 }
 function projectileWorld(){
-  const damage=[],explosions=[],hurt=[];
-  const w={LegendsCombat:combat,WeakSet,Math,lowMotion:false,WORLD:{w:2300,h:2300},
+  const damage=[],damageOpts=[],explosions=[],hurt=[];
+  const w={LegendsCombat:combat,LegendsActions:actions,WeakSet,Math,lowMotion:false,WORLD:{w:2300,h:2300},
     G:{projs:[],eprojs:[],zones:[],orbs:[],enemies:[],player:{x:100,y:300,r:16},stats:{mods:{}}},
     dist2:(x,y,a,b)=>(x-a)**2+(y-b)**2,rollCrit:()=>({mult:1,crit:false}),
-    dealDamage:(e,n)=>{e.hp-=n;damage.push(e);if(e.hp<=0)e.dead=true;},
+    dealDamage:(e,n,opts)=>{e.hp-=n;damage.push(e);damageOpts.push(opts);if(e.hp<=0)e.dead=true;},
     explode:(x,y,r,n)=>explosions.push({x,y,r,n}),hurtPlayer:n=>hurt.push(n),healPlayer(){},
-    hasEnh:()=>false,applyBleed(){},enemiesInRadius:()=>[],rand:(a,b)=>(a+b)/2,damage,explosions,hurt};
+    hasEnh:()=>false,applyBleed(){},enemiesInRadius:()=>[],rand:(a,b)=>(a+b)/2,damage,damageOpts,explosions,hurt};
   vm.createContext(w);vm.runInContext(fn('projectileTrail')+'\n'+fn('updateProjectiles'),w);return w;
 }
 const enemy=(x,hp=100)=>({x,y:100,r:4,hp,dead:false});
@@ -68,6 +69,11 @@ test('enemy projectiles also cannot tunnel through the player',()=>{
 test('dead targets never intercept a shot or consume its piercing budget',()=>{
   const w=projectileWorld(),live=enemy(170);w.G.enemies=[enemy(130,0),live];w.G.projs=[projectile()];
   w.updateProjectiles(.01);assert.deepEqual(w.damage,[live]);
+});
+test('actual projectile contact carries explicit poison, holy and Amazon arrow identities',()=>{
+  for(const [extra,cls,element]of [[{poison:1,sid:'sting'},'beast','poison'],[{sid:'holybolt'},'pala','holy'],[{basic:true},'ama','arrow']]){
+    const w=projectileWorld();w.G.cls=cls;w.G.enemies=[enemy(130)];w.G.projs=[projectile(extra)];w.updateProjectiles(.01);assert.equal(w.damageOpts[0].element,element);
+  }
 });
 test('knockback integrates the same displacement and damping at different frame rates',()=>{
   const simulate=n=>{const e={x:0,y:0,kx:220,ky:-120,kt:.22};for(let i=0;i<n;i++)combat.knockback(e,.22/n);return e;};

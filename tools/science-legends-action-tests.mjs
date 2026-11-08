@@ -12,3 +12,10 @@ test('visual action queues stay bounded, expire and never carry a damage callbac
   assert.equal(state.actions.length,24);assert.ok(state.actions.every(action=>!('dmg'in action)&&!('run'in action)));
   state.time=.31;actions.expire(state);assert.equal(state.actions.length,0);
 });
+test('elemental action identity stays explicit through frame playback',()=>{
+  const state={time:0};['lightning','poison','holy','arrow'].forEach((family,row)=>{
+    const action=actions.emitElement(state,family,1,2,50,0,.4);assert.equal(action.sheet,'elements');assert.equal(action.row,row);assert.equal(action.family,family);
+    assert.deepEqual([0,.11,.21,.31].map(t=>actions.sample(action,t,false).frame),[0,1,2,3]);
+  });
+  assert.equal(actions.familyForSkill('chain'),'lightning');assert.equal(actions.familyForSkill('plague'),'poison');assert.equal(actions.familyForSkill('holybolt'),'holy');assert.equal(actions.familyForSkill('multishot'),'arrow');
+});
