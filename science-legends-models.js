@@ -29,11 +29,11 @@
     return {x:sum?sumX/sum/width:.5,y:bottom/height};
   }
   function enemyColumn(kind){return kind==='boss'?3:ENEMIES.indexOf(kind);}
-  function sortActors(entries){return entries.slice().sort(function(a,b){return (a.actor.y+(a.actor.r||0))-(b.actor.y+(b.actor.r||0))||a.order-b.order;});}
+  function sortActors(entries,inPlace){return (inPlace?entries:entries.slice()).sort(function(a,b){return (a.actor.y+(a.actor.r||0))-(b.actor.y+(b.actor.r||0))||a.order-b.order;});}
   function bodyBounds(actor,size,anchor){anchor=anchor||{x:.5,y:.96};return {x:actor.x-(actor.fx<0?1-anchor.x:anchor.x)*size,y:actor.y+(actor.r||0)-anchor.y*size,w:size,h:size};}
   function frameBounds(actor,size,frame,mirror){var w=frame.w/frame.nominalWidth*size,h=frame.h/frame.nominalHeight*size;mirror=mirror==null?actor.fx<0:mirror;return {x:actor.x-(mirror?1-frame.anchor.x:frame.anchor.x)*w,y:actor.y+(actor.r||0)-frame.anchor.y*h,w:w,h:h};}
   function enemyBounds(actor,time,reduced,size,profile){var column=enemyColumn(actor.kind),row=enemyFrame(actor,time,reduced),pose=orientation('enemy',actor,profile),frame=pose.sheet&&column>=0&&pose.sheet.frames[column][row];return frame?frameBounds(actor,size,frame,pose.mirror):bodyBounds(actor,size,{x:.5,y:1});}
-  function pick(enemies,x,y,bounds){var queue=sortActors(enemies.map(function(actor,index){return {actor:actor,order:index};}));for(var i=queue.length-1;i>=0;i--){var actor=queue[i].actor;if(actor.dead||actor.hp<=0)continue;var box=bounds(actor);if(x>=box.x&&x<=box.x+box.w&&y>=box.y&&y<=box.y+box.h)return actor;}return null;}
+  function pick(enemies,x,y,bounds){var best=null,depth=-Infinity,order=-1;for(var i=0;i<enemies.length;i++){var actor=enemies[i];if(actor.dead||actor.hp<=0)continue;var z=actor.y+(actor.r||0);if(z<depth||z===depth&&i<order)continue;var box=bounds(actor);if(x>=box.x&&x<=box.x+box.w&&y>=box.y&&y<=box.y+box.h){best=actor;depth=z;order=i;}}return best;}
   function statuses(actor){
     var list=[];
     if(actor.frozen>0)list.push({kind:'frozen',label:'FROZEN',glyph:'❄',color:'#9eefff'});

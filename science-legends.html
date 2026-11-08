@@ -743,6 +743,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
 <script src="science-legends-feedback.js?v=1.457.0"></script>
 <script src="science-legends-gestures.js?v=1.457.0"></script>
 <script src="science-legends-combat.js?v=1.457.0"></script>
+<script src="science-legends-performance.js?v=1.458.0"></script>
 <script>
 /* ============================================================================
  * SCIENCE LEGENDS (BETA) — top-down horde-action RPG with a science-MCQ pulse.
@@ -764,8 +765,8 @@ function toast(msg, kind){
   w.appendChild(el);
   setTimeout(function(){ if (el.parentNode) el.parentNode.removeChild(el); }, 3100);
 }
-function show(id){ clearCombatInput(); $(id).classList.add('show'); }
-function hide(id){ clearCombatInput(); $(id).classList.remove('show'); }
+function show(id){ clearCombatInput(); $(id).classList.add('show'); invalidateScene(); }
+function hide(id){ clearCombatInput(); $(id).classList.remove('show'); invalidateScene(); }
 function embedded(){ return !!(window.parent && window.parent !== window); }
 
 /* ---------------- SFX (tiny WebAudio synth) ---------------- */
@@ -2193,10 +2194,11 @@ function updateCombatReadability(dt){
   G.enemies.forEach(function(e){e.hitFlash=Math.max(0,(e.hitFlash||0)-dt);e.impactCd=Math.max(0,(e.impactCd||0)-dt);});
   G.readabilityT=(G.readabilityT||0)-dt;if(G.readabilityT>0)return;G.readabilityT=.1;
   updateTargetPanel();
-  var b=$('evadeBtn');b.style.display='';b.disabled=p.evadeCd>0;
-  b.innerHTML=p.evadeCd>0 ? 'Evade '+p.evadeCd.toFixed(1)+'s<small>Recharging</small>' : 'Evade<small>Space · READY</small>';
-  var status=$('battleStatus');status.style.display='';
-  var bosses=G.enemies.filter(function(e){return e.boss&&!e.dead;});status.innerHTML='<strong>WAVE '+G.wave+' · HOLD THE COURTYARD</strong>'+(bosses.length?'Boss: '+Math.ceil(bosses[0].hp)+' / '+Math.ceil(bosses[0].maxHp)+' HP':'Next wave in '+Math.max(0,Math.ceil(40-G.waveT))+'s · '+G.enemies.length+' enemies');
+  var b=$('evadeBtn');LegendsPerformance.style(b,'display','');LegendsPerformance.disabled(b,p.evadeCd>0);
+  LegendsPerformance.html(b,p.evadeCd>0 ? 'Evade '+p.evadeCd.toFixed(1)+'s<small>Recharging</small>' : 'Evade<small>Space · READY</small>');
+  var status=$('battleStatus');LegendsPerformance.style(status,'display','');
+  var boss=null;for(var i=0;i<G.enemies.length;i++)if(G.enemies[i].boss&&!G.enemies[i].dead){boss=G.enemies[i];break;}
+  LegendsPerformance.html(status,'<strong>WAVE '+G.wave+' · HOLD THE COURTYARD</strong>'+(boss?'Boss: '+Math.ceil(boss.hp)+' / '+Math.ceil(boss.maxHp)+' HP':'Next wave in '+Math.max(0,Math.ceil(40-G.waveT))+'s · '+G.enemies.length+' enemies'));
 }
 function moveEvade(p,dt){
   var step=Math.min(dt,p.evadeT);p.evadeT=Math.max(0,p.evadeT-dt);
@@ -2227,9 +2229,13 @@ function drawCombatCues(){
   ctx.beginPath();ctx.ellipse(p.x,p.y+14,22,10,0,0,Math.PI*2);ctx.stroke();
   ctx.restore();
 }
+var atmosphereCache=null;
 function drawAtmosphere(){
-  ctx.save();var v=ctx.createRadialGradient(VW/2,VH/2,Math.min(VW,VH)*.22,VW/2,VH/2,Math.max(VW,VH)*.70);
-  v.addColorStop(0,'#06151a00');v.addColorStop(1,'#06151a99');ctx.fillStyle=v;ctx.fillRect(0,0,VW,VH);ctx.restore();
+  if(!atmosphereCache||atmosphereCache.w!==VW||atmosphereCache.h!==VH||atmosphereCache.dpr!==DPR){
+    var gradient=ctx.createRadialGradient(VW/2,VH/2,Math.min(VW,VH)*.22,VW/2,VH/2,Math.max(VW,VH)*.70);
+    gradient.addColorStop(0,'#06151a00');gradient.addColorStop(1,'#06151a99');atmosphereCache={w:VW,h:VH,dpr:DPR,gradient:gradient};
+  }
+  ctx.save();ctx.fillStyle=atmosphereCache.gradient;ctx.fillRect(0,0,VW,VH);ctx.restore();
 }
 function wireCombatPolish(){
   document.body.classList.toggle('low-motion',lowMotion);$('motionToggle').checked=lowMotion;
@@ -2241,15 +2247,24 @@ function wireCombatPolish(){
   window.addEventListener('pointercancel',clearCombatInput);
 }
 
+var landmarkTile=null,landmarkDpr=0;
+function cachedLandmarkTile(){
+  if(landmarkTile&&landmarkDpr===DPR)return landmarkTile;
+  var tile=document.createElement('canvas');tile.width=tile.height=Math.ceil(340*DPR);var g=tile.getContext('2d');g.scale(DPR,DPR);g.translate(80,190);
+  g.strokeStyle='#aaab8044';g.lineWidth=2;g.strokeRect(-72,-72,144,144);g.strokeRect(-62,-62,124,124);
+  g.save();g.rotate(Math.PI/4);g.fillStyle='#74836b55';g.fillRect(-23,-23,46,46);g.strokeStyle='#c2b78577';g.strokeRect(-30,-30,60,60);g.restore();
+  var glow=g.createRadialGradient(102,-95,0,102,-95,82);glow.addColorStop(0,'#ffc55b33');glow.addColorStop(1,'#ffc55b00');g.fillStyle=glow;g.fillRect(20,-177,164,164);
+  g.fillStyle='#1d302f';g.fillRect(89,-99,26,16);g.fillStyle='#82937b';g.fillRect(87,-103,30,7);
+  landmarkTile=tile;landmarkDpr=DPR;return tile;
+}
 function drawArenaLandmarks(camX,camY){
   ctx.save();
+  var tile=cachedLandmarkTile();
   // A ruined courtyard: inset stones and warm braziers are decorative, never invisible obstacles.
   for(var y=160;y<WORLD.h;y+=340)for(var x=160;x<WORLD.w;x+=340){
     if(x<camX-150||x>camX+VW+150||y<camY-150||y>camY+VH+150)continue;
-    ctx.strokeStyle='#aaab8044';ctx.lineWidth=2;ctx.strokeRect(x-72,y-72,144,144);ctx.strokeRect(x-62,y-62,124,124);
-    ctx.save();ctx.translate(x,y);ctx.rotate(Math.PI/4);ctx.fillStyle='#74836b55';ctx.fillRect(-23,-23,46,46);ctx.strokeStyle='#c2b78577';ctx.strokeRect(-30,-30,60,60);ctx.restore();
-    var glow=ctx.createRadialGradient(x+102,y-95,0,x+102,y-95,82);glow.addColorStop(0,'#ffc55b33');glow.addColorStop(1,'#ffc55b00');ctx.fillStyle=glow;ctx.fillRect(x+20,y-177,164,164);
-    ctx.fillStyle='#1d302f';ctx.fillRect(x+89,y-99,26,16);ctx.fillStyle='#82937b';ctx.fillRect(x+87,y-103,30,7);ctx.fillStyle='#ffd382';ctx.beginPath();ctx.ellipse(x+102,y-109,6,lowMotion?8:8+Math.sin(G.time*7+x)*2,0,0,Math.PI*2);ctx.fill();
+    ctx.drawImage(tile,x-80,y-190,340,340);
+    ctx.fillStyle='#ffd382';ctx.beginPath();ctx.ellipse(x+102,y-109,6,lowMotion?8:8+Math.sin(G.time*7+x)*2,0,0,Math.PI*2);ctx.fill();
   }
   if(!lowMotion){for(var i=0;i<16;i++){var mx=camX+((i*193+G.time*9)%(VW+40)),my=camY+((i*113-G.time*6)%(VH+40)+VH+40)%(VH+40);ctx.fillStyle=i%2?'#b5ecc13d':'#ffe3a157';ctx.beginPath();ctx.arc(mx,my,1.5,0,Math.PI*2);ctx.fill();}}
   ctx.restore();
@@ -2369,13 +2384,19 @@ function screenToWorld(x,y){
 }
 function pickEnemyAt(x,y){if(!G)return null;return LegendsModels.pick(G.enemies,x,y,function(enemy){var size=Math.max(40,enemy.r*4);return customImage(enemy.kind)?LegendsModels.bodyBounds(enemy,size,{x:.5,y:1}):LegendsModels.enemyBounds(enemy,G.time,lowMotion,size,G.presentation.models);});}
 function updateTargetPanel(){
-  var panel=$('targetPanel');if(!G||G.state!=='play'){panel.hidden=true;return;}
+  var panel=$('targetPanel');if(!G||G.state!=='play'){LegendsPerformance.hidden(panel,true);return;}
   if(G.atkTarget&&(G.atkTarget.dead||G.atkTarget.hp<=0||G.enemies.indexOf(G.atkTarget)<0))G.atkTarget=null;
-  var target=G.atkTarget||mouse.over;if(!target||target.dead||target.hp<=0||G.enemies.indexOf(target)<0){panel.hidden=true;return;}
-  panel.hidden=false;$('targetName').textContent={slime:'Mire Slime',imp:'Ash Imp',mite:'Rift Mite',brute:'Stone Brute',spitter:'Venom Spitter',charger:'Iron Charger',boss:'Core Tyrant'}[target.kind]||'Unknown foe';
-  $('targetType').textContent=target.boss?'BOSS · HEAVY':(target.elite?'ELITE · ':'')+({brute:'Heavy melee',spitter:'Ranged caster',charger:'Charging attacker',mite:'Swarm',imp:'Skirmisher',slime:'Melee'}[target.kind]||'Enemy');
-  $('targetHp').textContent=Math.max(0,Math.round(target.hp*10)/10)+' / '+Math.round(target.maxHp*10)/10+' HP';$('targetHpFill').style.transform='scaleX('+clamp(target.hp/target.maxHp,0,1)+')';
-  $('targetEffects').textContent=LegendsModels.statuses(target).map(function(status){return status.glyph+' '+status.label;}).join(' · ')||'No active effects';
+  var target=G.atkTarget||mouse.over;if(!target||target.dead||target.hp<=0||G.enemies.indexOf(target)<0){LegendsPerformance.hidden(panel,true);return;}
+  LegendsPerformance.hidden(panel,false);LegendsPerformance.text($('targetName'),{slime:'Mire Slime',imp:'Ash Imp',mite:'Rift Mite',brute:'Stone Brute',spitter:'Venom Spitter',charger:'Iron Charger',boss:'Core Tyrant'}[target.kind]||'Unknown foe');
+  LegendsPerformance.text($('targetType'),target.boss?'BOSS · HEAVY':(target.elite?'ELITE · ':'')+({brute:'Heavy melee',spitter:'Ranged caster',charger:'Charging attacker',mite:'Swarm',imp:'Skirmisher',slime:'Melee'}[target.kind]||'Enemy'));
+  LegendsPerformance.text($('targetHp'),Math.max(0,Math.round(target.hp*10)/10)+' / '+Math.round(target.maxHp*10)/10+' HP');LegendsPerformance.style($('targetHpFill'),'transform','scaleX('+clamp(target.hp/target.maxHp,0,1)+')');
+  LegendsPerformance.text($('targetEffects'),LegendsModels.statuses(target).map(function(status){return status.glyph+' '+status.label;}).join(' · ')||'No active effects');
+}
+function updateMouseHover(){
+  if(!mouse.active)return;
+  var previous=mouse.over,view=LegendsView.create(G.player.x,G.player.y,VW,VH,WORLD.w,WORLD.h),point=LegendsView.screenToWorld(view,mouse.sx,mouse.sy);mouse.wx=point.x;mouse.wy=point.y;
+  mouse.over=mouse.sx>=0?pickEnemyAt(mouse.wx,mouse.wy):null;
+  if(previous!==mouse.over)updateTargetPanel();
 }
 (function(){
   function pos(e){
@@ -3468,10 +3489,6 @@ function update(dt){
   updateCombatReadability(dt);
   if (mouse.active){
     var worldPoint=screenToWorld(mouse.sx,mouse.sy);mouse.wx=worldPoint.x;mouse.wy=worldPoint.y;
-    mouse.over = null;
-    if (mouse.sx >= 0){
-      mouse.over=pickEnemyAt(mouse.wx,mouse.wy);
-    }
   }
   G.insightT = Math.max(0, G.insightT - dt);
   G.empowerT = Math.max(0, G.empowerT - dt);
@@ -3693,8 +3710,8 @@ function update(dt){
   G.shake = Math.max(0, G.shake - dt * 1.6);
   G.qTimer += dt;
   var left = Math.max(0, QUESTION_EVERY - G.qTimer);
-  $('qTimerN').textContent = Math.ceil(left);
-  $('qTimer').classList.toggle('soon', left <= 5);
+  LegendsPerformance.text($('qTimerN'),Math.ceil(left));
+  LegendsPerformance.toggle($('qTimer'),'soon',left<=5);
   if (G.qTimer >= QUESTION_EVERY){
     G.qTimer = 0;
     openQuestion();
@@ -4110,17 +4127,22 @@ function petSprite(kind){
   return MOB_SPRITES.wolf;
 }
 function actorHeight(entry){return entry.kind==='hero'?72:entry.kind==='enemy'?Math.max(40,entry.actor.r*4):entry.actor.kind==='decoy'?72:entry.actor.follower||entry.actor.kind==='valkyrie'?64:entry.actor.r*3.8;}
+var actorPaintState=null;
+function queueActor(queue,actor,kind,order){
+  var entry=actorPaintState.entries.get(actor);if(!entry){entry={kind:kind,actor:actor,order:order};actorPaintState.entries.set(actor,entry);}entry.kind=kind;entry.order=order;queue.push(entry);
+}
 function drawActors(camX,camY){
-  var p=G.player,queue=[{kind:'hero',actor:p,order:0}];
-  G.enemies.forEach(function(e,i){if(!e.dead&&e.hp>0&&e.x>camX-180&&e.x<camX+VW+180&&e.y>camY-180&&e.y<camY+VH+180)queue.push({kind:'enemy',actor:e,order:i+1});});
-  G.pets.forEach(function(pt,i){if(pt.hp>0)queue.push({kind:'pet',actor:pt,order:1000+i});});
+  if(!actorPaintState||actorPaintState.run!==G)actorPaintState={run:G,entries:new WeakMap(),queue:[]};
+  var p=G.player,queue=actorPaintState.queue;queue.length=0;queueActor(queue,p,'hero',0);
+  G.enemies.forEach(function(e,i){if(!e.dead&&e.hp>0&&LegendsPerformance.visible(e,camX,camY,VW,VH,180))queueActor(queue,e,'enemy',i+1);});
+  G.pets.forEach(function(pt,i){if(pt.hp>0&&LegendsPerformance.visible(pt,camX,camY,VW,VH,180))queueActor(queue,pt,'pet',1000+i);});
   // Ground contacts always sit below every upright model.
   queue.forEach(function(entry){var actor=entry.actor;ctx.save();ctx.globalAlpha=.28;ctx.fillStyle='#000';ctx.beginPath();ctx.ellipse(actor.x,actor.y+actor.r,actor.r*.95,actor.r*.38,0,0,Math.PI*2);ctx.fill();ctx.restore();
     if(entry.kind==='enemy'&&actor.elite){ctx.save();ctx.strokeStyle=actor.boss?'#e1acff':'#ffd674';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(actor.x,actor.y+actor.r,actor.r+6,(actor.r+6)*.45,0,0,Math.PI*2);ctx.stroke();ctx.restore();}
     if(entry.kind==='pet'){ctx.save();ctx.strokeStyle='#84ebc9';ctx.lineWidth=1.5;ctx.beginPath();ctx.ellipse(actor.x,actor.y+actor.r,actor.r+4,(actor.r+4)*.4,0,0,Math.PI*2);ctx.stroke();ctx.restore();}
   });
   drawHeroGround();
-  var sorted=LegendsModels.sortActors(queue);G.renderOrder=sorted.map(function(entry){return entry.actor;});
+  var sorted=LegendsModels.sortActors(queue,true),renderOrder=G.renderOrder||(G.renderOrder=[]);renderOrder.length=0;for(var ri=0;ri<sorted.length;ri++)renderOrder.push(sorted[ri].actor);
   sorted.forEach(function(entry){var actor=entry.actor,size=actorHeight(entry);
     if(entry.kind==='hero')drawHeroModel();
     else if(entry.kind==='enemy'){
@@ -4348,13 +4370,18 @@ function draw(){
 }
 
 /* ---------------- HUD ---------------- */
+var combatHudNodes=null,skillCdNodes=[];
+function combatHud(){
+  if(!combatHudNodes){combatHudNodes={};['hpFill','hpTrail','hpTxt','healthBar','stage','healthState','hurtVignette','shieldState','insightState','xpFill','pLevel'].forEach(function(id){combatHudNodes[id]=$(id);});}
+  return combatHudNodes;
+}
 function updateHud(){
   if (G){
-    $('hudWave').textContent = G.wave;
-    $('hudKills').textContent = G.kills;
-    $('hudGold').textContent = G.gold;
-    $('treePts').textContent = G.points;
-    $('treeBtn').classList.toggle('has-pts', G.points > 0);
+    LegendsPerformance.text($('hudWave'),G.wave);
+    LegendsPerformance.text($('hudKills'),G.kills);
+    LegendsPerformance.text($('hudGold'),G.gold);
+    LegendsPerformance.text($('treePts'),G.points);
+    LegendsPerformance.toggle($('treeBtn'),'has-pts',G.points>0);
   }
   armoryRefreshWallet();
   if (_gPlaysLeft != null){
@@ -4363,17 +4390,17 @@ function updateHud(){
   }
 }
 function updateBars(){
-  var p = G.player;
+  var p = G.player,nodes=combatHud();
   var visual=LegendsFeedback.update(G,0,lowMotion),critical=p.hp>0&&p.hp/p.maxHp<=.25;
-  $('hpFill').style.transform = 'scaleX(' + clamp(p.hp / p.maxHp, 0, 1) + ')';
-  $('hpTrail').style.transform='scaleX('+clamp(visual.trail/p.maxHp,0,1)+')';
-  $('hpTxt').textContent = Math.max(0,Math.round(p.hp*10)/10) + ' / ' + Math.round(p.maxHp*10)/10;
-  $('healthBar').setAttribute('aria-valuemax',p.maxHp);$('healthBar').setAttribute('aria-valuenow',Math.max(0,p.hp));
-  $('stage').classList.toggle('health-critical',critical);$('healthState').textContent=critical?'LOW HEALTH':'';$('hurtVignette').style.opacity=visual.flash;
-  $('shieldState').hidden=!(p.shield>0);$('shieldState').textContent=p.shield>0?'Shield '+Math.round(p.shield*10)/10:'';
-  $('insightState').hidden=!(G.insightT>0);$('insightState').textContent=G.insightT>0?'Insight '+Math.ceil(G.insightT)+'s':'';
-  $('xpFill').style.transform = 'scaleX(' + clamp(G.xp / G.xpNext, 0, 1) + ')';
-  $('pLevel').textContent = 'Lv ' + G.level + ' · ' + CLASSES[G.cls].name + ' · ' + FOLLOWERS[META.follower].icon;
+  LegendsPerformance.style(nodes.hpFill,'transform','scaleX('+clamp(p.hp/p.maxHp,0,1)+')');
+  LegendsPerformance.style(nodes.hpTrail,'transform','scaleX('+clamp(visual.trail/p.maxHp,0,1)+')');
+  LegendsPerformance.text(nodes.hpTxt,Math.max(0,Math.round(p.hp*10)/10)+' / '+Math.round(p.maxHp*10)/10);
+  LegendsPerformance.attr(nodes.healthBar,'aria-valuemax',p.maxHp);LegendsPerformance.attr(nodes.healthBar,'aria-valuenow',Math.max(0,Math.round(p.hp*10)/10));
+  LegendsPerformance.toggle(nodes.stage,'health-critical',critical);LegendsPerformance.text(nodes.healthState,critical?'LOW HEALTH':'');LegendsPerformance.style(nodes.hurtVignette,'opacity',Math.round(visual.flash*100)/100);
+  LegendsPerformance.hidden(nodes.shieldState,!(p.shield>0));LegendsPerformance.text(nodes.shieldState,p.shield>0?'Shield '+Math.round(p.shield*10)/10:'');
+  LegendsPerformance.hidden(nodes.insightState,!(G.insightT>0));LegendsPerformance.text(nodes.insightState,G.insightT>0?'Insight '+Math.ceil(G.insightT)+'s':'');
+  LegendsPerformance.style(nodes.xpFill,'transform','scaleX('+clamp(G.xp/G.xpNext,0,1)+')');
+  LegendsPerformance.text(nodes.pLevel,'Lv '+G.level+' · '+CLASSES[G.cls].name+' · '+FOLLOWERS[META.follower].icon);
 }
 function renderSkillBar(){
   if (!G) return;
@@ -4393,17 +4420,20 @@ function renderSkillBar(){
     el.addEventListener('pointerdown', function(e){ e.preventDefault();el.focus({preventScroll:true});if(e.pointerType==='touch'||e.pointerType==='pen')beginSkillGesture(e,index,el);else castSkill(index); });
     el.addEventListener('click',function(e){if(e.detail===0)castSkill(index);});
   });
-  updateSkillCds();
+  cacheSkillCooldownNodes();updateSkillCds();
+}
+function cacheSkillCooldownNodes(){
+  skillCdNodes=Array.prototype.map.call(document.querySelectorAll('#skillBar .cd'),function(el){return {node:el,sid:el.getAttribute('data-cd'),button:el.closest('.skill-slot'),value:el.querySelector('.cd-value'),shade:el.querySelector('.cd-shade')};});
 }
 function updateSkillCds(){
-  Array.prototype.forEach.call(document.querySelectorAll('#skillBar .cd'), function(el){
-    var sid = el.getAttribute('data-cd');
+  skillCdNodes.forEach(function(entry){
+    var sid=entry.sid,el=entry.node;
     var left = G.cds[sid] || 0;
-    var button=el.closest('.skill-slot');button.classList.toggle('ready',left<=0);button.setAttribute('aria-label',SKILLS[sid].name+(left<=0?' ready':', '+left.toFixed(1)+' seconds remaining'));
-    if (left <= 0){ el.style.display = 'none'; return; }
-    el.style.display = 'grid';
-    el.querySelector('.cd-value').textContent=left>=1?Math.ceil(left):left.toFixed(1);
-    el.querySelector('.cd-shade').style.transform='scaleY('+clamp(left/skillCd(sid),0,1)+')';
+    var button=entry.button;LegendsPerformance.toggle(button,'ready',left<=0);LegendsPerformance.attr(button,'aria-label',SKILLS[sid].name+(left<=0?' ready':', '+left.toFixed(1)+' seconds remaining'));
+    if(left<=0){LegendsPerformance.style(el,'display','none');return;}
+    LegendsPerformance.style(el,'display','grid');
+    LegendsPerformance.text(entry.value,left>=1?Math.ceil(left):left.toFixed(1));
+    LegendsPerformance.style(entry.shade,'transform','scaleY('+clamp(left/skillCd(sid),0,1)+')');
   });
 }
 
@@ -4993,20 +5023,26 @@ function resize(){
   VW=width;VH=height;DPR=dpr;var pixelWidth=Math.round(VW*DPR),pixelHeight=Math.round(VH*DPR);
   if(canvas.width!==pixelWidth)canvas.width=pixelWidth;if(canvas.height!==pixelHeight)canvas.height=pixelHeight;
   if(G&&G.player){G.view=LegendsView.create(G.player.x,G.player.y,VW,VH,WORLD.w,WORLD.h);G.camX=G.view.x;G.camY=G.view.y;}
+  invalidateScene();
 }
 window.addEventListener('resize', resize);
-var lastT = 0;
+var lastT=0,sceneRevision=0,paintedRevision=-1,paintedRun=null,paintedState=null;
+function invalidateScene(){sceneRevision++;}
 function loop(t){
   requestAnimationFrame(loop);
   var dt = lastT ? Math.max(0,(t-lastT)/1000) : 1/60;
   lastT = t;
-  if(G)LegendsCombat.advance(G,dt,G.state==='play'&&!overlayOpen()&&!document.hidden,function(step){
+  var active=!!G&&G.state==='play'&&!overlayOpen()&&!document.hidden;
+  if(G)LegendsCombat.advance(G,dt,active,function(step){
     update(step);return G.state==='play'&&!overlayOpen();
   });
-  draw();
+  if(!document.hidden&&(active||paintedRevision!==sceneRevision||paintedRun!==G||paintedState!==(G&&G.state))){
+    if(active)updateMouseHover();draw();paintedRevision=sceneRevision;paintedRun=G;paintedState=G&&G.state;
+  }
 }
 document.addEventListener('visibilitychange', function(){
   if (document.hidden && G && G.state === 'play' && !overlayOpen()) show('pauseOverlay');
+  if(!document.hidden)invalidateScene();
 });
 
 /* ---------------- WIRING ---------------- */
