@@ -158,6 +158,16 @@ test('R28 art metadata is immutable, four-role column order and fallback identit
   }
   assert.equal(names.size,4);assert.equal(variety.model('imp'),null);assert.ok(Object.isFrozen(variety.guideEntries));
 });
+test('R28 model lookups reuse immutable metadata rather than allocating per rendered actor',()=>{
+  for(const kind of variety.modelOrder){assert.equal(variety.model(kind),variety.model(kind));assert.ok(Object.isFrozen(variety.model(kind)));}
+});
+test('unknown and prototype-like kind names cannot become roles, spawn choices or intelligence',()=>{
+  for(const kind of ['constructor','__proto__','toString','missing']){
+    assert.equal(variety.handles(kind),false);assert.equal(variety.model(kind),null);assert.equal(variety.introduction(kind),null);
+    assert.equal(variety.intelligence({kind}),null);assert.equal(variety.canSpawn(kind,50,[]),false);
+    assert.equal(variety.pickKind(50,[],.5,[kind]),null);
+  }
+});
 
 test('R29 hit and interrupt transitions produce bounded distinct feedback instead of per-step spam',()=>{
   const shell=scene('broodling');variety.modifyDamage(shell.enemy,5,{dx:1,dy:0},1);const first=shell.enemy.variety.feedback;

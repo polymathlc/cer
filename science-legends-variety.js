@@ -3,6 +3,7 @@
   'use strict';
   var TAU=Math.PI*2, MAX_ENEMIES=140;
   function freeze(o){return Object.freeze(o);}
+  function own(object,key){return Object.prototype.hasOwnProperty.call(object,key);}
   var definitions=freeze({
     warden:freeze({hp:126,speed:43,dmg:15,r:21,xp:14,minWave:4,weight:.65,name:'Iron Warden',color:'#e5bc76',model:'warden',fallback:'brute'}),
     broodling:freeze({hp:43,speed:73,dmg:7,r:16,xp:8,minWave:5,weight:.9,name:'Eggback Broodling',color:'#b8dc78',model:'broodling',fallback:'slime'}),
@@ -19,8 +20,9 @@
     bossEnraged:freeze({name:'Enraged Core Tyrant',role:'Three-lane groundbreaker',tell:'Three linked ground circles replace the single strike below 55% life.',counter:'Move clear of the whole line, then punish its recovery; control effects cancel the windup.',icon:'\u265c',color:'#f1a284'})
   });
   var order=freeze(['warden','hexer','broodling','sentinel']);
+  var models={};order.forEach(function(kind,index){models[kind]=freeze({column:index,fallback:definitions[kind].fallback});});freeze(models);
   var guideEntries=freeze(order.map(function(k){return guides[k];}).concat([guides.volatile,guides.boss]));
-  function handles(kind){return !!definitions[kind]||kind==='boss';}
+  function handles(kind){return own(definitions,kind)||kind==='boss';}
   function live(e){return !!e&&!e.dead&&e.hp>0;}
   function bounded(v,lo,hi){return Math.max(lo,Math.min(hi,v));}
   function initialize(e,ctx){
@@ -177,9 +179,9 @@
   function canSpawn(kind,wave,enemies,max){
     enemies=enemies||[];wave=Math.max(1,Math.floor(Number(wave)||1));
     var limit=Number.isFinite(max)?Math.max(0,Math.floor(max)):MAX_ENEMIES;
-    if(!definitions[kind]&&['slime','imp','mite','brute','spitter','charger','boss'].indexOf(kind)<0)return false;
+    if(!own(definitions,kind)&&['slime','imp','mite','brute','spitter','charger','boss'].indexOf(kind)<0)return false;
     if(enemies.length>=limit)return false;
-    var def=definitions[kind];if(def&&wave<def.minWave)return false;
+    var def=own(definitions,kind)?definitions[kind]:null;if(def&&wave<def.minWave)return false;
     var cap=kind==='warden'?Math.min(4,2+Math.floor(wave/8)):kind==='hexer'?Math.min(3,1+Math.floor(wave/10)):kind==='sentinel'?Math.min(3,1+Math.floor(wave/12)):kind==='broodling'?Math.min(6,3+Math.floor(wave/8)):Infinity;
     if(countAlive(enemies,kind)>=cap)return false;
     if(kind==='spitter'||kind==='hexer'||kind==='sentinel'){
@@ -193,18 +195,18 @@
     var total=0,k,i,weight,options=[];roll=bounded(Number(roll)||0,0,.999999999);
     for(i=0;i<pool.length;i++){
       k=pool[i];if(k==='boss'||!canSpawn(k,wave,enemies,max))continue;
-      if(!definitions[k]&&((k==='mite'&&wave<2)||((k==='brute'||k==='spitter')&&wave<4)||(k==='charger'&&wave<6)))continue;
-      weight=wave<4?1:definitions[k]?definitions[k].weight:1;total+=weight;options.push({kind:k,end:total});
+      if(!own(definitions,k)&&((k==='mite'&&wave<2)||((k==='brute'||k==='spitter')&&wave<4)||(k==='charger'&&wave<6)))continue;
+      weight=wave<4?1:own(definitions,k)?definitions[k].weight:1;total+=weight;options.push({kind:k,end:total});
     }
     for(i=0;i<options.length;i++)if(roll*total<options[i].end)return options[i].kind;
     return null;
   }
-  function intelligence(e){return e&&e.kind==='boss'?(e.variety&&e.variety.phaseTwo?guides.bossEnraged:guides.boss):guides[e&&e.kind]||null;}
-  function introduction(kind){return guides[kind]||null;}
-  function model(kind){var index=order.indexOf(kind);return index<0?null:{column:index,fallback:definitions[kind].fallback};}
+  function intelligence(e){return e&&e.kind==='boss'?(e.variety&&e.variety.phaseTwo?guides.bossEnraged:guides.boss):own(guides,e&&e.kind)?guides[e.kind]:null;}
+  function introduction(kind){return own(guides,kind)?guides[kind]:null;}
+  function model(kind){return own(models,kind)?models[kind]:null;}
   function drawTelegraphs(c,e,time,caption){
     var s=e&&e.variety;if(!s||!live(e))return;
-    c.save();c.lineWidth=2;c.strokeStyle=definitions[e.kind]?definitions[e.kind].color:'#dfa5c8';c.fillStyle=c.strokeStyle;
+    c.save();c.lineWidth=2;c.strokeStyle=own(definitions,e.kind)?definitions[e.kind].color:'#dfa5c8';c.fillStyle=c.strokeStyle;
     if(guarding(e,time)){
       c.globalAlpha=.65;var face=Math.atan2(e.fy||0,e.fx||1);c.beginPath();c.arc(e.x,e.y,e.r+9,face-.9,face+.9);c.stroke();
       c.globalAlpha=.95;c.lineWidth=3;c.beginPath();c.arc(e.x,e.y,e.r+13,face-.9,face-.9+1.8*bounded(s.guard/s.guardMax,0,1));c.stroke();
