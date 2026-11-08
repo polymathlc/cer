@@ -75,7 +75,10 @@ try {
       else check(frames.stats.mainExtracts >= 6, `${mode}: an unavailable worker actually runs the canonical synchronous fallback`);
       check(JSON.stringify(frames.frames) === JSON.stringify(canonical), `${mode}: fallback preserves exact source pixels, dimensions and foot anchors for all120frames`);
     }
-    await page.waitForTimeout(800);
+    // Optional elite sheets warm after the critical six. Retirement begins
+    // only when their preparation also drains, including under CPU throttling.
+    await page.waitForFunction(() => LegendsModels.ready('enemyElite') && LegendsModels.ready('enemyEliteRear'), null, { timeout: 30000 });
+    await page.waitForFunction(() => __workerStats.made === __workerStats.terminated, null, { timeout: 5000 });
     const idle = await page.evaluate(() => ({ ...__workerStats }));
     check(idle.made === idle.terminated, `${mode}: idle or failed workers terminate after preparation (${idle.made} made/${idle.terminated} terminated)`);
     check(errors.length === 0, `${mode}: worker success/failure leaves no uncaught game errors: ${errors.join(', ')}`);
