@@ -111,10 +111,11 @@
         "Evaluator independently ran all4 model tests, including unique columns and control-effect frames: passed.",
         "Implementer ran240 skill/ultimate stress combinations successfully.",
         "Evaluator inspected all6 generated enemy silhouettes in a real renderer screenshot.",
-        "Independent art QA547dad4 passed17 real-page assertions including distinct generated frames, source proportions, pause and render purity."
+        "Independent art QA547dad4 passed17 real-page assertions including distinct generated frames, source proportions, pause and render purity.",
+        "Independent productionQA17bfe38 confirmed complete debris-free models and correctcachedframe textures afterR19integration."
       ],
       "status": "verified",
-      "visual_acceptance": "pending-round-19-whole-silhouette-extraction"
+      "visual_acceptance": "verified-round-19-production-whole-silhouette-renderer"
     },
     {
       "round": 5,
@@ -235,10 +236,11 @@
         "Evaluator independently ran8 model/status/companion mapping tests: allpassed.",
         "Reviewed real pet movement/attack/heal pose tracking and preserved gameplay rules.",
         "Cross-cell source fragments are tracked as an open asset-quality follow-up for round19.",
-        "Independent actual-renderer QAea86591 passed20 art checks including all16 beast cells,5 humanoid roles and real boar override priority."
+        "Independent actual-renderer QAea86591 passed20 art checks including all16 beast cells,5 humanoid roles and real boar override priority.",
+        "Independent productionQA17bfe38 confirmed complete debris-free models and correctcachedframe textures afterR19integration."
       ],
       "status": "verified",
-      "visual_acceptance": "pending-round-19-whole-silhouette-extraction"
+      "visual_acceptance": "verified-round-19-production-whole-silhouette-renderer"
     },
     {
       "round": 12,
@@ -308,9 +310,99 @@
         "Visible headclick, overlap order, groundwalk, all6 archetypes and boss/death readouts covered."
       ],
       "status": "verified"
+    },
+    {
+      "round": 16,
+      "idea": "Make skills readable while keeping HUD reflow from stretching the game",
+      "finding": "Skills used inconsistent emoji-only presentation, and internal HUD wrapping could change stage size without updating the canvas/view.",
+      "change": "All60 skills now map to generated named archetype icons with fallback, framed controls and truthful cooldown numbers/progress. A guarded stage ResizeObserver keeps backing dimensions and fixed projection synchronized after internal layout changes.",
+      "commit": "74b152f",
+      "sources": [
+        "diablo2-alpha",
+        "diablo2-accessibility"
+      ],
+      "verification": [
+        "Evaluator independently ran41 real projection/resize browser checks: allpassed.",
+        "Evaluator independently ran explicit all60-skill icon mapping test: passed.",
+        "Implementer passed57 premium browser checks,38 tree checks and240 skill variants."
+      ],
+      "status": "verified"
+    },
+    {
+      "round": 17,
+      "idea": "Show truthful health and keep the player readable in effect-heavy fights",
+      "finding": "Damage/defense feedback lacked a readable trail and the player could disappear beneath central effects and repeated status plates.",
+      "change": "Immediate HP and aria values are paired with a separate decorative trail, actual shield/Insight details, restrained hit/critical cues and generated resource framing. A static post-effect player locator and compact ordinary status glyphs preserve combat focus.",
+      "commit": "fb53e7f",
+      "sources": [
+        "diablo4-vfx",
+        "diablo2-alpha",
+        "hades-nighty-night"
+      ],
+      "verification": [
+        "Evaluator independently ran30 realhealth browser checks at1280/390/320: allpassed.",
+        "Evaluator independently ran2 health/trail/heal/reduced-motion state tests: allpassed.",
+        "Reviewed post-effect static locator and unchanged authoritative HP/defense rules.",
+        "Independent dense66-foe/5-companion/4-skill capture passed8checks; locator and danger warnings remained readable."
+      ],
+      "status": "verified"
+    },
+    {
+      "round": 18,
+      "idea": "Make touch skill aiming deliberate and safely cancellable",
+      "finding": "Phone users lacked intentional direction/ground previews, and native multipointer panning could cancel combat controls.",
+      "change": "Touch/pen gestures now support matching preview, drag/release casting and quicktap behavior with run/skill/pointer ownership. Returning, cancellation, Escape, blur or overlay prevents latecasts; nativecompatibility click cannot duplicate a release. Gameplay hints/selectors match the dark UI.",
+      "commit": "d8bf06d",
+      "sources": [
+        "diablo2-accessibility",
+        "grim-dawn-monsters"
+      ],
+      "verification": [
+        "Evaluator independently ran30 real/native gesturebrowser checks at390/320: allpassed.",
+        "Evaluator independently ran2 gesture ownership/cancellation tests: allpassed.",
+        "Native two-touch joystick/aim and interruption safety covered; existing88 gameplay browser checks passed."
+      ],
+      "status": "verified"
+    },
+    {
+      "round": 19,
+      "idea": "Recover complete model silhouettes and keep an active run visually stable",
+      "finding": "Fixed cell crops clipped real anatomy and imported neighboring fragments; late models/admin overrides/ground could change an active character style and visible size.",
+      "change": "One-time global silhouette extraction builds bounded fullbody textures with nominalsource scale and correctfeet/picking. Immutable per-run generated/custom/builtin/ground/VFX profiles prevent late swaps; next run adoptsreadyart. Stampede uses the premiumboar with preserved override/fallback.",
+      "commit": "00d97a9",
+      "sources": [
+        "diablo2-alpha",
+        "diablo4-vfx"
+      ],
+      "verification": [
+        "Evaluator independently passed94 actualmodel/source checks,20 strictlate-source scenarios,15 atlas checks and17 model/extractor units.",
+        "Independent productionQA17bfe38 passed22 actualart,41 projection,18 UI,8dense and15atlas checks; complete120state contact sheets reviewed.",
+        "Latecustom actor/ground, next-run adoption, all-model failure, cachedtextures and premiumStampede/renderpurity verified."
+      ],
+      "status": "verified"
+    },
+    {
+      "round": 20,
+      "idea": "Turn actors naturally while retaining one fixed camera and stable presentation",
+      "finding": "A southeast-only model looked like backpedaling when travelling north; a naive rear swap could mirror the actor opposite its direction or flicker during idle jitter.",
+      "change": "All actor categories use matched cached front/rear states selected in simulation with normalized direction, idle guard and hysteresis. Native rear/front mirror rules differ correctly, committed attacks keep facing, missing pinned rear uses the samefront presentation, and picking follows the chosen frame.",
+      "commit": "6df19cc",
+      "sources": [
+        "diablo2-alpha",
+        "diablo4-vfx",
+        "grim-dawn-monsters"
+      ],
+      "verification": [
+        "Evaluator independently passed161 actualfacing browser checks.",
+        "Evaluator independently passed18 model/AI tests including tinyvectors, hysteresis, committed facing and Stampede simulation.",
+        "Front/rear sheets remain in immutable per-run profiles; no draw mutation or camera basis change.",
+        "Final complete browser sweep passed163 facing checks including actual WASD-driven model source selection."
+      ],
+      "visual_acceptance": "verified-independent-front-rear-renderer-and-profile-tests",
+      "status": "verified"
     }
   ],
-  "current_round": 16,
+  "current_round": null,
   "asset_quality_followups": [
     {
       "rounds": [
@@ -320,8 +412,25 @@
       ],
       "finding": "Some globally separate sprites cross nominal atlas cell boundaries, creating clipped anatomy and foreign fragments under fixed grid cropping.",
       "planned_round": 19,
-      "status": "open",
-      "evidence": "Independent QA found exact expected component counts; extraction benchmark12–22ms/atlas. Fullsprite bounds rarely overlap; one frontbrute pair overlaps2px and needs masking."
+      "status": "resolved",
+      "evidence": "Independent QA found exact expected component counts; extraction benchmark12–22ms/atlas. Fullsprite bounds rarely overlap; one frontbrute pair overlaps2px and needs masking.",
+      "resolved_by": [
+        "00d97a9",
+        "17bfe38"
+      ]
     }
-  ]
+  ],
+  "completed_rounds": 20,
+  "final_acceptance": {
+    "status": "complete",
+    "note": "All twenty evaluator-to-implementer rounds implemented and independently reviewed. Atlas source-quality follow-ups resolved by production extraction and visual inspection.",
+    "validation": {
+      "unit_tests": 187,
+      "browser_suites": 16,
+      "browser_checks": 691,
+      "skill_ultimate_combinations": 240,
+      "platform": "Windows Edge via Playwright; CI uses Chromium",
+      "all_passed": true
+    }
+  }
 }

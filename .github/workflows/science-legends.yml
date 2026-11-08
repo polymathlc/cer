@@ -1,10 +1,10 @@
 name: Science Legends combat and learning checks
 on:
   pull_request:
-    paths: ['science-legends*', 'science-slayers.html', 'science-expedition-*', 'science-feed-*.js', 'assets/science-legends/**', 'app.js', 'index.html', 'quest-frames.js', 'tools/science-legends-*', 'tools/science-expedition-*', 'tools/game-legends-slayers-*', 'tools/science-feed*', '.github/workflows/science-legends.yml']
+    paths: ['science-legends*', 'science-slayers.html', 'science-expedition-*', 'science-feed-*.js', 'assets/science-legends/**', 'docs/science-legends-20-rounds.json', 'app.js', 'index.html', 'quest-frames.js', 'tools/science-legends-*', 'tools/science-expedition-*', 'tools/game-legends-slayers-*', 'tools/science-feed*', '.github/workflows/science-legends.yml']
   push:
     branches: [main]
-    paths: ['science-legends*', 'science-slayers.html', 'science-expedition-*', 'science-feed-*.js', 'assets/science-legends/**', 'app.js', 'index.html', 'quest-frames.js', 'tools/science-legends-*', 'tools/science-expedition-*', 'tools/game-legends-slayers-*', 'tools/science-feed*', '.github/workflows/science-legends.yml']
+    paths: ['science-legends*', 'science-slayers.html', 'science-expedition-*', 'science-feed-*.js', 'assets/science-legends/**', 'docs/science-legends-20-rounds.json', 'app.js', 'index.html', 'quest-frames.js', 'tools/science-legends-*', 'tools/science-expedition-*', 'tools/game-legends-slayers-*', 'tools/science-feed*', '.github/workflows/science-legends.yml']
 permissions:
   contents: read
 jobs:
@@ -17,7 +17,7 @@ jobs:
         with:
           node-version: '24'
       - name: Verify mechanics, deterministic combat and endless question safeguards
-        run: node --test tools/game-legends-slayers-tests.mjs tools/science-legends-combat-tests.mjs tools/science-feed-core-tests.mjs tools/science-feed-standalone-tests.mjs tools/science-feed-payload-tests.mjs tools/science-feeding-integration-tests.mjs
+        run: node --test tools/game-legends-slayers-tests.mjs tools/science-legends-*-tests.mjs tools/science-feed-core-tests.mjs tools/science-feed-standalone-tests.mjs tools/science-feed-payload-tests.mjs tools/science-feeding-integration-tests.mjs
       - name: Install isolated browser runtime
         run: |
           npm install --prefix "$RUNNER_TEMP/legends-browser" --no-audit --no-fund playwright@1.62.1
@@ -29,8 +29,9 @@ jobs:
         run: |
           node tools/game-legends-slayers-browser.mjs
           node tools/science-expedition-accessibility-browser.mjs
-          node tools/science-legends-premium-browser.mjs
-          node tools/science-legends-skills-browser.mjs
+          for script in tools/science-legends-*-browser.mjs; do
+            node "$script"
+          done
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: failure()
         with:

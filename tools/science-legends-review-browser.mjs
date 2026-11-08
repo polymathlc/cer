@@ -20,15 +20,26 @@ try {
     return fs.existsSync(file)?route.fulfill({path:file}):route.abort();
   });
   await page.goto('http://legends-review.test/science-legends.html');
-  await page.waitForFunction(()=>window.LegendsModels&&LegendsModels.ready('hero')&&LegendsModels.ready('enemy'));
+  await page.waitForFunction(()=>window.LegendsModels&&LegendsModels.allReady());
   await page.locator('#startBtn').click();
   await page.evaluate(()=>show('pauseOverlay'));
   const frames=await page.evaluate(()=>{
-    const recorded=[],real=ctx.drawImage;
+    const recorded=[],real=ctx.drawImage,realHero=LegendsModels.drawHero,sourceCache=new WeakMap();let inHero=false;
+    LegendsModels.drawHero=function(...args){inHero=true;try{return realHero.apply(this,args);}finally{inHero=false;}};
     ctx.drawImage=function(image,...args){
-      if(String(image.src||'').includes('/v2/heroes.png')){
+      if(inHero){
         const m=this.getTransform();
-        recorded.push({cls:G.cls,a:m.a,b:m.b,c:m.c,d:m.d,sx:args[0],sy:args[1],sw:args[2],sh:args[3]});
+        const crop=args.length>=8?args.slice(0,4):[0,0,image.naturalWidth||image.width,image.naturalHeight||image.height],key=crop.join(',');
+        let entries=sourceCache.get(image);if(!entries){entries=new Map();sourceCache.set(image,entries);}
+        let stamp=entries.get(key);
+        if(!stamp){
+          const sample=document.createElement('canvas');sample.width=Math.ceil(crop[2]);sample.height=Math.ceil(crop[3]);
+          const g=sample.getContext('2d');g.drawImage(image,...crop,0,0,sample.width,sample.height);
+          const pixels=g.getImageData(0,0,sample.width,sample.height).data;let hash=2166136261,painted=false;
+          for(let i=0;i<pixels.length;i++){hash=Math.imul(hash^pixels[i],16777619);if(i%4===3&&pixels[i])painted=true;}
+          stamp={hash:hash>>>0,painted};entries.set(key,stamp);
+        }
+        recorded.push({cls:G.cls,a:m.a,b:m.b,c:m.c,d:m.d,...stamp});
       }
       return real.call(this,image,...args);
     };
@@ -36,23 +47,26 @@ try {
       for(const cls of CLASS_ORDER)for(const face of [[1,0],[-1,0],[0,1],[0,-1]])for(const spin of [false,true]){
         newGame(cls);G.pets=[];G.enemies=[];G.time=1;
         Object.assign(G.player,{fx:face[0],fy:face[1],moving:false,modelAttackUntil:0});
+        LegendsModels.advanceFacing(G.player);
         G.spin=spin?{radius:100}:null;draw();
       }
-      const poses=[];
+      const poses=[],poseHashes=[];
       for(const settings of [{time:1,moving:false,until:0},{time:0,moving:true,until:0},{time:.15,moving:true,until:0},{time:1,moving:false,until:2}]){
         G.time=settings.time;G.player.moving=settings.moving;G.player.modelAttackUntil=settings.until;draw();
-        poses.push(recorded.at(-1).sy/recorded.at(-1).sh);
+        poses.push(LegendsModels.stateFrame(G.player,G.time,false));poseHashes.push(recorded.at(-1).hash);
       }
-      return {recorded,poses,dpr:DPR};
-    } finally {ctx.drawImage=real;}
+      return {recorded,poses,poseHashes,dpr:DPR};
+    } finally {ctx.drawImage=real;LegendsModels.drawHero=realHero;}
   });
   check(frames.recorded.length===44,'all five classes render a generated model in all facings and Whirlwind states');
   for(const draw of frames.recorded){
     check(Math.abs(draw.a)===frames.dpr&&draw.d===frames.dpr&&draw.b===0&&draw.c===0,`${draw.cls}: actual sprite draw keeps fixed elevation, scale and upright pose`);
-    const col=['barb','sorc','beast','pala','ama'].indexOf(draw.cls);
-    check(Math.abs(draw.sx/draw.sw-col)<1e-8,`${draw.cls}: generated sprite uses its own class column`);
+    check(draw.painted,`${draw.cls}: actual actor source paints nontransparent pixels`);
   }
+  const classes=new Map();for(const draw of frames.recorded)if(!classes.has(draw.cls))classes.set(draw.cls,draw.hash);
+  check(new Set(classes.values()).size===5,'all five classes actually paint distinct generated silhouettes');
   check(JSON.stringify(frames.poses)==='[0,1,2,3]','idle, two stride and attack states render distinct atlas rows');
+  check(new Set(frames.poseHashes).size===4,'all four action states paint distinct source pixels even with cached textures');
   const before=await page.evaluate(()=>({time:G.time,row:LegendsModels.stateFrame(G.player,G.time,false)}));
   await page.waitForTimeout(150);
   check(await page.evaluate(b=>G.time===b.time&&LegendsModels.stateFrame(G.player,G.time,false)===b.row,before),'paused simulation freezes model animation');
