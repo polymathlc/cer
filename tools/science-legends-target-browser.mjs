@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';import path from 'node:path';import {fileURLToPath,pathToFileURL}from'node:url';
+const{chromium}=await import(process.env.PLAYWRIGHT_MODULE?pathToFileURL(process.env.PLAYWRIGHT_MODULE).href:'playwright');
+const root=fileURLToPath(new URL('../',import.meta.url)),browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_BROWSER_CHANNEL?{channel:process.env.PLAYWRIGHT_BROWSER_CHANNEL}:{})});let checks=0;function check(v,m){assert.ok(v,m);checks++;}
+try{for(const width of[1280,390,320]){
+  const context=await browser.newContext({viewport:{width,height:900},reducedMotion:'reduce'}),page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.route('**/*',route=>{const url=new URL(route.request().url());if(url.hostname!=='target.test')return route.abort();const file=path.join(root,url.pathname);return fs.existsSync(file)?route.fulfill({path:file}):route.abort();});
+  await page.goto('http://target.test/science-legends.html');await page.locator('#startBtn').click();await page.waitForFunction(()=>G&&G.time>.05);
+  await page.evaluate(()=>{G.enemies=[];G.pets=[];G.spawnT=999;G.stats.speed=0;G.player.atkCd=999;window.qaEnemy=spawnEnemy('brute',false);Object.assign(qaEnemy,{x:G.player.x+100,y:G.player.y,speed:0,hp:200,maxHp:200});draw();window.clickWorld=(x,y)=>{const point=LegendsView.worldToScreen(G.view,x,y),rect=canvas.getBoundingClientRect();canvas.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerType:'mouse',button:0,clientX:rect.left+point.x*rect.width/VW,clientY:rect.top+point.y*rect.height/VH}));window.dispatchEvent(new PointerEvent('pointerup',{pointerType:'mouse',button:0}));};clickWorld(qaEnemy.x,qaEnemy.y-42);});
+  check(await page.evaluate(()=>G.atkTarget===qaEnemy&&G.moveTarget===null&&qaEnemy.r===21),`${width}: actual visible-head pointer selects enemy without changing physics`);
+  await page.waitForFunction(()=>!$('targetPanel').hidden);check((await page.locator('#targetName').innerText())==='Stone Brute',`${width}: selected model shows its actual archetype`);
+  await page.evaluate(()=>{window.qaFront=spawnEnemy('brute',true);Object.assign(qaFront,{x:qaEnemy.x,y:qaEnemy.y+10,r:21,speed:0,hp:123.4,maxHp:200,frozen:1,slowT:1});draw();clickWorld(qaEnemy.x,qaEnemy.y-30);updateTargetPanel();});
+  check(await page.evaluate(()=>G.atkTarget===qaFront),`${width}: overlapping models select the frontmost living enemy`);
+  check((await page.locator('#targetType').innerText()).includes('ELITE')&&(await page.locator('#targetHp').innerText()).startsWith('123.4 / 200'),`${width}: readout exposes identity and current HP values`);
+  check((await page.locator('#targetEffects').innerText()).includes('FROZEN')&&(await page.locator('#targetEffects').innerText()).includes('SLOW'),`${width}: target statuses remain readable without body tint`);
+  check(await page.evaluate(()=>{const t=$('targetPanel').getBoundingClientRect(),b=$('battleStatus').getBoundingClientRect();return t.left>=0&&t.right<=innerWidth&&t.left>=b.right;}),`${width}: target panel fits without covering battle status`);
+  check(await page.evaluate(()=>{for(const kind of['slime','imp','mite','brute','spitter','charger','boss']){qaFront.kind=kind;qaFront.boss=kind==='boss';updateTargetPanel();if(!$('targetName').textContent||!$('targetHp').textContent.includes('HP'))return false;}return true;}),`${width}: all archetypes and boss retain useful readouts`);
+  await page.evaluate(()=>{const point=LegendsView.screenToWorld(G.view,20,VH-130);clickWorld(point.x,point.y);});check(await page.evaluate(()=>G.atkTarget===null&&!!G.moveTarget),`${width}: empty ground still sets a movement destination`);
+  await page.evaluate(()=>{G.atkTarget=qaFront;qaFront.hp=0;updateTargetPanel();});check(await page.evaluate(()=>$('targetPanel').hidden&&G.atkTarget===null),`${width}: dead targets clear immediately`);
+  check(errors.length===0,`${width}: no target UI errors: ${errors.join(', ')}`);await context.close();
+}console.log(`Science Legends target browser: ${checks} checks passed`);}finally{await browser.close();}

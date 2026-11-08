@@ -557,6 +557,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
   <div class="stage" id="stage">
     <canvas id="game"></canvas>
     <div class="battle-status" id="battleStatus" style="display:none"></div>
+    <div class="target-panel" id="targetPanel" hidden role="region" aria-label="Enemy target"><div class="target-name" id="targetName"></div><div class="target-type" id="targetType"></div><div class="target-hp"><span id="targetHpFill"></span></div><div class="target-numbers" id="targetHp"></div><div class="target-effects" id="targetEffects"></div></div>
     <button class="evade-btn" id="evadeBtn" type="button" style="display:none">Evade<small>Space · READY</small></button>
     <div class="beta-ribbon">Beta</div>
     <div class="qtimer" id="qTimer" style="display:none;"><span class="dot"></span> Next question in <b id="qTimerN" style="margin-left:2px;">20</b>s</div>
@@ -2174,6 +2175,7 @@ function updateCombatReadability(dt){
   G.evadeTrail=(G.evadeTrail||[]).filter(function(t){t.life-=dt;return t.life>0;});
   G.enemies.forEach(function(e){e.hitFlash=Math.max(0,(e.hitFlash||0)-dt);e.impactCd=Math.max(0,(e.impactCd||0)-dt);});
   G.readabilityT=(G.readabilityT||0)-dt;if(G.readabilityT>0)return;G.readabilityT=.1;
+  updateTargetPanel();
   var b=$('evadeBtn');b.style.display='';b.disabled=p.evadeCd>0;
   b.innerHTML=p.evadeCd>0 ? 'Evade '+p.evadeCd.toFixed(1)+'s<small>Recharging</small>' : 'Evade<small>Space · READY</small>';
   var status=$('battleStatus');status.style.display='';
@@ -2318,6 +2320,16 @@ function screenToWorld(x,y){
   var view=G&&G.view?G.view:LegendsView.create(G?G.player.x:0,G?G.player.y:0,VW,VH,WORLD.w,WORLD.h);
   return LegendsView.screenToWorld(view,x,y);
 }
+function pickEnemyAt(x,y){if(!G)return null;return LegendsModels.pick(G.enemies,x,y,function(enemy){return LegendsModels.enemyBounds(enemy,G.time,lowMotion,Math.max(40,enemy.r*4));});}
+function updateTargetPanel(){
+  var panel=$('targetPanel');if(!G||G.state!=='play'){panel.hidden=true;return;}
+  if(G.atkTarget&&(G.atkTarget.dead||G.atkTarget.hp<=0||G.enemies.indexOf(G.atkTarget)<0))G.atkTarget=null;
+  var target=G.atkTarget||mouse.over;if(!target||target.dead||target.hp<=0||G.enemies.indexOf(target)<0){panel.hidden=true;return;}
+  panel.hidden=false;$('targetName').textContent={slime:'Mire Slime',imp:'Ash Imp',mite:'Rift Mite',brute:'Stone Brute',spitter:'Venom Spitter',charger:'Iron Charger',boss:'Core Tyrant'}[target.kind]||'Unknown foe';
+  $('targetType').textContent=target.boss?'BOSS · HEAVY':(target.elite?'ELITE · ':'')+({brute:'Heavy melee',spitter:'Ranged caster',charger:'Charging attacker',mite:'Swarm',imp:'Skirmisher',slime:'Melee'}[target.kind]||'Enemy');
+  $('targetHp').textContent=Math.max(0,Math.round(target.hp*10)/10)+' / '+Math.round(target.maxHp*10)/10+' HP';$('targetHpFill').style.transform='scaleX('+clamp(target.hp/target.maxHp,0,1)+')';
+  $('targetEffects').textContent=LegendsModels.statuses(target).map(function(status){return status.glyph+' '+status.label;}).join(' · ')||'No active effects';
+}
 (function(){
   function pos(e){
     var r = canvas.getBoundingClientRect();
@@ -2338,13 +2350,11 @@ function screenToWorld(x,y){
     if (e.button === 2){ mouse.rDown = true; return; }
     if (e.button !== 0) return;
     mouse.lDown = true;
-    var over = null;
-    for (var i = 0; i < G.enemies.length; i++){
-      var en = G.enemies[i];
-      if (dist2(mouse.wx, mouse.wy, en.x, en.y) < (en.r + 14) * (en.r + 14)){ over = en; break; }
-    }
+    var over = pickEnemyAt(mouse.wx,mouse.wy);
+    mouse.over=over;
     if (over){ G.atkTarget = over; G.moveTarget = null; }
     else { G.moveTarget = { x: mouse.wx, y: mouse.wy }; G.atkTarget = null; }
+    updateTargetPanel();
   });
   window.addEventListener('pointerup', function(e){
     if (e.button === 2) mouse.rDown = false;
@@ -3394,10 +3404,7 @@ function update(dt){
     var worldPoint=screenToWorld(mouse.sx,mouse.sy);mouse.wx=worldPoint.x;mouse.wy=worldPoint.y;
     mouse.over = null;
     if (mouse.sx >= 0){
-      for (var moi = 0; moi < G.enemies.length; moi++){
-        var moe = G.enemies[moi];
-        if (dist2(mouse.wx, mouse.wy, moe.x, moe.y) < (moe.r + 14) * (moe.r + 14)){ mouse.over = moe; break; }
-      }
+      mouse.over=pickEnemyAt(mouse.wx,mouse.wy);
     }
   }
   G.insightT = Math.max(0, G.insightT - dt);
@@ -4067,7 +4074,7 @@ function draw(){
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.fillStyle = '#23262B';
   ctx.fillRect(0, 0, VW, VH);
-  if (!G || !p) return;
+  if (!G || !p){updateTargetPanel();return;}
   var view=G.view=LegendsView.create(p.x,p.y,VW,VH,WORLD.w,WORLD.h);
   var camX=view.x,camY=view.y;
   G.camX = camX; G.camY = camY;

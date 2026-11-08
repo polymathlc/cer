@@ -59,3 +59,9 @@ test('beast and humanoid companions map to premium sheets with explicit friendly
   assert.deepEqual(models.companionModel('fdef'),{sheet:'hero',column:3});assert.deepEqual(models.companionModel('fmag'),{sheet:'hero',column:1});assert.deepEqual(models.companionModel('decoy','barb'),{sheet:'hero',column:0});
   assert.equal(models.companionRole('fpri'),'HEALER');assert.equal(models.companionModel('unknown'),null);
 });
+test('visible body picking reaches heads and follows front-to-back depth without altering radii',()=>{
+  const back={x:100,y:100,r:21,hp:100,fx:1},front={x:100,y:110,r:21,hp:100,fx:1};
+  const bounds=actor=>models.bodyBounds(actor,84,{x:.5,y:.95});
+  assert.equal(models.pick([back],100,58,bounds),back);assert.equal(models.pick([back,front],100,80,bounds),front);
+  front.dead=true;assert.equal(models.pick([back,front],100,80,bounds),back);assert.equal(models.pick([back],300,300,bounds),null);assert.equal(back.r,21);
+});

@@ -23,6 +23,9 @@
   }
   function enemyColumn(kind){return kind==='boss'?3:ENEMIES.indexOf(kind);}
   function sortActors(entries){return entries.slice().sort(function(a,b){return (a.actor.y+(a.actor.r||0))-(b.actor.y+(b.actor.r||0))||a.order-b.order;});}
+  function bodyBounds(actor,size,anchor){anchor=anchor||{x:.5,y:.96};return {x:actor.x-(actor.fx<0?1-anchor.x:anchor.x)*size,y:actor.y+(actor.r||0)-anchor.y*size,w:size,h:size};}
+  function enemyBounds(actor,time,reduced,size){var column=enemyColumn(actor.kind),row=enemyFrame(actor,time,reduced),anchor=ready('enemy')&&column>=0?sheets.enemy.metadata[column][row]:null;return bodyBounds(actor,size,anchor);}
+  function pick(enemies,x,y,bounds){var queue=sortActors(enemies.map(function(actor,index){return {actor:actor,order:index};}));for(var i=queue.length-1;i>=0;i--){var actor=queue[i].actor;if(actor.dead||actor.hp<=0)continue;var box=bounds(actor);if(x>=box.x&&x<=box.x+box.w&&y>=box.y&&y<=box.y+box.h)return actor;}return null;}
   function statuses(actor){
     var list=[];
     if(actor.frozen>0)list.push({kind:'frozen',label:'FROZEN',glyph:'❄',color:'#9eefff'});
@@ -61,7 +64,7 @@
   function drawHero(ctx,cls,actor,time,reduced,size){return drawModel(ctx,'hero',HEROES.indexOf(cls),stateFrame(actor,time,reduced),actor,size);}
   function drawEnemy(ctx,actor,time,reduced,size){return drawModel(ctx,'enemy',enemyColumn(actor.kind),enemyFrame(actor,time,reduced),actor,size);}
   function drawCompanion(ctx,actor,time,reduced,size,cls){var model=companionModel(actor.kind,cls);if(!model)return false;ctx.save();if(actor.kind==='decoy')ctx.globalAlpha=.55;var drawn=drawModel(ctx,model.sheet,model.column,stateFrame(actor,time,reduced),actor,size);ctx.restore();return drawn;}
-  var api={ready:ready,drawHero:drawHero,drawEnemy:drawEnemy,drawCompanion:drawCompanion,companionModel:companionModel,companionRole:companionRole,stateFrame:stateFrame,enemyFrame:enemyFrame,enemyColumn:enemyColumn,sourceRect:sourceRect,footAnchor:footAnchor,sortActors:sortActors,statuses:statuses};
+  var api={ready:ready,drawHero:drawHero,drawEnemy:drawEnemy,drawCompanion:drawCompanion,companionModel:companionModel,companionRole:companionRole,stateFrame:stateFrame,enemyFrame:enemyFrame,enemyColumn:enemyColumn,sourceRect:sourceRect,footAnchor:footAnchor,sortActors:sortActors,statuses:statuses,bodyBounds:bodyBounds,enemyBounds:enemyBounds,pick:pick};
   if(typeof module==='object'&&module.exports)module.exports=api;
   root.LegendsModels=api;
   if(typeof root.Image==='function'&&root.document)Object.keys(sheets).forEach(function(kind){var sheet=sheets[kind];sheet.image=new root.Image();sheet.image.onload=function(){prepare(sheet);};sheet.image.src='assets/science-legends/v2/'+({hero:'heroes',enemy:'enemies',companion:'companions'}[kind])+'.png';});
