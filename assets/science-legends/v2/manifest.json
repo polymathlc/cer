@@ -45,7 +45,9 @@
         "attack anticipation"
       ],
       "prompt": "Use case: stylized-concept. Asset type: transparent enemy animation atlas for an original premium fantasy overhead action RPG. Exactly SIX COLUMNS by FOUR ROWS, 24 equal square cells in a landscape 3:2 sheet, no visible grid. Same creature design repeated consistently down each column. Columns left to right: emerald slime blob with a bright core and dark moss shell; small rust-red horned imp with charcoal claws; small violet armored scuttling insect mite; massive stone-and-bronze brute with a broad club and square shoulders; pale spitter creature with a green venom sac and long mouth; blue-grey armored horned charging beast with a low heavy silhouette. These are original enemies, readable fantasy creatures appropriate for a school game, no gore. Rows top to bottom: alert idle stance; first walking/squash stride phase; opposite walking/squash stride phase; a clearly distinct attack anticipation pose (imp reaching, mite rearing, brute raising club, spitter swollen venom sac, charger lowering horns, slime compressing to lunge). CRITICAL exactly the SAME steep three-quarter overhead orthographic camera in ALL24 cells, always looking down on head/shoulders, all face southeast bottom-right; no front portraits and no perspective changes. Full body and weapons inside each cell with transparent margins. Foot or slime contact baseline identical in each cell. Creature centered, roughly70percent cell height; relative shape/silhouette differences preserved. Premium painterly3D fantasy game sprite materials, crisp details, strong silhouettes at small scale, soft consistent lighting upper-left and darkteal ambient shadows. No pixel art, no labels, no lines, no text, no floor, no scenery, no castshadow blobs, no detached VFX, no logo, no watermark. True transparent background.",
-      "runtimeFile": "enemies.webp"
+      "runtimeFile": "enemies.webp",
+      "activeRuntime": false,
+      "replacedBy": "enemies-clean.png"
     },
     {
       "file": "attacks.png",
@@ -151,6 +153,7 @@
     "dimensions": "unchanged",
     "alphaVerification": "exact match to source PNG for all transparent assets",
     "sourceBytes": 18445728,
-    "runtimeBytes": 4092986
-  }
+    "baseRuntimeBytes": 4092986
+  },
+  "variants": "direction-variants.json"
 }

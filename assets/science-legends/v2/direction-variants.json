@@ -1,0 +1,43 @@
+{
+  "release": "1.455.0",
+  "generator": "Built-in image_gen tool",
+  "sampling": "Nominal grid identifies each pose; runtime unpacks complete alpha-connected silhouettes to preserve full anatomy and reject neighboring fragments. Source artwork stays unchanged.",
+  "assets": [
+    {
+      "file": "enemies-clean.png",
+      "runtimeFile": "enemies-clean.webp",
+      "referenceFile": "enemies.png",
+      "columns": 6,
+      "rows": 4,
+      "role": "selected forward enemy atlas",
+      "prompt": "Edit target: supplied original6columns by4rows enemy animation atlas. PRECISE cleanup for sprite-sheet production. Preserve all24 creature designs, color identities, poses, scale, same fixed camera angle, same6×4cell layout and exact canvas aspect. Remove every stray neighboring fragment from each cell. IMPORTANT the purple mite column currently includes a floating tan stone fragment from the neighboring brute club on its RIGHT; eliminate this fragment in ALL4 mite cells. The brute's club must be entirely contained inside its OWN fourth-column cell, never cross left into mite or down into another row. Remove any isolated fragment below the brute's feet. Ensure EACH entire enemy and weapon is wholly inside its cell with8percent clear transparent gutters. Reposition/fold the club within the brute's own cell only as needed, keeping brute body scale and foot anchor unchanged. Leave other creature identities and poses unchanged. All empty areas and gutters genuinely alpha0 transparent. No new shapes, no floor, no shadow plate, no border, no text, no grid lines, no watermark."
+    },
+    {
+      "file": "heroes-rear.png",
+      "runtimeFile": "heroes-rear.webp",
+      "referenceFile": "heroes.png",
+      "columns": 5,
+      "rows": 4,
+      "role": "rear-facing hero idle/walk/attack variants",
+      "prompt": "Input image role: reference atlas whose exact original five character identities, armor, colors, weapons, column order, animation-row order and sprite scale must be preserved. Produce a MATCHING REAR-VIEW animation atlas, exactly5columns by4rows. Rotate each character's BODY YAW180degrees so it faces NORTHWEST/top-left, showing back of head, back armor and cape. Do NOT rotate or tilt the camera: preserve the same steep three-quarter overhead ORTHOGRAPHIC camera elevation and lighting as the reference. Faces are turned away. Columns remain barbarian/sorcerer/beast warden/paladin/amazon. Rows remain idle/walk phase1/walk phase2/attack. Match body height and planted foot baseline to the reference so front/rear frame switching doesn't zoom or pop. Keep exact outfit silhouettes including barbarian fur, sorcerer violet cloak, beast warden green kit/wolf pelt, paladin steel/gold armor and amazon crimson cloak/bow. Every whole figure and weapon must stay INSIDE its own cell with at least8percent transparent padding and NO neighbor overlap. True transparent background and gutters, no floor or shadows, no labels, no grid lines, no text, no logo, no watermark. Same canvas5:4aspect as reference. Premium painterly3D game sprite look; this is a directional variant, not a character redesign."
+    },
+    {
+      "file": "enemies-rear.png",
+      "runtimeFile": "enemies-rear.webp",
+      "referenceFile": "enemies-clean.png",
+      "columns": 6,
+      "rows": 4,
+      "role": "rear-facing enemy variants",
+      "prompt": "Input image role: reference enemy atlas. Make a MATCHING REAR-VIEW directional sprite sheet for these exact original six creatures. Preserve exact6columns by4rows layout, exact1536×1024canvas aspect, cell positions, body scale, armor colors and materials, and same idle/walk1/walk2/attack anticipation rows. Rotate every creature's BODY YAW180degrees to face NORTHWEST/top-left, showing backs, top shoulders and rear armor instead of faces. Keep camera elevation and projection EXACTLY the same steep three-quarter overhead ORTHOGRAPHIC view as reference. Do NOT tilt camera, zoom, change lighting, or redesign any creature. Columns remain emerald slime/rustredimp/violetmite/stonebronzeclubbrute/palegreenvenomspitter/bluegreycharger. Maintain each creature's planted foot baseline and relative height across front/rear sheets. Every whole body, tail, horn and club must be contained inside its own cell with generous transparent padding. In particular keep brute club FULLY inside fourth column and ensure purple mite cells contain NO stray tan fragments from club. Attack row shows back-facing anticipation pose. Fullbody, premium painterly3D game sprite material detail, crisp readable silhouettes. True transparent background and gutters, no floor, no castshadow blobs, no plate behind creatures, no labels, no letters, no visiblegrid, no watermark."
+    },
+    {
+      "file": "companions-rear.png",
+      "runtimeFile": "companions-rear.webp",
+      "referenceFile": "companions.png",
+      "columns": 4,
+      "rows": 4,
+      "role": "rear-facing beast companion variants",
+      "prompt": "Input role: the supplied original companion sprite atlas is an identity, camera and layout reference. Create a matching REAR-VIEW directional animation atlas: exactly4columns×4rows, preserving original wolf/bear/boar/three-headedhydra column order, idle/walk1/walk2/attack row order, materials, outfit colors, body scale, foot baseline and squarecanvas. Turn each creature's BODY180degrees to face northwest/top-left, showing back/head/shoulders/tail instead of its face. Keep the EXACT SAME steep three-quarter overhead ORTHOGRAPHIC CAMERA elevation and lighting; do not turn the camera or change perspective. Preserve silvergreywolf withgreenharness, brownarmoredbear, russetarmoredboar, greenbronzehydra. Show complete bodies, paws, tusks and tails in every frame. Generous transparent separation between all16 full silhouettes; do not let one animal's anatomy overlap or touch another. Each should stay mostly centered in nominalcell with at least10percenttransparentpadding. Premium detailed painterly3D fantasy game sprites, clear at smallsizes, notpixelart. True alpha0transparent background and gutters. No scenery, no opaqueplate, no castshadow, no floor, no UI, no text, no gridlines, no watermark. This is a matched direction variant, no redesign."
+    }
+  ]
+}
