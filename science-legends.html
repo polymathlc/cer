@@ -611,6 +611,8 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
           <button class="btn btn-primary" id="treeCloseBtn" type="button">✓ Done</button>
         </div>
         <div class="tree-state-legend" aria-label="Skill tree states"><span><i class="state-locked">–</i> Locked</span><span><i class="state-ready">+</i> Available</span><span><i class="state-done">✓</i> Learned / max</span><span><i class="state-cap">◆</i> Capstone</span></div>
+        <p id="treeNavHelp" class="tree-keyboard-help">Arrow keys browse · Home / End jump · Enter inspects · Escape closes details · T returns to battle</p>
+        <div id="treeFeedback" class="tree-feedback" role="status" aria-live="polite">Inspect a node to read its requirements.</div>
         <div class="tree-board-wrap" id="treeBoardWrap">
           <div class="tree-board" id="treeBoard"></div>
         </div>
@@ -725,6 +727,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
 <script src="science-legends-models.js?v=1.455.0"></script>
 <script src="science-legends-actions.js?v=1.455.0"></script>
 <script src="science-legends-ai.js?v=1.455.0"></script>
+<script src="science-legends-tree.js?v=1.455.0"></script>
 <script src="science-legends-combat.js?v=1"></script>
 <script>
 /* ============================================================================
@@ -1819,7 +1822,7 @@ function skillCd(id){
 }
 
 /* ---- Tree UI: hover = tooltip, click = floating popover with "+ Add point" ---- */
-var treeSel = null;
+var treeSel = null,treeFocus=null;
 var TREE_W = 1000;
 function treeNodeState(nd){
   var r = nodeRank(nd.id);
@@ -1880,7 +1883,11 @@ function renderTree(){
   var wrap = $('treeBoardWrap');
   var sx = wrap.scrollLeft, sy = wrap.scrollTop;
   var board = $('treeBoard');
+  var oldFocus=document.activeElement,restoreFocus=board.contains(oldFocus),restoreId=oldFocus&&oldFocus.id;
   var tree = TREES[G.cls];
+  if(!tree.some(function(node){return node.id===treeFocus;}))treeFocus=LegendsTree.order(tree)[0].id;
+  board.setAttribute('role','group');board.setAttribute('aria-label','Skill paths');board.setAttribute('aria-describedby','treeNavHelp');
+  board.onkeydown=function(event){if(event.key==='Escape'&&treeSel){event.preventDefault();event.stopPropagation();treeSel=null;renderTree();focusTreeNode(treeFocus);}};
   var maxRow = 0;
   tree.forEach(function(nd){ if (nd.row > maxRow) maxRow = nd.row; });
   var H = 70 + (maxRow + 1) * 112 + 40;
@@ -1917,7 +1924,14 @@ function renderTree(){
   var tip = $('treeTip');
   Array.prototype.forEach.call(board.querySelectorAll('.tnode'), function(btn){
     var nd = nodeById(G.cls, btn.getAttribute('data-node'));
-    btn.addEventListener('click', function(){ treeSel = nd.id; renderTree(); });
+    btn.tabIndex=nd.id===treeFocus?0:-1;btn.setAttribute('aria-label',nd.name+', '+nodeKindLabel(nd)+', rank '+nodeRank(nd.id)+' of '+nd.max+'. '+(treeNodeState(nd)==='locked'?'Locked. ':'')+nodeReqMsgs(nd).join('. '));btn.setAttribute('aria-expanded',treeSel===nd.id?'true':'false');
+    btn.addEventListener('focus',function(){treeFocus=nd.id;board.querySelectorAll('.tnode').forEach(function(node){node.tabIndex=node===btn?0:-1;});});
+    btn.addEventListener('click', function(){ treeFocus=nd.id;treeSel = nd.id; renderTree(); });
+    btn.addEventListener('keydown',function(event){
+      if(event.key==='Escape'&&treeSel){event.preventDefault();event.stopPropagation();treeSel=null;renderTree();focusTreeNode(treeFocus);return;}
+      if(!/^(ArrowLeft|ArrowRight|ArrowUp|ArrowDown|Home|End)$/.test(event.key))return;
+      event.preventDefault();event.stopPropagation();var id=LegendsTree.next(tree,nd.id,event.key);treeSel=null;treeFocus=id;renderTree();focusTreeNode(id);
+    });
     btn.addEventListener('mouseenter', function(){
       if (treeSel === nd.id) return;                    // popover already shows it
       var p = nodeXY(nd), r = nodeRank(nd.id);
@@ -1937,13 +1951,15 @@ function renderTree(){
   var tpAdd = $('tpAdd');
   if (tpAdd) tpAdd.addEventListener('click', function(e){ e.stopPropagation(); learnSelected(); });
   var tpClose = $('tpClose');
-  if (tpClose) tpClose.addEventListener('click', function(e){ e.stopPropagation(); treeSel = null; renderTree(); });
+  if (tpClose) tpClose.addEventListener('click', function(e){ e.stopPropagation(); treeSel = null; renderTree();focusTreeNode(treeFocus); });
   wrap.scrollLeft = sx; wrap.scrollTop = sy;
   var pop=$('treePop');if(pop){pop.style.left=clamp(parseFloat(pop.style.left),sx+8,sx+Math.max(8,wrap.clientWidth-pop.offsetWidth-8))+'px';pop.style.top=clamp(parseFloat(pop.style.top),sy+8,sy+Math.max(8,wrap.clientHeight-pop.offsetHeight-8))+'px';}
+  if(restoreFocus){var replacement=restoreId&&$(restoreId);if(replacement&&!replacement.disabled)replacement.focus({preventScroll:true});else focusTreeNode(treeFocus,false);}
   $('treeTitle').textContent = '🌳 ' + CLASSES[G.cls].name + ' Skill Tree';
   $('treePtsBig').textContent = G.points + ' point' + (G.points === 1 ? '' : 's');
   renderTreeStats();
 }
+function focusTreeNode(id,scroll){var button=$('treeBoard').querySelector('[data-node="'+id+'"]');if(!button)return;button.focus({preventScroll:true});if(scroll!==false)button.scrollIntoView({block:'nearest',inline:'nearest',behavior:'auto'});}
 function selectNode(id){ treeSel = id; renderTree(); }
 function renderTreeStats(){
   var S = G.stats; if (!S) return;
@@ -1982,6 +1998,7 @@ function learnSelected(){
   if (nd.mod === 'cap.bear' && G.state !== 'menu' && !G.pets.some(function(p){ return p.kind === 'bear'; })) spawnPet('bear');
   renderTree();
   updateHud();
+  $('treeFeedback').textContent=nd.name+' is rank '+nodeRank(nd.id)+'. '+G.points+' skill point'+(G.points===1?'':'s')+' remaining.';
 }
 function resetTree(){
   var refund = pointsSpent();
@@ -2209,6 +2226,7 @@ window.addEventListener('keydown', function(e){
   if(e.repeat)return;
   if(qState && qState.active){if(k>='1'&&k<='8'){e.preventDefault();var qi=parseInt(k,10)-1;if(qState.current && qi<qState.current.options.length)answerQuestion(qi);}return;}
   if(k==='p'||k==='escape'){e.preventDefault();togglePause();return;}
+  if(k==='t'&&$('treeOverlay').classList.contains('show')){e.preventDefault();toggleTree();return;}
   if(overlayOpen())return;
   if(e.target.closest('button')&&(k===' '||k==='enter'))return;
   if(['arrowup','arrowdown','arrowleft','arrowright',' '].indexOf(k)>=0)e.preventDefault();
