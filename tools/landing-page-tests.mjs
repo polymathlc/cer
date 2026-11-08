@@ -8,6 +8,8 @@ import { readFileSync } from 'node:fs';
 const source = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
 const navigation = source.match(/function showPage\(pageId\) \{[\s\S]*?\r?\n\}/)?.[0];
 assert.ok(navigation, 'The production showPage function must be available.');
+const gameVisibility = source.match(/function notifyLegendsSurfaceVisibility\(force\) \{[\s\S]*?\r?\n\}/)?.[0];
+assert.ok(gameVisibility, 'The production game visibility publisher must be available.');
 const entryRouting = source.match(/function signedOutEntryPage\(\) \{[\s\S]*?\r?\n\}/)?.[0];
 assert.ok(entryRouting, 'The production signed-out entry routing must be available.');
 
@@ -36,7 +38,7 @@ function setup({ visible = 'landingPage', scrollY = 0, hash = '' } = {}) {
     assert.equal(url, '/cer/index.html?test=1');
     window.location.hash = '';
   } };
-  const showPage = new Function('document', 'window', `${navigation}\nreturn showPage;`)(document, window);
+  const showPage = new Function('document', 'window', `${gameVisibility}\n${navigation}\nreturn showPage;`)(document, window);
   const signedOutEntryPage = new Function('document', 'window', `${entryRouting}\nreturn signedOutEntryPage;`)(document, window);
   return { showPage, signedOutEntryPage, pages, window, scrollCalls, errors, loading, forgotPassword };
 }

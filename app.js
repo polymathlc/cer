@@ -72,6 +72,7 @@ const tcgSyncDuelVolume = () => queueMicrotask(() => {
 document.addEventListener('click', event => { if (event.target.closest?.('[data-tcg-audio]')) tcgSyncDuelVolume(); });
 document.addEventListener('input', event => { if (event.target.matches?.('[data-tcg-audio]')) tcgSyncDuelVolume(); });
 document.addEventListener('visibilitychange', () => { if (document.hidden) tcgCombatStop(); });
+document.addEventListener('visibilitychange', () => notifyLegendsSurfaceVisibility());
 import { mountInterfaceStudio } from "./interface-studio.mjs?v=2";
 import { mountScienceCoach, resetScienceCoaches, scienceCoachMotion } from "./science-coaches.js";
 import { SCIENCE_COACH_INSTRUCTIONS } from "./science-coach-core.js";
@@ -3645,6 +3646,27 @@ function showPage(pageId) {
   document.querySelectorAll('.auth-loading').forEach(e => e.classList.remove('active'));
   const fp = document.getElementById('forgotPassInfo');
   if (fp) fp.style.display = 'none';
+  notifyLegendsSurfaceVisibility();
+}
+
+// A CSS-hidden iframe keeps document.hidden=false. Tell the game which portal
+// surface is actually active so it can freeze simulation and clear held input.
+function notifyLegendsSurfaceVisibility(force) {
+  try {
+    const frame = document.getElementById('legendsFrame');
+    if (!frame) return false;
+    if (!frame.dataset.legendsVisibilityBound) {
+      frame.dataset.legendsVisibilityBound = '1';
+      frame.addEventListener('load', () => notifyLegendsSurfaceVisibility(true));
+    }
+    if (!frame.getAttribute('src') || !frame.contentWindow) return false;
+    const page = document.getElementById('page-legends'), wrapper = document.getElementById('appWrapper');
+    const active = !!(!document.hidden && page?.classList.contains('active') && wrapper?.style.display !== 'none');
+    if (!force && frame.dataset.legendsSurfaceActive === String(active)) return active;
+    frame.contentWindow.postMessage({ type: 'SD_GAME_VISIBILITY', mode: 'legends', active }, location.origin);
+    frame.dataset.legendsSurfaceActive = String(active);
+    return active;
+  } catch (_) { return false; }
 }
 
 function signedOutEntryPage() {
@@ -7158,6 +7180,7 @@ function navigateTo(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('page-' + page).classList.add('active');
+  notifyLegendsSurfaceVisibility();
   // 🧭 An embedded app's frame is pointed at the app the first time its page opens.
   try { appEmbedOnNavigate(page); } catch (e) { console.warn('embed', e); }
   // 🔥 Realm of Embers takes the whole app with it: stepping into the realm
