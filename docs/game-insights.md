@@ -1,51 +1,63 @@
-# Games Insights
+# Games Insights — v1.458.0
 
-Administrators open **Games → Games Insights**. Students and employees cannot
-navigate to the page, invoke its data loader, or export its statistics. The view
-and pending requests are cleared when the account or administrator preview changes.
+The **Games Insights** sidebar tab is visible only to administrators. The page's
+navigation, loader, renderer and CSV export independently check administrator
+access. Signing out, switching accounts or entering a practice preview clears
+the current view; an old asynchronous response cannot populate a new account.
+Opening another game does not fetch organization-wide analytics.
 
-Popularity ranks distinct player accounts with observed activity, then question
-answers. Historical `questionAttempts` records contain account UIDs, not separate
-family-child identities, so siblings sharing an old account count together. The
-view joins these records with new actual-run start summaries without counting an
-account twice. A returning account appears on two or more Singapore dates.
+The catalog contains all seventeen game modes. Popularity ranks observed player
+accounts, then question-answer volume. Historical `questionAttempts` records do
+not identify family profiles separately, so children sharing an account count
+together. Returning accounts were observed on at least two Singapore dates in
+the selected window. Accuracy uses graded answers and teacher mark overrides;
+its sample size is shown. Answering-player trends compare question activity
+with the preceding equal-length period. Games ask questions at different rates,
+so answer volume is not a measure of total playing time.
 
-Windows are 7, 30 and 90 Singapore calendar days, including today. The answering
-player trend compares the question-log population with the preceding window; it
-does not invent a historical trend for launch-only games. Accuracy honors valid
-teacher mark overrides. Answer clocks are explicitly labelled as answer time,
-never total playtime. No completion, session-length or frame-rate data is inferred.
+The page supports seven, thirty and ninety-day windows, per-game daily question
+charts and CSV export. Recommendations distinguish reach from volume and avoid
+flagging a difficulty problem from fewer than twenty graded answers. Unknown
+activity is labeled as unmeasured instead of ranking a game as unpopular.
 
-The loader reads at most 20,000 recent answers across the current and prior
-window, 5,000 profiles, 5,000 leaderboard documents and the administrator's retired
-account map. Sampling warnings appear in the view and CSV; capped answer samples
-hide trend percentages. Unknown game activity is marked unmeasured, not unpopular.
+Historical reads use the existing timestamp index and are bounded to the newest
+20,000 attempts plus at most 5,000 account profiles and leaderboard documents.
+The view and export retain source-cap warnings; truncated answer samples hide
+trends. Retired and administrator accounts are excluded where the loaded profile
+and retirement records identify them. No additional Firestore index or rules
+deployment is required by these existing query/write paths.
 
-## Actual launch collection
+## Recorded launches
 
-`game-usage.js` counts one start per real run, with no heartbeats or recurring
-writes. It merges nested increments into the student's existing
-`scienceGameLeaderboard/{uid}.gameUsageDaily[YYYY-MM-DD][gameId].starts` fields.
-The writer never replaces score, FPS, wallet, card or reward data. It retains
-190 days of daily counters, covering the 90-day view and its comparison window.
-Historical launches before this release are unavailable.
+`game-usage.js` records actual student run starts across all seventeen modes,
+including games without question loops. Menu opens, administrator previews,
+duplicate callbacks, foreign frames and stale learner identities do not count.
+Direct game modes use their actual run object; iframe protocols use the current
+owned frame and run nonce. The Hades frame is retired on profile changes so an
+old WindowProxy cannot report a run for the replacement learner.
 
-Only student runs count. Administrator previews and acting-as-student previews
-are excluded. Every deferred write rechecks the captured account and active
-learner after prerequisite reads. Object-owned runs use weak deduplication; iframe
-protocols use scoped, bounded nonce deduplication. Failures do not block, charge or
-interrupt gameplay.
+Each actual start performs a deferred merge into the student's existing
+`scienceGameLeaderboard/{uid}` document:
 
-The seventeen canonical IDs are `defenders`, `raiders`, `spire`, `legends`,
-`slayers`, `fps`, `hades`, `grand-line`, `tcg-train`, `tcg-duel`, `tcg-siege`,
-`tcg-legends`, `pirate-rift`, `adventure`, `ghost-arena`, `tcg-arena` and
-`tcg-dungeon`. Hooks run after actual run initialization, not opening a page,
-character picker, campaign or training menu. Parent messages require the current
-same-origin frame and learner context. Hades retries reuse its real start nonce;
-profile replacement retires the old frame identity.
+```text
+gameUsageVersion: 1
+gameUsageRecordedSince: server timestamp
+gameUsageDaily[YYYY-MM-DD][gameId].starts: increment(1)
+```
 
-CI is `.github/workflows/game-insights.yml`. Unit coverage checks aggregation,
-access, all canonical IDs, duplicate starts, profile cancellation, nested merges,
-retention and the real portal adapter. Browser tests exercise the dashboard,
-eight iframe starts/contexts, six TCG starts, Adventure/Ghost Arena and Strike.
-Fixtures intercept persistence; tests do not write to production accounts.
+Days use Singapore time and retain 190 days, covering the ninety-day comparison
+window. The writer rechecks the owner after prerequisite reads and merges only
+usage fields; it never replaces score, wallet, reward or FPS data. Recording is
+best effort and cannot block or charge gameplay. There are no frame, heartbeat
+or question-time writes for this feature.
+
+Starts begin with this release. Historical starts, total playtime and completed
+runs were not recorded and are not inferred. The dashboard joins recorded-start
+accounts with question accounts without double counting them. Pure action games
+can therefore enter the popularity rankings as new launches are observed.
+
+CI in `.github/workflows/game-insights.yml` verifies role/account isolation,
+coverage limits, nested merge preservation, all actual launch paths and the
+desktop/mobile dashboard. Existing game-family browser suites also exercise
+their real start buttons with isolated telemetry adapters; tests do not write
+synthetic starts into production accounts.

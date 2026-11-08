@@ -1,10 +1,10 @@
 name: Admin games insights and real launch tracking
 on:
   pull_request:
-    paths: ['game-insights*', 'game-usage.js', 'app.js', 'index.html', 'fps.html', 'science-*.html', 'pirate-rift*', 'grand-line*', 'tools/game-insights*', 'tools/game-usage*', '.github/workflows/game-insights.yml']
+    paths: ['game-insights*', 'game-usage.js', 'app.js', 'index.html', 'fps.html', 'science-*.html', 'hades-*', 'pirate-rift*', 'grand-line*', 'tools/game-insights*', 'tools/game-usage*', '.github/workflows/game-insights.yml']
   push:
     branches: [main]
-    paths: ['game-insights*', 'game-usage.js', 'app.js', 'index.html', 'fps.html', 'science-*.html', 'pirate-rift*', 'grand-line*', 'tools/game-insights*', 'tools/game-usage*', '.github/workflows/game-insights.yml']
+    paths: ['game-insights*', 'game-usage.js', 'app.js', 'index.html', 'fps.html', 'science-*.html', 'hades-*', 'pirate-rift*', 'grand-line*', 'tools/game-insights*', 'tools/game-usage*', '.github/workflows/game-insights.yml']
 permissions:
   contents: read
 jobs:
