@@ -104,3 +104,33 @@ test('projectile trail history stays bounded and disappears in reduced motion',(
   const w=projectileWorld(),p=projectile();for(let i=0;i<1000;i++){p.x++;w.projectileTrail(p,.01);}
   assert.ok(p.trail.length<=9);assert.ok(p.trail.every(t=>t.age<=.15));w.lowMotion=true;w.projectileTrail(p,.01);assert.equal(p.trail.length,0);
 });
+
+test('continuous critical channels retain visible impact without slowing the simulation clock',()=>{
+  const w={G:{player:{x:0,y:0},time:0,impacts:[],hitStop:0,shake:0,impactCooldown:0},lowMotion:false,Math,Number};
+  vm.createContext(w);vm.runInContext(fn('combatImpact'),w);
+  for(let frame=0;frame<240;frame++)combat.advance(w.G,1/60,true,dt=>{
+    w.G.time+=dt;w.G.impactCooldown=Math.max(0,w.G.impactCooldown-dt);
+    w.combatImpact({x:20,y:0,r:5,hp:100},10,{crit:true,continuous:true});
+  });
+  close(w.G.time,4);assert.equal(w.G.hitStop,0);assert.equal(w.G.impacts.length,48);
+});
+
+test('repeated dramatic impacts have a stop budget below five percent of wall time',()=>{
+  for(const hz of [30,60,144]){
+  const w={G:{player:{x:0,y:0},time:0,impacts:[],hitStop:0,shake:0,impactCooldown:0},lowMotion:false,Math,Number};
+  vm.createContext(w);vm.runInContext(fn('combatImpact'),w);
+  for(let frame=0;frame<hz*4;frame++)combat.advance(w.G,1/hz,true,dt=>{
+    w.G.time+=dt;w.G.impactCooldown=Math.max(0,w.G.impactCooldown-dt);
+    w.combatImpact({x:20,y:0,r:5,hp:0,elite:true},10,{crit:true});
+  });
+  assert.ok(w.G.time/4>=.95,`${hz}Hz simulation retained${w.G.time/4} of wall time`);
+  assert.equal(w.G.impacts.length,48);
+  }
+});
+
+test('mid-frame impact stops consume remaining wall time instead of losing an extra partial frame',()=>{
+  const clock={};let steps=0;
+  combat.advance(clock,1/30,true,()=>{steps++;clock.hitStop=.035;});
+  assert.equal(steps,1);close(clock.hitStop,.01);close(clock.accumulator,0);
+  combat.advance(clock,.01,true,()=>steps++);assert.equal(steps,1);close(clock.hitStop,0);
+});

@@ -2573,9 +2573,11 @@ function combatImpact(e, amount, opts){
     var impulse=(opts.crit?120:42)*(e.boss?.28:e.elite?.7:1);
     e.kx=dx/d*impulse;e.ky=dy/d*impulse;e.kt=.16;
   }
-  if(!lowMotion&&strong&&G.impactCooldown<=0){
+  // Rapid channels keep their visual impact without repeatedly stopping time.
+  // At most35ms of stop per0.9sim seconds keeps sustained combat responsive.
+  if(!lowMotion&&strong&&(!opts.continuous||e.hp<=0&&(e.elite||e.boss))&&G.impactCooldown<=0){
     G.hitStop=Math.max(G.hitStop||0,opts.crit?.035:.022);
-    G.impactCooldown=.11;
+    G.impactCooldown=.9;
     G.shake=Math.max(G.shake,opts.crit?.15:.08);
   }
 }
@@ -3325,7 +3327,7 @@ function updateProjectiles(dt){
     if (zn.tick <= 0){
       zn.tick = 0.4;
       enemiesInRadius(zn.x, zn.y, zn.r).forEach(function(e){
-        dealDamage(e, zn.dps * 0.4, { color: '#FF8A65' });
+        dealDamage(e, zn.dps * 0.4, { color: '#FF8A65',continuous:true });
         if (zn.slow) e.slowT = Math.max(e.slowT || 0, 0.6);
       });
     }
@@ -3619,7 +3621,7 @@ function update(dt){
       var flame = G.stats.mods['pw.flamespin'];
       enemiesInRadius(p.x, p.y, wr).forEach(function(e){
         var cr = rollCrit();
-        dealDamage(e, sn.dps * 0.16 * wm * cr.mult, { crit: cr.crit, color: flame ? '#FF7043' : '#FFCC80' });
+        dealDamage(e, sn.dps * 0.16 * wm * cr.mult, { crit: cr.crit, continuous:true,color: flame ? '#FF7043' : '#FFCC80' });
         if (flame) applyBleed(e, sn.dps * 0.1 * wm, 2,'burn');
         if (sn.pull){
           var m = Math.hypot(e.x - p.x, e.y - p.y) || 1;
@@ -3648,7 +3650,7 @@ function update(dt){
     if (A.tick <= 0){
       A.tick = 0.3 / (G.stats.mods['pw.swarmqueen'] ? 2 : 1);
       enemiesInRadius(p.x, p.y, A.radius).forEach(function(e){
-        dealDamage(e, A.dps * 0.3, { element:LegendsActions.familyForSkill(A.sid),color: A.visual === 'storm' ? '#FFF176' : A.visual === 'holy' ? '#FFF59D' : '#90A4AE' });
+        dealDamage(e, A.dps * 0.3, { continuous:true,element:LegendsActions.familyForSkill(A.sid),color: A.visual === 'storm' ? '#FFF176' : A.visual === 'holy' ? '#FFF59D' : '#90A4AE' });
       });
     }
     if (A.t <= 0) G.auras.splice(au, 1);
@@ -3667,7 +3669,7 @@ function update(dt){
         if (dist2(hx, hy, he.x, he.y) < (16 + he.r) * (16 + he.r)){
           O.hitCd.set(he,G.time + 0.5);
           var hcr = rollCrit();
-          dealDamage(he, O.dmg * hcr.mult, { crit: hcr.crit, color: '#FFF59D',element:'holy' });
+          dealDamage(he, O.dmg * hcr.mult, { crit: hcr.crit,continuous:true,color: '#FFF59D',element:'holy' });
         }
       }
     }

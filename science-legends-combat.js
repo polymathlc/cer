@@ -43,7 +43,14 @@
     var steps = 0;
     while (clock.accumulator + 1e-10 >= STEP && steps < MAX_STEPS) {
       clock.accumulator -= STEP; steps++;
-      if (update(STEP) === false || clock.hitStop > 0) { clock.accumulator = 0; break; }
+      if (update(STEP) === false) { clock.accumulator = 0; break; }
+      if(clock.hitStop>0){
+        // A stop requested mid-frame also consumes the rest of that frame.
+        // Discarding it and then starting the full stop next frame double-counts
+        // time and makes rapid impactful attacks feel like persistent slow motion.
+        var held=Math.min(clock.accumulator,clock.hitStop);
+        clock.hitStop=Math.max(0,clock.hitStop-held);clock.accumulator-=held;break;
+      }
     }
     return steps;
   }
