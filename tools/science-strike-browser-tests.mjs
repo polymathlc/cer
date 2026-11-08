@@ -162,8 +162,13 @@ try {
   await page.locator('#strikeSensitivity0').focus();
   await page.keyboard.press('ArrowRight');
   check(await page.locator('#strikeSensitivity0').inputValue() === '1.1', 'Aim speed range supports keyboard adjustment');
-  await page.locator('#menuSettings input[type=checkbox]').check();
+  await page.locator('#menuSettings input[data-set=reducedMotion]').check();
   check(await page.evaluate(() => document.body.classList.contains('reduce-motion')), 'Reduced-motion preference applies');
+  await page.locator('#menuSettings input[data-set=invertY]').check();
+  await page.locator('#strikeCrosshair0').fill('1.25');
+  check(await page.locator('#strikeCrosshair1').inputValue() === '1.25', 'Crosshair size stays in sync across menus');
+  check(await page.evaluate(() => JSON.parse(localStorage.getItem('scienceStrike:controls')).invertY === true), 'Invert-Y is saved');
+  await page.locator('#menuSettings input[data-set=invertY]').uncheck();
   check(await page.locator('#strikeSensitivity1').inputValue() === '1.1', 'Menu and pause settings stay in sync');
   await page.reload();
   await page.waitForFunction(() => !!window.__strikeQA && !!window.__mock.authCallback);
