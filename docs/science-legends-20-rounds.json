@@ -1,5 +1,5 @@
 {
-  "project": "Science Legends — Emberwild Ascendant",
+  "project": "Science Legends — 20-round visual and combat review",
   "method": "Twenty sequential evaluator-to-implementer rounds. A round is verified only after its change and acceptance evidence are reviewed.",
   "sources": [
     {
@@ -113,7 +113,8 @@
         "Evaluator inspected all6 generated enemy silhouettes in a real renderer screenshot.",
         "Independent art QA547dad4 passed17 real-page assertions including distinct generated frames, source proportions, pause and render purity."
       ],
-      "status": "verified"
+      "status": "verified",
+      "visual_acceptance": "pending-round-19-whole-silhouette-extraction"
     },
     {
       "round": 5,
@@ -219,7 +220,108 @@
         "Reviewed control/death cancellation and safe committed pet targeting."
       ],
       "status": "verified"
+    },
+    {
+      "round": 11,
+      "idea": "Make the companion roster visually coherent with the new heroes",
+      "finding": "Animals and humanoid followers still used old pixel forms beside the newly generated actors.",
+      "change": "Four beast companions use generated action cells; Defender, Mage, healer, Valkyrie and decoy reuse matching hero models with explicit friendly role badges and ground contacts. Actual movement, attacks and healing drive animation; override aliases remain.",
+      "commit": "be05c9c",
+      "sources": [
+        "diablo2-alpha",
+        "grim-dawn-monsters"
+      ],
+      "verification": [
+        "Evaluator independently ran8 model/status/companion mapping tests: allpassed.",
+        "Reviewed real pet movement/attack/heal pose tracking and preserved gameplay rules.",
+        "Cross-cell source fragments are tracked as an open asset-quality follow-up for round19.",
+        "Independent actual-renderer QAea86591 passed20 art checks including all16 beast cells,5 humanoid roles and real boar override priority."
+      ],
+      "status": "verified",
+      "visual_acceptance": "pending-round-19-whole-silhouette-extraction"
+    },
+    {
+      "round": 12,
+      "idea": "Build a readable illustrated skill sanctum",
+      "finding": "The large skill graph retained a flat white surface and lacked a clear visual state legend.",
+      "change": "Generated tree art and interface ornaments now frame a scoped dark skill surface with brighter functional edges, readable states/popovers/stats, a shape/text legend and viewport-aware popovers.",
+      "commit": "0df0b5c",
+      "sources": [
+        "diablo2-alpha",
+        "diablo2-accessibility",
+        "hades-welcome"
+      ],
+      "verification": [
+        "Evaluator independently ran47 real premium browser checks: allpassed.",
+        "Evaluator visually inspected390px tree screenshot: actual decorative art, clear activegraph and bounded popover.",
+        "Implementer passed24 accessibility and88 existing gameplay browser checks."
+      ],
+      "status": "verified"
+    },
+    {
+      "round": 13,
+      "idea": "Make a large skill graph navigable without hundreds of Tab presses",
+      "finding": "Node buttons lacked descriptive names and stable spatial keyboard browsing; rerendering could lose focus.",
+      "change": "One logical Tab entry supports arrows/Home/End, named ranks/requirements, inspect-only Enter/Space, visible focus scrolling, retained allocation focus, popover-first Escape and clean T close. Learn feedback is announced.",
+      "commit": "a62a3f8",
+      "sources": [
+        "diablo2-accessibility",
+        "hades-welcome"
+      ],
+      "verification": [
+        "Evaluator independently ran24 real-page keyboard/allocation/focus checks at1280/390px: allpassed.",
+        "Independent full-page UI18checks also passed.",
+        "Reviewed navigation as inspection only, preserving explicit point allocation."
+      ],
+      "status": "verified"
+    },
+    {
+      "round": 14,
+      "idea": "Find skills and understand prerequisite routes",
+      "finding": "Locating advanced abilities in a176-node graph required manually scanning and panning without branch context.",
+      "change": "Literal local search provides live counts/results and next-match navigation. Activation focuses the real node and highlights its prerequisite ancestry/edges while preserving rank and point rules; clear/no-result states are explicit.",
+      "commit": "0bd5097",
+      "sources": [
+        "diablo2-accessibility",
+        "hades-welcome"
+      ],
+      "verification": [
+        "Evaluator independently ran38 real browser search/navigation/locked-node checks: allpassed.",
+        "Evaluator independently ran2 spatial/literal-search/ancestry unit tests: allpassed.",
+        "Reviewed literal matching and unchanged canLearn/allocation semantics."
+      ],
+      "status": "verified"
+    },
+    {
+      "round": 15,
+      "idea": "Let players target the visible model rather than a hidden small circle",
+      "finding": "Clicking the visible head of a large brute missed its collision-circle picker and issued a movement command.",
+      "change": "Hover and click now share cached rendered-body bounds and frontmost-foot-depth picking. A generated-frame target readout shows enemy identity, elite/boss rank, numeric health and statuses, clearing stale targets without altering combat radii.",
+      "commit": "c87f815",
+      "sources": [
+        "diablo4-vfx",
+        "grim-dawn-monsters"
+      ],
+      "verification": [
+        "Evaluator independently ran30 real targetbrowser checks at1280/390/320: allpassed.",
+        "Evaluator independently ran9 model/status/body-picking tests: allpassed.",
+        "Visible headclick, overlap order, groundwalk, all6 archetypes and boss/death readouts covered."
+      ],
+      "status": "verified"
     }
   ],
-  "current_round": 11
+  "current_round": 16,
+  "asset_quality_followups": [
+    {
+      "rounds": [
+        4,
+        11,
+        20
+      ],
+      "finding": "Some globally separate sprites cross nominal atlas cell boundaries, creating clipped anatomy and foreign fragments under fixed grid cropping.",
+      "planned_round": 19,
+      "status": "open",
+      "evidence": "Independent QA found exact expected component counts; extraction benchmark12–22ms/atlas. Fullsprite bounds rarely overlap; one frontbrute pair overlaps2px and needs masking."
+    }
+  ]
 }
