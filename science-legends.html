@@ -2461,10 +2461,12 @@ function combatImpact(e, amount, opts){
     G.shake=Math.max(G.shake,opts.crit?.15:.08);
   }
 }
-function applyBleed(e, total, dur){
+function applyBleed(e, total, dur, kind){
   var mult = G.stats.poisonMult || 1;
-  e.bleed = Math.max(e.bleed, (total * mult) / dur);
-  e.bleedT = Math.max(e.bleedT, dur);
+  var current=e.bleedT>0?(e.bleed||0):0,incoming=(total*mult)/dur;
+  if(incoming>=current)e.dotKind=kind||'bleed';
+  e.bleed=Math.max(current,incoming);
+  e.bleedT=Math.max(e.bleedT||0,dur);
 }
 function killEnemy(e, opts){
   e.hp = 0; e.dead = true;
@@ -3092,7 +3094,7 @@ function explode(x, y, radius, dmg, opts){
     dealDamage(e, dmg * cr.mult, { crit: cr.crit, color: opts.color || '#FFAB91', impactX:e.x-x,impactY:e.y-y,
       knock:{x:x,y:y,f:Math.min(210,70+radius*.5)} });
     if (opts.burn) applyBleed(e, dmg * 0.4, 3);
-    if (opts.poison) applyBleed(e, dmg * (opts.poisonStrong ? 1 : 0.5), 3);
+    if (opts.poison) applyBleed(e, dmg * (opts.poisonStrong ? 1 : 0.5), 3,'poison');
     if (opts.slow) e.slowT = Math.max(e.slowT || 0, 2);
     if (opts.bleed) applyBleed(e, dmg * 0.4, 3);
     if (opts.stun) e.stun = Math.max(e.stun, 1);
@@ -3150,7 +3152,7 @@ function updateProjectiles(dt){
         color: pr.kind === 'boar' ? '#BCAAA4' : pr.sid==='icebolt'?'#94e7ff':pr.sid==='holybolt'?'#fff4a1':'#B39DDB', knock: pr.kind === 'boar' ? { x: pr.x - pr.vx, y: pr.y - pr.vy, f: 190 } : null });
       if (pr.stunHit) e.stun = Math.max(e.stun, pr.stunHit);
       if (pr.slow) e.slowT = Math.max(e.slowT || 0, pr.slow);
-      if (pr.poison) applyBleed(e, pr.dmg * (hasEnh(pr.sid || '', 2) && pr.sid === 'sting' ? 1.2 : 0.6), 3);
+      if (pr.poison) applyBleed(e, pr.dmg * (hasEnh(pr.sid || '', 2) && pr.sid === 'sting' ? 1.2 : 0.6), 3,'poison');
       if (pr.kind === 'boar' && G.stats.mods['pw.thunderhooves']){
         boltFx([{ x: e.x, y: e.y - 60 }, { x: e.x, y: e.y }], '#FFF176');
         dealDamage(e, 15 * G.stats.dmg, { noSplash: true, color: '#FFF176' });
@@ -3248,8 +3250,9 @@ function updateEnemies(dt){
     e.hitCd -= dt;
     if (e.slowT > 0) e.slowT -= dt;
     if (e.bleedT > 0){
-      e.bleedT -= dt;
-      e.hp -= e.bleed * dt;
+      e.hp -= e.bleed * Math.min(dt,e.bleedT);
+      e.bleedT = Math.max(0,e.bleedT-dt);
+      if(e.bleedT<=0){e.bleed=0;e.dotKind=null;}
       if (e.hp <= 0){ killEnemy(e, {}); G.enemies.splice(i, 1); continue; }
     }
     if (e.frozen > 0){ e.frozen -= dt; continue; }
@@ -3973,8 +3976,9 @@ function drawActors(camX,camY){
     }else{var petId=actor.kind==='boarpet'?'boar':actor.kind;drawActorModel(petId,petSprite(petId)[(actor.animT*2|0)%2],actor,size,false);}
   });
   // Labels are a final pass, never covered by a nearer body sprite.
-  queue.forEach(function(entry){var actor=entry.actor;if(entry.kind==='hero'||actor.hp>=actor.maxHp)return;var width=actor.r*2.2,y=actor.y+actor.r-actorHeight(entry)-8;
-    ctx.fillStyle='#07121be6';ctx.fillRect(actor.x-width/2-1,y-1,width+2,6);ctx.fillStyle=entry.kind==='pet'?'#81c784':actor.boss?'#ce93d8':'#ef7770';ctx.fillRect(actor.x-width/2,y,width*clamp(actor.hp/actor.maxHp,0,1),4);
+  queue.forEach(function(entry){var actor=entry.actor;if(entry.kind==='hero')return;var width=actor.r*2.2,y=actor.y+actor.r-actorHeight(entry)-8;
+    if(actor.hp<actor.maxHp){ctx.fillStyle='#07121be6';ctx.fillRect(actor.x-width/2-1,y-1,width+2,6);ctx.fillStyle=entry.kind==='pet'?'#81c784':actor.boss?'#ce93d8':'#ef7770';ctx.fillRect(actor.x-width/2,y,width*clamp(actor.hp/actor.maxHp,0,1),4);}
+    LegendsModels.statuses(actor).forEach(function(status,index){var bx=actor.x+(index%2?25:-25),by=y-13-Math.floor(index/2)*14;ctx.save();ctx.fillStyle='#07121bf0';ctx.fillRect(bx-24,by-7,48,12);ctx.strokeStyle=status.color;ctx.lineWidth=1;ctx.strokeRect(bx-24,by-7,48,12);ctx.fillStyle=status.color;ctx.font='700 8px system-ui';ctx.textAlign='center';ctx.fillText(status.glyph+' '+status.label,bx,by+2);ctx.restore();});
   });
 }
 function drawHeroGround(){

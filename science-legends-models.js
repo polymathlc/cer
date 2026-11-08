@@ -16,6 +16,14 @@
   }
   function enemyColumn(kind){return kind==='boss'?3:ENEMIES.indexOf(kind);}
   function sortActors(entries){return entries.slice().sort(function(a,b){return (a.actor.y+(a.actor.r||0))-(b.actor.y+(b.actor.r||0))||a.order-b.order;});}
+  function statuses(actor){
+    var list=[];
+    if(actor.frozen>0)list.push({kind:'frozen',label:'FROZEN',glyph:'❄',color:'#9eefff'});
+    if(actor.stun>0)list.push({kind:'stun',label:'STUN',glyph:'✦',color:'#ffe197'});
+    if(actor.slowT>0)list.push({kind:'slow',label:'SLOW',glyph:'◷',color:'#b4d9f0'});
+    if(actor.bleedT>0)list.push(actor.dotKind==='poison'?{kind:'poison',label:'VENOM',glyph:'◆',color:'#bce87f'}:{kind:'bleed',label:'BLEED',glyph:'♦',color:'#ffa49c'});
+    return list;
+  }
   function enemyFrame(actor,time,reduced){
     if(actor.frozen>0||actor.stun>0)return 0;
     if(actor.chargeSt===1)return 3;
@@ -43,7 +51,7 @@
   }
   function drawHero(ctx,cls,actor,time,reduced,size){return drawModel(ctx,'hero',HEROES.indexOf(cls),stateFrame(actor,time,reduced),actor,size);}
   function drawEnemy(ctx,actor,time,reduced,size){return drawModel(ctx,'enemy',enemyColumn(actor.kind),enemyFrame(actor,time,reduced),actor,size);}
-  var api={ready:ready,drawHero:drawHero,drawEnemy:drawEnemy,stateFrame:stateFrame,enemyFrame:enemyFrame,enemyColumn:enemyColumn,sourceRect:sourceRect,footAnchor:footAnchor,sortActors:sortActors};
+  var api={ready:ready,drawHero:drawHero,drawEnemy:drawEnemy,stateFrame:stateFrame,enemyFrame:enemyFrame,enemyColumn:enemyColumn,sourceRect:sourceRect,footAnchor:footAnchor,sortActors:sortActors,statuses:statuses};
   if(typeof module==='object'&&module.exports)module.exports=api;
   root.LegendsModels=api;
   if(typeof root.Image==='function'&&root.document)Object.keys(sheets).forEach(function(kind){var sheet=sheets[kind];sheet.image=new root.Image();sheet.image.onload=function(){prepare(sheet);};sheet.image.src='assets/science-legends/v2/'+(kind==='hero'?'heroes':'enemies')+'.png';});

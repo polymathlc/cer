@@ -42,3 +42,14 @@ test('actor depth follows planted feet, remains stable at ties and never mutates
   assert.equal(entries[0].actor,hero);assert.equal(entries[1].actor,front);
   front.y=70;assert.deepEqual(models.sortActors(entries).map(e=>e.actor),[front,rear,hero,pet]);
 });
+test('status badges have deterministic text/shape identities and omit expired effects',()=>{
+  assert.deepEqual(models.statuses({frozen:1,stun:1,slowT:1,bleedT:1,dotKind:'poison'}).map(s=>s.kind),['frozen','stun','slow','poison']);
+  assert.equal(models.statuses({bleedT:1}).at(0).label,'BLEED');
+  assert.deepEqual(models.statuses({frozen:0,stun:-1,slowT:0,bleedT:0}),[]);
+});
+test('expired strong damage-over-time does not survive a later weaker application',()=>{
+  const w={G:{stats:{poisonMult:1}},Math};vm.createContext(w);vm.runInContext(fn('applyBleed'),w);
+  const enemy={bleed:100,bleedT:0,dotKind:'poison'};w.applyBleed(enemy,12,3,'bleed');assert.equal(enemy.bleed,4);assert.equal(enemy.dotKind,'bleed');
+  w.applyBleed(enemy,6,3,'poison');assert.equal(enemy.bleed,4);assert.equal(enemy.dotKind,'bleed');
+  w.applyBleed(enemy,30,3,'poison');assert.equal(enemy.bleed,10);assert.equal(enemy.dotKind,'poison');
+});
