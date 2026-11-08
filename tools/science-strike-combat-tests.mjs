@@ -197,3 +197,34 @@ test('low-power ADS optics keep a crosshair while sniper scopes supply their own
   }
   weapon.arch.scope = 3; arms = 0; c.drawCrosshair(); assert.equal(arms, 0);
 });
+
+test('a forgiving graze over a small bug never steals a shot aimed at the enemy behind it', () => {
+  const { c, hits, target, aimAtFraction, weapon } = fixture();
+  const far = target(10, { size: 1 }), near = target(4, { size: 0.6 });
+  aimAtFraction(far, 0.15);
+  const nearBand = c.strikeShotBand(near, c.strikeShotAim());
+  assert.ok(nearBand && nearBand.over, 'the shot only grazes over the small bug');
+  c.spawnBullet(0, weapon, 'bullet'); c.updatePProj(0.5);
+  assert.equal(hits[0].e, far); assert.equal(near.hp, 1000);
+});
+
+test('a level shot just over a small bug alone still counts as a body hit, never a crit', () => {
+  const { c, hits, target, weapon } = fixture();
+  const bug = target(4, { size: 0.6 });
+  const band = c.strikeShotBand(bug, c.strikeShotAim());
+  if (band && band.over) {
+    c.spawnBullet(0, weapon, 'bullet'); c.updatePProj(0.3);
+    assert.equal(hits[0].e, bug); assert.equal(hits[0].crit, false);
+  } else assert.ok(band, 'a level shot reaches the bug');
+});
+
+test('aim assist leaves a clean hit alone, bends a near miss and ignores a wild one', () => {
+  const { c, target, aimAtFraction } = fixture();
+  const far = target(20, { size: 1 });   // far enough that its body is narrower than the assist window
+  aimAtFraction(far, 0.5);
+  assert.equal(c.aimAssist(0), 0, 'already on target: unchanged');
+  const miss = 1.4 * Math.PI / 180;
+  const bent = c.aimAssist(miss);
+  assert.ok(Math.abs(bent) < miss * 0.5, 'a near miss is bent toward the target');
+  assert.equal(c.aimAssist(4 * Math.PI / 180), 4 * Math.PI / 180, 'a wild miss stays a miss');
+});

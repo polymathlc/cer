@@ -319,6 +319,9 @@
   #wpnMagTrack { height: 3px; margin-top: 10px; background: #35505b; border-radius: 2px; overflow: hidden; }
   #wpnMagFill { height: 100%; background: #72dfcd; width: 100%; }
   @media (max-width: 480px) { .strike-armory { grid-template-columns: repeat(2,1fr); } #hudBottomRight { min-width: 180px; } }
+  #hudQTimer.q-soon { color: #ffd76a; border-color: #ffd76a; animation: qSoonPulse .5s ease-in-out infinite alternate; }
+  @keyframes qSoonPulse { from { transform: scale(1); } to { transform: scale(1.08); } }
+  body.reduce-motion #hudQTimer.q-soon { animation: none; }
 </style>
 </head>
 <body>
@@ -1490,7 +1493,7 @@ const sfx = {
     blip(1350, 0.04, 'square', 0.1);
   },
   crit() { blip(1900, 0.08, 'square', 0.16); blip(2600, 0.1, 'square', 0.12, null, 0.05); },
-  kill() { blip(720, 0.1, 'square', 0.2, 140); },
+  kill() { blip(660, 0.08, 'square', 0.18); blip(990, 0.12, 'square', 0.16, 1320, 0.06); },   // rising two-note chime
   reload() { blip(850, 0.05, 'square', 0.18); blip(620, 0.06, 'square', 0.18, null, 0.13); },   // click-clack
   reloadEnd() { blip(1150, 0.06, 'square', 0.2); },
   pickup(kind, tier) {   // chime — higher weapon rarity = higher pitch
@@ -1777,7 +1780,7 @@ function spawnWave() {
   const idle = () => skillLv('ghost') ? 'idle' : 'chase';
   // the swarm: lots of fodder to mow down
   // waves 1–2 are a warm-up: fewer bugs while a new player finds the controls
-  const swarmN = wv === 1 ? 6 : wv === 2 ? 8 : Math.min(22, 8 + Math.floor(wv * 1.4));
+  const swarmN = wv === 1 ? 6 : wv === 2 ? 8 : wv === 3 ? 10 : Math.min(22, 8 + Math.floor(wv * 1.4));
   for (let i = 0; i < swarmN; i++) {
     const pos = findSpawn(rng);
     const e = makeMinion(rng, pos.x, pos.y, wv);
@@ -1786,11 +1789,11 @@ function spawnWave() {
     spawnPoof(pos.x, pos.y);
   }
   // the core: a handful of real enemies
-  const coreN = wv < 3 ? wv : Math.min(9, 2 + Math.floor(wv * 0.7));
+  const coreN = wv <= 3 ? wv : Math.min(9, 2 + Math.floor(wv * 0.7));
   for (let i = 0; i < coreN; i++) {
     const pos = findSpawn(rng);
     const e = makeEnemy(rng, pos.x, pos.y, hpScale, wv);
-    if (wv < 3) e.dmg *= 0.6;
+    if (wv < 3) e.dmg *= 0.6; else if (wv === 3) e.dmg *= 0.8;   // ramp, not a cliff
     e.state = idle();
     G.enemies.push(e);
     spawnPoof(pos.x, pos.y);
@@ -2178,9 +2181,10 @@ function strikeShotBand(e, aim) {
   const height = scale * 0.95 * e.size;
   const fraction = (REND_H / 2 - (aim.hor + scale * 0.48 - height)) / height;
   // a level shot just over a small bug's back still counts as a body hit (never a crit)
-  if (fraction < -0.35 || fraction > 1) return null;
+  const over = (e.size || 1) < 0.8 ? 0.35 : 0.1;
+  if (fraction < -over || fraction > 1) return null;
   const band = critBand(e);
-  return { crit: fraction >= band[0] && fraction <= band[1] };
+  return { crit: fraction >= band[0] && fraction <= band[1], over: fraction < 0 };
 }
 function strikeShotHeight(aim, x, y) {
   const depth = (x - aim.x) * Math.cos(aim.dir) + (y - aim.y) * Math.sin(aim.dir);
@@ -2240,10 +2244,14 @@ function strikeUpdateWeapon(dt) {
       G.reloading = 0; G.ammo = magSize(); sfx.reloadEnd(); updateHud();
     }
   }
+  // Tactical reload: after a quiet moment with a low magazine and nobody close, top up automatically.
+  G.sinceShot = (G.sinceShot || 0) + dt;
+  if (!mouseDown && !(G.reloading > 0) && G.sinceShot > 1.2 && G.ammo < 0.4 * magSize()
+      && !G.enemies.some(e => e.hp > 0 && Math.hypot(e.x - G.player.x, e.y - G.player.y) < 5)) startReload();
   if (mouseDown || G.triggerQueued > 0) {
     for (let n = 0; n < 6 && G.fireCd <= 1e-8 && G.reloading <= 0; n++) {
       if (!shoot()) break;
-      G.triggerQueued = 0;
+      G.triggerQueued = 0; G.sinceShot = 0;
       if (!mouseDown) break;
     }
   } else G.fireCd = Math.max(0, G.fireCd);
@@ -2385,9 +2393,11 @@ function updatePProj(dt) {
       // than where a simulation step happened to end inside the body.
       const speed = Math.hypot(p.dx, p.dy);
       const perp = Math.abs((e.x - p.aim.x) * p.dy - (e.y - p.aim.y) * p.dx) / speed;
-      hits.push({ e, t, crit: p.kind !== 'stream' && band.crit && perp < 0.2 * e.size });
+      hits.push({ e, t, over: band.over, crit: p.kind !== 'stream' && band.crit && perp < 0.2 * e.size });
     }
     hits.sort((a, b) => a.t - b.t);
+    // a forgiving "just over its back" graze never steals a shot aimed squarely at something behind
+    while (hits.length > 1 && hits[0].over && hits.some(h => !h.over)) hits.shift();
     for (const hit of hits) {
       const e = hit.e;
       if (e.hp <= 0) continue;
@@ -2903,6 +2913,7 @@ function closeDraft() {
   G.draftOffers = null;
   $('draftOverlay').classList.remove('active');
   G.breakT = 5;   // the 5s breather only starts once the draft is done
+  G.reloading = 0; G.ammo = magSize();   // start every wave with a full magazine
   updateHud();
   requestLock();
 }
@@ -3149,7 +3160,12 @@ function tick(now) {
     render(); return;
   }
   G.playSeconds += dt;
-  if (!G.firstTip && G.wave === 1 && G.playSeconds > 2) { G.firstTip = true; toast('🎯 Aim a little low at small bugs — click to shoot, Space to dodge'); }
+  if (!G.firstTip && G.wave === 1 && G.playSeconds > 3) {
+    G.firstTip = true;
+    let seen = false;
+    try { seen = localStorage.getItem('scienceStrike:tipSeen') === '1'; localStorage.setItem('scienceStrike:tipSeen', '1'); } catch {}
+    if (!seen) toast('🎯 Aim a little low at small bugs — click to shoot, Space to dodge');
+  }
 
   const P = G.player;
   // question countdown runs only while actually playing
@@ -4839,6 +4855,29 @@ function drawCrosshair() {
     ctx.beginPath(); ctx.arc(cx, cy, Math.min(cx, cy) - 26, sa - 0.22, sa + 0.22); ctx.stroke();
     ctx.restore();
   }
+  // question heads-up under the crosshair in the last three seconds
+  if (G.qTimerMs > 0 && G.qTimerMs < 3000 && !G.activeQ) {
+    ctx.save();
+    ctx.font = 'bold 14px system-ui, sans-serif'; ctx.textAlign = 'center';
+    ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.fillStyle = '#ffd76a';
+    const qt = '🧪 Question in ' + Math.ceil(G.qTimerMs / 1000);
+    ctx.strokeText(qt, cx, cy + 78); ctx.fillText(qt, cx, cy + 78);
+    ctx.restore();
+  }
+  // wave break: say what's coming and what to do with the time
+  if (G.breakT > 0 && !G.draftOpen && !(G.banner && G.banner.t > 0)) {
+    ctx.save();
+    ctx.textAlign = 'center'; ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+    ctx.font = 'bold 26px monospace'; ctx.fillStyle = '#ffd76a';
+    const nt = 'NEXT WAVE IN ' + Math.ceil(G.breakT);
+    ctx.strokeText(nt, cx, REND_H * 0.2); ctx.fillText(nt, cx, REND_H * 0.2);
+    if (G.loots.some(l => l.kind === 'chest')) {
+      ctx.font = 'bold 15px monospace'; ctx.fillStyle = '#e9f2ff';
+      ctx.strokeText('📦 Walk to the chest and press [E]', cx, REND_H * 0.2 + 26);
+      ctx.fillText('📦 Walk to the chest and press [E]', cx, REND_H * 0.2 + 26);
+    }
+    ctx.restore();
+  }
   // resume grace: a shrinking ring tells the player the world is easing back in
   if (G.resumeGrace > 0) {
     const k = G.resumeGrace / STRIKE_RESUME_GRACE;
@@ -4867,7 +4906,9 @@ function drawCrosshair() {
   if (G.hitmark && G.hitmark.t > 0) {
     const k = G.hitmark;
     const kill = k.kind === 'kill';
-    const g2 = kill ? 11 : 8, armL = kill ? 10 : 7;
+    const t0 = kill ? 0.3 : k.kind === 'crit' ? 0.28 : 0.18, age = t0 - k.t;
+    const pop = age < 0.12 ? 1.4 - 0.4 * (age / 0.12) : 1;   // the X lands big, then settles
+    const g2 = (kill ? 11 : 8) * pop, armL = (kill ? 10 : 7) * pop;
     ctx.save();
     ctx.globalAlpha = Math.min(1, k.t / 0.12);
     ctx.strokeStyle = kill ? '#ff4b57' : k.kind === 'crit' ? '#ffd24d' : '#ffffff';
@@ -4880,7 +4921,7 @@ function drawCrosshair() {
     }
     if (kill || k.kind === 'crit') {
       ctx.fillStyle = kill ? '#ff8b80' : '#ffe49a';
-      ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+      ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
       ctx.fillText(kill ? 'ELIMINATED' : 'CRITICAL', cx, cy + 45);
     }
     ctx.restore();
@@ -4984,7 +5025,14 @@ function paintStrikeWeaponHud() {
   fill.style.background = loading ? '#ffbf69' : G.ammo <= Math.ceil(size * .25) ? '#ff996e' : '#72dfcd';
 }
 function updateQTimerHud() {
-  $('hudQTimer').textContent = '🧪 next question ' + Math.max(0, Math.ceil(G.qTimerMs / 1000)) + 's';
+  const secs = Math.max(0, Math.ceil(G.qTimerMs / 1000)), chip = $('hudQTimer');
+  const label = '🧪 next question ' + secs + 's';
+  if (chip.textContent !== label) chip.textContent = label;
+  const soon = secs <= 3 && secs > 0;
+  chip.classList.toggle('q-soon', soon);
+  // one soft tick per second in the last three, so a question never lands as a surprise
+  if (soon && G.qWarnSec !== secs && combatReady()) { G.qWarnSec = secs; blip(880, 0.04, 'sine', 0.1); }
+  if (!soon) G.qWarnSec = 0;
 }
 let toastT = 0;
 function toast(msg, color) {
