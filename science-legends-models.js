@@ -75,27 +75,46 @@
     sheet.processing=false;sheet.prepared=true;sheet.failed=false;root.dispatchEvent(new Event('legendsmodelsready'));
   }
   function prepareFallback(sheet){sheet.processing=false;root.setTimeout(function(){prepare(sheet,true);},0);}
-  function retireAtlasWorker(){
-    if(workerIdleTimer)root.clearTimeout(workerIdleTimer);
-    workerIdleTimer=root.setTimeout(function(){if(atlasWorker&&!workerRequests.size){atlasWorker.terminate();atlasWorker=null;}},500);
+  function cancelAtlasWorkerRetirement(){
+    if(workerIdleTimer!==null){root.clearTimeout(workerIdleTimer);workerIdleTimer=null;}
+  }
+  function stopAtlasWorker(worker){
+    if(!worker)return;
+    if(atlasWorker===worker){cancelAtlasWorkerRetirement();atlasWorker=null;}
+    // Keep the identity-guarded error sink for already queued native errors.
+    worker.onmessage=null;worker.terminate();
+  }
+  function retireAtlasWorker(worker){
+    if(!worker||atlasWorker!==worker)return;
+    cancelAtlasWorkerRetirement();
+    var timer=root.setTimeout(function(){
+      if(workerIdleTimer!==timer||atlasWorker!==worker)return;
+      workerIdleTimer=null;if(!workerRequests.size)stopAtlasWorker(worker);
+    },500);
+    workerIdleTimer=timer;
   }
   function getAtlasWorker(){
     if(workerDisabled||typeof root.Worker!=='function')return null;
+    cancelAtlasWorkerRetirement();
     if(atlasWorker)return atlasWorker;
     try{
-      atlasWorker=new root.Worker(new URL('science-legends-atlas-worker.js?v=1.458.0',modelScript||root.location.href));
-      atlasWorker.onmessage=function(event){
-        var response=event.data,request=workerRequests.get(response.id);if(!request)return;workerRequests.delete(response.id);
+      var worker=new root.Worker(new URL('science-legends-atlas-worker.js?v=1.458.0',modelScript||root.location.href));atlasWorker=worker;
+      worker.onmessage=function(event){
+        if(atlasWorker!==worker)return;
+        var response=event.data,request=workerRequests.get(response.id);if(!request||request.worker!==worker)return;workerRequests.delete(response.id);
         if(response.error)prepareFallback(request.sheet);
         else try{publishFrames(request.sheet,response.frames,response.missing);}catch(_){prepareFallback(request.sheet);}
-        retireAtlasWorker();
+        retireAtlasWorker(worker);
       };
-      atlasWorker.onerror=function(event){
-        if(event.preventDefault)event.preventDefault();workerDisabled=true;atlasWorker.terminate();atlasWorker=null;
-        var pending=Array.from(workerRequests.values());workerRequests.clear();pending.forEach(function(request){prepareFallback(request.sheet);});
+      worker.onerror=function(event){
+        if(event.preventDefault)event.preventDefault();
+        if(atlasWorker!==worker)return;
+        workerDisabled=true;stopAtlasWorker(worker);
+        var pending=[];workerRequests.forEach(function(request,id){if(request.worker===worker){pending.push(request);workerRequests.delete(id);}});
+        pending.forEach(function(request){prepareFallback(request.sheet);});
       };
-      return atlasWorker;
-    }catch(_){workerDisabled=true;atlasWorker=null;return null;}
+      return worker;
+    }catch(_){workerDisabled=true;cancelAtlasWorkerRetirement();atlasWorker=null;return null;}
   }
   function prepare(sheet,synchronous,pixelsOnly){
     if(sheet.prepared||sheet.processing)return;
@@ -103,13 +122,13 @@
     try{
       var worker=synchronous?null:getAtlasWorker();sheet.processing=true;
       if(worker&&!pixelsOnly&&typeof root.createImageBitmap==='function'&&typeof root.OffscreenCanvas==='function'){
-        var bitmapId=++workerSequence;workerRequests.set(bitmapId,{sheet:sheet});
-        function bitmapFailed(){if(!workerRequests.has(bitmapId))return;workerRequests.delete(bitmapId);sheet.processing=false;prepare(sheet,false,true);retireAtlasWorker();}
+        var bitmapId=++workerSequence;workerRequests.set(bitmapId,{sheet:sheet,worker:worker});
+        function bitmapFailed(){if(!workerRequests.has(bitmapId))return;workerRequests.delete(bitmapId);sheet.processing=false;prepare(sheet,false,true);retireAtlasWorker(worker);}
         var bitmapTask;try{bitmapTask=root.createImageBitmap(atlas);}catch(_){bitmapFailed();return;}
         Promise.resolve(bitmapTask).then(function(bitmap){
-          if(!workerRequests.has(bitmapId)){bitmap.close();return;}
+          var request=workerRequests.get(bitmapId);if(!request||request.worker!==worker||atlasWorker!==worker){bitmap.close();return;}
           try{worker.postMessage({id:bitmapId,bitmap:bitmap,width:atlas.naturalWidth,height:atlas.naturalHeight,columns:sheet.columns},[bitmap]);}
-          catch(_){bitmap.close();workerRequests.delete(bitmapId);prepareFallback(sheet);retireAtlasWorker();}
+          catch(_){bitmap.close();workerRequests.delete(bitmapId);prepareFallback(sheet);retireAtlasWorker(worker);}
         },bitmapFailed);
         return;
       }
@@ -117,16 +136,16 @@
       var context=canvas.getContext('2d',{willReadFrequently:true});context.drawImage(atlas,0,0);
       var pixels=context.getImageData(0,0,canvas.width,canvas.height).data;
       if(worker){
-        var id=++workerSequence;workerRequests.set(id,{sheet:sheet});
+        var id=++workerSequence;workerRequests.set(id,{sheet:sheet,worker:worker});
         try{worker.postMessage({id:id,pixels:pixels.buffer,width:canvas.width,height:canvas.height,columns:sheet.columns},[pixels.buffer]);return;}
-        catch(_){workerRequests.delete(id);prepareFallback(sheet);retireAtlasWorker();return;}
+        catch(_){workerRequests.delete(id);prepareFallback(sheet);retireAtlasWorker(worker);return;}
       }
       var unpacked=root.LegendsAtlas.extract(pixels,canvas.width,canvas.height,sheet.columns,4);
       var frames=unpacked.frames.map(function(rows){return rows.map(function(frame){
         return frame?Object.assign({},frame,{rgba:root.LegendsAtlas.cropPixels(pixels,canvas.width,canvas.height,frame)}):null;
       });});
       publishFrames(sheet,frames,unpacked.missing);
-    }catch(_){sheet.processing=false;sheet.failed=true;}
+    }catch(_){sheet.processing=false;sheet.failed=true;retireAtlasWorker(worker);}
   }
   function drawModel(ctx,kind,column,row,actor,size,profile){
     var pose=orientation(kind,actor,profile),sheet=pose.sheet;if(column<0||!sheet)return false;

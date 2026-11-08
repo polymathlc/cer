@@ -12,13 +12,14 @@ let checks = 0;
 const check = (value, label) => { assert.ok(value, label); checks++; };
 async function setup(mode) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
-  const page = await context.newPage(), errors = [];
+  const page = await context.newPage(), errors = [], heldAssets=[];let assetsReady;const optionalAssets=new Promise(resolve=>{assetsReady=resolve;});
   page.on('pageerror', error => errors.push(error.message));
   await context.route('**/*', route => {
     const url = new URL(route.request().url());
     if (url.hostname !== 'legends-worker.test') return route.abort();
     if (mode === 'blocked' && url.pathname.endsWith('/science-legends-atlas-worker.js')) return route.abort();
     const file = path.join(root, decodeURIComponent(url.pathname));
+    if(mode==='retirement-race'&&url.pathname.includes('/v4/enemies-elite')){heldAssets.push({route,file});if(heldAssets.length===2)assetsReady();return;}
     return fs.existsSync(file) && fs.statSync(file).isFile() ? route.fulfill({ path: file }) : route.abort();
   });
   await page.addInitScript(mode => {
@@ -33,18 +34,24 @@ async function setup(mode) {
     if (mode === 'bitmap-reject') window.createImageBitmap = () => Promise.reject(new Error('Synthetic bitmap decode rejection'));
     if (mode === 'bitmap-throw') window.createImageBitmap = () => { throw new Error('Synthetic bitmap decode throw'); };
     if (mode === 'rgba-only') window.OffscreenCanvas = undefined;
+    window.__atlasWorkers=[];window.__atlasPosts=[];window.__atlasIdleTimers=[];
+    if(mode==='retirement-race'){
+      const schedule=window.setTimeout.bind(window),cancel=window.clearTimeout.bind(window);
+      window.setTimeout=function(callback,delay,...args){if(delay!==500)return schedule(callback,delay,...args);const id=schedule(()=>{},2147483647);__atlasIdleTimers.push({id,callback,args,cancelled:false});return id;};
+      window.clearTimeout=function(id){for(const timer of __atlasIdleTimers)if(timer.id===id)timer.cancelled=true;return cancel(id);};
+    }
     const ActualWorker = Worker;
     window.__heldAtlasMessages = [];
     window.Worker = class extends ActualWorker {
-      constructor(...args) { super(...args); this.__ended = false; stats.made++; this.addEventListener('message', () => stats.replies++); this.addEventListener('error', () => stats.errors++); }
-      postMessage(...args) { stats.posted++; if (mode === 'post-throw') throw new Error('Synthetic blocked worker transfer'); const send = () => super.postMessage(...args); if (mode === 'held' && !window.__releaseAtlasMessages) return __heldAtlasMessages.push(send); return send(); }
+      constructor(...args) { super(...args); this.__ended = false;this.__identity=stats.made+1;__atlasWorkers.push(this);stats.made++; this.addEventListener('message', () => stats.replies++); this.addEventListener('error', () => stats.errors++); }
+      postMessage(...args) { stats.posted++;__atlasPosts.push({worker:this.__identity,id:args[0].id});if (mode === 'post-throw'||mode==='retirement-race'&&this.__identity===1) throw new Error('Synthetic blocked worker transfer'); const send = () => super.postMessage(...args); if ((mode === 'held'||mode==='retirement-race') && !window.__releaseAtlasMessages) return __heldAtlasMessages.push(send); return send(); }
       terminate() { if (!this.__ended) { this.__ended = true; stats.terminated++; } return super.terminate(); }
     };
   }, mode);
   const cdp = await context.newCDPSession(page);
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
   await page.goto('http://legends-worker.test/science-legends.html', { waitUntil: 'domcontentloaded' });
-  return { context, page, errors };
+  return { context, page, errors,optionalAssets,releaseOptionalAssets:()=>Promise.all(heldAssets.map(({route,file})=>route.fulfill({path:file}))) };
 }
 const summaries = [];
 try {
@@ -84,6 +91,40 @@ try {
     check(errors.length === 0, `${mode}: worker success/failure leaves no uncaught game errors: ${errors.join(', ')}`);
     summaries.push({ mode, readyAt: frames.readyAt, maxStartupTask: frames.maxStartupTask, preparation: frames.stats, workerLifetime: { made: idle.made, posted: idle.posted, replies: idle.replies, terminated: idle.terminated, errors: idle.errors } });
     await context.close();
+  }
+
+  // Deterministically deliver callbacks from an already retired worker before
+  // and after its replacement prepares optional sheets. Native workers still
+  // produce the new sheets; only the otherwise timing-dependent order is fixed.
+  {
+    const {context,page,errors,optionalAssets,releaseOptionalAssets}=await setup('retirement-race');
+    await page.waitForFunction(()=>LegendsModels.allReady(),null,{timeout:30000});await optionalAssets;
+    const retired=await page.evaluate(()=>{
+      const worker=__atlasWorkers[0],timer=__atlasIdleTimers.findLast(t=>!t.cancelled);window.__staleAtlas={error:worker.onerror,message:worker.onmessage,timer};
+      timer.callback(...timer.args);let prevented=0;__staleAtlas.error({preventDefault(){prevented++;}});
+      const late=new ErrorEvent('error',{cancelable:true,message:'Queued native worker error after retirement'});worker.dispatchEvent(late);
+      return{terminated:worker.__ended,prevented,nativePrevented:late.defaultPrevented,made:__workerStats.made};
+    });
+    check(retired.terminated&&retired.prevented===1&&retired.made===1,'race: postMessage failure retires its worker; a late error with no active worker is safely suppressed');
+    check(retired.nativePrevented,'race: retired worker retains a native ErrorEvent sink so queued errors cannot escape default handling');
+    await releaseOptionalAssets();await page.waitForFunction(()=>__atlasWorkers.length===2&&__heldAtlasMessages.length>=2,null,{timeout:30000});
+    const pending=await page.evaluate(()=>{
+      const replacement=__atlasWorkers[1],messageId=__atlasPosts.find(p=>p.worker===replacement.__identity).id;let prevented=0;
+      __staleAtlas.error({preventDefault(){prevented++;}});__staleAtlas.message({data:{id:messageId,error:'Stale worker must not settle a replacement request'}});
+      __releaseAtlasMessages=true;for(const send of __heldAtlasMessages)send();__heldAtlasMessages=[];
+      return{replacementEnded:replacement.__ended,prevented};
+    });
+    check(!pending.replacementEnded&&pending.prevented===1,'race: late errors and same-ID responses from an old worker leave its replacement alive');
+    await page.waitForFunction(()=>LegendsModels.ready('enemyElite')&&LegendsModels.ready('enemyEliteRear'),null,{timeout:30000});
+    const settled=await page.evaluate(()=>{
+      const replacement=__atlasWorkers[1];__staleAtlas.timer.callback(...__staleAtlas.timer.args);const protectedReplacement=!replacement.__ended;
+      const timer=__atlasIdleTimers.findLast(t=>!t.cancelled);timer.callback(...timer.args);return{protectedReplacement,replies:__workerStats.replies,made:__workerStats.made,terminated:__workerStats.terminated};
+    });
+    check(settled.replies>=2,'race: stale responses do not consume new requests; both optional sheets are actually prepared by the replacement worker');
+    check(settled.protectedReplacement,'race: even after new requests drain, an old idle callback cannot terminate the replacement');
+    check(settled.made===settled.terminated,'race: the replacement still retires through its own current idle callback');
+    check(errors.length===0,'race: post-throw retirement and delayed callbacks leave no uncaught game errors: '+errors.join(', '));
+    summaries.push({mode:'retirement-race',retired,pending,settled});await context.close();
   }
 
   const { context, page, errors } = await setup('held');
