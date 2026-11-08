@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import combat from '../science-legends-combat.js';
 import actions from '../science-legends-actions.js';
+import spatial from '../science-legends-spatial.js';
 
 const source=readFileSync(new URL('../science-legends.html',import.meta.url),'utf8');
 function fn(name){
@@ -17,13 +18,13 @@ function fn(name){
 }
 function projectileWorld(){
   const damage=[],damageOpts=[],explosions=[],hurt=[];
-  const w={LegendsCombat:combat,LegendsActions:actions,WeakSet,Math,lowMotion:false,WORLD:{w:2300,h:2300},
+  const w={LegendsCombat:combat,LegendsActions:actions,LegendsSpatial:spatial,WeakSet,Math,lowMotion:false,WORLD:{w:2300,h:2300},
     G:{time:0,projs:[],eprojs:[],zones:[],orbs:[],enemies:[],player:{x:100,y:300,r:16},stats:{mods:{}}},
     dist2:(x,y,a,b)=>(x-a)**2+(y-b)**2,rollCrit:()=>({mult:1,crit:false}),
     dealDamage:(e,n,opts)=>{e.hp-=n;damage.push(e);damageOpts.push(opts);if(e.hp<=0)e.dead=true;},
     explode:(x,y,r,n)=>explosions.push({x,y,r,n}),hurtPlayer:n=>hurt.push(n),healPlayer(){},
     hasEnh:()=>false,applyBleed(){},enemiesInRadius:()=>[],rand:(a,b)=>(a+b)/2,damage,damageOpts,explosions,hurt};
-  vm.createContext(w);vm.runInContext(fn('skillFx')+'\n'+fn('projectileTrail')+'\n'+fn('updateProjectiles'),w);return w;
+  vm.createContext(w);vm.runInContext(fn('enemyCandidates')+'\n'+fn('skillFx')+'\n'+fn('projectileTrail')+'\n'+fn('updateProjectiles'),w);return w;
 }
 const enemy=(x,hp=100)=>({x,y:100,r:4,hp,dead:false});
 const projectile=(extra={})=>({kind:'basic',x:100,y:100,r:2,vx:10000,vy:0,life:1,dmg:10,pierce:0,...extra});
