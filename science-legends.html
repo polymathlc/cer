@@ -730,6 +730,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
 <script src="science-legends-actions.js?v=1.455.0"></script>
 <script src="science-legends-ai.js?v=1.455.0"></script>
 <script src="science-legends-tree.js?v=1.455.0"></script>
+<script src="science-legends-icons.js?v=1.455.0"></script>
 <script src="science-legends-combat.js?v=1"></script>
 <script>
 /* ============================================================================
@@ -1838,6 +1839,8 @@ function nodeKindLabel(nd){
   return nd.kind === 'cap' ? 'Capstone' : nd.kind === 'ult' ? 'Ultimate' : nd.kind === 'enh' ? 'Enhancement'
     : nd.kind === 'branch' ? 'Branch' : nd.kind === 'unlock' ? 'New skill' : nd.kind === 'rank' ? 'Skill rank' : 'Passive';
 }
+function skillIconHtml(sid){return LegendsIcons.markup(sid,SKILLS[sid]);}
+function treeIconHtml(node){var sid=node.fx&&(node.fx.unlock||node.fx.skill)||node.ultInfo&&node.ultInfo.sid||node.sm&&node.sm.sid||node.mod&&node.mod.split('.')[0];return sid&&SKILLS[sid]?skillIconHtml(sid):node.icon;}
 function nodeReqMsgs(nd){
   var r = nodeRank(nd.id);
   var msgs = [];
@@ -1868,7 +1871,7 @@ function buildPopHtml(nd){
   var full = r >= nd.max;
   return '<div class="tree-pop" id="treePop" style="width:'+W+'px;max-height:'+Math.max(180,$('treeBoardWrap').clientHeight-20)+'px;overflow:auto;left:' + px + 'px;top:' + py + 'px;">' +
     '<button type="button" class="tp-x" id="tpClose">✕</button>' +
-    '<div class="tp-head"><span class="tp-ico">' + nd.icon + '</span><div>' +
+    '<div class="tp-head"><span class="tp-ico">' + treeIconHtml(nd) + '</span><div>' +
     '<div class="tp-name">' + nd.name + '</div>' +
     '<div style="display:flex;gap:6px;align-items:center;margin-top:3px;"><span class="tp-kind">' + nodeKindLabel(nd) + '</span>' +
     (nd.max > 1 ? '<span style="font-size:0.66rem;font-weight:800;color:var(--text-tertiary);">Rank ' + r + '/' + nd.max + '</span>' : (r ? '<span style="font-size:0.66rem;font-weight:800;color:var(--good);">Learned ✓</span>' : '')) +
@@ -1919,7 +1922,7 @@ function renderTree(){
   tree.forEach(function(nd){
     var p = nodeXY(nd), st = treeNodeState(nd), r = nodeRank(nd.id);
     html += '<button type="button" class="tnode ' + st + ' k-' + nd.kind + (nd.kind === 'cap' ? ' capstone' : '') + (treeSel === nd.id ? ' selq' : '')+(route.has(nd.id)?' tree-route':'')+(treeQuery&&!route.has(nd.id)?' search-muted':'') + '" style="left:' + p.x + 'px;top:' + p.y + 'px;" data-node="' + nd.id + '">' +
-      nd.icon + '<span class="rank">' + (nd.max > 1 ? (r + '/' + nd.max) : (r ? '✓' : nd.kind === 'cap' ? 'CAP' : nd.kind === 'ult' ? 'ULT' : '·')) + '</span></button>';
+      treeIconHtml(nd) + '<span class="rank">' + (nd.max > 1 ? (r + '/' + nd.max) : (r ? '✓' : nd.kind === 'cap' ? 'CAP' : nd.kind === 'ult' ? 'ULT' : '·')) + '</span></button>';
   });
   if (treeSel){
     var selNd = nodeById(G.cls, treeSel);
@@ -2063,7 +2066,7 @@ function renderSkillSel(){
     var sid = G.slots[i];
     slotsHtml += '<button type="button" class="sel-slot' + (selSlotIdx === i ? ' active' : '') + '" data-slot="' + i + '">' +
       '<span class="key">' + (i + 1) + '</span>' +
-      '<span class="ss-ico">' + (sid ? SKILLS[sid].icon : '·') + '</span>' +
+      '<span class="ss-ico">' + (sid ? skillIconHtml(sid) : '·') + '</span>' +
       '<span class="ss-name">' + (sid ? SKILLS[sid].name : 'Empty') + '</span></button>';
   }
   $('selSlots').innerHTML = slotsHtml;
@@ -2075,7 +2078,7 @@ function renderSkillSel(){
     var unlocked = skillUnlocked(sid);
     var inSlot = G.slots.indexOf(sid);
     grid += '<button type="button" class="sel-skill' + (unlocked ? '' : ' locked') + (inSlot >= 0 ? ' slotted' : '') + '" data-skill="' + sid + '">' +
-      '<span class="ssk-ico">' + SKILLS[sid].icon + '</span>' +
+      '<span class="ssk-ico">' + skillIconHtml(sid) + '</span>' +
       '<div class="ssk-body"><div class="ssk-name">' + SKILLS[sid].name + (unlocked ? ' <span class="ssk-rank">Rk ' + skillRank(sid) + '</span>' : '') + (inSlot >= 0 ? ' <span class="ssk-slot">slot ' + (inSlot + 1) + '</span>' : '') + '</div>' +
       '<div class="ssk-desc">' + (unlocked ? SKILLS[sid].desc : '🔒 Unlock in the skill tree (T)') + '</div></div></button>';
   });
@@ -4311,24 +4314,28 @@ function renderSkillBar(){
   for (var i = 0; i < 4; i++){
     var sid = G.slots[i];
     var unlocked = sid && skillUnlocked(sid);
-    html += '<div class="skill-slot' + (sid ? (unlocked ? '' : ' locked') : ' empty') + '" data-skill="' + i + '" title="' + (sid ? SKILLS[sid].name + ' — ' + SKILLS[sid].desc.replace(/"/g, '&quot;') : 'Empty — tap 🎯 Select Skill') + '">' +
-      '<span class="key">' + (i + 1) + '</span>' + (sid ? SKILLS[sid].icon : '·') +
-      (sid ? (unlocked ? '<div class="cd" data-cd="' + sid + '" style="display:none;"></div>' : '<span class="lock">🔒</span>') : '') +
-      '</div>';
+    html += '<button type="button" class="skill-slot' + (sid ? (unlocked ? '' : ' locked') : ' empty') + '" data-skill="' + i + '" aria-keyshortcuts="'+(i+1)+'" title="' + (sid ? SKILLS[sid].name + ' — ' + SKILLS[sid].desc.replace(/"/g, '&quot;') : 'Empty — tap 🎯 Select Skill') + '">' +
+      '<span class="key">' + (i + 1) + '</span>' + (sid ? skillIconHtml(sid) : '·') +'<span class="skill-name">'+(sid?SKILLS[sid].name:'Empty')+'</span>'+
+      (sid ? (unlocked ? '<span class="cd" data-cd="' + sid + '" style="display:none;"><span class="cd-shade"></span><b class="cd-value"></b></span>' : '<span class="lock">🔒</span>') : '') +
+      '</button>';
   }
   bar.innerHTML = html;
   Array.prototype.forEach.call(bar.querySelectorAll('.skill-slot'), function(el){
-    el.addEventListener('pointerdown', function(e){ e.preventDefault(); castSkill(parseInt(el.getAttribute('data-skill'), 10)); });
+    var index=parseInt(el.getAttribute('data-skill'),10),sid=G.slots[index];el.setAttribute('aria-label',sid?SKILLS[sid].name+(skillUnlocked(sid)?' ready':' locked'):'Empty skill slot '+(index+1));
+    el.addEventListener('pointerdown', function(e){ e.preventDefault();el.focus({preventScroll:true}); castSkill(index); });
+    el.addEventListener('click',function(e){if(e.detail===0)castSkill(index);});
   });
+  updateSkillCds();
 }
 function updateSkillCds(){
   Array.prototype.forEach.call(document.querySelectorAll('#skillBar .cd'), function(el){
     var sid = el.getAttribute('data-cd');
     var left = G.cds[sid] || 0;
+    var button=el.closest('.skill-slot');button.classList.toggle('ready',left<=0);button.setAttribute('aria-label',SKILLS[sid].name+(left<=0?' ready':', '+left.toFixed(1)+' seconds remaining'));
     if (left <= 0){ el.style.display = 'none'; return; }
     el.style.display = 'grid';
-    el.textContent = left >= 1 ? Math.ceil(left) : left.toFixed(1);
-    el.style.transform = 'scaleY(' + clamp(left / skillCd(sid), 0, 1) + ')';
+    el.querySelector('.cd-value').textContent=left>=1?Math.ceil(left):left.toFixed(1);
+    el.querySelector('.cd-shade').style.transform='scaleY('+clamp(left/skillCd(sid),0,1)+')';
   });
 }
 
@@ -4798,7 +4805,7 @@ function renderClassCards(){
     el.tabIndex=0;el.setAttribute('role','button');el.setAttribute('aria-pressed',key===chosenClass?'true':'false');
     el.addEventListener('keydown',function(ev){if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();chosenClass=key;renderClassCards();}});
     var skillsHtml = c.skills.slice(0, 4).map(function(sid){
-      return '<div class="sk">' + SKILLS[sid].icon + ' <b>' + SKILLS[sid].name + '</b></div>';
+      return '<div class="sk">' + skillIconHtml(sid) + ' <b>' + SKILLS[sid].name + '</b></div>';
     }).join('');
     el.innerHTML = '<div class="chead"><span class="cico"></span>' + c.icon + ' ' + c.name + '</div>' +
       '<div class="cdesc">' + c.desc + '</div>' +
@@ -4887,10 +4894,10 @@ function togglePause(){
 /* ---------------- SIZE / LOOP ---------------- */
 function resize(){
   var stage = $('stage');
-  DPR = Math.min(2, window.devicePixelRatio || 1);
-  VW = stage.clientWidth; VH = stage.clientHeight;
-  canvas.width = Math.round(VW * DPR);
-  canvas.height = Math.round(VH * DPR);
+  var width=stage.clientWidth,height=stage.clientHeight,dpr=Math.min(2,window.devicePixelRatio||1);if(width<=0||height<=0)return;
+  VW=width;VH=height;DPR=dpr;var pixelWidth=Math.round(VW*DPR),pixelHeight=Math.round(VH*DPR);
+  if(canvas.width!==pixelWidth)canvas.width=pixelWidth;if(canvas.height!==pixelHeight)canvas.height=pixelHeight;
+  if(G&&G.player){G.view=LegendsView.create(G.player.x,G.player.y,VW,VH,WORLD.w,WORLD.h);G.camX=G.view.x;G.camY=G.view.y;}
 }
 window.addEventListener('resize', resize);
 var lastT = 0;
@@ -4912,6 +4919,7 @@ function init(){
   wireCombatPolish();
   wireTreeSearch();
   resize();
+  if(typeof ResizeObserver==='function'){var stageObserver=new ResizeObserver(resize);stageObserver.observe($('stage'));}
   buildGround();
   metaLoadLocal();
   renderClassCards();
