@@ -7,10 +7,11 @@
   ground.src = 'assets/science-legends/courtyard-slate.webp';
   function ready() { return atlas.complete && atlas.naturalWidth > 0 && atlas.naturalHeight > 0; }
   function groundReady() { return ground.complete && ground.naturalWidth > 0; }
-  function cell(ctx, index, size, xAnchor) {
-    var w = atlas.naturalWidth / 4, h = atlas.naturalHeight / 2;
+  function cell(ctx, index, size, xAnchor, source) {
+    var w = (source.naturalWidth || source.width) / 4;
+    var h = (source.naturalHeight || source.height) / 2;
     ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(atlas, index % 4 * w, Math.floor(index / 4) * h, w, h,
+    ctx.drawImage(source, index % 4 * w, Math.floor(index / 4) * h, w, h,
       -size * xAnchor, -size / 2, size, size);
   }
   function impactCell(color) {
@@ -25,6 +26,7 @@
   root.LegendsArt = {
     ready: ready,
     groundReady: groundReady,
+    images: function () { return [atlas, ground]; },
     drawGround: function (ctx, x, y, width, height) {
       if (!groundReady()) return false;
       var pattern = groundPatterns.get(ctx);
@@ -39,8 +41,8 @@
       ctx.fillRect(x - 260, y - 260, width + 520, height + 520); ctx.restore();
       return true;
     },
-    drawProjectile: function (ctx, pr, style) {
-      if (!ready()) return false;
+    drawProjectile: function (ctx, pr, style, source) {
+      if (!source && !ready()) return false;
       var index, size, anchor = .82;
       if (style === 'fireorb' || style === 'flameglob' || style === 'ember') {
         index = 0; size = style === 'fireorb' ? 66 : 38;
@@ -50,21 +52,21 @@
         index = 3; size = style === 'javelin' ? 68 : 44; anchor = .89;
       } else return false;
       ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(Math.atan2(pr.vy, pr.vx));
-      cell(ctx, index, size, anchor); ctx.restore();
+      cell(ctx, index, size, anchor, source || atlas); ctx.restore();
       return true;
     },
-    drawImpact: function (ctx, impact, progress) {
-      if (!ready()) return false;
+    drawImpact: function (ctx, impact, progress, source) {
+      if (!source && !ready()) return false;
       var size = impact.r * (1.2 + progress * 1.5);
       ctx.save(); ctx.translate(impact.x, impact.y); ctx.rotate(impact.ang * .2);
       ctx.globalAlpha = Math.pow(1 - progress, 1.4) * (impact.strong ? .95 : .72);
-      cell(ctx, impactCell(impact.color), size, .5); ctx.restore();
+      cell(ctx, impactCell(impact.color), size, .5, source || atlas); ctx.restore();
       return true;
     },
-    drawHammer: function (ctx, hammer, time) {
-      if (!ready()) return false;
+    drawHammer: function (ctx, hammer, time, source) {
+      if (!source && !ready()) return false;
       ctx.save(); ctx.translate(hammer.x, hammer.y); ctx.rotate(time * 8);
-      cell(ctx, 2, 48, .5); ctx.restore();
+      cell(ctx, 2, 48, .5, source || atlas); ctx.restore();
       return true;
     }
   };

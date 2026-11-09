@@ -60,6 +60,11 @@
   function orientation(kind,actor,profile){var front=getSheet(kind,profile),back=front&&rearFacing(actor)&&getSheet(kind+'Rear',profile);return {sheet:back||front,rear:!!back,mirror:back?actor.fx>0:actor.fx<0};}
   function ready(kind){return !!getSheet(kind||'hero');}
   function allReady(){return ['hero','enemy','companion','heroRear','enemyRear','companionRear'].every(ready);}
+  function assetStates() {
+    return Object.values(sheets).map(function (sheet) {
+      return sheet.prepared ? 'ready' : sheet.failed ? 'failed' : 'pending';
+    });
+  }
   function snapshot(){var profile={};Object.keys(sheets).forEach(function(kind){profile[kind]=getSheet(kind);});return Object.freeze(profile);}
   function frameInfo(kind,column,row){var sheet=getSheet(kind),frame=sheet&&sheet.frames[column]&&sheet.frames[column][row];if(!frame)return null;return Object.freeze({x:frame.x,y:frame.y,w:frame.w,h:frame.h,anchor:Object.freeze({x:frame.anchor.x,y:frame.anchor.y}),nominalWidth:frame.nominalWidth,nominalHeight:frame.nominalHeight,pixels:frame.pixels,visiblePixels:frame.visiblePixels,core:Object.freeze(Object.assign({},frame.core))});}
   var atlasWorker=null,workerDisabled=false,workerRequests=new Map(),workerSequence=0,workerIdleTimer=null;
@@ -163,9 +168,28 @@
   var api={ready:ready,allReady:allReady,snapshot:snapshot,frameInfo:frameInfo,advanceFacing:advanceFacing,rearFacing:rearFacing,drawHero:drawHero,drawEnemy:drawEnemy,drawCompanion:drawCompanion,companionModel:companionModel,companionRole:companionRole,stateFrame:stateFrame,enemyFrame:enemyFrame,enemyColumn:enemyColumn,enemyPose:enemyPose,sourceRect:sourceRect,footAnchor:footAnchor,sortActors:sortActors,statuses:statuses,bodyBounds:bodyBounds,frameBounds:frameBounds,enemyBounds:enemyBounds,companionBounds:companionBounds,pick:pick};
   if(typeof module==='object'&&module.exports)module.exports=api;
   root.LegendsModels=api;
-  function loadSheet(kind){var sheet=sheets[kind];if(sheet.image)return;sheet.image=new root.Image();sheet.image.onload=function(){prepare(sheet);};sheet.image.src='assets/science-legends/'+(sheet.optional?'v4/':'v2/')+sheet.file+'.webp';}
+  function loadSheet(kind) {
+    var sheet = sheets[kind];
+    if (sheet.image) return;
+    sheet.image = new root.Image();
+    sheet.image.onload = function () { prepare(sheet); };
+    sheet.image.onerror = function () { sheet.failed = true; };
+    sheet.image.src = 'assets/science-legends/' + (sheet.optional ? 'v4/' : 'v2/') + sheet.file + '.webp';
+  }
   var optionalScheduled=false;
-  function warmOptional(){if(optionalScheduled)return;optionalScheduled=true;var warm=function(){loadSheet('enemyElite');loadSheet('enemyEliteRear');};if(typeof root.requestIdleCallback==='function')root.requestIdleCallback(warm,{timeout:3000});else root.setTimeout(warm,100);}
+  function prepareAll() {
+    if (typeof root.Image !== 'function' || !root.document) return;
+    optionalScheduled = true;
+    Object.keys(sheets).forEach(loadSheet);
+  }
+  function warmOptional() {
+    if (optionalScheduled) return;
+    optionalScheduled = true;
+    if (typeof root.requestIdleCallback === 'function') root.requestIdleCallback(prepareAll, { timeout: 3000 });
+    else root.setTimeout(prepareAll, 100);
+  }
+  api.assetStates = assetStates;
+  api.prepareAll = prepareAll;
   api.warmOptional=warmOptional;
   if(typeof root.Image==='function'&&root.document){Object.keys(sheets).forEach(function(kind){if(!sheets[kind].optional)loadSheet(kind);});root.addEventListener('legendsmodelsready',function(){if(allReady())warmOptional();});}
 

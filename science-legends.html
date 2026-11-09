@@ -115,7 +115,6 @@ html, body {
   font-weight: 800; font-size: var(--font-size-sm); cursor: pointer;
 }
 .tree-btn .pts { background: var(--accent-base); color: #fff; border-radius: 999px; padding: 1px 8px; font-size: var(--font-size-xs); }
-.tree-btn.has-pts { animation: pulseGlow 1.6s infinite; }
 @keyframes pulseGlow { 0%,100% { box-shadow: 0 0 0 0 rgba(230,74,25,0.35); } 50% { box-shadow: 0 0 0 7px rgba(230,74,25,0); } }
 
 /* ---- Stage ---- */
@@ -456,15 +455,7 @@ body.touch .pbars { bottom: 150px; }
 .fol-pill .fp-body b { font-size: var(--font-size-sm); }
 .fol-pill .fp-body span { color: var(--text-secondary); line-height: 1.4; }
 
-/* ---- v2: skill select ---- */
-.sksel-btn {
-  position: absolute; left: 50%; bottom: 30px; transform: translateX(150px);
-  z-index: 4; border: 1px solid var(--accent-base); color: var(--accent-dark);
-  background: rgba(255,255,255,0.94); border-radius: 999px; padding: 6px 13px;
-  font-weight: 800; font-size: var(--font-size-xs); cursor: pointer; font-family: inherit;
-  box-shadow: var(--shadow-md); white-space: nowrap;
-}
-body.touch .sksel-btn { transform: none; left: auto; right: 16px; bottom: 90px; }
+/* ---- Skill select ---- */
 .skill-slot.empty { opacity: 0.6; border-style: dashed; font-size: 18px; color: var(--text-tertiary); }
 .sel-slots { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
 .sel-slot {
@@ -529,14 +520,14 @@ body.touch .sksel-btn { transform: none; left: auto; right: 16px; bottom: 90px; 
 .hud{background:linear-gradient(110deg,#fffdf6,#edf3f2)}.skill-slot.ready{box-shadow:0 0 0 2px #ffe0a044,0 5px 18px #0005}.class-card{background:linear-gradient(145deg,#fff,#f5eee1);transition:transform .15s,box-shadow .15s}.class-card.sel{box-shadow:0 0 0 2px var(--accent-base),0 8px 24px #653a1626}.class-card:focus-visible,.evade-btn:focus-visible{outline:3px solid #38a7cc;outline-offset:3px}
 .hint-bar{max-width:calc(100% - 30px);white-space:normal;text-align:center;font-size:.67rem}.battle-map{position:absolute;right:14px;top:54px;width:142px;height:166px;z-index:4;background:#071019eb;border:1px solid #c4a77088;border-radius:10px;padding:5px;pointer-events:none}.battle-map canvas{width:130px;height:130px;display:block}.battle-map span{display:block;text-align:center;font-size:10px;letter-spacing:.08em;color:#ffe0a0;margin-top:4px}.descend-btn{position:absolute;left:50%;top:98px;transform:translateX(-50%);z-index:4;border:2px solid #ffe0a0;background:#213b38;color:#fff2cf;border-radius:12px;padding:12px 20px;font-weight:800;cursor:pointer}.descend-btn[hidden]{display:none}
 body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:none!important;transition:none!important}
-@media(max-width:700px){.hint-bar{display:none}.battle-status{top:52px;max-width:calc(100% - 145px);font-size:.67rem;padding:6px 8px}.battle-map{width:116px;height:140px}.battle-map canvas{width:104px;height:104px}.qtimer{font-size:.7rem;white-space:nowrap}.pbars,body.touch .pbars{bottom:166px;width:165px}.skillbar{bottom:18px;left:calc(50% + 42px);gap:6px}.skill-slot{width:43px;height:46px;font-size:21px}.evade-btn{right:15px;bottom:85px;min-width:86px;min-height:44px}.hint-bar{bottom:127px}.sksel-btn,body.touch .sksel-btn{bottom:140px;right:15px;left:auto;transform:none}.joy{left:12px;bottom:18px;width:96px;height:96px}.battle-map span{font-size:9px}.descend-btn{top:145px;font-size:.75rem}}
+@media(max-width:700px){.hint-bar{display:none}.battle-status{top:52px;max-width:calc(100% - 145px);font-size:.67rem;padding:6px 8px}.battle-map{width:116px;height:140px}.battle-map canvas{width:104px;height:104px}.qtimer{font-size:.7rem;white-space:nowrap}.pbars,body.touch .pbars{bottom:166px;width:165px}.skillbar{bottom:18px;left:calc(50% + 42px);gap:6px}.skill-slot{width:43px;height:46px;font-size:21px}.evade-btn{right:15px;bottom:85px;width:86px;min-width:86px;min-height:44px}.joy{left:12px;bottom:18px;width:96px;height:96px}.battle-map span{font-size:9px}.descend-btn{top:145px;font-size:.75rem}}
 </style>
-<link rel="stylesheet" href="science-legends-premium.css?v=1.458.0">
-<link rel="stylesheet" href="science-legends-sanctum.css?v=1.458.0">
-<link rel="stylesheet" href="science-legends-icons.css?v=1.458.0">
-<link rel="stylesheet" href="science-expedition-accessibility.css?v=1.458.0">
-<link rel="stylesheet" href="science-legends-refinement.css?v=1.458.0">
-<script defer src="science-expedition-accessibility.js?v=1.458.0"></script>
+<link rel="stylesheet" href="science-legends-premium.css?v=1.459.0">
+<link rel="stylesheet" href="science-legends-sanctum.css?v=1.459.0">
+<link rel="stylesheet" href="science-legends-icons.css?v=1.459.0">
+<link rel="stylesheet" href="science-expedition-accessibility.css?v=1.459.0">
+<link rel="stylesheet" href="science-legends-refinement.css?v=1.459.0">
+<script defer src="science-expedition-accessibility.js?v=1.459.0"></script>
 </head>
 <body>
 <div id="app">
@@ -550,7 +541,6 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
     <span class="stat" title="Your points — spend them on loot boxes in the Armory">💰 <span id="hudWallet">…</span></span>
     <span class="spacer"></span>
     <button class="tree-btn" id="armoryBtn" type="button" title="Armory — permanent equipment &amp; loot boxes (B)">🎁 Armory</button>
-    <button class="tree-btn" id="treeBtn" type="button" title="Skill tree (T)">🌳 Skill Tree <span class="pts" id="treePts">0</span></button>
     <button class="icon-btn" id="muteBtn" type="button" title="Sound on/off">🔊</button>
     <button class="icon-btn" id="pauseBtn" type="button" title="Pause (P / Esc)">⏸</button>
   </div>
@@ -561,7 +551,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
     <div class="hurt-vignette" id="hurtVignette" aria-hidden="true"></div>
     <div class="battle-status" id="battleStatus" style="display:none"></div>
     <div class="target-panel" id="targetPanel" hidden role="region" aria-label="Enemy target"><div class="target-name" id="targetName"></div><div class="target-type" id="targetType"></div><div class="target-hp"><span id="targetHpFill"></span></div><div class="target-numbers" id="targetHp"></div><div class="target-effects" id="targetEffects"></div><div id="targetCounter" style="font-size:9px;line-height:1.35;margin-top:4px;color:#d2dfd6"></div></div>
-    <button class="evade-btn" id="evadeBtn" type="button" style="display:none">Evade<small>Space · READY</small></button>
+    <button class="evade-btn" id="evadeBtn" type="button" style="display:none" aria-keyshortcuts="Space">Evade<small>Space · READY</small></button>
     <div class="beta-ribbon">Beta</div>
     <div class="qtimer" id="qTimer" style="display:none;"><span class="dot"></span> Next question in <b id="qTimerN" style="margin-left:2px;">20</b>s</div>
     <div class="pbars" id="pBars" style="display:none;">
@@ -572,7 +562,10 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
     </div>
     <div class="skillbar" id="skillBar" style="display:none;"></div>
     <div class="touch-aim-hint" id="touchAimHint">Hold a skill + drag to aim.<br>Return to its button to cancel.</div>
-    <button class="sksel-btn" id="skillSelBtn" type="button" style="display:none;" title="Choose which 4 of your 12 skills sit on the bar (K)">🎯 Select Skill</button>
+    <div class="combat-skill-tools" id="combatSkillTools" role="group" aria-label="Skill controls">
+      <button class="tree-btn" id="treeBtn" type="button" style="display:none" aria-haspopup="dialog" aria-controls="treeOverlay" aria-keyshortcuts="T" title="Skill tree (T)">Skill tree <span class="pts" id="treePts">0</span></button>
+      <button class="sksel-btn" id="skillSelBtn" type="button" style="display:none" aria-label="Equip skills" aria-haspopup="dialog" aria-controls="skillSelOverlay" aria-keyshortcuts="K" title="Equip skills (K)">Equip</button>
+    </div>
     <div class="hint-bar" id="hintBar"><b>WASD</b> / click: move · Click foe / right-click: attack · <b>1–4</b>: skills · <b>Space</b>: evade · <b>T</b>: tree · <b>K</b>: equip</div>
     <div class="joy" id="joy"><div class="base"></div><div class="knob" id="joyKnob"></div></div>
     <div class="toast-wrap" id="toastWrap"></div>
@@ -591,7 +584,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
           <li data-ico="💨"><strong>Space / Evade</strong>: dodge in your movement direction (5-second cooldown). Step out of the <strong>orange charge lane</strong> before its ring fills. Leaving the game pauses combat.</li>
           <li data-ico="🕹️">Move with <strong>WASD / arrows</strong>, or <strong>click the ground</strong> to walk there. <strong>Click an enemy</strong> to attack it, hold <strong>right-click</strong> to fire at the crosshair, and skills <strong>1–4 fire at the crosshair</strong>.</li>
           <li data-ico="🎯">On touch screens, <strong>hold a skill and drag</strong> to preview its aim. <strong>Release to cast</strong>, or return to the skill button to cancel. Your other thumb can keep moving.</li>
-          <li data-ico="✨">Each class knows <strong>12 skills</strong> — unlock, rank, branch and crown them with 1-of-3 <strong>ULTIMATES</strong> in a huge <strong>skill tree (T)</strong>, then pick your <strong>4</strong> with 🎯 <strong>Select Skill (K)</strong>.</li>
+          <li data-ico="✨">Use <strong>Skill tree (T)</strong> above the hotbar to unlock and upgrade skills. Choose your four active skills with <strong>Equip (K)</strong>.</li>
           <li data-ico="🧪">Every <strong>20s</strong>: a science MCQ. Correct = <strong>+1 skill point</strong>, a heal and an Insight damage surge.</li>
           <li data-ico="⚠️">Wrong answers in a row cause increasing health loss: <strong>8%, 16%, 28%, then 45%</strong> of maximum HP. A <strong>fifth wrong answer ends the run</strong>. A correct answer resets the streak.</li>
           <li data-ico="🎁">Spend app points on <strong>loot boxes</strong> in the <strong>Armory (B)</strong> — permanent helm, armour, gloves, greaves, rings &amp; amulet. Unique and Mythic gear carries <strong>skill-changing powers</strong>.</li>
@@ -605,6 +598,15 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
           <button class="btn btn-primary" id="startBtn" type="button" style="flex:1;justify-content:center;font-size:1rem;padding:12px;">⚔️ Begin the hunt</button>
         </div>
         <p class="center" style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin:12px 0 0;" id="menuFoot" role="status" aria-live="polite">Connecting to your class question stream…</p></div>
+      </div></div>
+    </div>
+
+    <div class="overlay" id="loadingOverlay" style="background:#0e1b26;backdrop-filter:none">
+      <div class="panel"><div class="panel-pad center">
+        <h2>Preparing the hunt</h2>
+        <progress id="loadingProgress" max="100" value="0" aria-label="Hunt preparation" style="width:100%;height:1rem;accent-color:#b57222"></progress>
+        <p id="loadingStatus" class="sub" role="status">Loading character art and effects…</p>
+        <button class="btn btn-outline" id="cancelLoadingBtn" type="button">Back to class selection</button>
       </div></div>
     </div>
 
@@ -687,7 +689,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
     <div class="overlay" id="skillSelOverlay">
       <div class="panel wide"><div class="panel-pad">
         <div class="tree-head">
-          <h2>🎯 Select Skills</h2>
+          <h2>🎯 Equip skills</h2>
           <span class="spacer" style="flex:1;"></span>
           <button class="btn btn-primary" id="selCloseBtn" type="button">✓ Done</button>
         </div>
@@ -731,22 +733,22 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
   </div>
 </div>
 
-<script src="science-feed-bridge.js?v=1.458.0"></script>
-<script src="game-question-pressure.js?v=1.458.0"></script>
-<script src="science-legends-art.js?v=1.458.0"></script>
-<script src="science-legends-view.js?v=1.458.0"></script>
-<script src="science-legends-atlas.js?v=1.458.0"></script>
-<script src="science-legends-models.js?v=1.458.0"></script>
-<script src="science-legends-actions.js?v=1.458.0"></script>
-<script src="science-legends-ai.js?v=1.458.0"></script>
-<script src="science-legends-tree.js?v=1.458.0"></script>
-<script src="science-legends-icons.js?v=1.458.0"></script>
-<script src="science-legends-feedback.js?v=1.458.0"></script>
-<script src="science-legends-gestures.js?v=1.458.0"></script>
-<script src="science-legends-combat.js?v=1.458.0"></script>
-<script src="science-legends-performance.js?v=1.458.0"></script>
-<script src="science-legends-spatial.js?v=1.458.0"></script>
-<script src="science-legends-variety.js?v=1.458.0"></script>
+<script src="science-feed-bridge.js?v=1.459.0"></script>
+<script src="game-question-pressure.js?v=1.459.0"></script>
+<script src="science-legends-art.js?v=1.459.0"></script>
+<script src="science-legends-view.js?v=1.459.0"></script>
+<script src="science-legends-atlas.js?v=1.459.0"></script>
+<script src="science-legends-models.js?v=1.459.0"></script>
+<script src="science-legends-actions.js?v=1.459.0"></script>
+<script src="science-legends-ai.js?v=1.459.0"></script>
+<script src="science-legends-tree.js?v=1.459.0"></script>
+<script src="science-legends-icons.js?v=1.459.0"></script>
+<script src="science-legends-feedback.js?v=1.459.0"></script>
+<script src="science-legends-gestures.js?v=1.459.0"></script>
+<script src="science-legends-combat.js?v=1.459.0"></script>
+<script src="science-legends-performance.js?v=1.459.0"></script>
+<script src="science-legends-spatial.js?v=1.459.0"></script>
+<script src="science-legends-variety.js?v=1.459.0"></script>
 <script>
 /* ============================================================================
  * SCIENCE LEGENDS (BETA) — top-down horde-action RPG with a science-MCQ pulse.
@@ -1698,7 +1700,7 @@ function genTree(cls){
     var r0 = tier * ROWS_PER_TIER;
     if (s > 0){
       nodes.push({ id: 'u_' + sid, name: 'Learn: ' + def.name, icon: def.icon, tier: tier, col: bc + 0.4, row: r0, kind: 'unlock', max: 1,
-        req: ['r_' + sk[s >= 2 ? s - 2 : 0]], desc: 'Unlock the ' + def.name + ' skill — assign it with the 🎯 Select Skill button (K).', fx: { unlock: sid } });
+        req: ['r_' + sk[s >= 2 ? s - 2 : 0]], desc: 'Unlock the ' + def.name + ' skill and assign it with Equip (K).', fx: { unlock: sid } });
     }
     nodes.push({ id: 'r_' + sid, name: def.name, icon: def.icon, tier: tier, col: bc + 0.4, row: r0 + 1, kind: 'rank', max: 5,
       req: s > 0 ? ['u_' + sid] : [], desc: def.desc + ' Each rank: +20% power, −4% cooldown. Rank 3 opens this skill’s ULTIMATES.', fx: { skill: sid } });
@@ -2102,12 +2104,12 @@ var chosenClass = 'barb';
 var G = null;
 $('enemyGuideEntries').innerHTML=LegendsVariety.guideEntries.map(function(entry){return '<p style="font-size:12px;line-height:1.5"><strong>'+entry.icon+' '+entry.name+'</strong><br>'+entry.tell+'<br>'+entry.counter+'</p>';}).join('');
 
-function newGame(cls){
+function newGame(cls, presentation){
   cancelSkillGesture();equipCandidate=null;
   var c = CLASSES[cls];
   var feedOwner=JSON.stringify(scienceFeed.context());
   G = {
-    state: 'play', cls: cls, follower:META.follower,feedOwner:feedOwner, presentation:snapshotPresentation(),
+    state: 'play', cls: cls, follower:META.follower,feedOwner:feedOwner, presentation:presentation||snapshotPresentation(),
     player: {
       x: WORLD.w / 2, y: WORLD.h / 2, r: 16,
       hp: c.hp, maxHp: c.hp, levelHp: 0,
@@ -2141,7 +2143,7 @@ var lowMotion = false;
 try { var motionPref=localStorage.getItem('science_expedition_motion'); lowMotion=motionPref===null ? !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) : motionPref==='1'; } catch(e){}
 var parentSurfaceActive=true,intersectionSurfaceActive=true,surfaceWasActive=true;
 function activeGameSurface(){return parentSurfaceActive&&intersectionSurfaceActive&&!document.hidden;}
-function refreshGameSurface(){var active=activeGameSurface();if(active===surfaceWasActive)return;surfaceWasActive=active;clearCombatInput();lastT=0;if(G){G.accumulator=0;G.hitStop=0;}if(active){resize();invalidateScene();}}
+function refreshGameSurface(){var active=activeGameSurface();if(active===surfaceWasActive)return;surfaceWasActive=active;clearCombatInput();lastT=0;if(G){G.accumulator=0;G.hitStop=0;}if(active){resize();invalidateScene();}else cancelPendingHunt();}
 window.addEventListener('message',function(event){var d=event.data;if(event.source!==window.parent||event.origin!==location.origin||!d||d.type!=='SD_GAME_VISIBILITY'||d.mode!=='legends'||typeof d.active!=='boolean')return;parentSurfaceActive=d.active;refreshGameSurface();});
 function clearCombatInput(){
   cancelSkillGesture();
@@ -2280,28 +2282,40 @@ function drawArenaLandmarks(camX,camY){
 /* ---------------- INPUT ---------------- */
 var keys = {};
 var joyVec = { x: 0, y: 0, on: false };
+// A combat Space press owns its release even if a dialog opens while held.
+var combatSpaceHeld = false;
 window.addEventListener('keydown', function(e){
-  if(!activeGameSurface())return;
-  if(e.ctrlKey||e.metaKey||e.altKey||e.target.closest('input,textarea,select,[contenteditable="true"]'))return;
   var k=e.key.toLowerCase();
+  if(k===' '){
+    if(!e.repeat)combatSpaceHeld=false;
+    if(combatSpaceHeld){e.preventDefault();return;}
+  }
+  if(!activeGameSurface())return;
+  if(e.ctrlKey||e.metaKey||e.altKey||e.target.closest?.('input,textarea,select,[contenteditable="true"]'))return;
+  if(k===' '&&G&&G.state==='play'&&!(qState&&qState.active)&&!overlayOpen()){
+    e.preventDefault();
+    if(!e.repeat){combatSpaceHeld=true;evade();}
+    return;
+  }
   if(e.repeat)return;
   if(qState && qState.active){if(k>='1'&&k<='8'){e.preventDefault();var qi=parseInt(k,10)-1;if(qState.current && qi<qState.current.options.length)answerQuestion(qi);}return;}
   if(k==='escape'&&skillGesture){e.preventDefault();cancelSkillGesture();return;}
   if(k==='p'||k==='escape'){e.preventDefault();togglePause();return;}
   if(k==='t'&&$('treeOverlay').classList.contains('show')){e.preventDefault();toggleTree();return;}
   if(overlayOpen())return;
-  if(e.target.closest('button')&&(k===' '||k==='enter'))return;
-  if(['arrowup','arrowdown','arrowleft','arrowright',' '].indexOf(k)>=0)e.preventDefault();
+  if(['arrowup','arrowdown','arrowleft','arrowright'].indexOf(k)>=0)e.preventDefault();
   keys[k]=true;
   if(!G || G.state!=='play')return;
-  if(k===' '){evade();return;}
 
   if(k>='1'&&k<='4')castSkill(parseInt(k,10)-1);
   if(k==='t')toggleTree();
   if(k==='i'||k==='b')toggleArmory();
   if(k==='k')toggleSkillSel();
 });
-window.addEventListener('keyup', function(e){ keys[e.key.toLowerCase()] = false; });
+window.addEventListener('keyup', function(e){
+  if(e.key===' '&&combatSpaceHeld){combatSpaceHeld=false;e.preventDefault();return;}
+  keys[e.key.toLowerCase()]=false;
+});
 function moveInput(){
   var x = 0, y = 0;
   if (keys['w'] || keys['arrowup']) y -= 1;
@@ -2324,7 +2338,7 @@ function moveInput(){
     if (e.pointerType !== 'touch') return;
     if (!document.body.classList.contains('touch')) return;
     if (!G || G.state!=='play' || overlayOpen()) return;
-    if (e.target.closest('.evade-btn') || e.target.closest('.descend-btn') || e.target.closest('.skill-slot') || e.target.closest('.overlay') || e.target.closest('.hud') || e.target.closest('.sksel-btn')) return;
+    if (e.target.closest('.evade-btn, .descend-btn, .skill-slot, .overlay, .hud, .combat-skill-tools')) return;
     if (pid !== null) return;
     var r = stage.getBoundingClientRect();
     if (e.clientX - r.left > r.width * 0.55) return;
@@ -2997,7 +3011,7 @@ function castSkill(idx){
   if(!activeGameSurface())return;
   if (!G || G.state !== 'play' || overlayOpen() || G.player.evadeT>0) return;
   var sid = G.slots[idx];
-  if (!sid){ failedCastFeedback('Slot '+(idx+1)+' is empty. Select Skill (K) to equip one.');return;}
+  if (!sid){ failedCastFeedback('Slot '+(idx+1)+' is empty. Use Equip (K) to choose a skill.');return;}
   if (!skillUnlocked(sid)){failedCastFeedback(SKILLS[sid].name+' is locked. Open the tree (T) for requirements.');return;}
   if ((G.cds[sid] || 0) > 0){failedCastFeedback(SKILLS[sid].name+' ready in '+(Math.ceil(G.cds[sid]*10)/10).toFixed(1)+'s');return;}
   G.enemySpatialDirty=true;
@@ -3550,7 +3564,7 @@ function updateEnemies(dt){
 
 /* ---------------- MAIN UPDATE ---------------- */
 function overlayOpen(){
-  return ['menuOverlay', 'treeOverlay', 'questionOverlay', 'pauseOverlay', 'overOverlay', 'armoryOverlay', 'skillSelOverlay'].some(function(id){ return $(id).classList.contains('show'); });
+  return ['menuOverlay', 'loadingOverlay', 'treeOverlay', 'questionOverlay', 'pauseOverlay', 'overOverlay', 'armoryOverlay', 'skillSelOverlay'].some(function(id){ return $(id).classList.contains('show'); });
 }
 function update(dt){
   var p = G.player;
@@ -3980,7 +3994,7 @@ function drawImpacts(){
   (G.impacts||[]).forEach(function(f){
     if(!worldPointVisible(f.x,f.y,f.r*2+24))return;
     var k=clamp(f.t/f.life,0,1);
-    if(G.presentation.legacyArt&&window.LegendsArt&&window.LegendsArt.drawImpact&&window.LegendsArt.drawImpact(ctx,f,k))return;
+    if(G.presentation.legacyArt&&window.LegendsArt&&window.LegendsArt.drawImpact&&window.LegendsArt.drawImpact(ctx,f,k,G.presentation.legacySource))return;
     ctx.save();ctx.translate(f.x,f.y);ctx.rotate(f.ang);
     ctx.strokeStyle=f.color;ctx.fillStyle=f.color;
     ctx.globalAlpha=(1-k)*.8;ctx.lineWidth=(1-k)*2+1;
@@ -4005,7 +4019,7 @@ function drawProjectile(pr){
   }
   var st = projStyle(pr);
   drawProjectileTrail(pr,st);
-  if(G.presentation.legacyArt&&window.LegendsArt&&window.LegendsArt.drawProjectile&&window.LegendsArt.drawProjectile(ctx,pr,st,G.time))return;
+  if(G.presentation.legacyArt&&window.LegendsArt&&window.LegendsArt.drawProjectile&&window.LegendsArt.drawProjectile(ctx,pr,st,G.presentation.legacySource))return;
   var ang = Math.atan2(pr.vy, pr.vx);
   ctx.save();
   ctx.translate(pr.x, pr.y);
@@ -4288,7 +4302,7 @@ function threatLayout(){
   var p=G.player,key=[VW,VH,DPR,sceneRevision,p.shield>0,G.insightT>0,p.hp/p.maxHp<=.25,$('targetPanel').hidden,$('toastWrap').childElementCount].join('|');
   if(threatLayoutCache&&threatLayoutCache.key===key&&G.time<threatLayoutCache.until)return threatLayoutCache;
   var rect=canvas.getBoundingClientRect(),scaleX=VW/Math.max(1,rect.width),scaleY=VH/Math.max(1,rect.height),blocked=[];
-  var nodes=[$('pBars'),$('skillBar'),$('skillSelBtn'),$('evadeBtn'),$('hintBar'),$('joy'),$('qTimer'),$('battleStatus'),$('targetPanel'),$('toastWrap'),document.querySelector('.touch-aim-hint'),document.querySelector('.beta-ribbon')];
+  var nodes=[$('pBars'),$('skillBar'),$('combatSkillTools'),$('evadeBtn'),$('hintBar'),$('joy'),$('qTimer'),$('battleStatus'),$('targetPanel'),$('toastWrap'),document.querySelector('.touch-aim-hint'),document.querySelector('.beta-ribbon')];
   nodes.forEach(function(node){if(!node||node.hidden)return;var box=node.getBoundingClientRect();if(box.width>0&&box.height>0)blocked.push({left:(box.left-rect.left)*scaleX-4,top:(box.top-rect.top)*scaleY-4,right:(box.right-rect.left)*scaleX+4,bottom:(box.bottom-rect.top)*scaleY+4});});
   threatLayoutCache={key:key,until:G.time+.5,blocked:blocked};return threatLayoutCache;
 }
@@ -4408,7 +4422,7 @@ function draw(){
       var ha = O.ang + h * (Math.PI * 2 / O.count);
       var hx = p.x + Math.cos(ha) * oR, hy = p.y + Math.sin(ha) * oR;
       if(!worldPointVisible(hx,hy,48))continue;
-      if(G.presentation.legacyArt&&window.LegendsArt&&window.LegendsArt.drawHammer&&window.LegendsArt.drawHammer(ctx,{x:hx,y:hy,ang:ha},G.time))continue;
+      if(G.presentation.legacyArt&&window.LegendsArt&&window.LegendsArt.drawHammer&&window.LegendsArt.drawHammer(ctx,{x:hx,y:hy,ang:ha},G.time,G.presentation.legacySource))continue;
       ctx.save();
       ctx.translate(hx, hy);
       ctx.rotate(ha);
@@ -4526,12 +4540,15 @@ function combatHud(){
   return combatHudNodes;
 }
 function updateHud(){
+  var treeButton=$('treeBtn');
+  LegendsPerformance.style(treeButton,'display',G&&G.state==='play'?'':'none');
   if (G){
     LegendsPerformance.text($('hudWave'),G.wave);
     LegendsPerformance.text($('hudKills'),G.kills);
     LegendsPerformance.text($('hudGold'),G.gold);
     LegendsPerformance.text($('treePts'),G.points);updateCombatStates();
-    LegendsPerformance.toggle($('treeBtn'),'has-pts',G.points>0);
+    LegendsPerformance.toggle(treeButton,'has-pts',G.points>0);
+    LegendsPerformance.attr(treeButton,'aria-label','Skill tree, '+G.points+' unspent '+(G.points===1?'point':'points'));
   }
   armoryRefreshWallet();
   if (_gPlaysLeft != null){
@@ -4559,7 +4576,7 @@ function renderSkillBar(){
   for (var i = 0; i < 4; i++){
     var sid = G.slots[i];
     var unlocked = sid && skillUnlocked(sid);
-    html += '<button type="button" class="skill-slot' + (sid ? (unlocked ? '' : ' locked') : ' empty') + '" data-skill="' + i + '" aria-keyshortcuts="'+(i+1)+'" title="' + (sid ? SKILLS[sid].name + ' — ' + SKILLS[sid].desc.replace(/"/g, '&quot;') : 'Empty — tap 🎯 Select Skill') + '">' +
+    html += '<button type="button" class="skill-slot' + (sid ? (unlocked ? '' : ' locked') : ' empty') + '" data-skill="' + i + '" aria-keyshortcuts="'+(i+1)+'" title="' + (sid ? SKILLS[sid].name + ' — ' + SKILLS[sid].desc.replace(/"/g, '&quot;') : 'Empty — choose Equip (K)') + '">' +
       '<span class="key">' + (i + 1) + '</span>' + (sid ? skillIconHtml(sid) : '·') +'<span class="skill-name">'+(sid?SKILLS[sid].name:'Empty')+'</span>'+
       (sid ? (unlocked ? '<span class="cd" data-cd="' + sid + '" style="display:none;"><span class="cd-shade"></span><b class="cd-value"></b></span>' : '<span class="lock">🔒</span>') : '') +
       '</button>';
@@ -4672,12 +4689,13 @@ var qState = { active: false, current: null, answered: false };
 // The bridge also invalidates failed diagrams: the same learner keeps their run.
 function syncCombatLearner(){
   var context=scienceFeed.context(),owner=JSON.stringify(context);
+  if(pendingHunt&&pendingHunt.owner!==owner)cancelPendingHunt();
   if(_gameCreditOwner && _gameCreditOwner!==owner){_gameCreditOwner='';_gPlaysLeft=null;}
   if(G && G.feedOwner!==owner){
     clearCombatInput();G=null;scienceFeedOpening=false;
     qState.active=false;qState.current=null;qState.answered=true;
     document.querySelectorAll('.overlay').forEach(function(el){el.classList.remove('show');});
-    ['pBars','skillBar','skillSelBtn','qTimer','battleStatus','evadeBtn','mapWrap'].forEach(function(id){var el=$(id);if(el)el.style.display='none';});
+    ['pBars','skillBar','treeBtn','skillSelBtn','qTimer','battleStatus','evadeBtn','mapWrap'].forEach(function(id){var el=$(id);if(el)el.style.display='none';});
     if($('descendBtn'))$('descendBtn').hidden=true;
     resetFlagUI();show('menuOverlay');renderClassCards();
   }
@@ -5102,23 +5120,183 @@ function renderMenuFollowers(){
   if(!wrap.childElementCount)FOLLOWER_ORDER.forEach(function(key){var f=FOLLOWERS[key],el=document.createElement('button');el.type='button';el.className='fol-pill';el.dataset.follower=key;el.innerHTML='<span class="fp-ico">'+f.icon+'</span><span class="fp-body"><b>'+f.name+'</b><span>'+f.desc+'</span></span>';el.addEventListener('click',function(){META.follower=key;metaSave();renderMenuFollowers();});wrap.appendChild(el);});
   Array.from(wrap.children).forEach(function(el){var selected=el.dataset.follower===META.follower;LegendsPerformance.toggle(el,'sel',selected);LegendsPerformance.attr(el,'aria-pressed',selected?'true':'false');});
 }
-function startRun(){
-  if(G && G.state==='play')return;
-  if (!_canPlayGame()){ _showPlayLimit(); return; }
-  var runOwner=_gameCreditOwner;
-  _noteGamePlayStart(runOwner);
-  hide('menuOverlay'); hide('overOverlay');
-  newGame(chosenClass);
-  heroSheets = buildHeroSprites(CLASSES[chosenClass].sprite);
-  $('pBars').style.display = '';
-  $('skillBar').style.display = '';
-  $('skillSelBtn').style.display = '';
-  $('qTimer').style.display = '';
-  qState.active = false;
-  for (var i = 0; i < 14; i++) spawnEnemy(pick(wavePool()), false);
-  renderSkillBar();
-  updateHud(); updateBars();
-  toast('⚔️ Wave 1 — survive! You have 1 skill point (T = tree, K = skills)', 'energy');
+var pendingHunt = null;
+var huntImageStates = new WeakMap();
+var huntInterfaceImages = null;
+var HUNT_ASSET_WAIT_MS = 8000;
+
+function huntDelay(ms){
+  return new Promise(function(resolve){ setTimeout(resolve, ms); });
+}
+function huntImageState(image){
+  if(image.complete && !image.naturalWidth)return 'failed';
+  if(typeof image.decode !== 'function')return image.complete ? 'ready' : 'pending';
+  if(!huntImageStates.has(image)){
+    huntImageStates.set(image, 'pending');
+    Promise.resolve().then(function(){ return image.decode(); }).then(function(){
+      huntImageStates.set(image, 'ready');
+    }, function(){ huntImageStates.set(image, 'failed'); });
+  }
+  return huntImageStates.get(image);
+}
+function setHuntProgress(value, label){
+  $('loadingProgress').value = value;
+  LegendsPerformance.text($('loadingStatus'), label);
+}
+function cancelPendingHunt(){
+  var hunt = pendingHunt;
+  if(!hunt)return;
+  pendingHunt = null;
+  if(hunt.staged && G === hunt.staged){
+    G = hunt.previousGame;
+    heroSheets = hunt.previousSprites;
+    if(!G){
+      ['pBars','skillBar','skillSelBtn','qTimer','battleStatus','evadeBtn'].forEach(function(id){ $(id).style.display = 'none'; });
+    }
+    updateHud();
+    updateTouchAimHint();
+  }
+  hide('loadingOverlay');
+}
+function huntEffectKeys(cls){
+  var sheets = ['attacks', 'elements', 'fx-' + cls];
+  if(cls === 'barb')sheets.push('whirlwind');
+  return sheets;
+}
+async function prepareHuntArt(hunt){
+  LegendsModels.prepareAll();
+  if(!huntInterfaceImages){
+    huntInterfaceImages = ['interface', 'skill-tree'].map(function(name){
+      var image = new Image();
+      image.src = 'assets/science-legends/v2/' + name + '.webp';
+      return image;
+    });
+  }
+  var images = LegendsArt.images().concat(LegendsActions.images(), LegendsIcons.images(),
+    huntInterfaceImages, [_barbBuiltin], Object.values(_ovrImgs));
+  var deadline = performance.now() + HUNT_ASSET_WAIT_MS;
+  while(pendingHunt === hunt){
+    var states = LegendsModels.assetStates().concat(images.map(huntImageState));
+    var settled = states.filter(function(state){ return state !== 'pending'; }).length;
+    setHuntProgress(Math.round(72 * settled / states.length), 'Loading artwork · ' + settled + ' / ' + states.length);
+    if(settled === states.length || performance.now() >= deadline)break;
+    await huntDelay(50);
+  }
+  if(pendingHunt !== hunt)return null;
+
+  var presentation = snapshotPresentation();
+  var actions = Object.assign({}, presentation.actions);
+  Object.keys(actions).forEach(function(key){
+    if(actions[key] && huntImageState(actions[key]) !== 'ready')actions[key] = null;
+  });
+  var legacy = LegendsArt.images()[0];
+  if(huntImageState(legacy) !== 'ready')legacy = null;
+  var ground = LegendsArt.images()[1];
+
+  // A decoded HTMLImageElement may drop its decoded pixels before the first cast.
+  // Keep raster-backed copies of the shared effects and the selected class for this run.
+  var keys = huntEffectKeys(hunt.cls);
+  var effects = keys.map(function(key){ return actions[key]; }).concat(legacy).filter(Boolean);
+  var rasters = new Map();
+  if(typeof createImageBitmap === 'function' && effects.length){
+    setHuntProgress(76, 'Preparing spell textures…');
+    var accept = true;
+    var rasterTimer;
+    var preparation = Promise.all(effects.map(function(image){
+      return Promise.resolve().then(function(){ return createImageBitmap(image); }).then(function(bitmap){
+        if(accept && pendingHunt === hunt)rasters.set(image, bitmap);
+        else bitmap.close();
+      }, function(){});
+    }));
+    await Promise.race([preparation, new Promise(function(resolve){ rasterTimer = setTimeout(resolve, 1500); })]);
+    accept = false;
+    clearTimeout(rasterTimer);
+  }
+  if(pendingHunt !== hunt){
+    rasters.forEach(function(bitmap){ bitmap.close(); });
+    return null;
+  }
+  keys.forEach(function(key){ actions[key] = rasters.get(actions[key]) || actions[key]; });
+  return Object.freeze(Object.assign({}, presentation, {
+    actions: Object.freeze(actions), legacyArt: !!legacy,
+    legacySource: rasters.get(legacy) || legacy,
+    generatedGround: presentation.generatedGround && huntImageState(ground) === 'ready'
+  }));
+}
+async function warmHuntCanvas(hunt, presentation, fallbackSprites){
+  var textures = new Set([cachedLandmarkTile(), _groundTileC, presentation.builtin, presentation.legacySource]);
+  Object.values(presentation.models).forEach(function(sheet){
+    if(sheet)sheet.frames.forEach(function(rows){ rows.forEach(function(frame){ textures.add(frame.texture); }); });
+  });
+  Object.values(presentation.overrides).forEach(function(image){ textures.add(image); });
+  huntEffectKeys(hunt.cls).forEach(function(key){ textures.add(presentation.actions[key]); });
+  fallbackSprites.forEach(function(rows){ rows.forEach(function(frame){ textures.add(frame); }); });
+  Object.values(MOB_SPRITES).forEach(function(frames){ frames.forEach(function(frame){ textures.add(frame); }); });
+  var sources = Array.from(textures).filter(Boolean);
+  var batch = 16;
+  // Draw on the actual gameplay canvas. A hidden scratch context does not warm its renderer.
+  for(var start = 0; start < sources.length && pendingHunt === hunt; start += batch){
+    setHuntProgress(80 + Math.floor(17 * start / sources.length), 'Warming the arena…');
+    ctx.save();
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    for(var i = start; i < Math.min(start + batch, sources.length); i++){
+      ctx.drawImage(sources[i], (i % 4) * 52, (Math.floor(i / 4) % 4) * 52, 52, 52);
+    }
+    ctx.restore();
+    await huntDelay(16);
+  }
+}
+async function startRun(){
+  if(pendingHunt || (G && G.state === 'play') || !activeGameSurface())return;
+  if(!_canPlayGame()){ _showPlayLimit(); return; }
+  var hunt = {cls: chosenClass, owner: JSON.stringify(scienceFeed.context()), creditOwner: _gameCreditOwner,
+    previousGame: G, previousSprites: heroSheets, staged: null};
+  pendingHunt = hunt;
+  setHuntProgress(0, 'Loading character art and effects…');
+  show('loadingOverlay');
+  try {
+    if(!muted){
+      var audio = _ctx();
+      if(audio && audio.state === 'suspended'){
+        try { Promise.resolve(audio.resume()).catch(function(){}); } catch(_){}
+      }
+    }
+    var presentation = await prepareHuntArt(hunt);
+    if(pendingHunt !== hunt)return;
+    var sprites = buildHeroSprites(CLASSES[hunt.cls].sprite);
+    await warmHuntCanvas(hunt, presentation, sprites);
+    if(pendingHunt !== hunt)return;
+
+    newGame(hunt.cls, presentation);
+    hunt.staged = G;
+    G.state = 'preparing';
+    heroSheets = sprites;
+    ['pBars','skillBar','skillSelBtn','qTimer'].forEach(function(id){ $(id).style.display = ''; });
+    for(var i = 0; i < 14; i++)spawnEnemy(pick(wavePool()), false);
+    renderSkillBar();
+    updateHud();
+    updateBars();
+    draw();
+    setHuntProgress(100, 'Arena ready');
+    await huntDelay(32);
+
+    if(pendingHunt !== hunt)return;
+    if(!activeGameSurface() || hunt.owner !== JSON.stringify(scienceFeed.context())){ cancelPendingHunt(); return; }
+    if(!_canPlayGame()){ cancelPendingHunt(); _showPlayLimit(); return; }
+    pendingHunt = null;
+    G.state = 'play';
+    qState.active = false;
+    hide('menuOverlay'); hide('overOverlay'); hide('loadingOverlay');
+    lastT = 0;
+    _noteGamePlayStart(hunt.creditOwner);
+    updateTouchAimHint();
+    toast('⚔️ Wave 1 — survive! You have 1 skill point (T = tree, K = skills)', 'energy');
+  } catch(error) {
+    if(pendingHunt !== hunt)return;
+    cancelPendingHunt();
+    console.error('Science Legends could not prepare the hunt', error);
+    toast('Could not prepare the hunt. Try again.', 'bad');
+  }
 }
 function loadBest(){ try { var v = JSON.parse(localStorage.getItem('legends_best')); return v && typeof v.wave === 'number' ? v : { wave: 0, kills: 0 }; } catch(e){ return { wave: 0, kills: 0 }; } }
 function saveBest(v){ try { localStorage.setItem('legends_best', JSON.stringify(v)); } catch(e){} }
@@ -5213,6 +5391,7 @@ function init(){
   renderClassCards();
   wireFlag();
   $('startBtn').addEventListener('click', startRun);
+  $('cancelLoadingBtn').addEventListener('click', cancelPendingHunt);
   $('againBtn').addEventListener('click', function(){ hide('overOverlay'); show('menuOverlay'); renderClassCards(); });
   $('resumeBtn').addEventListener('click', function(){ hide('pauseOverlay'); });
   $('quitBtn').addEventListener('click', function(){ hide('pauseOverlay'); gameOver('abandon'); });
