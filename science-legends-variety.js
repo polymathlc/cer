@@ -44,6 +44,7 @@
     var s=e&&e.variety;
     if(!s||s.phase!=='windup')return false;
     s.phase='recovery';s.timer=.62;s.cooldown=Math.max(s.cooldown,.9);s.target=null;
+    if(s.bossAttack)s.bossAttack=null;
     e.modelAttackUntil=0;
     note(e,'interrupt',reason==='frozen'?'FROZEN — INTERRUPTED':'INTERRUPTED','#b7e8f0',ctx&&ctx.time||0,ctx);
     return true;
@@ -137,7 +138,9 @@
     if(e.kind==='warden')advanceWarden(e,dt,target,ctx,dx,dy,d);
     else if(e.kind==='hexer')advanceHexer(e,dt,target,ctx,dx,dy,d);
     else if(e.kind==='sentinel')advanceSentinel(e,dt,target,ctx,dx,dy,d);
-    else if(e.kind==='boss')advanceBoss(e,dt,target,ctx,dx,dy,d);
+    else if(e.kind==='boss'){
+      if(!root.LegendsBosses?.advance(e,dt,target,ctx))advanceBoss(e,dt,target,ctx,dx,dy,d);
+    }
     else{setFacing(e,dx,dy);move(e,dx,dy,d,dt,ctx.slowMult||1,1);}
     return true;
   }
@@ -162,7 +165,7 @@
   function onDeath(e,ctx){
     if(!e||e.varietyDeathHandled||!e.dead&&e.hp>0)return {children:0,volatile:false,disarmed:false};
     e.varietyDeathHandled=true;ctx=ctx||{};var disarmed=e.frozen>0||e.stun>0,children=0,volatile=false;
-    if(e.variety){e.variety.phase='dead';e.variety.timer=0;e.variety.target=null;}
+    if(e.variety){e.variety.phase='dead';e.variety.timer=0;e.variety.target=null;if(e.variety.bossAttack)e.variety.bossAttack=null;}
     if(ctx.paused||ctx.ended)return {children:0,volatile:false,disarmed:disarmed};
     if(e.kind==='broodling'&&!disarmed&&ctx.spawnChild){
       var fx=e.fx||1,fy=e.fy||0;
@@ -201,11 +204,15 @@
     for(i=0;i<options.length;i++)if(roll*total<options[i].end)return options[i].kind;
     return null;
   }
-  function intelligence(e){return e&&e.kind==='boss'?(e.variety&&e.variety.phaseTwo?guides.bossEnraged:guides.boss):own(guides,e&&e.kind)?guides[e.kind]:null;}
+  function intelligence(e){
+    if(e&&e.kind==='boss')return root.LegendsBosses?.intelligence(e)||(e.variety?.phaseTwo?guides.bossEnraged:guides.boss);
+    return own(guides,e&&e.kind)?guides[e.kind]:null;
+  }
   function introduction(kind){return own(guides,kind)?guides[kind]:null;}
   function model(kind){return own(models,kind)?models[kind]:null;}
   function drawTelegraphs(c,e,time,caption){
     var s=e&&e.variety;if(!s||!live(e))return;
+    if(e.kind==='boss'&&root.LegendsBosses?.drawTelegraphs(c,e,time,caption))return;
     c.save();c.lineWidth=2;c.strokeStyle=own(definitions,e.kind)?definitions[e.kind].color:'#dfa5c8';c.fillStyle=c.strokeStyle;
     if(guarding(e,time)){
       c.globalAlpha=.65;var face=Math.atan2(e.fy||0,e.fx||1);c.beginPath();c.arc(e.x,e.y,e.r+9,face-.9,face+.9);c.stroke();

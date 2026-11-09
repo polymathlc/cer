@@ -6,11 +6,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pw = process.env.PLAYWRIGHT_MODULE || 'playwright';
 const { chromium } = await import(path.isAbsolute(pw) ? pathToFileURL(pw).href : pw);
-const fixture = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="overflow:auto"><main id="app"><button id="launch">Grand Line</button></main><aside id="already-inert" inert>Other tool</aside><script type="module">
+const fixture = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="overflow:auto"><main id="app"><button id="launch">Grand Line</button></main><aside id="already-inert" inert>Other tool</aside><script src="/game-question-flag.js"></script><script type="module">
 import {installGrandLinePortal} from '/grand-line-portal.js';
 import {createGrandLineEconomy,createGrandLineRpgCommit} from '/grand-line-economy.js';
 window.user={uid:'private-account',role:'student'};window.level='P6';window.previewLevel='P6';window.child='learner-a';window.notices=[];window.shown=[];window.records=[];window.writes=[];window.riftOpened=0;window.startedLevels=[];window.questionLevels=[];window.snapshotLevels=[];
-window.rpg={gold:2000};window.remote=false;window.delayGrade=false;window.failSave=false;window.delaySave=false;
+window.rpg={gold:2000};window.remote=false;window.delayGrade=false;window.failSave=false;window.delaySave=false;window.flags=[];window.delayFlag=false;
 window.makeRows=()=>[1,2,3,4,5].map(i=>({id:'bank-'+i,topic:'Authored question '+i,html:'<p>Compare the <b>labelled table</b>.</p><table><tr><th>Material</th><th>Temperature</th></tr><tr><td>Metal</td><td>15 °C</td></tr></table><p><span class="math-frac"><span class="num">3</span><span class="den">4</span></span> of the sample.</p><script>window.evil=true<\\/script>',options:['Wood','Metal','Air'],answer:1}));
 window.rows=makeRows();
 const economy=createGrandLineEconomy({getUser:()=>user,getState:()=>rpg,getPacks:()=>[{id:'spark',name:'Bronze Pack',cost:120,odds:{1:40,2:30,3:17,4:8,5:3.5,6:1.2,7:.3}},{id:'nova',name:'Silver Pack',cost:320,bonusOdds:{3:62,4:25,5:9,6:3,7:1}},{id:'galaxy',name:'Gold Pack',cost:750,bonusOdds:{4:68,5:22,6:8,7:2}}],random:()=>0,
@@ -18,6 +18,7 @@ const economy=createGrandLineEconomy({getUser:()=>user,getState:()=>rpg,getPacks
 window.portal=installGrandLinePortal({subject:new URLSearchParams(location.search).get('subject'),getUser:()=>user,getLevel:()=>level,getPreviewLevel:()=>previewLevel,getProfileKey:()=>child,isLevel:v=>/^P[3-6]$/.test(v||''),notify:m=>notices.push(m),onStart:ctx=>startedLevels.push(ctx.level),
  getRiftFrame:()=>document.querySelector('#rift'),beforeOpen:()=>document.querySelector('#rift')?.remove(),openRift:()=>riftOpened++,
  ...economy,getSnapshot:ctx=>{snapshotLevels.push(ctx.level);return economy.getSnapshot(ctx);},getQuestions:ctx=>{questionLevels.push(ctx.level);return rows.map(q=>remote?{...q,grading:'remote',answer:null}:q);},markShown:q=>shown.push(q.id),recordAnswer:r=>{records.push(r);rpg.gold+=r.correct?10:0;},
+ submitFlag:async(payload,current)=>{if(delayFlag)await new Promise(resolve=>window.finishFlag=resolve);if(!current())return {ok:false};flags.push(payload);return {ok:true};},
  gradeQuestion:async({choice})=>{if(delayGrade)await new Promise(resolve=>window.finishGrade=resolve);return {correct:choice===1,answer:1};}});
 document.querySelector('#launch').onclick=()=>portal.open();window.ready=true;
 </script></body></html>`;
@@ -32,7 +33,7 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost'); res.setHeader('Cache-Control', 'no-store');
   if (url.pathname === '/') { res.setHeader('Content-Type', 'text/html; charset=utf-8'); return res.end(fixture); }
   if (url.pathname === '/grand-line.html' || url.pathname === '/rift.html') { res.setHeader('Content-Type', 'text/html; charset=utf-8'); return res.end(childHtml); }
-  if (/^\/(grand-line-(portal|learning-parent|economy|core|data)|pirate-rift-portal|game-question-pressure)\.js$/.test(url.pathname)) {
+  if (/^\/(grand-line-(portal|learning-parent|economy|core|data)|pirate-rift-portal|game-question-(pressure|flag))\.js$/.test(url.pathname)) {
     res.setHeader('Content-Type', 'text/javascript'); return res.end(fs.readFileSync(path.join(root, path.basename(url.pathname))));
   }
   res.writeHead(404).end();
@@ -56,7 +57,7 @@ try {
     const initial = await open(), url = new URL(await page.locator('iframe').getAttribute('src'));
     assert.equal(initial.questionCount, 3); assert.equal(initial.available, true); assert.match(initial.profileKey, /^p[0-9a-f]{16}$/);
     assert.equal(url.searchParams.get('profile'), initial.profileKey); assert.equal(url.searchParams.get('subject'), subject.toLowerCase()); assert.ok(!url.href.includes('private-account'));
-    assert.equal(url.searchParams.get('v'), '3.5.3');
+    assert.equal(url.searchParams.get('v'), '3.5.4');
     assert.equal(await page.locator('.grand-line-portal').getAttribute('aria-label'), 'Crew Defense');
     assert.match(await page.locator('.grand-line-stage iframe').getAttribute('title'), /Crew Defense/);
     assert.match(await page.locator('.grand-line-status').textContent(), /three questions after every wave/);
@@ -86,6 +87,16 @@ try {
     await page.getByText(subject + ' · Wave', { exact: true }).waitFor();
     assert.equal(await page.locator('.grand-line-learning-stem table').count(), 1); assert.equal(await page.locator('.grand-line-learning-stem .math-frac').count(), 1);
     assert.equal(await page.evaluate(() => window.evil), undefined); assert.equal(await page.locator('.grand-line-learning-stem script').count(), 0);
+    await page.getByRole('button',{name:/Flag this question/}).click();
+    await page.getByLabel('Describe the issue').fill('  The table units are unclear.  ');
+    await page.getByRole('button',{name:'Submit flag'}).click();
+    await page.getByText(/Flag submitted/).waitFor();
+    const flagState = await page.evaluate(() => ({flags, attempts:records.length, gold:rpg.gold}));
+    assert.equal(flagState.flags.length,1);
+    assert.equal(flagState.flags[0].questionId,'bank-1');
+    assert.equal(flagState.flags[0].comment,'The table units are unclear.');
+    assert.match(flagState.flags[0].questionTitle,/Compare the labelled table/);
+    assert.equal(flagState.attempts,0); assert.equal(flagState.gold,2000);
     await page.screenshot({ path: path.join(screens, subject.toLowerCase() + '-learning-mobile.png') });
     for (let i = 1; i <= 3; i++) {
       await page.getByText('Question ' + i + ' of 3', { exact: true }).waitFor(); await page.locator('.grand-line-learning-option').nth(1).click();
@@ -106,10 +117,15 @@ try {
     await page.evaluate(() => { rows = makeRows().slice(0, 2); }); await game.evaluate(() => { round = 2; }); await game.locator('#round').click();
     assert.equal((await message('GLTCG_ROUND_BLOCKED')).round, 2); assert.equal(await page.locator('.grand-line-learning-overlay').count(), 0);
     assert.equal(await page.evaluate(() => shown.length), 3);
-    await page.evaluate(() => { rows = makeRows(); remote = true; delayGrade = true; }); await game.locator('#round').click();
+    await page.evaluate(() => { rows = makeRows(); remote = true; delayGrade = true; delayFlag = true; }); await game.locator('#round').click();
+    await page.getByRole('button',{name:/Flag this question/}).click();
+    await page.getByLabel('Describe the issue').fill('Report waiting during profile change');
+    await page.getByRole('button',{name:'Submit flag'}).click();
+    await page.waitForFunction(()=>typeof finishFlag==='function');
     await page.locator('.grand-line-learning-option').nth(1).click(); await page.waitForFunction(() => typeof finishGrade === 'function');
-    await page.evaluate(() => { child = 'learner-b'; portal.sync(); finishGrade(); });
+    await page.evaluate(() => { child = 'learner-b'; portal.sync(); finishGrade(); finishFlag(); delayFlag = false; });
     assert.equal(await page.locator('.grand-line-learning-overlay').count(), 0); assert.equal(await page.locator('iframe').count(), 0); assert.equal(await page.evaluate(() => records.length), 3);
+    assert.equal(await page.evaluate(()=>flags.length),1,'A delayed report cannot write for a different learner');
     assert.equal(await page.locator('#app').evaluate(el => el.inert), false); assert.equal(await page.locator('#already-inert').evaluate(el => el.inert), true);
     assert.equal(await page.evaluate(() => document.body.style.overflow), 'auto'); assert.equal(await page.evaluate(() => document.activeElement.id), 'launch');
     const sibling = await open(); assert.notEqual(sibling.profileKey, initial.profileKey); assert.equal(sibling.collection.stats.packsOpened, 0); assert.equal(sibling.wallet.balance, 1710);

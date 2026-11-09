@@ -139,7 +139,7 @@ for(const [name,source] of [['Defenders',defenders],['Raiders',raiders]])test(na
 for(const [name,source,prefix] of [['Defenders',defenders,'defenders'],['Raiders',raiders,'raider']])test(name+' outbound score and play packets keep the run learner identity',()=>{
   const packets=[];
   const f=fixture(source,['reportScore','_noteGamePlayStart'],{
-    window:{parent:{postMessage:packet=>packets.push(packet)}},flagEmbedded:()=>true,embedded:()=>true,
+    window:{parent:{postMessage:packet=>packets.push(packet)}},embedded:()=>true,
     _gameCreditsReady:()=>true,_gPlaysLeft:2,
     [prefix+'RunKey']:'captured-child',[prefix+'RunLevel']:'P4',
     scienceFeed:{context:()=>({studentKey:'new-child',studentLevel:'P6'})},

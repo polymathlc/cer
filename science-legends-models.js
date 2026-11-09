@@ -31,7 +31,17 @@
   function varietyModel(kind){return root.LegendsVariety&&root.LegendsVariety.model(kind);}
   function enemyColumn(kind){var extra=varietyModel(kind);return extra?extra.column:kind==='boss'?3:ENEMIES.indexOf(kind);}
   var enemyPoses=Object.create(null);
-  function enemyPose(actor,profile){var extra=varietyModel(actor.kind),elite=extra&&getSheet('enemyElite',profile),key=(elite?'elite:':'base:')+actor.kind;return enemyPoses[key]||(enemyPoses[key]=Object.freeze(elite?{kind:'enemyElite',column:extra.column}:{kind:'enemy',column:extra?ENEMIES.indexOf(extra.fallback):enemyColumn(actor.kind)}));}
+  function enemyPose(actor,profile){
+    var boss = actor.kind === 'boss' && root.LegendsBosses && getSheet('boss',profile) && root.LegendsBosses.get(actor.bossId || 'tyrant');
+    if(boss){
+      var bossKey = 'boss:' + boss.id;
+      return enemyPoses[bossKey] || (enemyPoses[bossKey] = Object.freeze({kind:'boss',column:boss.column}));
+    }
+    var extra = varietyModel(actor.kind), elite = extra && getSheet('enemyElite',profile);
+    var key = (elite ? 'elite:' : 'base:') + actor.kind;
+    return enemyPoses[key] || (enemyPoses[key] = Object.freeze(elite ? {kind:'enemyElite',column:extra.column} :
+      {kind:'enemy',column:extra ? ENEMIES.indexOf(extra.fallback) : enemyColumn(actor.kind)}));
+  }
   function sortActors(entries,inPlace){return (inPlace?entries:entries.slice()).sort(function(a,b){return (a.actor.y+(a.actor.r||0))-(b.actor.y+(b.actor.r||0))||a.order-b.order;});}
   function bodyBounds(actor,size,anchor){anchor=anchor||{x:.5,y:.96};return {x:actor.x-(actor.fx<0?1-anchor.x:anchor.x)*size,y:actor.y+(actor.r||0)-anchor.y*size,w:size,h:size};}
   function frameBounds(actor,size,frame,mirror){var w=frame.w/frame.nominalWidth*size,h=frame.h/frame.nominalHeight*size;mirror=mirror==null?actor.fx<0:mirror;return {x:actor.x-(mirror?1-frame.anchor.x:frame.anchor.x)*w,y:actor.y+(actor.r||0)-frame.anchor.y*h,w:w,h:h};}
@@ -44,6 +54,9 @@
     if(actor.stun>0)list.push({kind:'stun',label:'STUN',glyph:'✦',color:'#ffe197'});
     if(actor.slowT>0)list.push({kind:'slow',label:'SLOW',glyph:'◷',color:'#b4d9f0'});
     if(actor.bleedT>0)list.push(actor.dotKind==='poison'?{kind:'poison',label:'VENOM',glyph:'◆',color:'#bce87f'}:actor.dotKind==='burn'?{kind:'burn',label:'BURN',glyph:'♨',color:'#ffbd84'}:{kind:'bleed',label:'BLEED',glyph:'♦',color:'#ffa49c'});
+    if(actor.chillT>0 && !(actor.frozen>0))list.push({kind:'chill',label:'CHILLED',glyph:'❄',color:'#a4eaff'});
+    if(actor.afflictions?.bleed?.length)list.push({kind:'bleed',label:'BLEED ×'+actor.afflictions.bleed.length,glyph:'♦',color:'#ff8190'});
+    if(actor.afflictions?.fire?.length)list.push({kind:'burn',label:'BURN ×'+actor.afflictions.fire.length,glyph:'♨',color:'#ff9554'});
     return list;
   }
   function enemyFrame(actor,time,reduced){
@@ -56,6 +69,10 @@
     return actor.moving?(reduced?1:1+(Math.floor((time+(actor.modelPhase||0))*7)%2)):0;
   }
   var sheets={hero:{columns:5,file:'heroes',image:null,frames:[],prepared:false},enemy:{columns:6,file:'enemies-clean',image:null,frames:[],prepared:false},companion:{columns:4,file:'companions',image:null,frames:[],prepared:false},heroRear:{columns:5,file:'heroes-rear',image:null,frames:[],prepared:false},enemyRear:{columns:6,file:'enemies-rear',image:null,frames:[],prepared:false},companionRear:{columns:4,file:'companions-rear',image:null,frames:[],prepared:false},enemyElite:{columns:4,file:'enemies-elite',optional:true,image:null,frames:[],prepared:false},enemyEliteRear:{columns:4,file:'enemies-elite-rear',optional:true,image:null,frames:[],prepared:false}};
+  ['boss','bossRear','mythicHero','mythicHeroRear'].forEach(function(kind,index){
+    var files = ['bosses','bosses-rear','mythic-heroes','mythic-heroes-rear'];
+    sheets[kind] = {columns:index<2?4:5,file:files[index],optional:true,release:'v5',image:null,frames:[],prepared:false};
+  });
   function getSheet(kind,profile){var sheet=profile?profile[kind]:sheets[kind];return sheet&&sheet.prepared?sheet:null;}
   function orientation(kind,actor,profile){var front=getSheet(kind,profile),back=front&&rearFacing(actor)&&getSheet(kind+'Rear',profile);return {sheet:back||front,rear:!!back,mirror:back?actor.fx>0:actor.fx<0};}
   function ready(kind){return !!getSheet(kind||'hero');}
@@ -163,6 +180,9 @@
     ctx.restore();return true;
   }
   function drawHero(ctx,cls,actor,time,reduced,size,profile){return drawModel(ctx,'hero',HEROES.indexOf(cls),stateFrame(actor,time,reduced),actor,size,profile);}
+  function drawMythicHero(ctx,cls,actor,time,reduced,size,profile){
+    return drawModel(ctx,'mythicHero',HEROES.indexOf(cls),stateFrame(actor,time,reduced),actor,size,profile);
+  }
   function drawEnemy(ctx,actor,time,reduced,size,profile){var model=enemyPose(actor,profile);return drawModel(ctx,model.kind,model.column,enemyFrame(actor,time,reduced),actor,size,profile);}
   function drawCompanion(ctx,actor,time,reduced,size,cls,profile){var model=companionModel(actor.kind,cls);if(!model)return false;ctx.save();if(actor.kind==='decoy')ctx.globalAlpha=.55;var drawn=drawModel(ctx,model.sheet,model.column,stateFrame(actor,time,reduced),actor,size,profile);ctx.restore();return drawn;}
   var api={ready:ready,allReady:allReady,snapshot:snapshot,frameInfo:frameInfo,advanceFacing:advanceFacing,rearFacing:rearFacing,drawHero:drawHero,drawEnemy:drawEnemy,drawCompanion:drawCompanion,companionModel:companionModel,companionRole:companionRole,stateFrame:stateFrame,enemyFrame:enemyFrame,enemyColumn:enemyColumn,enemyPose:enemyPose,sourceRect:sourceRect,footAnchor:footAnchor,sortActors:sortActors,statuses:statuses,bodyBounds:bodyBounds,frameBounds:frameBounds,enemyBounds:enemyBounds,companionBounds:companionBounds,pick:pick};
@@ -174,7 +194,7 @@
     sheet.image = new root.Image();
     sheet.image.onload = function () { prepare(sheet); };
     sheet.image.onerror = function () { sheet.failed = true; };
-    sheet.image.src = 'assets/science-legends/' + (sheet.optional ? 'v4/' : 'v2/') + sheet.file + '.webp';
+    sheet.image.src = 'assets/science-legends/' + (sheet.release || (sheet.optional ? 'v4' : 'v2')) + '/' + sheet.file + '.webp';
   }
   var optionalScheduled=false;
   function prepareAll() {
@@ -185,9 +205,11 @@
   function warmOptional() {
     if (optionalScheduled) return;
     optionalScheduled = true;
-    if (typeof root.requestIdleCallback === 'function') root.requestIdleCallback(prepareAll, { timeout: 3000 });
-    else root.setTimeout(prepareAll, 100);
+    function warmElites(){ loadSheet('enemyElite'); loadSheet('enemyEliteRear'); }
+    if (typeof root.requestIdleCallback === 'function') root.requestIdleCallback(warmElites, { timeout: 3000 });
+    else root.setTimeout(warmElites, 100);
   }
+  api.drawMythicHero = drawMythicHero;
   api.assetStates = assetStates;
   api.prepareAll = prepareAll;
   api.warmOptional=warmOptional;

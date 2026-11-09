@@ -107,7 +107,7 @@ try {
       };
     });
     await beginLoading(game);
-    await game.waitForFunction(() => LegendsModels.assetStates().filter(state => state === 'ready').length === 7
+    await game.waitForFunction(() => LegendsModels.assetStates().filter(state => state === 'ready').length === LegendsModels.assetStates().length - 1
       && $('loadingProgress').value > 0);
     const before = await game.locator('#loadingProgress').evaluate(progress => ({
       native: progress instanceof HTMLProgressElement, value: progress.value, max: progress.max

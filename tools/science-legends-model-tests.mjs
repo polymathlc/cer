@@ -9,7 +9,7 @@ test('upright hero contract preserves size and ground anchor in every class/faci
   const draws=[],w={G:null,heroSheets:[['idle','stride']],customImage:()=>null,window:{},drawSpriteOr:(...args)=>draws.push(args)};
   vm.createContext(w);vm.runInContext(fn('drawActorModel')+'\n'+fn('drawHeroModel'),w);
   for(const cls of ['barb','sorc','beast','pala','ama'])for(const [fx,fy]of [[1,0],[-1,0],[0,1],[0,-1]])for(const spin of [null,{radius:100}]){
-    w.G={cls,spin,player:{x:200,y:250,r:16,fx,fy,moving:true,animT:1}};w.drawHeroModel();
+    w.G={cls,spin,stats:{},player:{x:200,y:250,r:16,fx,fy,moving:true,animT:1}};w.drawHeroModel();
     const [id,sheet,x,y,size,flip]=draws.at(-1);assert.equal(id,'hero_'+cls);assert.equal(sheet,'idle');assert.equal(x,200);assert.equal(y+size/2,266);assert.equal(size,72);assert.equal(flip,fx<0);
   }
 });

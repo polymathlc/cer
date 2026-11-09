@@ -3,15 +3,17 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import icons from '../science-legends-icons.js';
+import builds from '../science-legends-builds.js';
+import actions from '../science-legends-actions.js';
 
 const html=fs.readFileSync(new URL('../science-legends.html',import.meta.url),'utf8');
 const source=fs.readFileSync(new URL('../science-legends-icons.js',import.meta.url),'utf8');
 const chunk=(start,end)=>html.slice(html.indexOf(start),html.indexOf(end));
 const {CLASSES,SKILLS,TREES}=vm.runInNewContext(
   chunk('var CLASSES = {','var FOLLOWERS = {')+
-  chunk('var CAPSTONES = {','var EQUIP_SLOTS = [')+
+  chunk('var CAPSTONES = {','var EQUIP_SLOTS =')+
   chunk('var TIER_REQ = [','/* ---- Tree state helpers ---- */')+
-  ';({CLASSES,SKILLS,TREES})'
+  ';({CLASSES,SKILLS,TREES})', {LegendsBuilds:builds,LegendsActions:actions}
 );
 
 test('all 60 shipped skills select unique class-and-cell portraits in the actual class order',()=>{

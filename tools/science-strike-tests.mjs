@@ -70,6 +70,7 @@ function fixture() {
     spendGameCredit: () => { counts.credit++; return true; },
     isAdmin: () => false, levelLabel: n => 'P' + n,
     nextQuestion: async () => q, QUESTION_INTERVAL: 15000, fpsWireQuestionImages() {}, toast() {},
+    fpsQuestionFlag: { setQuestion() {}, reset() {} },
   });
   vm.runInContext(cut('// The simulation may advance', '/* ════════════════ COMBAT'), c);
   const emit = (scope, name, extra = {}) => {

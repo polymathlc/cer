@@ -6,11 +6,13 @@ import http from 'node:http';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const pw=process.env.PLAYWRIGHT_MODULE || 'playwright';
 const {chromium}=await import(path.isAbsolute(pw)?pathToFileURL(pw).href:pw);
-const fixture=`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><iframe id="game" src="/frame.html"></iframe><script type="module">
+const fixture=`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><iframe id="game" src="/frame.html"></iframe><script src="/game-question-flag.js"></script><script type="module">
 import {installHadesLearningParent,sanitizeHadesQuestionHtml} from '/hades-learning-parent.js';
 window.identity='admin:P6';window.records=[];window.marked=[];window.failures=[];window.unavailable=[];window.badImage=false;window.slowImage=false;window.unsupportedVisual='';
 window.clean=sanitizeHadesQuestionHtml;
+window.flags=[];window.holdFlag=false;
 window.bridge=installHadesLearningParent({subject:'Science',getFrame:()=>document.getElementById('game'),getIdentity:()=>window.identity,isAllowed:()=>true,isActive:()=>true,
+submitFlag:async(payload,current)=>{if(holdFlag)await new Promise(resolve=>window.finishFlag=resolve);if(!current())return {ok:false};flags.push(payload);return {ok:true};},
 getQuestions:async()=>Array.from({length:5},(_,i)=>({id:'bank-'+i,topic:'Plant Systems',html:window.unsupportedVisual+'<p>Use label A and compare the dull green fruit with the bright red fruit.</p><table><tr><th>Fruit</th><th>Colour</th></tr><tr><td>A</td><td>Dull green</td></tr></table><img alt="Fruit diagram" src="'+(window.slowImage?'/slow.svg':window.badImage?'/missing.png':'/diagram.svg')+'"><p>Calculate <span class="math-frac"><span class="num">1</span><span class="den">2</span></span> of the examples.</p>',options:['It is bright.','It blends with leaves, so smell helps animals find it.','It has no seeds.','It has roots.'],answer:1,explainHtml:'<p>The diagram labels show that colour provides little contrast.</p>'})),
 markShown:q=>window.marked.push(q.id),recordAnswer:r=>window.records.push(r),onImageFailure:(q,url)=>window.failures.push({id:q.id,url}),onQuestionUnavailable:(q,reason)=>window.unavailable.push({id:q.id,reason})});window.ready=true;
 </script></body></html>`;
@@ -19,6 +21,7 @@ const server=http.createServer((req,res)=>{
   if(req.url==='/'){res.setHeader('content-type','text/html');res.end(fixture);}
   else if(new URL(req.url,'http://localhost').pathname==='/game-question-pressure.js'){res.setHeader('content-type','text/javascript');res.end(fs.readFileSync(path.join(root,'game-question-pressure.js')));}
   else if(req.url==='/hades-learning-parent.js'){res.setHeader('content-type','text/javascript');res.end(fs.readFileSync(path.join(root,'hades-learning-parent.js')));}
+  else if(req.url==='/game-question-flag.js'){res.setHeader('content-type','text/javascript');res.end(fs.readFileSync(path.join(root,'game-question-flag.js')));}
   else if(req.url==='/frame.html'){res.setHeader('content-type','text/html');res.end('<!doctype html><script>window.messages=[];addEventListener("message",e=>messages.push(e.data));window.send=d=>parent.postMessage(d,location.origin);</script>');}
   else if(req.url==='/diagram.svg'){res.setHeader('content-type','image/svg+xml');res.end('<svg xmlns="http://www.w3.org/2000/svg" width="360" height="110" viewBox="0 0 360 110"><path d="M25 75Q70 12 145 77" fill="none" stroke="#29583a" stroke-width="8"/><circle cx="95" cy="57" r="28" fill="#73846c"/><text x="155" y="65" font-size="25">A · dull green fruit</text></svg>');}
   else if(req.url==='/slow.svg'){pendingImages.push(res);}
@@ -43,6 +46,17 @@ try{
     const dialog=document.querySelector('.hades-learning-dialog').getBoundingClientRect();const num=document.querySelector('.num').getBoundingClientRect(),den=document.querySelector('.den').getBoundingClientRect();
     return{left:dialog.left,right:dialog.right,width:innerWidth,numY:num.y,denY:den.y,mathDisplay:getComputedStyle(document.querySelector('.math-frac')).display};});
   assert.ok(geometry.left>=0 && geometry.right<=geometry.width);assert.ok(geometry.denY>geometry.numY);assert.equal(geometry.mathDisplay,'inline-flex');
+  await page.getByRole('button',{name:/Flag this question/}).click();
+  await page.getByLabel('Describe the issue').fill('  The diagram label could be clearer.  ');
+  await page.getByRole('button',{name:'Submit flag'}).click();
+  await page.getByText(/Flag submitted/).waitFor();
+  const flags=await page.evaluate(()=>window.flags);
+  assert.equal(flags.length,1);
+  assert.equal(flags[0].questionId,'bank-0');
+  assert.equal(flags[0].comment,'The diagram label could be clearer.');
+  assert.match(flags[0].questionTitle,/Use label A/);
+  assert.equal(await page.evaluate(()=>records.length),0,'A report does not grade or reward the question');
+  assert.equal(await frame.evaluate(()=>messages.some(message=>message.type==='HADES_ROUND_RESULT')),false);
   const output=process.env.HADES_SCREENSHOTS;if(output){fs.mkdirSync(output,{recursive:true});await page.screenshot({path:path.join(output,'science-sanctuary-mobile.png'),fullPage:true});}
   for(let i=0;i<5;i++){
     await page.locator('.hades-learning-option').nth(1).click();
@@ -87,10 +101,16 @@ try{
   await page.getByRole('button',{name:'Return to game',exact:true}).click();await frame.waitForFunction(()=>messages.at(-1)?.type==='HADES_ROUND_BLOCKED');assert.equal(await page.evaluate(()=>records.length),5);
   await page.evaluate(()=>{window.badImage=false;window.slowImage=true;});sessionId=await hello('browser-3');
   await send({type:'HADES_ROUND_REQUEST',requestId:'invalidate',sessionId,round:1});await page.getByRole('dialog').waitFor();
-  await page.evaluate(()=>{window.retiredImage=document.querySelector('.hades-learning-stem img');window.identity='other:P3';bridge.invalidate('Changed account');});
+  await page.evaluate(()=>{window.holdFlag=true;});
+  await page.getByRole('button',{name:/Flag this question/}).click();
+  await page.getByLabel('Describe the issue').fill('Report waiting during profile change');
+  await page.getByRole('button',{name:'Submit flag'}).click();
+  await page.waitForFunction(()=>typeof finishFlag==='function');
+  await page.evaluate(()=>{window.retiredImage=document.querySelector('.hades-learning-stem img');window.identity='other:P3';bridge.invalidate('Changed account');finishFlag();window.holdFlag=false;});
   assert.equal(await page.getByRole('dialog').count(),0);await frame.waitForFunction(()=>messages.at(-1)?.type==='HADES_INVALIDATE');
   await page.evaluate(()=>retiredImage.dispatchEvent(new Event('error')));
   assert.equal(await page.evaluate(()=>failures.length),1,'late detached-image failure cannot flag a question for the next account');
+  assert.equal(await page.evaluate(()=>flags.length),1,'A delayed report cannot write for a different learner');
   const unsupported=['<svg><circle cx="20" cy="20" r="10"/></svg>','<math><mi>x</mi></math>','<iframe title="Essential diagram" src="/diagram.svg"></iframe>'];
   for(let i=0;i<unsupported.length;i++){
     await page.evaluate(visual=>{window.slowImage=false;window.unsupportedVisual=visual;},unsupported[i]);sessionId=await hello('unsupported-'+i);

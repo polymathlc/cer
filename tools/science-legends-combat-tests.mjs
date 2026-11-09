@@ -24,7 +24,7 @@ function projectileWorld(){
     dealDamage:(e,n,opts)=>{e.hp-=n;damage.push(e);damageOpts.push(opts);if(e.hp<=0)e.dead=true;},
     explode:(x,y,r,n)=>explosions.push({x,y,r,n}),hurtPlayer:n=>hurt.push(n),healPlayer(){},
     hasEnh:()=>false,applyBleed(){},enemiesInRadius:()=>[],rand:(a,b)=>(a+b)/2,damage,damageOpts,explosions,hurt};
-  vm.createContext(w);vm.runInContext(fn('enemyCandidates')+'\n'+fn('skillFx')+'\n'+fn('projectileTrail')+'\n'+fn('updateProjectiles'),w);return w;
+  vm.createContext(w);vm.runInContext(['enemyCandidates','ultN','skillBuild','skillTint','skillFx','projectileTrail','updateProjectiles'].map(fn).join('\n'),w);return w;
 }
 const enemy=(x,hp=100)=>({x,y:100,r:4,hp,dead:false});
 const projectile=(extra={})=>({kind:'basic',x:100,y:100,r:2,vx:10000,vy:0,life:1,dmg:10,pierce:0,...extra});

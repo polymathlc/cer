@@ -104,10 +104,18 @@
   }
   function emit(state,row,x,y,radius,angle,duration){return retain(state,{row:row,x:x,y:y,r:radius,ang:angle||0,start:state.time,life:duration||.32,priority:0});}
   function emitElement(state,family,x,y,radius,angle,duration){var row=ELEMENTS.indexOf(family);if(row<0)return null;var action=emit(state,row,x,y,radius,angle,duration);action.sheet='elements';action.family=family;return action;}
+  var paintedRecipes = Object.create(null);
+  function paintRecipe(action){
+    var original = recipes[action.sid];
+    if(!action.tint || !original)return original;
+    var key = action.sid + ':' + action.tint;
+    return paintedRecipes[key] || (paintedRecipes[key] = Object.assign({},original,{color:action.tint,accent:'#f1fbff'}));
+  }
   function emitSkill(state,sid,x,y,radius,angle,duration,options){
     if(!recipes[sid])return null;
     var action={row:0,x:x,y:y,r:radius,ang:angle||0,start:state.time,life:duration||.52,sid:sid,recipe:sid};
     if(options){if(options.points)action.points=options.points.slice(0,16).map(function(p){return {x:p.x,y:p.y};});if(options.phase)action.phase=options.phase;if(Number.isFinite(options.arc))action.arc=options.arc;if(Number.isFinite(options.fromX)&&Number.isFinite(options.fromY)){action.fromX=options.fromX;action.fromY=options.fromY;}}
+    if(options && options.tint)action.tint = options.tint;
     action.priority=action.phase==='impact'?1:action.phase==='cast'?2:action.phase==='burst'||recipes[sid].mode==='target'||recipes[sid].mode==='nova'?3:2;
     return retain(state,action);
   }
@@ -160,11 +168,11 @@
     var size=gesture?42:arrival?32:Math.max(flight?30:48,Math.min(reduced?260:380,action.r*(flight?3:2.05))),height=size*cell.h/cell.w;
     ctx.save();ctx.translate(action.x,action.y);ctx.rotate(atlasRotation(action));
     if(gesture||arrival){ctx.beginPath();ctx.arc(0,0,gesture?21:16,0,TAU);ctx.clip();}
-    ctx.globalAlpha=s.alpha*(gesture?.5:arrival?.35:action.channel?.34:flight?.6:.63);ctx.imageSmoothingEnabled=true;
+    ctx.globalAlpha=s.alpha*(gesture?.5:arrival?.35:action.channel?.34:flight?.6:.63)*(action.tint?.55:1);ctx.imageSmoothingEnabled=true;
     ctx.drawImage(cell.image,cell.x,cell.y,cell.w,cell.h,-size/2,-height/2,size,height);ctx.restore();return true;
   }
   function drawCastGesture(ctx,action,s,reduced){
-    var rec=recipes[action.sid],r=18,phase=reduced?0:s.progress*2;
+    var rec=paintRecipe(action),r=18,phase=reduced?0:s.progress*2;
     ctx.save();ctx.translate(action.x,action.y);ctx.rotate(action.ang||0);ctx.globalAlpha=s.alpha*.8;ctx.strokeStyle=rec.color;ctx.fillStyle=rec.accent;ctx.lineWidth=1.5;
     if(rec.cls==='barb'){for(var b=-1;b<=1;b+=2){line(ctx,-r*.6,b*r*.7,r*.65,b*r*.25);diamond(ctx,r*.6,b*r*.25,3);}}
     else if(rec.cls==='sorc'){crest(ctx,r,3,phase);for(var m=0;m<3;m++)diamond(ctx,Math.cos(m*TAU/3+phase)*r*.55,Math.sin(m*TAU/3+phase)*r*.55,3);}
@@ -227,7 +235,7 @@
     if(action.phase==='impact'){drawContactImpact(ctx,action,s,reduced);return;}
     if(action.phase==='arrival'){drawDashArrival(ctx,action,s,reduced);return;}
     if(action.phase==='flight'){drawFlightWake(ctx,action,s,reduced,atlasDrawn);return;}
-    var rec=recipes[action.sid],r=Math.max(12,action.r||42),phase=reduced?0:s.age*rec.rate,progress=s.progress,n=reduced?Math.min(4,rec.count):rec.count;
+    var rec=paintRecipe(action),r=Math.max(12,action.r||42),phase=reduced?0:s.age*rec.rate,progress=s.progress,n=reduced?Math.min(4,rec.count):rec.count;
     var expansion=action.channel?1:Math.min(1,.2+progress*2),rad=r*expansion;
     ctx.save();ctx.translate(action.x,action.y);ctx.globalAlpha=s.alpha*.78;ctx.strokeStyle=rec.color;ctx.fillStyle=rec.accent;ctx.lineWidth=2;ctx.lineCap='round';
     if(action.points){
@@ -329,10 +337,10 @@
   function drawChannel(ctx,channel,time,reduced,profile){
     if(!recipes[channel.sid])return false;
     var life=channel.life||Math.max(.01,channel.t||1),start=channel.start===undefined?time:channel.start;
-    return drawSkill(ctx,{sid:channel.sid,x:channel.x,y:channel.y,r:channel.r||channel.radius||42,ang:channel.ang||0,start:start,life:life,channel:true,phase:channel.phase,bodyOwned:!!channel.bodyOwned},time,reduced,profile);
+    return drawSkill(ctx,{sid:channel.sid,x:channel.x,y:channel.y,r:channel.r||channel.radius||42,ang:channel.ang||0,start:start,life:life,channel:true,phase:channel.phase,bodyOwned:!!channel.bodyOwned,tint:channel.tint},time,reduced,profile);
   }
   function drawAnticipation(ctx,target,reduced,profile){
-    var rec=recipe(target.sid);if(!rec)return false;var k=Math.max(0,Math.min(1,target.progress)),r=target.r;
+    var rec=paintRecipe(target);if(!rec)return false;var k=Math.max(0,Math.min(1,target.progress)),r=target.r;
     ctx.save();ctx.translate(target.x,target.y);ctx.strokeStyle=rec.color;ctx.fillStyle=rec.accent;ctx.lineWidth=1.5;
     ctx.globalAlpha=.33;for(var i=0;i<8;i++){var a=i*TAU/8;ctx.beginPath();ctx.arc(0,0,r,a+.1,a+.5);ctx.stroke();}
     ctx.globalAlpha=.7;crest(ctx,Math.max(14,r*(1-k)),4,Math.PI/4);

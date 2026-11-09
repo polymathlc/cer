@@ -1,10 +1,10 @@
 name: Hades sanctuary beta checks
 on:
   pull_request:
-    paths: ['hades-*', 'HADES-BETA.md', 'app.js', 'game-usage.js', 'game-question-pressure.js', 'index.html', 'tools/hades-*.mjs', '.github/workflows/hades-learning.yml']
+    paths: ['hades-*', 'HADES-BETA.md', 'app.js', 'game-usage.js', 'game-question-pressure.js', 'game-question-flag.js', 'index.html', 'tools/hades-*.mjs', '.github/workflows/hades-learning.yml']
   push:
     branches: [main]
-    paths: ['hades-*', 'HADES-BETA.md', 'app.js', 'game-usage.js', 'game-question-pressure.js', 'index.html', 'tools/hades-*.mjs', '.github/workflows/hades-learning.yml']
+    paths: ['hades-*', 'HADES-BETA.md', 'app.js', 'game-usage.js', 'game-question-pressure.js', 'game-question-flag.js', 'index.html', 'tools/hades-*.mjs', '.github/workflows/hades-learning.yml']
 permissions:
   contents: read
 jobs:

@@ -13,12 +13,13 @@ const check = (condition, message) => { assert.ok(condition, message); assertion
 const browser = await chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_BROWSER_CHANNEL ? { channel: process.env.PLAYWRIGHT_BROWSER_CHANNEL } : {}) });
 function portal(slug, holdFeed=false) {
   return `<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body,iframe{margin:0;width:100%;height:100%;border:0;display:block}</style><iframe src="/science-${slug}.html"></iframe><script>
-  window.records=[];window.learner='student-a';window.level='P4';window.nextId=0;window.holdFeed=${holdFeed};window.delayed=[];window.creditBalance=10;
+  window.records=[];window.learner='student-a';window.level='P4';window.nextId=0;window.holdFeed=${holdFeed};window.delayed=[];window.creditBalance=10;window.ackGear=false;
   window.addEventListener('message',e=>{ if(e.source!==document.querySelector('iframe').contentWindow)return; records.push(e.data);
     if(e.data.type==='SD_REQUEST_QUESTIONS'){const data={type:'SD_QUESTIONS',feedPolicyVersion:1,requestId:e.data.requestId,studentKey:learner,studentLevel:level,playsLeft:{legends:creditBalance,slayers:creditBalance},questions:[{id:'qa-'+(++nextId),q:'Which material lets light pass through?',options:['Clear glass','Wood','Brick','Metal'],answer:0,explain:'Clear glass is transparent.',topic:'Light'}]};if(holdFeed)delayed.push(data);else e.source.postMessage(data,location.origin);}
-    if(e.data.type==='LEGENDS_REQUEST_META') e.source.postMessage({type:'LEGENDS_META',meta:{inv:[],eq:{},loadout:{},pts:0},gold:0},location.origin);
+    if(e.data.type==='LEGENDS_REQUEST_META'&&e.data.studentKey===learner&&e.data.studentLevel===level)e.source.postMessage({type:'LEGENDS_META',studentKey:learner,studentLevel:level,meta:{inv:[],eq:{},loadout:{},pts:0},gold:0},location.origin);
+    if(ackGear&&e.data.type==='LEGENDS_SAVE'&&e.data.studentKey===learner&&e.data.studentLevel===level)e.source.postMessage({type:'LEGENDS_META',studentKey:learner,studentLevel:level,receipt:{client:e.data.client,seq:e.data.seq},meta:{inv:e.data.patch.add||[],eq:{},loadout:{},ts:Date.now()},gold:0},location.origin);
   });
-  window.switchLearner=()=>{learner='student-b';level='P3';document.querySelector('iframe').contentWindow.postMessage({type:'SD_FEED_INVALIDATE',studentKey:learner,studentLevel:level},location.origin);};
+  window.switchLearner=(key='student-b',grade='P3')=>{learner=key;level=grade;document.querySelector('iframe').contentWindow.postMessage({type:'SD_FEED_INVALIDATE',studentKey:learner,studentLevel:level},location.origin);};
   </script>`;
 }
 async function openGame(slug, touch=false, holdFeed=false) {
@@ -158,20 +159,35 @@ try {
   await game.evaluate(()=>scienceFeed.refresh());await game.locator('#startBtn').click();
   await game.waitForFunction(()=>G&&G.state==='play');
   await page.evaluate(()=>{holdFeed=true;});
-  await game.evaluate(()=>{ META.inv.push({id:'old-child-item',r:'common'});metaSave();void openQuestion(); });
+  await game.waitForFunction(()=>metaReady);
+  await game.evaluate(()=>{
+    const item={id:'old-child-item',name:'Old child helm',slot:'helm',r:'common',af:{hp:10}};
+    META.inv.push(item);metaSave({add:[item]});void openQuestion();
+  });
+  check(await game.evaluate(()=>JSON.parse(localStorage.getItem('legends_gear_meta_student-b')).inv.some(item=>item.id==='old-child-item')),`${slug}: gear is banked immediately under the acting learner`);
   await page.waitForFunction(()=>delayed.length>0);
   await page.evaluate(()=>{learner='student-c';level='P5';document.querySelector('iframe').contentWindow.postMessage({type:'SD_FEED_INVALIDATE',studentKey:learner,studentLevel:level},location.origin);});
   await game.waitForFunction(()=>G===null);
   await page.evaluate(()=>{for(const data of delayed)document.querySelector('iframe').contentWindow.postMessage(data,location.origin);delayed=[];holdFeed=false;});
   await page.waitForTimeout(700);
   check(await game.evaluate(()=>G===null&&!qState.active&&studentKey==='student-c'),`${slug}: delayed old-child reply cannot restart combat or change identity`);
-  check(await game.evaluate(()=>!META.inv.some(item=>item.id==='old-child-item')&&!localStorage.getItem('legends_meta_student-c')),`${slug}: pending old-child inventory write is cancelled`);
-  await page.evaluate(()=>document.querySelector('iframe').contentWindow.postMessage({type:'LEGENDS_GOLD_RESULT',ok:true,reason:'lootbox',gold:999},location.origin));
+  check(await game.evaluate(()=>!META.inv.some(item=>item.id==='old-child-item')&&!JSON.parse(localStorage.getItem('legends_gear_meta_student-c')||'{}').inv?.some(item=>item.id==='old-child-item')),`${slug}: old-child inventory cannot enter the new learner's cache`);
+  await page.evaluate(()=>document.querySelector('iframe').contentWindow.postMessage({type:'LEGENDS_GOLD_RESULT',studentKey:'student-b',studentLevel:'P3',ok:true,reason:'lootbox',gold:999},location.origin));
   await page.waitForTimeout(30);
   check(await game.evaluate(()=>META.inv.length===0),`${slug}: cancelled purchase cannot deliver old-child gear`);
   await game.evaluate(()=>window.postMessage({type:'SD_QUESTIONS',feedPolicyVersion:1,studentKey:'forged',studentLevel:'P6',questions:[]},location.origin));
   await page.waitForTimeout(30);
   check(await game.evaluate(()=>studentKey==='student-c'),`${slug}: non-parent message cannot change learner`);
+  await Promise.all([game.waitForNavigation(),game.evaluate(()=>location.reload())]);
+  await game.waitForFunction(()=>typeof META!=='undefined'&&metaReady&&studentKey==='student-c');
+  check(await game.evaluate(()=>!META.inv.length),`${slug}: a reloaded sibling sees an empty personal Armory`);
+  await page.evaluate(()=>{ackGear=true;switchLearner('student-b','P4');});
+  await game.waitForFunction(()=>studentKey==='student-b'&&metaReady&&!gearOutbox().entries.length&&META.inv.some(item=>item.id==='old-child-item'));
+  check(await page.evaluate(()=>{
+    const sends=records.filter(row=>row.type==='LEGENDS_SAVE'&&row.patch?.add?.some(item=>item.id==='old-child-item'));
+    return sends.length>=2&&sends.every(row=>row.studentKey==='student-b'&&row.client===sends[0].client&&row.seq===sends[0].seq)
+      &&sends[0].studentLevel==='P3'&&sends.at(-1).studentLevel==='P4';
+  }),`${slug}: a drop without a receipt survives reload and retries only for its original learner at the new grade`);
   check(errors.length===0,`${slug}: no uncaught browser errors: ${errors}`);
   await context.close();
   const mobile=await openGame(slug,true);
@@ -197,5 +213,24 @@ try {
   check(mobile.errors.length===0,`${slug}: no mobile browser errors`);
   await mobile.context.close();
  }
+ const compatibility=await openGame('slayers');
+ await compatibility.game.waitForFunction(()=>metaReady);
+ await compatibility.page.evaluate(()=>{
+   const old={id:'legacy-mythic',slot:'helm',r:'mythic',name:'Old mythic helm',af:{hp:28},pw:'windrunner'};
+   const signature={id:'legend-signature',slot:'ring',r:'mythic',name:'Legend signature ring',af:{hp:600},signature:'legend-ring'};
+   const hidden=Array.from({length:85},(_,index)=>({id:'legend-pants-'+index,slot:'pants',r:'rare',name:'Legend pants',af:{hp:12}}));
+   document.querySelector('iframe').contentWindow.postMessage({type:'LEGENDS_META',studentKey:learner,studentLevel:level,
+     meta:{inv:[old,signature,...hidden],eq:{helm:old.id,ring1:signature.id,pants:hidden[0].id},loadout:{},ts:1},gold:0},location.origin);
+ });
+ await compatibility.game.waitForFunction(()=>META.inv.length===87);
+ await compatibility.game.locator('#menuArmoryBtn').click();
+ check(await compatibility.game.locator('#invGrid .inv-item').count()===1 && await compatibility.game.locator('#invGrid [data-item="legacy-mythic"]').count()===1,'Slayers: compatible old mythics are visible while Legends-specific gear stays in storage');
+ check(await compatibility.game.evaluate(()=>equippedItems().map(item=>item.id).join(',')==='legacy-mythic'),'Slayers: only compatible old equipment contributes to stats');
+ await compatibility.game.evaluate(()=>{salvageItem('legend-signature');unequipSlot('ring1');grantBoxItem();});
+ check(await compatibility.game.evaluate(()=>META.inv.length===88 && META.eq.ring1==='legend-signature' && META.eq.pants==='legend-pants-0'),'Slayers: opening a box past the old cap preserves every owned item and all hidden equipment');
+ await compatibility.page.waitForFunction(()=>records.some(message=>message.type==='LEGENDS_SAVE'&&message.patch?.add?.length===1));
+ check(await compatibility.page.evaluate(()=>records.filter(message=>message.type==='LEGENDS_SAVE').every(message=>!message.patch?.remove?.length && message.studentKey==='student-a' && message.studentLevel==='P4')),'Slayers: the compatible game sends only the bound additive mutation');
+ check(!compatibility.errors.length,'Slayers: shared equipment causes no browser errors: '+compatibility.errors.join(', '));
+ await compatibility.context.close();
  console.log(`${assertions} Legends/Slayers browser checks passed. Screenshots: ${output}`);
 } finally { await browser.close(); }

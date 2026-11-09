@@ -1,10 +1,10 @@
 name: Grand Line Chronicles checks
 on:
   pull_request:
-    paths: ['grand-line*', 'assets/grand-line/**', 'assets/grand-line-vfx/**', 'index.html', 'app.js', 'game-usage.js', 'game-question-pressure.js', 'practice-*.js', 'science-feed-*.js', 'tools/grand-line*', '.github/workflows/grand-line.yml']
+    paths: ['grand-line*', 'assets/grand-line/**', 'assets/grand-line-vfx/**', 'index.html', 'app.js', 'game-usage.js', 'game-question-pressure.js', 'game-question-flag.js', 'practice-*.js', 'science-feed-*.js', 'tools/grand-line*', '.github/workflows/grand-line.yml']
   push:
     branches: [main]
-    paths: ['grand-line*', 'assets/grand-line/**', 'assets/grand-line-vfx/**', 'index.html', 'app.js', 'game-usage.js', 'game-question-pressure.js', 'practice-*.js', 'science-feed-*.js', 'tools/grand-line*', '.github/workflows/grand-line.yml']
+    paths: ['grand-line*', 'assets/grand-line/**', 'assets/grand-line-vfx/**', 'index.html', 'app.js', 'game-usage.js', 'game-question-pressure.js', 'game-question-flag.js', 'practice-*.js', 'science-feed-*.js', 'tools/grand-line*', '.github/workflows/grand-line.yml']
 permissions:
   contents: read
 jobs:
