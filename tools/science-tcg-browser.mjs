@@ -50,6 +50,7 @@ ${slice('const TCG_ELEMENTS =','// ---- Booster packs')}
 ${slice('const TCG_FX_PHASES =','// \'fx:cosmic:fly2\'')}
 ${slice('const DUEL_FX_SHAPES =','function duelFxSlotId')}
 ${slice('function _tcgTargetByStrat','let _tcgConfig')}
+${slice('const TCG_RARITY =','function tcgRarityHtml')}
 ${slice('const FLAG_DAILY_LIMIT =','// Students get a shared daily pool of GAME CREDITS')}
 ${slice('let _tcgQuiz = null;', '// -- ⚡ Energy:')}
 ${slice('function duelReleased()','// Inline handlers on the TCG page/overlays')}
@@ -130,6 +131,10 @@ try{
   await page.waitForFunction(()=>window.qa.duel);
   await page.evaluate(()=>{const r=qa.duel;r.p.mana=10;r.p.cap=10;const foe=qa.duelSummon(qa.duelMakeHandCard('c147','E',1),'E');foe.shield=false;foe.hp=100;foe.maxHp=100;r.e.board=[foe];r.p.hand=[qa.duelMakeHandCard('c201','P',1)];qa.duelCommitPlay('P',0,null);});
   ok(await page.evaluate(()=>qa.duel.e.board[0].frozen===1&&qa.duel.p.board[0].shield),'Duel actual card play applies signature freeze and shield');
+  await page.locator('#duelShell [data-duel-side="P"][data-peek="c201"]').hover();
+  await page.locator('#duelPeek').waitFor();
+  ok(await page.locator('#duelPeek .duel-peek-sub').first().innerText().then(t=>t.includes('★★★★★★★ Legendary')),'Duel card hover renders the Legendary rarity for the live Snow Queen');
+  await page.mouse.move(0,0);
   await page.waitForFunction(()=>[...document.querySelectorAll('#duelShell img')].every(img=>img.complete));await shot('06-duel');
   await page.evaluate(()=>{const r=qa.duel;r.p.mana=10;r.p.hand=[qa.duelMakeHandCard('c147','P',1)];qa.duelCommitPlay('P',0,null);const actor=r.p.board.at(-1);actor.canAttack=true;actor.attacked=false;actor.frozen=0;qa.duelAttack(actor.uid,r.e.board[0].uid,false);});
   ok(await page.evaluate(()=>qa.duel.p.board.at(-1)._signature.casts===2),'Iron Capacitor discharge is reachable through the first actual attack');
