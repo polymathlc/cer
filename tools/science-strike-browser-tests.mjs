@@ -127,7 +127,7 @@ async function pageFor({ bankRows = bank, pending = false, lock = 'success', mob
       if (artUnavailable) return route.abort();
       return route.fulfill({ contentType: file.endsWith('.webp') ? 'image/webp' : 'image/png', body: fs.readFileSync(new URL(file, root)) });
     }
-    if (/^(?:science-feed-(core|mastery|variety|quality)|science-strike-feed|student-question-history|game-question-pressure|game-usage)\.js$/.test(file))
+    if (/^(?:science-feed-(core|mastery|variety|quality)|science-strike-feed|student-question-history|game-question-pressure|game-question-flag|game-usage)\.js$/.test(file))
       return route.fulfill({ contentType: 'application/javascript', body: fs.readFileSync(new URL(file, root), 'utf8') });
     return route.abort();
   });
@@ -558,6 +558,37 @@ try {
   await shot(fallback.page, 'art-network-fallback');
   await checkClean(fallback); await fallback.context.close();
   console.log('PASS artwork network failure: fallback rendering and combat remain available without uncaught errors');
+
+  const reporting = await pageFor();
+  await reporting.page.locator('#playBtn').click();
+  await reporting.page.waitForFunction(() => window.__strikeQA.run && !window.__strikeQA.run.paused);
+  await reporting.page.evaluate(() => { window.__strikeQA.run.qTimerMs = 0; });
+  await reporting.page.locator('.gqf-toggle').click();
+  const displayed = await reporting.page.evaluate(() => window.__strikeQA.run.activeQ.id);
+  await reporting.page.locator('#flagBox textarea').fill('Please check choice 2.');
+  await reporting.page.locator('.gqf-submit').click();
+  await reporting.page.getByText('Flag submitted.').waitFor();
+  const reports = await reporting.page.evaluate(async () => {
+    const flagWrites = window.__mock.writes.filter(write => write.path.startsWith('flaggedQuestions/'));
+    window.__mock.reports = flagWrites.map(write => write.value);
+    await window.__mock.emit('flaggedQuestions');
+    return flagWrites;
+  });
+  check(reports.length === 1 && reports[0].value.questionId === displayed &&
+    reports[0].value.comment === '[Science Strike] Please check choice 2.' &&
+    reports[0].value.flaggedByUid === 'learner' && !!reports[0].value.questionSignature,
+    'Strike reports the actual shown question and comment under the signed-in learner');
+  check(await reporting.page.evaluate(id => window.__strikeQA.run.activeQ?.id === id &&
+    !window.__strikeQA.run.questionAnswered && window.__strikeQA.run.qTotal === 0 &&
+    !window.__mock.writes.some(write => write.path === 'questionAttempts'), displayed),
+    'Refreshing the newly flagged question leaves it unanswered in the current run');
+  await reporting.page.waitForFunction(() => !document.querySelector('#qOptions').classList.contains('qlock'));
+  await reporting.page.locator('#qOptions .qopt').first().click();
+  check(await reporting.page.evaluate(() => window.__strikeQA.run.qCorrect === 1),
+    'The flagged question still accepts its normal answer and reward');
+  check(reporting.errors.length === 0 && reporting.external.length === 0,
+    'Strike report writes stay in the mocked authenticated data boundary without browser errors');
+  await reporting.context.close();
 
 } finally {
   await browser.close();

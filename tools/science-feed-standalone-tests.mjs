@@ -127,7 +127,7 @@ function fpsFixture(bank,random=()=>0.5){
     fpsFeedLoad:0,fpsProfileStop:null,fpsFailedImages:new Map(),questions:bank.map(q=>({id:q.id,feedSource:q})),customTopicLevels:{},
     fpsServedMemory:new Map(),fpsFeedFlags:[],fpsFeedObjectives:[],fpsFeedObjectiveMap:{},
     stripHtml:html=>String(html||'').replace(/<[^>]*>/g,''),qZoomBtns:()=>'',
-    suspendCombat:noop,clearTimeout:noop,cancelAnimationFrame:noop,hideOverlays:noop,enterMenu:noop,
+    suspendCombat:noop,clearTimeout:noop,cancelAnimationFrame:noop,hideOverlays:noop,enterMenu:noop,fpsQuestionFlag:{reset:noop},
     qLockT:0,raf:0,skillsOpen:false,skillsFromPause:false,
     G:{activeQ:null},QUESTION_INTERVAL:15000,$:el,isAdmin:()=>false,localStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value)},
     Map,Set,Date,JSON,Number,String,Array,Math});
@@ -240,8 +240,12 @@ test('🚫 Science Strike never loads a Sec 1 question (v1.453.0)', () => {
   assert.equal(c.fpsIsSec1(question('p4')),false);
 });
 test('Science Strike clears the old run on a live child or level change', async () => {
-  const {c}=fpsFixture([question('a')]);c.fpsApplyProfile({students:[{name:'Ada',level:'P4'}]});
-  c.G.activeQ=(await c.nextQuestion());assert.ok(c.G.activeQ);c.fpsApplyProfile({students:[{name:'Ben',level:'P3'}]});assert.equal(c.G,null);
+  const {c}=fpsFixture([question('a')]);
+  let flagResets=0;c.fpsQuestionFlag.reset=()=>{flagResets++;};
+  c.fpsApplyProfile({students:[{name:'Ada',level:'P4'}]});
+  c.G.activeQ=(await c.nextQuestion());assert.ok(c.G.activeQ);
+  c.fpsApplyProfile({students:[{name:'Ben',level:'P3'}]});assert.equal(c.G,null);
+  assert.equal(flagResets,1,'switching learners clears the old question report form');
 });
 
 test('a late old-question image error cannot withdraw the next question for the same child',async()=>{

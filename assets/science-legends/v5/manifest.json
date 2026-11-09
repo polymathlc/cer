@@ -1,0 +1,150 @@
+{
+  "version": 5,
+  "mode": "built-in image generation",
+  "encoding": "WebP quality 89, alphaQuality 100. Source dimensions and alpha are preserved.",
+  "bossColumns": [
+    "Core Tyrant",
+    "Prism Regent",
+    "Mire Matriarch",
+    "Storm Warden"
+  ],
+  "mythicColumns": [
+    "Worldbreaker",
+    "Astral Heart",
+    "Primeval Pact",
+    "Sunward",
+    "Skyspike"
+  ],
+  "animationRows": [
+    "idle",
+    "walk left step",
+    "walk right step",
+    "attack"
+  ],
+  "itemCells": [
+    "helm",
+    "chest",
+    "gloves",
+    "pants",
+    "greaves",
+    "ring",
+    "amulet",
+    "onehand",
+    "twohand",
+    "shield",
+    "focus",
+    "orb"
+  ],
+  "assets": [
+    {
+      "png": "bosses.png",
+      "webp": "bosses.webp",
+      "width": 1254,
+      "height": 1254,
+      "columns": 4,
+      "rows": 4,
+      "pngSha256": "cc8ee3992aae7e7bd4c8f48a9aa7f5927410e560fb52dac84ba38ae09e2b8449",
+      "webpSha256": "2c1177a4fc89949a15aeda3dfd0b00eb439405456fc87d14c2402119a1cf90cb",
+      "webpBytes": 629216,
+      "prompts": [
+        "Create a production transparent PNG sprite atlas for Science Legends, a dark mythic science-fantasy action RPG, with EXACTLY FOUR columns and FOUR rows of sixteen fully separate painted 3D-looking boss sprite cutouts. Square atlas, equal cell boxes. Orthographic elevated three-quarter view from front southeast, looking down approximately 24 degrees. Same stable body scale and consistent planted foot baseline at 87% of every cell. All cells contain full silhouette, weapons and limbs inside the cell, no adjacent touches; leave at least 7% transparent gutters each side. Columns from left: (1) Core Tyrant, massive black basalt humanoid in ancient bronze plates, short horned mask, hammer fist and glowing amber core, (2) Prism Regent, tall sinister violet faceted crystal armored sorcerer with crown and a slender amethyst scepter, (3) Mire Matriarch, broad multi-legged green-black chitin brood queen with luminous mint eggs and sharp insect claws, (4) Storm Warden, angular dark brass knight with cyan coils, tall closed helm and storm halberd. Four rows: neutral combat idle, walk step left foot forward, walk step right foot forward, one dramatic committed attack pose (hammer slam, raised crystal cast, lunging claws, sweeping halberd). Same exact costume/design for each column's four poses. Clearly distinct silhouettes, high readable shapes at 100px, premium painted material texture and subtle top left lighting. True transparent alpha background. No floor, no shadow outside bodies, no text, no grid outlines, no UI or large VFX, no background glow. Frame equal spacing is mandatory."
+      ]
+    },
+    {
+      "png": "bosses-rear.png",
+      "webp": "bosses-rear.webp",
+      "width": 1254,
+      "height": 1254,
+      "columns": 4,
+      "rows": 4,
+      "pngSha256": "efaec861b71026f398e60dbb6d1b95d76eb900c9389cd49288f0d6ff69d0fd85",
+      "webpSha256": "fc35cddea2d30c6d75d87f7b17384c6a49135f09c13f18b2efea8a625d0db286",
+      "webpBytes": 584514,
+      "prompts": [
+        "Create a production transparent PNG sprite atlas for Science Legends, a dark mythic science-fantasy action RPG, with EXACTLY FOUR columns and FOUR rows of sixteen fully separate painted 3D-looking boss sprite cutouts. Square atlas, equal cell boxes. Orthographic elevated three-quarter view from front southeast, looking down approximately 24 degrees. Same stable body scale and consistent planted foot baseline at 87% of every cell. All cells contain full silhouette, weapons and limbs inside the cell, no adjacent touches; leave at least 7% transparent gutters each side. Columns from left: (1) Core Tyrant, massive black basalt humanoid in ancient bronze plates, short horned mask, hammer fist and glowing amber core, (2) Prism Regent, tall sinister violet faceted crystal armored sorcerer with crown and a slender amethyst scepter, (3) Mire Matriarch, broad multi-legged green-black chitin brood queen with luminous mint eggs and sharp insect claws, (4) Storm Warden, angular dark brass knight with cyan coils, tall closed helm and storm halberd. Four rows: neutral combat idle, walk step left foot forward, walk step right foot forward, one dramatic committed attack pose (hammer slam, raised crystal cast, lunging claws, sweeping halberd). Same exact costume/design for each column's four poses. Clearly distinct silhouettes, high readable shapes at 100px, premium painted material texture and subtle top left lighting. True transparent alpha background. No floor, no shadow outside bodies, no text, no grid outlines, no UI or large VFX, no background glow. Frame equal spacing is mandatory.",
+        "Create the matching REAR VIEW animation atlas to the attached front-view boss sprites. Use attached sprites as character design references. Preserve exactly 4 columns and 4 rows of 16 separate poses in equal square cells, in the same order. Turn each character to face northwest, away from camera so we see their backs, rear three-quarter view with fixed elevated orthographic camera (looking down 24 degrees), matching scale and posture. Columns: bronze-plated basalt Core Tyrant with hammer fist; violet crystalline scepter Prism Regent; broad dark green six-legged chitin Mire Matriarch with green eggs; brass cyan-coil Storm Warden with large halberd. Rows: idle, left step, right step, committed attack. Same character design and action for each referenced pose seen from rear, same foot baseline around 87% of cells, keep weapons inside each cell. Cutouts only on actual true transparent alpha. All negative space and between cells must have alpha exactly zero, no background shadows, no matte, no floor, no colored haze, no texts or separators."
+      ]
+    },
+    {
+      "png": "mythic-heroes.png",
+      "webp": "mythic-heroes.webp",
+      "width": 1402,
+      "height": 1122,
+      "columns": 5,
+      "rows": 4,
+      "pngSha256": "20292001960b4a3ca8088e4148b232916060eb68b0d9da1d0356f3f3618eb44f",
+      "webpSha256": "856a92fdf528d37d0307b277931e37612f407d1bcdcf138556afc796556b29fa",
+      "webpBytes": 609956,
+      "prompts": [
+        "Create a production transparent sprite atlas for a high-end science-fantasy action RPG with EXACTLY FIVE equal columns and FOUR equal rows. Wide rectangular sheet, twenty separate full-body character animation sprites. Fixed orthographic elevated three-quarter front southeast view, camera looks down 24 degrees, feet at 87% of each cell and equal full-body height. Leave 7% transparent gutters so no weapon or detail crosses cells. Columns left to right: 1 Worldbreaker Barbarian, broad brutal warrior, black steel mountain plate with ember orange seams and huge double-headed basalt axe; 2 Astral Heart Sorcerer, lean hooded starlight caster in violet midnight robes holding a bright suspended violet crystal orb; 3 Primeval Pact Beast Master, rugged hunter in green bark scale armor with antler hood and emerald carved animal focus; 4 Sunward Paladin, gold ivory solar knight, one-hand sword and round brilliant gold sun shield; 5 Skyspike Amazon, agile fierce huntress in blue and bronze eagle armor carrying a long sapphire-tipped two-handed spear diagonal close to body. Rows top to bottom: idle ready, walk step left, walk step right, committed class attack. Each column stays the exact same costume and silhouette across its four phases. Restrained emissive accents on gear, sophisticated painterly photoreal materials, legible small-scale. Actual transparent alpha background, no ground, no typography, no glow beyond silhouette, no gridlines, no missing cell, no cropping.",
+        "Remove the background and ground shadows from this existing sprite atlas without changing the actual twenty painted character silhouettes, positions, proportions, equipment, pose or artwork. Maintain the original exact five columns by four rows equal grid and crop boundaries. Everything between and around the characters must be genuinely transparent PNG alpha=0, with opaque costume and weapon interiors and only edge antialiasing. This is a strict background removal. No white, gray, checkerboard baked into pixels, halo, drop shadows, color bleed, or matte. Keep each entire character cutout, all limbs, weapons, and orbs. Same original dimensions and cell placement if possible. No text."
+      ]
+    },
+    {
+      "png": "mythic-heroes-rear.png",
+      "webp": "mythic-heroes-rear.webp",
+      "width": 1402,
+      "height": 1122,
+      "columns": 5,
+      "rows": 4,
+      "pngSha256": "2bc18a995fd182def04de312329a0d91f2893bf4a900c82a591a78c63d7ba595",
+      "webpSha256": "18fb5e152ad567b26904b0534d041e0a12cf1b06cb1b6baa558a3f4759cdd2ef",
+      "webpBytes": 701800,
+      "prompts": [
+        "Create a production transparent sprite atlas for a high-end science-fantasy action RPG with EXACTLY FIVE equal columns and FOUR equal rows. Wide rectangular sheet, twenty separate full-body character animation sprites. Fixed orthographic elevated three-quarter front southeast view, camera looks down 24 degrees, feet at 87% of each cell and equal full-body height. Leave 7% transparent gutters so no weapon or detail crosses cells. Columns left to right: 1 Worldbreaker Barbarian, broad brutal warrior, black steel mountain plate with ember orange seams and huge double-headed basalt axe; 2 Astral Heart Sorcerer, lean hooded starlight caster in violet midnight robes holding a bright suspended violet crystal orb; 3 Primeval Pact Beast Master, rugged hunter in green bark scale armor with antler hood and emerald carved animal focus; 4 Sunward Paladin, gold ivory solar knight, one-hand sword and round brilliant gold sun shield; 5 Skyspike Amazon, agile fierce huntress in blue and bronze eagle armor carrying a long sapphire-tipped two-handed spear diagonal close to body. Rows top to bottom: idle ready, walk step left, walk step right, committed class attack. Each column stays the exact same costume and silhouette across its four phases. Restrained emissive accents on gear, sophisticated painterly photoreal materials, legible small-scale. Actual transparent alpha background, no ground, no typography, no glow beyond silhouette, no gridlines, no missing cell, no cropping.",
+        "Generate the matching REAR VIEW sprite atlas of the referenced twenty Mythic Unique hero poses. The reference establishes exact hero design, grid and pose, not its white backdrop. Turn every hero to face away from the viewer, toward northwest; show their backs and rear three-quarter silhouettes from the same orthographic elevated 24-degree camera. Exactly five equal columns and four equal rows, fully separate cell silhouettes with 6 percent margins. Same class columns and poses: Worldbreaker Barbarian black-orange plate and double axe; Astral Heart Sorcerer violet hooded star robes and orb; Primeval Pact Beast Master green bark scale and antlers with carved focus; Sunward Paladin ivory gold plate, round gold sun shield and sword; Skyspike Amazon blue bronze feathered armor and long blue-tipped spear. Rows idle, left walk, right walk, committed attack. Same full-body scale and baseline per cell. TRUE TRANSPARENT alpha PNG, fully transparent negative space (alpha zero), no colored fringe or shadows, no floor, no typography or outlines. Treat as sixteen-bit RGBA cutouts isolated on transparent canvas."
+      ]
+    },
+    {
+      "png": "items-common.png",
+      "webp": "items-common.webp",
+      "width": 1448,
+      "height": 1086,
+      "columns": 4,
+      "rows": 3,
+      "pngSha256": "ecff8f54e9fa94a3469c9a16719558701e7c4cbd0c9f3db37450e0eea6ef541e",
+      "webpSha256": "b32ec2452d7a108954a634556d3c01a4f0c61d629a7b91377addbc67e43f7daf",
+      "webpBytes": 360126,
+      "prompts": [
+        "Production icon sprite sheet for a dark fantasy role-playing game's item inventory. Exactly 4 equal columns by 3 equal rows, twelve isolated individually painted objects, centered fully inside each cell with 9% transparent margin and no overlap. True transparent background and no shadow beyond each silhouette. Row 1 left to right: worn steel helmet; simple fitted steel chest cuirass; pair of brown leather gauntlets; dark cloth and leather armored trousers. Row 2: pair of iron greaves; single silver ring with a small blue stone; leather cord amulet with a blue gem; single practical one-handed iron sword. Row 3: imposing two-handed battleaxe with both grip and head visible; plain worn iron and wood shield; small wooden spell focus with a teal crystal; round blue glass magical orb in a simple silver mount. Painted collectible loot icons, practical common and magical equipment, coherent isometric 3/4 icon angles, beautiful metal and leather texture, distinct shapes at 48px. No text, no borders or outlines, no labels, no grid divider lines, no decorative backgrounds. All twelve cells must contain one icon in the specified sequence."
+      ]
+    },
+    {
+      "png": "items-exalted.png",
+      "webp": "items-exalted.webp",
+      "width": 1448,
+      "height": 1086,
+      "columns": 4,
+      "rows": 3,
+      "pngSha256": "411b784c96d49a9fa5382e269e1f058c0d1b4abc1301c2fed35978ec62a91484",
+      "webpSha256": "f5eb298ce4cfb7ef16d502d68cd3a6eb05c3de56b3dce4e4251901e0b58c22f3",
+      "webpBytes": 546812,
+      "prompts": [
+        "Production icon sprite sheet for rare, legendary and unique gear in a premium dark science-fantasy action RPG. Exactly 4 equal columns by 3 equal rows. Twelve isolated objects centered fully within cell with 9% transparent margins; no object overlaps another. True alpha background. Row 1 left to right: elaborate gilded horned helmet; black-gold dragon scale chest cuirass; pair of gilded claw gauntlets; charcoal articulated plate trousers. Row 2: pair of polished enchanted greaves; large garnet gemstone ring; elaborate ruby sunburst amulet; compact luminous one-handed blue steel sword. Row 3: ceremonial two-handed black basalt double axe with orange seams; brilliant circular golden solar shield; green antler-and-crystal animal spell focus; violet suspended stellar crystal orb in dark ornate holder. Painstaking gilded engravings, rich facet material texture and contained emissive gems, high contrast icon silhouettes at 48px, same consistent 3/4 icon perspective. No background scenes, text, borders, cell lines or extraneous particle trails. All twelve cells exactly as specified.",
+        "Clean only the alpha matte of this exact 4-by-3 equipment icon sheet. Keep all 12 item paintings, engravings, positions, silhouettes, relative scale and exact grid order. Make every pixel outside the actual equipment silhouettes genuinely transparent (zero alpha), especially between cells. Remove all residual tinted haze, gray checker/matte and color spill. The items' interior colors and materials should be opaque and crisp. Preserve full helmet horns, gloves, jewels, axe, shield, focus and orb contours. True transparent PNG, no floor, no large VFX aura, no cell borders, no text."
+      ]
+    },
+    {
+      "png": "items-mythic.png",
+      "webp": "items-mythic.webp",
+      "width": 1536,
+      "height": 1024,
+      "columns": 3,
+      "rows": 2,
+      "pngSha256": "db4d26c036ccf6ff3d471c8f140f39037de4672cbdb33e61d2090d5944071c15",
+      "webpSha256": "5e6e3ad8424528a392c8e62aaaa55f006517786343fb11fb04d0a33826d368ba",
+      "webpBytes": 304980,
+      "prompts": [
+        "Transparent 3 column by 2 row inventory icon atlas, exact equal square cells, landscape 3:2. Paint five Mythic Unique signature item cutouts for a dark science fantasy ARPG, each centered with at least 10 percent gutters. Row 1 left to right: Worldbreaker, a two-handed double-headed black basalt axe with ember seams; Astral Heart, a violet faceted crystalline orb suspended inside ornate midnight filigree; Primeval Pact, an animal-shaped green jade casting focus made of polished antler and bark. Row 2 left to right: Sunward, brilliant round gold ivory shield engraved with a raised sun and prominent radiant center; Skyspike, a two-handed bronze spear with blue sapphire tip angled diagonally and contained in its cell; leave bottom-right cell completely empty transparent. Premium polished painted item materials, strong silhouettes at 48px, readable at small scale. Real alpha background, pixels outside the objects fully transparent alpha zero. No borders, no typography, no hand holding the equipment, no environment or ground shadows, no stray halos. Full weapons visible within their own cell."
+      ]
+    }
+  ],
+  "mythicItemCells": [
+    "Worldbreaker",
+    "Astral Heart",
+    "Primeval Pact",
+    "Sunward",
+    "Skyspike",
+    null
+  ]
+}

@@ -9,18 +9,24 @@ const root=fileURLToPath(new URL('..',import.meta.url));
 const app=fs.readFileSync(path.join(root,'app.js'),'utf8');
 const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
 const adapter=app.slice(app.indexOf('var _hadesBridge = null;'),app.indexOf('function buildDefenderQuestions()'));
+const reportWriter=app.slice(app.indexOf('const FLAG_DAILY_LIMIT ='),app.indexOf('async function _sdRecordFlag'));
 const markup=html.slice(html.indexOf('<div class="page" id="page-hades">'),html.indexOf('<!-- ===== PAGE: REALM OF EMBERS'));
-const fixture=`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${markup}<script type="module">
+const fixture=`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${markup}<script src="./game-question-flag.js"></script><script type="module">
 import {installHadesDisplay} from './hades-display.js';import {installHadesLearningParent} from './hades-learning-parent.js';
-window.currentUser={uid:'family',role:'student',level:'P6',name:'Older child'};window.records=[];window.shown=[];
+window.currentUser={uid:'family',role:'student',level:'P6',name:'Older child'};window.records=[];window.shown=[];window.reports=[];
 const _isAdmin=()=>currentUser?.role==='admin',liveLevel=l=>l,isLevelCode=l=>['P3','P4','P5','P6'].includes(l),TOPIC_LEVELS=['P3','P4','P5','P6'],LIVE_LEVELS=TOPIC_LEVELS;
-const _scienceFeedLevel=()=>currentUser.level,_scienceFeedKey=()=>currentUser.uid+':'+currentUser.name;
+const _scienceFeedLevel=()=>currentUser.level,_scienceFeedGameLevel=_scienceFeedLevel,_scienceFeedKey=()=>currentUser.uid+':'+currentUser.name;
 const questionBank=Array.from({length:10},(_,i)=>({id:'bank-'+i,title:'Science bank question '+i,html:'<p>Which part absorbs water?</p>',options:['Root','Leaf'],answer:0}));
 const qReleased=()=>true,qInSyllabus=()=>true,questionQualitySignature=q=>q.id,_sdExtractMcq=q=>q;
+const db={},collection=(_,name)=>name,where=(...fields)=>fields,query=(...fields)=>fields;
+const getDocs=async()=>({forEach:visit=>reports.forEach(report=>visit({data:()=>report}))});
+const addDoc=async(name,report)=>{if(name!=='flaggedQuestions')throw Error('Unexpected report collection');reports.push(report);};
+const Timestamp={now:()=>new Date()},_scienceFeedSources=()=>questionBank,_scienceFeedFlagOwn=()=>{};
 const _scienceFeedContext=()=>({}),_scienceFeedPlan=rows=>({questions:rows.filter(q=>!shown.includes(q.id)).slice(0,5)});
 const _scienceFeedTake=async rows=>rows.filter(q=>!shown.includes(q.id)).slice(0,5);
 const _scienceFeedMark=id=>shown.push(id),_scienceFeedRememberResult=()=>{},_scienceFeedImageResult=()=>{};
 const _sdRecordAttempt=row=>records.push({...row,learner:currentUser.name});
+${reportWriter}
 ${adapter}
 document.getElementById('page-hades').classList.add('active');_hadesInit();window.closeGame=()=>_hadesResetLearning();window.ready=true;
 </script>`;
@@ -28,7 +34,7 @@ const server=http.createServer((req,res)=>{
  const pathname=new URL(req.url,'http://localhost').pathname;
  if(pathname==='/'){res.setHeader('content-type','text/html');res.end(fixture);}
  else if(pathname==='/hades-game.html'){res.setHeader('content-type','text/html');res.end('<script>window.messages=[];addEventListener("message",e=>messages.push(e.data));window.send=d=>parent.postMessage(d,location.origin);</script>');}
- else if(['/hades-display.js','/hades-learning-parent.js','/game-question-pressure.js'].includes(pathname)){res.setHeader('content-type','text/javascript');res.end(fs.readFileSync(path.join(root,pathname.slice(1))));}
+ else if(['/hades-display.js','/hades-learning-parent.js','/game-question-pressure.js','/game-question-flag.js'].includes(pathname)){res.setHeader('content-type','text/javascript');res.end(fs.readFileSync(path.join(root,pathname.slice(1))));}
  else res.writeHead(404).end();
 });
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
@@ -45,6 +51,16 @@ try{
  await page.locator('#hadesFullscreen').click();
  await frame.evaluate(sessionId=>send({type:'HADES_ROUND_REQUEST',requestId:'round',round:1,sessionId}),session);
  await page.getByRole('dialog').waitFor();
+ await page.getByRole('button',{name:/Flag this question/}).click();
+ await page.getByLabel('Describe the issue').fill('The question could name the kind of plant.');
+ await page.getByRole('button',{name:'Submit flag'}).click();
+ await page.getByText(/Flag submitted/).waitFor();
+ const report=await page.evaluate(()=>reports[0]);
+ assert.equal(report.questionId,'bank-0');
+ assert.equal(report.questionTitle,'Science bank question 0');
+ assert.equal(report.comment,'[Hades Sanctuary] The question could name the kind of plant.');
+ assert.equal(report.flaggedBy,'Older child');
+ assert.equal(await page.evaluate(()=>records.length),0);
  for(let i=0;i<5;i++){await page.locator('.hades-learning-option').first().click();await page.getByRole('button',{name:i===4?'Claim sanctuary reward':'Next question',exact:true}).click();}
  await frame.waitForFunction(()=>messages.at(-1)?.type==='HADES_ROUND_RESULT');
  assert.equal(await page.evaluate(()=>records.length),5);assert.equal(await page.evaluate(()=>records.every(r=>r.mode==='hades' && r.learner==='Older child')),true);
@@ -52,5 +68,5 @@ try{
  await page.evaluate(()=>{currentUser.name='Younger child';currentUser.level='P4';closeGame();});
  await page.waitForFunction(()=>!document.fullscreenElement);
  assert.equal(await page.locator('#hadesFrame').getAttribute('src'),null);assert.deepEqual(errors,[]);
- console.log('Science student beta: automatic launch, fixed profile level, fullscreen sanctuary, five recorded answers and profile cleanup passed.');
+ console.log('Science student beta: automatic launch, fixed profile level, fullscreen sanctuary, teacher report, five recorded answers and profile cleanup passed.');
 }finally{await browser.close();server.close();}

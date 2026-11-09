@@ -253,9 +253,10 @@ const DIALOG_CSS = `
 
 export function installGrandLineLearningParent(config) {
   const win = config.window || window, doc = win.document;
-  let overlay = null, resolvePresentation = null, previousFocus = null;
+  let overlay = null, resolvePresentation = null, previousFocus = null, questionFlag = null;
   let controller;
   function close(finished = false) {
+    questionFlag?.reset(); questionFlag = null;
     overlay?.remove(); overlay = null;
     const resolve = resolvePresentation; resolvePresentation = null; resolve?.(finished);
     if (previousFocus?.isConnected) previousFocus.focus(); previousFocus = null;
@@ -271,6 +272,7 @@ export function installGrandLineLearningParent(config) {
     let index = 0, score = 0;
     function render() {
       if (!isCurrent()) { close(); return; }
+      questionFlag?.reset(); questionFlag = null;
       dialog.replaceChildren(); const q = questions[index]; let selected = false;
       const unsupported = grandLineUnsupportedQuestionVisual(q,doc); let failed = unsupported;
       const started = performance.now();
@@ -289,6 +291,18 @@ export function installGrandLineLearningParent(config) {
       const next = make('button','grand-line-learning-action',index === 2 ? 'Complete wave' : 'Next question'); next.type = 'button'; next.hidden = true;
       next.onclick = () => { if (!selected || failed || !isCurrent()) return; if (index === 2) close(true); else { index++; render(); } };
       actions.append(exit,next);
+      let flagHost = null;
+      if (typeof config.submitFlag === 'function' && win.GameQuestionFlag) {
+        flagHost = make('div');
+        const currentQuestion = row => isCurrent() && dialog.isConnected && questions[index] === row;
+        questionFlag = win.GameQuestionFlag.create(flagHost, {
+          current: currentQuestion,
+          title: () => q.title || stem.textContent || heading.textContent,
+          submit: (payload, row, signal) => config.submitFlag(payload, () =>
+            !signal.aborted && currentQuestion(row) && payload.questionId === String(row.id))
+        });
+        questionFlag.setQuestion(q);
+      }
       const buttons = q.options.map((html, choice) => {
         const button = make('button','grand-line-learning-option'); button.type = 'button';
         const content = make('span'); content.innerHTML = sanitizeGrandLineQuestionHtml(html,doc);
@@ -317,7 +331,9 @@ export function installGrandLineLearningParent(config) {
         };
         options.append(button); return button;
       });
-      dialog.append(top,heading,copy,stem,options,warning,feedback,actions);
+      dialog.append(top,heading,copy,stem,options,warning,feedback);
+      if (flagHost) dialog.append(flagHost);
+      dialog.append(actions);
       if (unsupported && isCurrent() && dialog.isConnected) questionUnavailable(q,'unsupported-question-visual');
       // Disable answers until every essential image has loaded; no invisible
       // diagram may silently become a guessing question or grant a reward.
@@ -339,7 +355,8 @@ export function installGrandLineLearningParent(config) {
     overlay.addEventListener('keydown', event => {
       if (event.key === 'Escape') { event.preventDefault(); close(); return; }
       if (event.key !== 'Tab') return;
-      const focusable = [...dialog.querySelectorAll('button:not(:disabled):not([hidden])')];
+      const focusable = [...dialog.querySelectorAll('button:not(:disabled),textarea:not(:disabled)')]
+        .filter(element => element.getClientRects().length > 0);
       const first = focusable[0], last = focusable.at(-1);
       if (event.shiftKey && (doc.activeElement === first || doc.activeElement === dialog)) { event.preventDefault(); last?.focus(); }
       else if (!event.shiftKey && doc.activeElement === last) { event.preventDefault(); first?.focus(); }

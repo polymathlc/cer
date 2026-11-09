@@ -360,15 +360,6 @@ body.touch .pbars { bottom: 150px; }
 .q-explain.show { display: block; }
 .q-explain img { max-width: 100%; height: auto; }
 
-/* flag */
-.flagbox { flex: 1; min-width: 200px; }
-.flag-link { background: none; border: none; color: var(--text-tertiary); font-size: var(--font-size-xs); font-weight: 700; cursor: pointer; padding: 4px 0; font-family: inherit; }
-.flag-link:hover { color: var(--bad); text-decoration: underline; }
-.flag-form { display: flex; flex-direction: column; gap: 8px; }
-.flag-form textarea { width: 100%; border: 1px solid var(--border-medium); border-radius: 9px; padding: 8px 10px; font-family: inherit; font-size: var(--font-size-sm); resize: vertical; }
-.flag-actions { display: flex; gap: 8px; justify-content: flex-end; }
-.flag-done { color: var(--good); font-size: var(--font-size-sm); font-weight: 700; }
-
 /* stats grid on game-over */
 .over-stats { display: flex; justify-content: center; gap: 22px; margin: 6px 0 16px; flex-wrap: wrap; }
 .over-stats .num { font-size: 1.7rem; font-weight: 800; }
@@ -634,17 +625,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
         <p class="q-pressure-rule" style="font-size:.78rem;line-height:1.45;">Wrong answers in a row deal increasing damage. Five in a row ends the run. A correct answer resets the streak.</p>
         <div class="q-explain" id="qExplain"></div>
         <div class="row" style="margin-top:14px;justify-content:space-between;align-items:flex-start;gap:10px;">
-          <div class="flagbox" id="flagBox" style="display:none;">
-            <button class="flag-link" id="flagToggle" type="button">⚑ Flag this question</button>
-            <div class="flag-form" id="flagForm" style="display:none;">
-              <textarea id="flagComment" rows="3" placeholder="What's wrong? (e.g. wrong answer, typo, unclear diagram)"></textarea>
-              <div class="flag-actions">
-                <button class="btn btn-outline" id="flagCancel" type="button">Cancel</button>
-                <button class="btn btn-primary" id="flagSubmit" type="button">Submit flag</button>
-              </div>
-            </div>
-            <div class="flag-done" id="flagDone" style="display:none;">✓ Thanks — your teacher will review this question.</div>
-          </div>
+          <div id="flagBox" hidden></div>
           <button class="btn btn-primary" id="qContinueBtn" type="button" style="display:none;flex:0 0 auto;">Back to battle →</button>
         </div>
       </div></div>
@@ -724,6 +705,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
 </div>
 
 <script src="science-feed-bridge.js?v=1.458.0"></script>
+<script src="game-question-flag.js?v=1.460.0"></script>
 <script src="game-question-pressure.js?v=1.458.0"></script>
 <script>
 /* ============================================================================
@@ -1331,7 +1313,15 @@ function rollItem(forceRarity){
   var name = pick(NAME_PREFIX) + ' ' + pick(BASE_NAMES[base]) + (R.rank >= 3 ? ' ' + pick(NAME_SUFFIX) : '');
   return { id: id, slot: base, r: r, name: name, af: rollAffixes(R.affixes, R.mult), pw: null };
 }
-function itemFits(item, slotId){ return item && item.slot === slotBase(slotId); }
+function slayersItem(item){
+  return !!item && !item.signature && typeof item.id === 'string' && typeof item.name === 'string'
+    && Object.hasOwn(RARITIES, item.r) && (!item.pw || Object.hasOwn(POWERS, item.pw))
+    && EQUIP_SLOTS.some(function(slot){ return slotBase(slot.id) === item.slot; })
+    && item.af && Object.keys(item.af).every(function(key){ return Object.hasOwn(AFFIX_LABEL, key) && Number.isFinite(item.af[key]); });
+}
+function itemFits(item, slotId){
+  return slayersItem(item) && EQUIP_SLOTS.some(function(slot){ return slot.id === slotId && slotBase(slot.id) === item.slot; });
+}
 function itemIcon(item){ var b = item.slot; var s = EQUIP_SLOTS.find(function(x){ return slotBase(x.id) === b; }); return s ? s.ic : '🎁'; }
 
 /* ---- META — permanent state (gear, loadouts, follower). Saved via the parent
@@ -1339,9 +1329,9 @@ function itemIcon(item){ var b = item.slot; var s = EQUIP_SLOTS.find(function(x)
 var META = { inv: [], eq: {}, loadout: {}, follower: 'fdef', pts: 0 };
 var appGold = null;         // wallet when embedded (the app's gold)
 var metaReady = false;
-var INV_CAP = 80;
+function gearCacheKey(){ return (embedded() ? 'legends_gear_meta_' : 'legends_meta_') + studentKey; }
 function metaLoadLocal(){
-  var m = _lsGet('legends_meta_' + studentKey, null);
+  var m = _lsGet(gearCacheKey(), null);
   // Once the cloud copy has synced down, only a strictly NEWER local copy may
   // replace it — a stale device must never erase gear bought elsewhere.
   if (m && typeof m === 'object' && (!metaReady || (m.ts || 0) > (META.ts || 0))){
@@ -1353,39 +1343,88 @@ function metaLoadLocal(){
   if (!FOLLOWERS[META.follower]) META.follower = 'fdef';
   if (!(META.pts >= 0)) META.pts = 0;
 }
-var _metaSaveT = null;
-function metaSave(){
-  META.ts = Date.now();
-  if (_metaSaveT) clearTimeout(_metaSaveT);
-  _metaSaveT = setTimeout(function(){
-    _metaSaveT = null;
-    _lsSet('legends_meta_' + studentKey, META);
-    // Never write to the cloud before the cloud copy has synced down — an
-    // unsynced frame pushing its empty boot state was wiping armories.
-    if (embedded() && metaReady){
-      try { window.parent.postMessage({ type: 'LEGENDS_SAVE', meta: { inv: META.inv, eq: META.eq, loadout: META.loadout, follower: META.follower, ts: META.ts } }, '*'); } catch(e){}
-    }
-  }, 600);
+var metaRevision = 0;
+var gearOwner = '', gearRetry = null, gearOutboxes = new Map();
+function postGearMessage(type, fields){
+  if (!embedded()) return false;
+  var context = scienceFeed.context();
+  if (!context.studentKey || !context.studentLevel || context.studentKey !== studentKey) return false;
+  try {
+    window.parent.postMessage(Object.assign({}, fields, context, {type:type}), location.origin);
+    return true;
+  } catch (_) { return false; }
 }
-function metaApplyRemote(m){
-  m = (m && typeof m === 'object') ? m : {};
-  var remoteInv = Array.isArray(m.inv) ? m.inv : [];
-  var remoteNewer = (m.ts || 0) >= (META.ts || 0);
-  var wipeSuspect = remoteInv.length === 0 && META.inv.length > 0;
-  metaReady = true;
-  if (!remoteNewer || wipeSuspect){
-    // This device knows MORE than the cloud (e.g. the cloud copy was wiped by
-    // an unsynced frame) — keep ours and repair the cloud copy from it.
-    metaSave();
-    return;
+function currentGearMessage(message){
+  var context = scienceFeed.context();
+  return !!context.studentKey && !!context.studentLevel && context.studentKey === studentKey
+    && message.studentKey === context.studentKey && message.studentLevel === context.studentLevel;
+}
+function gearOutboxKey(){ return 'legends_gear_outbox_slayers_' + studentKey; }
+function gearOutbox(){
+  if (!gearOutboxes.has(studentKey)){
+    gearOutboxes.set(studentKey, _lsGet(gearOutboxKey(), null) || {client:null, seq:0, entries:[]});
   }
-  META.inv = remoteInv;
-  if (m.eq && typeof m.eq === 'object') META.eq = m.eq;
-  if (m.loadout && typeof m.loadout === 'object') META.loadout = m.loadout;
-  if (FOLLOWERS[m.follower]) META.follower = m.follower;
-  META.ts = m.ts || META.ts || 0;
+  return gearOutboxes.get(studentKey);
 }
-function itemById(id){ for (var i = 0; i < META.inv.length; i++) if (META.inv[i].id === id) return META.inv[i]; return null; }
+function sendGearOutbox(){
+  clearTimeout(gearRetry);
+  var box = gearOutbox(), entry = box.entries[0];
+  if (entry && postGearMessage('LEGENDS_SAVE', {client:box.client, seq:entry.seq, patch:entry.patch})){
+    gearRetry = setTimeout(sendGearOutbox, 5000);
+  }
+}
+function metaSave(patch){
+  META.ts = Date.now();
+  // Persist the learner's optimistic cache and each ordered change before posting.
+  _lsSet(gearCacheKey(), META);
+  if (!embedded() || !patch) return;
+  var box = gearOutbox();
+  if (!box.client){
+    box.client = Array.from(crypto.getRandomValues(new Uint8Array(16)), function(byte){
+      return byte.toString(16).padStart(2, '0');
+    }).join('');
+  }
+  box.entries.push({seq:++box.seq, patch:structuredClone(patch)});
+  _lsSet(gearOutboxKey(), box);
+  if (metaReady && box.entries.length === 1) sendGearOutbox();
+}
+function metaApplyRemote(message){
+  var m = message.meta || {}, revision = Number(m.ts) || 0;
+  var box = gearOutbox(), receipt = message.receipt, wasReady = metaReady;
+  var ack = receipt && receipt.client === box.client && receipt.seq === box.entries[0]?.seq;
+  if (ack){
+    box.entries.shift();
+    _lsSet(gearOutboxKey(), box);
+  }
+  if (wasReady && revision < metaRevision){
+    if (ack) sendGearOutbox();
+    return false;
+  }
+  var remoteInv = Array.isArray(m.inv) ? m.inv : [];
+  var legacy = !wasReady && !box.entries.length && message.legacy && !revision && !remoteInv.length
+    ? _lsGet('legends_meta_' + studentKey, null) : null;
+  metaReady = true;
+  metaRevision = revision;
+  if (legacy && Array.isArray(legacy.inv) && legacy.inv.length){
+    META.inv = legacy.inv;
+    META.eq = legacy.eq || {};
+    META.loadout = legacy.loadout || {};
+    META.follower = FOLLOWERS[legacy.follower] ? legacy.follower : 'fdef';
+    metaSave({seedLegacy:true, add:META.inv, eq:META.eq, loadout:META.loadout, follower:META.follower});
+  } else if (!box.entries.length){
+    var before = JSON.stringify(META.eq);
+    META.inv = remoteInv;
+    META.eq = (m.eq && typeof m.eq === 'object') ? m.eq : {};
+    META.loadout = (m.loadout && typeof m.loadout === 'object') ? m.loadout : {};
+    META.follower = FOLLOWERS[m.follower] ? m.follower : 'fdef';
+    META.ts = revision;
+    _lsSet(gearCacheKey(), META);
+    if (G && G.state === 'play' && before !== JSON.stringify(META.eq)) computeStats();
+  }
+  if (!wasReady || ack) sendGearOutbox();
+  return true;
+}
+function itemById(id){ return META.inv.find(function(item){ return item?.id === id && slayersItem(item); }) || null; }
 function equippedItems(){
   var out = [];
   EQUIP_SLOTS.forEach(function(s){ var it = itemById(META.eq[s.id]); if (it && itemFits(it, s.id)) out.push(it); });
@@ -1411,8 +1450,12 @@ function buyBox(){
   }
   if (embedded()){
     if (_pendingBuy) return;
+    if (!metaReady || !postGearMessage('LEGENDS_GOLD_DELTA', {delta:-BOX_COST, reason:'lootbox'})){
+      requestMeta();
+      toast('Loading your Armory…', 'energy');
+      return;
+    }
     _pendingBuy = setTimeout(function(){ _pendingBuy = null; toast('Purchase timed out — try again', 'bad'); }, 5000);
-    try { window.parent.postMessage({ type: 'LEGENDS_GOLD_DELTA', delta: -BOX_COST, reason: 'lootbox' }, '*'); } catch(e){}
   } else {
     META.pts -= BOX_COST;
     grantBoxItem();
@@ -1421,14 +1464,7 @@ function buyBox(){
 function grantBoxItem(){
   var item = rollItem();
   META.inv.push(item);
-  // keep the bag bounded: drop the oldest COMMON items first
-  while (META.inv.length > INV_CAP){
-    var di = META.inv.findIndex(function(x){ return x.r === 'common' && !isEquipped(x.id); });
-    if (di < 0) di = META.inv.findIndex(function(x){ return !isEquipped(x.id); });
-    if (di < 0) break;
-    META.inv.splice(di, 1);
-  }
-  metaSave();
+  metaSave({add:[item]});
   sfx(item.r === 'mythic' || item.r === 'legendary' ? 'level' : 'point');
   armoryReveal(item);
   renderArmory();
@@ -1444,34 +1480,37 @@ function equipItem(id, slotId){
     slotId = (empty || fits[0] || {}).id;
   }
   if (!slotId || !itemFits(it, slotId)) return;
-  // unequip from any other slot first
-  EQUIP_SLOTS.forEach(function(s){ if (META.eq[s.id] === id) META.eq[s.id] = null; });
+  var changed = {};
+  EQUIP_SLOTS.forEach(function(slot){
+    if (slot.id !== slotId && META.eq[slot.id] === id) META.eq[slot.id] = changed[slot.id] = null;
+  });
   META.eq[slotId] = id;
-  metaSave();
+  changed[slotId] = id;
+  metaSave({eq:changed});
   if (G) computeStats();
   renderArmory();
   toast('✅ ' + it.name + ' equipped', 'good');
 }
 function unequipSlot(slotId){
-  if (!META.eq[slotId]) return;
+  if (!itemFits(itemById(META.eq[slotId]), slotId)) return;
   META.eq[slotId] = null;
-  metaSave();
+  metaSave({eq:{[slotId]:null}});
   if (G) computeStats();
   renderArmory();
 }
 function salvageItem(id){
-  var idx = META.inv.findIndex(function(x){ return x.id === id; });
-  if (idx < 0) return;
-  var it = META.inv[idx];
+  var it = itemById(id);
+  if (!it || (embedded() && !metaReady)) return;
+  var idx = META.inv.indexOf(it);
   EQUIP_SLOTS.forEach(function(s){ if (META.eq[s.id] === id) META.eq[s.id] = null; });
   META.inv.splice(idx, 1);
   var refund = RARITIES[it.r].salvage;
   if (embedded()){
-    try { window.parent.postMessage({ type: 'LEGENDS_GOLD_DELTA', delta: refund, reason: 'salvage' }, '*'); } catch(e){}
+    postGearMessage('LEGENDS_GOLD_DELTA', {delta:refund, reason:'salvage'});
   } else {
     META.pts += refund;
   }
-  metaSave();
+  metaSave({remove:[id]});
   if (G) computeStats();
   armorySel = null;
   renderArmory();
@@ -1500,6 +1539,7 @@ function renderArmory(){
   var sHtml = '';
   EQUIP_SLOTS.forEach(function(s){
     var it = itemById(META.eq[s.id]);
+    if (!itemFits(it, s.id)) it = null;
     sHtml += '<div class="eq-slot' + (it ? ' filled r-' + it.r : '') + '" data-slot="' + s.id + '" title="' + s.name + (it ? ' — ' + it.name : '') + '">' +
       '<span class="eqs-ico">' + (it ? itemIcon(it) : s.ic) + '</span>' +
       '<span class="eqs-name">' + s.name + '</span>' +
@@ -1515,7 +1555,7 @@ function renderArmory(){
     });
   });
   // inventory sorted by rarity desc
-  var inv = META.inv.slice().sort(function(a, b){ return RARITIES[b.r].rank - RARITIES[a.r].rank; });
+  var inv = META.inv.filter(slayersItem).sort(function(a, b){ return RARITIES[b.r].rank - RARITIES[a.r].rank; });
   $('invGrid').innerHTML = inv.length ? inv.map(function(it){ return itemCardHtml(it); }).join('') : '<div class="inv-empty">Your bag is empty — open a loot box below!</div>';
   Array.prototype.forEach.call(document.querySelectorAll('#invGrid .inv-item'), function(el){
     el.addEventListener('click', function(){ armorySel = el.getAttribute('data-item'); renderArmory(); });
@@ -2009,8 +2049,9 @@ function loadLoadout(cls){
 }
 function saveLoadout(){
   if (!G) return;
-  META.loadout[G.cls] = G.slots.slice();
-  metaSave();
+  var slots = G.slots.slice();
+  META.loadout[G.cls] = slots;
+  metaSave({loadout:{[G.cls]:slots}});
 }
 var selSlotIdx = 0;
 function openSkillSel(){
@@ -2180,14 +2221,6 @@ function aggroPack(packId, srcE){
   });
   if (woke && srcE){ addText(srcE.x, srcE.y - srcE.r - 8, '!', '#FF5252', true); sfx('hit'); }
 }
-function trimInv(){
-  while (META.inv.length > INV_CAP){
-    var di = META.inv.findIndex(function(x){ return x.r === 'common' && !isEquipped(x.id); });
-    if (di < 0) di = META.inv.findIndex(function(x){ return !isEquipped(x.id); });
-    if (di < 0) break;
-    META.inv.splice(di, 1);
-  }
-}
 /* Monster loot. Bosses use the boosted table: 0.5% MYTHIC, 1% unique, 7% legendary. */
 function dropItem(bossTable){
   var r = Math.random() * 100;
@@ -2196,8 +2229,7 @@ function dropItem(bossTable){
     : rollRarity();
   var it = rollItem(rar);
   META.inv.push(it);
-  trimInv();
-  metaSave();
+  metaSave({add:[it]});
   sfx(it.r === 'mythic' || it.r === 'legendary' ? 'level' : 'point');
   toast('📦 ' + RARITIES[it.r].name + ' drop: ' + it.name + ' — saved to your Armory (B)', it.r === 'mythic' || it.r === 'legendary' ? 'good' : 'energy');
   if (it.r === 'mythic'){ toast('✦ MYTHIC ITEM! ✦', 'good'); G.shake = 0.5; }
@@ -4597,15 +4629,20 @@ function syncCombatLearner(){
     resetFlagUI();show('menuOverlay');renderClassCards();
   }
   var nextKey=context.studentKey||'guest';
-  if(nextKey!==studentKey){
-    if(_metaSaveT){clearTimeout(_metaSaveT);_metaSaveT=null;}
+  if(gearOwner!==owner){
+    gearOwner=owner;metaRevision=0;metaReady=false;
+    clearTimeout(gearRetry);
     if(_pendingBuy){clearTimeout(_pendingBuy);_pendingBuy=null;}
+    _metaReqTries=0;
+  }
+  if(nextKey!==studentKey){
     studentKey=nextKey;META={inv:[],eq:{},loadout:{},follower:'fdef',pts:0};
-    metaReady=false;appGold=null;_gPlaysLeft=null;
+    appGold=null;_gPlaysLeft=null;
     loadAdaptiveState();metaLoadLocal();renderMenuFollowers();
     if(typeof renderContinue==='function')renderContinue();
-    _metaReqTries=0;requestMeta();updateHud();
+    updateHud();
   }
+  if(!metaReady && _metaReqTries===0)requestMeta();
 }
 
 // The portal owns level, mastery, quality and shared repetition decisions.
@@ -4614,6 +4651,7 @@ var scienceFeed = ScienceFeedBridge.create({
   prefetch: true, // next question is fetched while this one is on screen
   onPool: function(rows, event){ acceptedFeedEvent=event||null; applyBankQuestions(rows); syncCombatLearner(); },
   onInvalidate: function(){
+    resetFlagUI();
     syncCombatLearner();
     if(typeof qState !== 'undefined' && qState){ qState.active=false; qState.current=null; qState.answered=true; }
     var overlay=document.getElementById('questionOverlay'); if(overlay) overlay.classList.remove('show');
@@ -4657,7 +4695,7 @@ async function openQuestion(){
   if(!scienceFeed.current(q))return;
   var ex = $('qExplain'); ex.className = 'q-explain'; ex.innerHTML = '';
   $('qContinueBtn').style.display = 'none';
-  resetFlagUI();
+  questionFlag?.setQuestion(q);
   // Anti-misclick guard: players are usually mid-click-spam (moving/attacking)
   // when the question pops. Swallow held buttons and disarm the answers for a
   // beat so a stray click can never pick an option.
@@ -4714,18 +4752,18 @@ function answerQuestion(idx){
   ex.innerHTML = head + body;
   ex.className = 'q-explain show';
   wireQuestionImages(ex);
-  maybeShowFlag(q);
   var btn = $('qContinueBtn');
   btn.style.display = 'inline-flex';
   btn.onclick = function(){
     if(G!==questionRun || G.state!=='play' || !qState.active || qState.current!==q)return;
     qState.active = false;
+    resetFlagUI();
     hide('questionOverlay');
     updateHud();
   };
   updateHud();
   if(G.player.hp<=0){
-    qState.active=false;hide('questionOverlay');gameOver();
+    qState.active=false;resetFlagUI();hide('questionOverlay');gameOver();
     $('overSub').textContent=pressure.message+' Your question penalty ended this run.';
   }
 }
@@ -4779,7 +4817,7 @@ var _metaReqTries = 0;
 function requestMeta(){
   if (!embedded()) return;
   if (metaReady) return;
-  try { window.parent.postMessage({ type: 'LEGENDS_REQUEST_META' }, '*'); } catch(e){}
+  postGearMessage('LEGENDS_REQUEST_META');
   _metaReqTries++;
   if (_metaReqTries < 8 && !metaReady) setTimeout(requestMeta, 1200);
 }
@@ -4831,13 +4869,13 @@ window.addEventListener('message', function(ev){
     }
     updateHud();
   } else if (d.type === 'LEGENDS_META'){
-    metaApplyRemote(d.meta);
+    if(!currentGearMessage(d) || !metaApplyRemote(d))return;
     if (typeof d.gold === 'number') appGold = d.gold;
-    metaReady = true;
     renderMenuFollowers();
     if ($('armoryOverlay').classList.contains('show')) renderArmory();
     updateHud();
   } else if (d.type === 'LEGENDS_GOLD_RESULT'){
+    if(!currentGearMessage(d))return;
     if(d.reason==='lootbox' && !_pendingBuy)return; // cancelled old-learner purchase
     if (typeof d.gold === 'number') appGold = d.gold;
     if (d.reason === 'lootbox'){
@@ -4846,65 +4884,17 @@ window.addEventListener('message', function(ev){
       else toast(d.message || 'Not enough points — answer questions in the app to earn more!', 'bad');
     }
     updateHud();
-  } else if (d.type === 'SD_FLAG_RESULT'){
-    if (d.ok) flagSucceeded(); else flagFailed(d.message);
   }
 });
 
-/* ---- flag a question ---- */
-var flagState = { q: null, busy: false };
-function resetFlagUI(){
-  flagState.q = null; flagState.busy = false;
-  $('flagBox').style.display = 'none';
-  $('flagForm').style.display = 'none';
-  $('flagDone').style.display = 'none';
-  $('flagToggle').style.display = '';
-  $('flagComment').value = '';
-  var sb = $('flagSubmit'); sb.disabled = false; sb.textContent = 'Submit flag';
-}
-function maybeShowFlag(q){
-  if (!q || !q.id || !usingBankQuestions || !embedded()) return;
-  flagState.q = q;
-  $('flagBox').style.display = '';
-}
+var questionFlag = null;
+function resetFlagUI(){ questionFlag?.reset(); }
 function wireFlag(){
-  $('flagToggle').addEventListener('click', function(){
-    $('flagToggle').style.display = 'none';
-    $('flagForm').style.display = 'flex';
-    $('flagComment').focus();
+  questionFlag = GameQuestionFlag.embedded($('flagBox'), {
+    mode: 'slayers', feed: () => scienceFeed,
+    current: q => qState.active && qState.current === q,
+    title: () => $('qStem').textContent
   });
-  $('flagCancel').addEventListener('click', function(){
-    $('flagForm').style.display = 'none';
-    $('flagToggle').style.display = '';
-    $('flagComment').value = '';
-  });
-  $('flagSubmit').addEventListener('click', submitFlag);
-}
-function submitFlag(){
-  if(!scienceFeed.current(flagState.q)) return;
-  if (flagState.busy || !flagState.q) return;
-  var comment = $('flagComment').value.trim();
-  if (!comment){ toast('Please describe the issue', 'bad'); $('flagComment').focus(); return; }
-  flagState.busy = true;
-  var sb = $('flagSubmit'); sb.disabled = true; sb.textContent = 'Submitting…';
-  try {
-    window.parent.postMessage({ type:'SD_FLAG', studentKey:scienceFeed.context().studentKey, studentLevel:scienceFeed.context().studentLevel, mode: 'slayers', questionId: flagState.q.id, questionTitle: (flagState.q.q || '').slice(0, 140), comment: comment }, '*');
-  } catch(e){ flagFailed('Could not submit — try again'); }
-  flagState.timeout = setTimeout(function(){ if (flagState.busy) flagSucceeded(); }, 4000);
-}
-function flagSucceeded(){
-  if (flagState.timeout) clearTimeout(flagState.timeout);
-  flagState.busy = false;
-  $('flagForm').style.display = 'none';
-  $('flagToggle').style.display = 'none';
-  $('flagDone').style.display = 'block';
-  toast('⚑ Question flagged — thanks!', 'good');
-}
-function flagFailed(msg){
-  if (flagState.timeout) clearTimeout(flagState.timeout);
-  flagState.busy = false;
-  var sb = $('flagSubmit'); sb.disabled = false; sb.textContent = 'Submit flag';
-  toast(msg || 'Could not submit the flag', 'bad');
 }
 
 /* ============================================================================
@@ -5015,7 +5005,7 @@ function renderMenuFollowers(){
     el.type = 'button';
     el.className = 'fol-pill' + (key === META.follower ? ' sel' : '');
     el.innerHTML = '<span class="fp-ico">' + f.icon + '</span><span class="fp-body"><b>' + f.name + '</b><span>' + f.desc + '</span></span>';
-    el.addEventListener('click', function(){ META.follower = key; metaSave(); renderMenuFollowers(); });
+    el.addEventListener('click', function(){ META.follower = key; metaSave({follower:key}); renderMenuFollowers(); });
     wrap.appendChild(el);
   });
 }

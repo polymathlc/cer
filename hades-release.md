@@ -1,4 +1,6 @@
-# Hades 2.2.3 student beta
+# Hades 2.2.4 student beta
+
+The portal’s sanctuary question panel now accepts a flag and comment through the authenticated question report route. Reports stay tied to the displayed question and learner session, separate from answer grading and room rewards.
 
 This portal ships the full-size Hades build with fullscreen controls, premium chamber details, animated gate rings, spectral dash silhouettes and polished menus. BETA labels remain visible. Students play using their own school level; administrator preview stays separate.
 

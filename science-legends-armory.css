@@ -1,0 +1,203 @@
+/* Armour and bag slots use the same atlas cell layout at every rarity. */
+.armory-panel {
+  position: relative;
+  color: #f3e6ca;
+  background: linear-gradient(145deg, #253444, #121c27 46%);
+  border: 1px solid #9d8359;
+}
+.armory-panel .tree-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin-bottom: 12px;
+  padding: 5px 0;
+  border-bottom: 1px solid #9d835973;
+  background: #1c2a38;
+}
+.armory-panel h2, .armory-panel h3 { color: #ffe2a8; }
+.armory-panel h3 { margin: 0 0 8px; font-size: .94rem; }
+.armory-class { color: #bed3df; font-weight: 700; font-size: .72rem; }
+.armory-layout {
+  display: grid;
+  grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
+  gap: 16px;
+  align-items: start;
+}
+.eq-slots {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-areas:
+    'mainhand helm offhand'
+    'gloves chest amulet'
+    'ring1 pants ring2'
+    '. greaves .';
+  gap: 6px;
+}
+.eq-slot[data-slot="mainhand"] { grid-area: mainhand; }
+.eq-slot[data-slot="helm"] { grid-area: helm; }
+.eq-slot[data-slot="offhand"] { grid-area: offhand; }
+.eq-slot[data-slot="gloves"] { grid-area: gloves; }
+.eq-slot[data-slot="chest"] { grid-area: chest; }
+.eq-slot[data-slot="amulet"] { grid-area: amulet; }
+.eq-slot[data-slot="ring1"] { grid-area: ring1; }
+.eq-slot[data-slot="pants"] { grid-area: pants; }
+.eq-slot[data-slot="ring2"] { grid-area: ring2; }
+.eq-slot[data-slot="greaves"] { grid-area: greaves; }
+.eq-slot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+  min-height: 80px;
+  padding: 4px;
+  border: 1px dashed #9eafbb55;
+  border-radius: 8px;
+  background: #121d29;
+  color: #dfdfd4;
+  font: inherit;
+  text-align: center;
+}
+.eq-slot.filled { border-style: solid; border-color: var(--rar); cursor: pointer; }
+.eqs-ico { display: grid; place-items: center; height: 36px; font-size: 22px; opacity: .65; }
+.eqs-name { font-size: .62rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.eqs-item { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .68rem; }
+.eqs-item.empty { color: #a9bac5; }
+.gear-inactive .gear-icon { opacity: .55; }
+.gear-inactive-label { color: #ffcc94; font-size: .63rem; font-weight: 700; }
+.armory-bag-heading, .armory-paging {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  color: #bed3df;
+  font-size: .68rem;
+}
+.armory-bag-heading { margin-bottom: 8px; }
+.armory-bag-heading h3 { margin-bottom: 0; }
+.armory-paging { margin-top: 8px; }
+.armory-paging[hidden] { display: none; }
+.inv-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 5px;
+  max-height: 254px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 5px;
+  border: 1px solid #9d835973;
+  border-radius: 8px;
+  background: #0c141e;
+}
+.inv-item, .inv-space {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  min-height: 44px;
+  padding: 2px;
+  border: 1px solid var(--rar, #4d5c67);
+  border-radius: 6px;
+  background: linear-gradient(145deg, #263443, #141e29);
+}
+.inv-item { cursor: pointer; }
+.inv-space { background: #111c28; }
+.inv-empty { grid-column: 1 / -1; padding: 20px 10px; text-align: center; font-size: .75rem; color: #bed3df; }
+.inv-item.r-magic { background: linear-gradient(145deg, #244973, #142338); }
+.inv-item.r-rare { background: linear-gradient(145deg, #4d4129, #242117); }
+.inv-item.r-legendary { background: linear-gradient(145deg, #653c2d, #2c1a17); }
+.inv-item.r-unique { background: linear-gradient(145deg, #584b2d, #282019); }
+.inv-item.r-mythic { background: linear-gradient(145deg, #542a66, #25132d); }
+.inv-item.mythic-unique { box-shadow: inset 0 0 13px #ffb7ff62; }
+.eq-slot.sel, .inv-item.sel { outline: 2px solid #ffe2a8; outline-offset: -2px; }
+.armory-panel button:focus-visible, .armory-detail:focus-visible {
+  outline: 2px solid #8ce5ec;
+  outline-offset: -2px;
+}
+.ii-eq {
+  position: absolute;
+  bottom: 2px;
+  left: 2px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: #296041;
+  color: #fff;
+  font-size: .62rem;
+  font-weight: 800;
+}
+.gear-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  background-position: var(--gear-x) var(--gear-y);
+  background-repeat: no-repeat;
+  background-size: 400% 300%;
+  font-size: 23px;
+}
+.gear-art-common .gear-icon[data-atlas="common"] { background-image: url('assets/science-legends/v5/items-common.webp'); }
+.gear-art-exalted .gear-icon[data-atlas="exalted"] { background-image: url('assets/science-legends/v5/items-exalted.webp'); }
+.gear-art-mythic .gear-icon[data-atlas="mythic"] { background-image: url('assets/science-legends/v5/items-mythic.webp'); background-size:300% 200%; }
+.gear-art-common .gear-icon[data-atlas="common"] .gear-icon-fallback,
+.gear-art-exalted .gear-icon[data-atlas="exalted"] .gear-icon-fallback,
+.gear-art-mythic .gear-icon[data-atlas="mythic"] .gear-icon-fallback { visibility: hidden; }
+.armory-detail, .armory-shop {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid #9d835973;
+  border-radius: 8px;
+  background: #152130;
+  font-size: .76rem;
+  line-height: 1.55;
+}
+.ad-head { display: flex; gap: 9px; align-items: center; margin-bottom: 7px; }
+.ad-head .gear-icon { width: 52px; height: 52px; border: 1px solid var(--rar); border-radius: 8px; background-color: #101a25; }
+.ad-name { color: #ffe2a8; font-weight: 800; font-size: .91rem; overflow-wrap: anywhere; }
+.ad-sub, .ad-hint, .armory-box-info div, .armory-boss-rule { color: #bed3df; }
+.ad-pw, .ad-signature, .ad-issue { margin-top: 6px; color: #ffdbac; }
+.ad-signature { color: #f3b5ff; }
+.gear-affinity { color: #a5edf1; font-weight: 700; }
+.ad-actions, .armory-shop { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ad-actions { margin-top: 9px; }
+.armory-panel .btn { min-height: 44px; }
+.armory-panel .btn-outline { color: #ffe2a8; border-color: #9d8359; background: #23384b; }
+.armory-box-info { flex: 1 1 220px; }
+.armory-wallet { color: #ffe2a8; font-weight: 800; }
+.armory-boss-rule { margin: 8px 0 0; font-size: .7rem; line-height: 1.5; }
+#boxReveal {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  background: #070e17b3;
+  border-radius: inherit;
+}
+.reveal-card {
+  max-width: 88%;
+  padding: 18px 25px;
+  border: 2px solid var(--rar);
+  border-radius: 12px;
+  background: #172432;
+  box-shadow: 0 0 20px var(--rar);
+  text-align: center;
+}
+.reveal-card .gear-icon { width: 84px; height: 84px; }
+.rv-rar, .rv-name { color: #ffe2a8; font-weight: 800; }
+.rv-rar { font-size: .67rem; letter-spacing: .12em; }
+.rv-af { color: #bed3df; font-size: .73rem; line-height: 1.5; }
+
+@media (max-width: 700px) {
+  .armory-layout { grid-template-columns: minmax(0, 1fr); gap: 13px; }
+  .armory-panel .panel-pad { padding: 12px; }
+  .eq-slot { min-height: 64px; }
+  .eq-slot .gear-icon, .eqs-ico { width: 30px; height: 30px; }
+}
+@media (max-width: 430px) {
+  .inv-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}

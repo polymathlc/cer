@@ -305,17 +305,6 @@ html, body {
 .q-explain.show { display: block; }
 .q-explain b { color: var(--text-primary); }
 
-/* flag-a-question UI (shown after answering) */
-.flagbox { flex: 1 1 auto; min-width: 0; }
-.flag-link { background: none; border: none; color: var(--text-tertiary); font-family: inherit; font-size: var(--font-size-xs); font-weight: 700; cursor: pointer; padding: 6px 0; text-decoration: underline; text-underline-offset: 2px; }
-.flag-link:hover { color: var(--danger); }
-.flag-form { margin-top: 6px; display: flex; flex-direction: column; gap: 8px; max-width: 380px; }
-.flag-form textarea { width: 100%; border: 1.5px solid var(--border-medium); border-radius: 10px; padding: 8px 10px; font-family: inherit; font-size: var(--font-size-sm); color: var(--text-primary); resize: vertical; }
-.flag-form textarea:focus { outline: none; border-color: var(--accent-base); }
-.flag-actions { display: flex; gap: 8px; }
-.flag-actions .btn { padding: 6px 14px; }
-.flag-done { font-size: var(--font-size-xs); color: var(--good); font-weight: 800; padding: 6px 0; }
-
 .toast-wrap { position: absolute; top: 64px; left: 50%; transform: translateX(-50%); z-index: 60; display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none; }
 .toast {
   background: rgba(26,21,48,0.92); color: #fff; padding: 8px 16px; border-radius: 999px;
@@ -438,17 +427,7 @@ html, body {
         <p class="q-pressure-rule" style="font-size:.78rem;line-height:1.45;">Wrong answers in a row deal increasing damage. Five in a row ends the run. A correct answer resets the streak.</p>
         <div class="q-explain" id="qExplain"></div>
         <div class="row" style="margin-top:14px;justify-content:space-between;align-items:flex-start;gap:10px;">
-          <div class="flagbox" id="flagBox" style="display:none;">
-            <button class="flag-link" id="flagToggle" type="button">⚑ Flag this question</button>
-            <div class="flag-form" id="flagForm" style="display:none;">
-              <textarea id="flagComment" rows="3" placeholder="What's wrong? (e.g. wrong answer, typo, unclear diagram)"></textarea>
-              <div class="flag-actions">
-                <button class="btn btn-outline" id="flagCancel" type="button">Cancel</button>
-                <button class="btn btn-primary" id="flagSubmit" type="button">Submit flag</button>
-              </div>
-            </div>
-            <div class="flag-done" id="flagDone" style="display:none;">✓ Thanks — your teacher will review this question.</div>
-          </div>
+          <div id="flagBox" hidden></div>
           <button class="btn btn-primary" id="qContinueBtn" type="button" style="display:none;flex:0 0 auto;">Continue →</button>
         </div>
       </div></div>
@@ -486,6 +465,7 @@ html, body {
 </div>
 
 <script src="science-feed-bridge.js"></script>
+<script src="game-question-flag.js?v=1.460.0"></script>
 <script src="game-question-pressure.js?v=1.457.0"></script>
 <script>
 /* ============================================================================
@@ -2614,6 +2594,7 @@ var raiderAcceptedFeedEvent=null;
 var scienceFeed = ScienceFeedBridge.create({
   onPool: function(rows, acceptedEvent){ raiderAcceptedFeedEvent=acceptedEvent||null; applyBankQuestions(rows);bindRaiderRunIdentity(); },
   onInvalidate: function(){
+    resetFlagUI();
     var retired=retireRaiderIdentity();
     if(!_gameCreditsReady()){_gPlaysLeft=null;scienceFeed.refresh();}
     var wasActive=!retired && typeof qState!=='undefined' && qState && qState.active;
@@ -2665,7 +2646,7 @@ async function openQuestion(){
   var ex = $('qExplain'); ex.className = 'q-explain'; ex.innerHTML = '';
   $('qContinueBtn').style.display = 'none';
   $('qReward').textContent = 'Room cleared!';
-  resetFlagUI();
+  questionFlag?.setQuestion(q);
   show('questionOverlay');
 }
 
@@ -2708,7 +2689,6 @@ function answerQuestion(idx, btnEl){
   ex.className = 'q-explain show';
   wireQuestionImages(ex);
 
-  maybeShowFlag(q);
 
   var btn = $('qContinueBtn');
   btn.style.display = 'inline-flex';
@@ -2716,6 +2696,7 @@ function answerQuestion(idx, btnEl){
   btn.onclick = function(){
     if(G!==questionRun || G.state!=='question' || !qState.active || qState.current!==q || !scienceFeed.current(q))return;
     qState.active = false;
+    resetFlagUI();
     hide('questionOverlay');
     if (grantsUpgrade){ openUpgrade(); }
     else {
@@ -2726,7 +2707,7 @@ function answerQuestion(idx, btnEl){
     }
   };
   if(G.player.hp<=0){
-    qState.active=false;hide('questionOverlay');gameOver();
+    qState.active=false;resetFlagUI();hide('questionOverlay');gameOver();
     $('overSub').textContent=pressure.message+' Your question penalty ended this raid.';
   }
 }
@@ -2949,80 +2930,17 @@ window.addEventListener('message', function(ev){
   _ovrSet(d.overrides);
 });
 
-/* ---------------- 14b. FLAG A QUESTION ----------------
- * Lets students report a bad question after answering. The game can't reach
- * Firestore directly, so it posts the flag to the parent app, which writes it
- * to the same `flaggedQuestions` collection the in-app flag dialog uses. */
-var flagState = { q: null, busy: false };
+function embedded(){ return window.parent !== window; }
 
-function embedded(){ return !!(window.parent && window.parent !== window); }
-
-function resetFlagUI(){
-  flagState.q = null; flagState.busy = false;
-  $('flagBox').style.display = 'none';
-  $('flagForm').style.display = 'none';
-  $('flagDone').style.display = 'none';
-  $('flagToggle').style.display = '';
-  $('flagComment').value = '';
-  var sb = $('flagSubmit'); sb.disabled = false; sb.textContent = 'Submit flag';
-}
-
-/* Only offer flagging for real bank questions while embedded in the app. */
-function maybeShowFlag(q){
-  if (!q || !q.id || !usingBankQuestions || !embedded()) return;
-  flagState.q = q;
-  $('flagBox').style.display = '';
-}
-
+var questionFlag = null;
+function resetFlagUI(){ questionFlag?.reset(); }
 function wireFlag(){
-  $('flagToggle').addEventListener('click', function(){
-    $('flagToggle').style.display = 'none';
-    $('flagForm').style.display = 'flex';
-    $('flagComment').focus();
+  questionFlag = GameQuestionFlag.embedded($('flagBox'), {
+    mode: 'raiders', feed: () => scienceFeed,
+    current: q => qState.active && qState.current === q,
+    title: () => $('qStem').textContent
   });
-  $('flagCancel').addEventListener('click', function(){
-    $('flagForm').style.display = 'none';
-    $('flagToggle').style.display = '';
-    $('flagComment').value = '';
-  });
-  $('flagSubmit').addEventListener('click', submitFlag);
 }
-
-function submitFlag(){
-  if(!scienceFeed.current(flagState.q)) return;
-  if (flagState.busy || !flagState.q) return;
-  var comment = $('flagComment').value.trim();
-  if (!comment){ toast('Please describe the issue', 'bad'); $('flagComment').focus(); return; }
-  flagState.busy = true;
-  var sb = $('flagSubmit'); sb.disabled = true; sb.textContent = 'Submitting…';
-  try {
-    window.parent.postMessage({ type:'SD_FLAG', studentKey:scienceFeed.context().studentKey, studentLevel:scienceFeed.context().studentLevel, mode:'raiders', questionId:flagState.q.id, questionTitle:(flagState.q.q||'').slice(0,140), comment:comment }, '*');
-  } catch(e){ flagFailed('Could not submit — try again'); }
-  // Fallback if the parent never answers (e.g. older app build).
-  flagState.timeout = setTimeout(function(){ if (flagState.busy) flagSucceeded(); }, 4000);
-}
-
-function flagSucceeded(){
-  if (flagState.timeout) clearTimeout(flagState.timeout);
-  flagState.busy = false;
-  $('flagForm').style.display = 'none';
-  $('flagToggle').style.display = 'none';
-  $('flagDone').style.display = 'block';
-  toast('⚑ Question flagged — thanks!', 'good');
-}
-function flagFailed(msg){
-  if (flagState.timeout) clearTimeout(flagState.timeout);
-  flagState.busy = false;
-  var sb = $('flagSubmit'); sb.disabled = false; sb.textContent = 'Submit flag';
-  toast(msg || 'Could not submit the flag', 'bad');
-}
-
-window.addEventListener('message', function(ev){
-  var d = ev && ev.data;
-  if (!d || d.type !== 'SD_FLAG_RESULT') return;
-  if(ev.source!==window.parent || ev.origin!==location.origin)return;
-  if (d.ok) flagSucceeded(); else flagFailed(d.message);
-});
 
 /* ---------------- 15. MENU WIRING ---------------- */
 function renderClassPills(){

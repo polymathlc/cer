@@ -359,15 +359,6 @@ body.touch .pbars { bottom: 150px; }
 .q-explain.show { display: block; }
 .q-explain img { max-width: 100%; height: auto; }
 
-/* flag */
-.flagbox { flex: 1; min-width: 200px; }
-.flag-link { background: none; border: none; color: var(--text-tertiary); font-size: var(--font-size-xs); font-weight: 700; cursor: pointer; padding: 4px 0; font-family: inherit; }
-.flag-link:hover { color: var(--bad); text-decoration: underline; }
-.flag-form { display: flex; flex-direction: column; gap: 8px; }
-.flag-form textarea { width: 100%; border: 1px solid var(--border-medium); border-radius: 9px; padding: 8px 10px; font-family: inherit; font-size: var(--font-size-sm); resize: vertical; }
-.flag-actions { display: flex; gap: 8px; justify-content: flex-end; }
-.flag-done { color: var(--good); font-size: var(--font-size-sm); font-weight: 700; }
-
 /* stats grid on game-over */
 .over-stats { display: flex; justify-content: center; gap: 22px; margin: 6px 0 16px; flex-wrap: wrap; }
 .over-stats .num { font-size: 1.7rem; font-weight: 800; }
@@ -380,66 +371,9 @@ body.touch .pbars { bottom: 150px; }
   .tree-board-wrap { height: 48vh; }
 }
 
-/* ---- v2: armory / loot / rarity ---- */
+/* ---- Item rarity colours ---- */
 .r-common { --rar: #9E9E9E; } .r-magic { --rar: #42A5F5; } .r-rare { --rar: #FFB300; }
 .r-unique { --rar: #C9A227; } .r-legendary { --rar: #FF7043; } .r-mythic { --rar: #D500F9; }
-.eq-slots { display: grid; grid-template-columns: repeat(auto-fit, minmax(108px, 1fr)); gap: 10px; margin-bottom: 14px; }
-.eq-slot {
-  border: 2px dashed var(--border-medium); border-radius: 12px; padding: 10px 8px;
-  display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer;
-  background: var(--bg-secondary); text-align: center; min-height: 88px;
-}
-.eq-slot.filled { border-style: solid; border-color: var(--rar); background: var(--bg-primary); box-shadow: var(--shadow-sm); }
-.eq-slot .eqs-ico { font-size: 22px; }
-.eq-slot .eqs-name { font-size: 0.62rem; font-weight: 800; letter-spacing: 0.04em; color: var(--text-tertiary); text-transform: uppercase; }
-.eq-slot .eqs-item { font-size: 0.66rem; font-weight: 700; line-height: 1.25; }
-.eq-slot .eqs-item.empty { color: var(--text-tertiary); font-weight: 500; }
-.armory-shop {
-  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-  border: 1px solid var(--border-subtle); border-radius: 12px; padding: 12px 14px;
-  background: linear-gradient(135deg, #FFF8F5, var(--bg-secondary)); margin-bottom: 14px;
-}
-.armory-wallet { font-weight: 800; font-size: var(--font-size-md); }
-.inv-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(54px, 1fr)); gap: 8px;
-  max-height: 26vh; overflow-y: auto; padding: 4px; border: 1px solid var(--border-subtle);
-  border-radius: 12px; background: var(--bg-secondary); overscroll-behavior: contain;
-}
-.inv-empty { grid-column: 1 / -1; text-align: center; color: var(--text-tertiary); font-size: var(--font-size-sm); padding: 22px 10px; }
-.inv-item {
-  position: relative; aspect-ratio: 1; border-radius: 10px; border: 2.5px solid var(--rar);
-  background: var(--bg-primary); font-size: 21px; cursor: pointer; display: grid; place-items: center;
-}
-.inv-item.r-mythic { background: linear-gradient(135deg, #F3E5F5, #fff); box-shadow: 0 0 8px rgba(213,0,249,0.35); }
-.inv-item.r-legendary { box-shadow: 0 0 6px rgba(255,112,67,0.3); }
-.inv-item.sel { outline: 3px solid var(--text-primary); outline-offset: 1px; }
-.inv-item .ii-pw { position: absolute; top: -6px; right: -6px; font-size: 11px; background: var(--bg-primary); border: 1px solid var(--rar); border-radius: 50%; width: 18px; height: 18px; display: grid; place-items: center; }
-.inv-item .ii-eq { position: absolute; bottom: -6px; left: -6px; font-size: 0.56rem; font-weight: 800; color: #fff; background: var(--good); border-radius: 6px; padding: 1px 5px; }
-.armory-detail { margin-top: 12px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--bg-secondary); padding: 12px 14px; min-height: 74px; font-size: var(--font-size-sm); }
-.armory-detail .ad-hint { color: var(--text-tertiary); line-height: 1.5; }
-.armory-detail .ad-head { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }
-.armory-detail .ad-ico { width: 42px; height: 42px; border-radius: 10px; border: 2.5px solid var(--rar); background: var(--bg-primary); display: grid; place-items: center; font-size: 20px; flex: 0 0 auto; }
-.armory-detail .ad-name { font-weight: 800; font-size: var(--font-size-md); }
-.armory-detail .ad-sub { color: var(--text-tertiary); font-size: var(--font-size-xs); }
-.armory-detail .ad-af { color: var(--text-secondary); line-height: 1.55; }
-.armory-detail .ad-pw { margin-top: 8px; border-left: 4px solid #D500F9; background: #F3E5F5; border-radius: 0 8px 8px 0; padding: 8px 11px; line-height: 1.5; }
-.armory-detail .ad-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-#boxReveal {
-  display: none; position: absolute; inset: 0; z-index: 12; align-items: center; justify-content: center;
-  background: rgba(24,24,28,0.6); border-radius: 18px;
-}
-.reveal-card {
-  background: var(--bg-primary); border: 3px solid var(--rar); border-radius: 16px;
-  padding: 22px 30px; text-align: center; box-shadow: 0 0 40px var(--rar);
-  animation: revealPop 0.45s cubic-bezier(0.2, 1.4, 0.4, 1);
-  max-width: 320px;
-}
-@keyframes revealPop { from { transform: scale(0.4) rotate(-6deg); opacity: 0; } }
-.reveal-card .rv-rar { font-weight: 800; letter-spacing: 0.14em; font-size: 0.72rem; margin-bottom: 6px; }
-.reveal-card .rv-ico { font-size: 44px; margin: 4px 0; }
-.reveal-card .rv-name { font-weight: 800; font-size: 1.05rem; margin-bottom: 8px; }
-.reveal-card .rv-af { color: var(--text-secondary); font-size: var(--font-size-sm); line-height: 1.5; }
-.reveal-card .rv-pw { margin-top: 8px; font-weight: 800; color: #8E24AA; font-size: var(--font-size-sm); }
 
 /* ---- v2: follower pills ---- */
 .followers { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin: 8px 0 16px; }
@@ -522,12 +456,13 @@ body.touch .pbars { bottom: 150px; }
 body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:none!important;transition:none!important}
 @media(max-width:700px){.hint-bar{display:none}.battle-status{top:52px;max-width:calc(100% - 145px);font-size:.67rem;padding:6px 8px}.battle-map{width:116px;height:140px}.battle-map canvas{width:104px;height:104px}.qtimer{font-size:.7rem;white-space:nowrap}.pbars,body.touch .pbars{bottom:166px;width:165px}.skillbar{bottom:18px;left:calc(50% + 42px);gap:6px}.skill-slot{width:43px;height:46px;font-size:21px}.evade-btn{right:15px;bottom:85px;width:86px;min-width:86px;min-height:44px}.joy{left:12px;bottom:18px;width:96px;height:96px}.battle-map span{font-size:9px}.descend-btn{top:145px;font-size:.75rem}}
 </style>
-<link rel="stylesheet" href="science-legends-premium.css?v=1.459.0">
-<link rel="stylesheet" href="science-legends-sanctum.css?v=1.459.0">
-<link rel="stylesheet" href="science-legends-icons.css?v=1.459.0">
-<link rel="stylesheet" href="science-expedition-accessibility.css?v=1.459.0">
-<link rel="stylesheet" href="science-legends-refinement.css?v=1.459.0">
-<script defer src="science-expedition-accessibility.js?v=1.459.0"></script>
+<link rel="stylesheet" href="science-legends-premium.css?v=1.460.0">
+<link rel="stylesheet" href="science-legends-sanctum.css?v=1.460.0">
+<link rel="stylesheet" href="science-legends-icons.css?v=1.460.0">
+<link rel="stylesheet" href="science-expedition-accessibility.css?v=1.460.0">
+<link rel="stylesheet" href="science-legends-refinement.css?v=1.460.0">
+<link rel="stylesheet" href="science-legends-armory.css?v=1.460.0">
+<script defer src="science-expedition-accessibility.js?v=1.460.0"></script>
 </head>
 <body>
 <div id="app">
@@ -587,7 +522,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
           <li data-ico="✨">Use <strong>Skill tree (T)</strong> above the hotbar to unlock and upgrade skills. Choose your four active skills with <strong>Equip (K)</strong>.</li>
           <li data-ico="🧪">Every <strong>20s</strong>: a science MCQ. Correct = <strong>+1 skill point</strong>, a heal and an Insight damage surge.</li>
           <li data-ico="⚠️">Wrong answers in a row cause increasing health loss: <strong>8%, 16%, 28%, then 45%</strong> of maximum HP. A <strong>fifth wrong answer ends the run</strong>. A correct answer resets the streak.</li>
-          <li data-ico="🎁">Spend app points on <strong>loot boxes</strong> in the <strong>Armory (B)</strong> — permanent helm, armour, gloves, greaves, rings &amp; amulet. Unique and Mythic gear carries <strong>skill-changing powers</strong>.</li>
+          <li data-ico="🎁">Boss loot goes straight to your <strong>Armory (B)</strong>. Equip armour, jewellery, weapons and offhands, or spend app points on loot boxes. Each boss has a <strong>0.01% chance</strong> to drop your class’s Mythic Unique.</li>
         </ul></details>
         <div class="legends-section-title">01 · Choose your legend</div>
         <div class="classes" id="classCards"></div>
@@ -644,17 +579,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
         <p class="q-pressure-rule" style="font-size:.78rem;line-height:1.45;">Wrong answers in a row deal increasing damage. Five in a row ends the run. A correct answer resets the streak.</p>
         <div class="q-explain" id="qExplain"></div>
         <div class="row" style="margin-top:14px;justify-content:space-between;align-items:flex-start;gap:10px;">
-          <div class="flagbox" id="flagBox" style="display:none;">
-            <button class="flag-link" id="flagToggle" type="button">⚑ Flag this question</button>
-            <div class="flag-form" id="flagForm" style="display:none;">
-              <textarea id="flagComment" rows="3" placeholder="What's wrong? (e.g. wrong answer, typo, unclear diagram)"></textarea>
-              <div class="flag-actions">
-                <button class="btn btn-outline" id="flagCancel" type="button">Cancel</button>
-                <button class="btn btn-primary" id="flagSubmit" type="button">Submit flag</button>
-              </div>
-            </div>
-            <div class="flag-done" id="flagDone" style="display:none;">✓ Thanks — your teacher will review this question.</div>
-          </div>
+          <div id="flagBox" hidden></div>
           <button class="btn btn-primary" id="qContinueBtn" type="button" style="display:none;flex:0 0 auto;">Back to battle →</button>
         </div>
       </div></div>
@@ -662,26 +587,43 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
 
     <!-- ARMORY / LOOT BOXES -->
     <div class="overlay" id="armoryOverlay">
-      <div class="panel xwide" style="position:relative;"><div class="panel-pad">
+      <div class="panel xwide armory-panel"><div class="panel-pad">
         <div class="tree-head">
-          <h2>🎁 Armory</h2>
-          <span class="beta-chip">Permanent gear</span>
+          <h2>Armory</h2>
+          <span id="armoryClassName" class="armory-class"></span>
           <span class="spacer" style="flex:1;"></span>
           <button class="btn btn-primary" id="armoryCloseBtn" type="button">✓ Done</button>
         </div>
-        <div class="eq-slots" id="eqSlots"></div>
+        <div class="armory-layout">
+          <section aria-labelledby="armoryEquipmentTitle">
+            <h3 id="armoryEquipmentTitle">Equipment</h3>
+            <div class="eq-slots" id="eqSlots"></div>
+          </section>
+          <section aria-labelledby="armoryInventoryTitle">
+            <div class="armory-bag-heading">
+              <h3 id="armoryInventoryTitle">Inventory</h3>
+              <span id="armoryBagCount" aria-live="polite"></span>
+            </div>
+            <div class="inv-grid" id="invGrid"></div>
+            <div id="armoryPaging" class="armory-paging" hidden>
+              <button class="btn btn-outline" id="armoryPrev" type="button">Previous</button>
+              <span id="armoryPageLabel" aria-live="polite"></span>
+              <button class="btn btn-outline" id="armoryNext" type="button">Next</button>
+            </div>
+            <div class="armory-detail" id="armoryDetail" tabindex="-1" role="region" aria-label="Item details"></div>
+          </section>
+        </div>
         <div class="armory-shop">
-          <span style="font-size:26px;">📦</span>
-          <div style="flex:1;min-width:170px;">
-            <div style="font-weight:800;">Loot Box — <span style="color:var(--accent-dark);">150 🪙</span></div>
-            <div style="font-size:var(--font-size-xs);color:var(--text-secondary);line-height:1.45;">Drop rates: Common 41% · Magic 28% · Rare 19% · <b style="color:#FF7043;">Legendary 6%</b> · <b style="color:#C9A227;">Unique 4%</b> · <b style="color:#D500F9;">Mythic 2%</b></div>
+          <div class="armory-box-info">
+            <strong>Loot Box · 150 🪙</strong>
+            <div id="armoryBoxOdds"></div>
+            <div id="armoryBuyHint" role="status"></div>
           </div>
           <span class="armory-wallet" id="armoryWallet">…</span>
           <button class="btn btn-primary" id="buyBoxBtn" type="button">📦 Open loot box</button>
         </div>
-        <div class="inv-grid" id="invGrid"></div>
-        <div class="armory-detail" id="armoryDetail"></div>
-        <div id="boxReveal"></div>
+        <p class="armory-boss-rule">Bosses add one item to your bag when defeated. Each has a 0.01% chance to drop your class’s Mythic Unique.</p>
+        <div id="boxReveal" aria-hidden="true"></div>
       </div></div>
     </div>
 
@@ -733,22 +675,26 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
   </div>
 </div>
 
-<script src="science-feed-bridge.js?v=1.459.0"></script>
-<script src="game-question-pressure.js?v=1.459.0"></script>
-<script src="science-legends-art.js?v=1.459.0"></script>
-<script src="science-legends-view.js?v=1.459.0"></script>
-<script src="science-legends-atlas.js?v=1.459.0"></script>
-<script src="science-legends-models.js?v=1.459.0"></script>
-<script src="science-legends-actions.js?v=1.459.0"></script>
-<script src="science-legends-ai.js?v=1.459.0"></script>
-<script src="science-legends-tree.js?v=1.459.0"></script>
-<script src="science-legends-icons.js?v=1.459.0"></script>
-<script src="science-legends-feedback.js?v=1.459.0"></script>
-<script src="science-legends-gestures.js?v=1.459.0"></script>
-<script src="science-legends-combat.js?v=1.459.0"></script>
-<script src="science-legends-performance.js?v=1.459.0"></script>
-<script src="science-legends-spatial.js?v=1.459.0"></script>
-<script src="science-legends-variety.js?v=1.459.0"></script>
+<script src="science-feed-bridge.js?v=1.460.0"></script>
+<script src="game-question-flag.js?v=1.460.0"></script>
+<script src="game-question-pressure.js?v=1.460.0"></script>
+<script src="science-legends-art.js?v=1.460.0"></script>
+<script src="science-legends-view.js?v=1.460.0"></script>
+<script src="science-legends-atlas.js?v=1.460.0"></script>
+<script src="science-legends-models.js?v=1.460.0"></script>
+<script src="science-legends-actions.js?v=1.460.0"></script>
+<script src="science-legends-ai.js?v=1.460.0"></script>
+<script src="science-legends-tree.js?v=1.460.0"></script>
+<script src="science-legends-icons.js?v=1.460.0"></script>
+<script src="science-legends-feedback.js?v=1.460.0"></script>
+<script src="science-legends-gestures.js?v=1.460.0"></script>
+<script src="science-legends-combat.js?v=1.460.0"></script>
+<script src="science-legends-performance.js?v=1.460.0"></script>
+<script src="science-legends-spatial.js?v=1.460.0"></script>
+<script src="science-legends-variety.js?v=1.460.0"></script>
+<script src="science-legends-builds.js?v=1.460.0"></script>
+<script src="science-legends-bosses.js?v=1.460.0"></script>
+<script src="science-legends-loot.js?v=1.460.0"></script>
 <script>
 /* ============================================================================
  * SCIENCE LEGENDS (BETA) — top-down horde-action RPG with a science-MCQ pulse.
@@ -1125,7 +1071,7 @@ var CLASS_ORDER = ['barb', 'sorc', 'beast', 'pala', 'ama'];
 var SKILLS = {
   /* ---- BARBARIAN ---- */
   cleave:    { name:'Cleave', icon:'🪓', cd:3.5, type:'arc', p:{dmg:42,range:135,arc:2.4}, desc:'Swing a massive arc in front of you.', e1:{n:'Rupture',d:'Cleave makes enemies bleed for 40% extra damage over 3s.'}, e2:{n:'Wide Swing',d:'Cleave arc and range +30%.'} },
-  whirlwind: { name:'Whirlwind', icon:'🌀', cd:9, type:'spin', p:{dps:48,dur:2.4,radius:135}, desc:'Spin for 2.4s, shredding everything around you.', e1:{n:'Vortex',d:'Whirlwind drags enemies toward you.'}, e2:{n:'Bladestorm',d:'Whirlwind hurls spinning blades outward.'} },
+  whirlwind: { name:'Whirlwind', icon:'🌀', cd:9, type:'spin', p:{dps:48,dur:2.4,radius:135}, desc:'Spin for 2.4s, shredding enemies in melee reach.', e1:{n:'Vortex',d:'Whirlwind drags enemies toward you.'}, e2:{n:'Grindstone',d:'Enemies in the inner half of Whirlwind take 30% more damage.'} },
   charge:    { name:'Charge', icon:'💨', cd:7, type:'dash', p:{dmg:38,dist:300,stun:0.8}, desc:'Dash forward, smashing through enemies.', e1:{n:'Unstoppable',d:'Charge grants a 30-damage shield for 3s.'}, e2:{n:'Tremor',d:'Charge leaves a damaging shockwave trail.'} },
   warcry:    { name:'War Cry', icon:'📣', cd:14, type:'buff', p:{dur:5,dmg:0.45,aspd:0.25,stunR:250,stun:1.2}, desc:'+45% damage, +25% attack speed for 5s; nearby enemies stunned.', e1:{n:'Rally',d:'War Cry also heals you for 15% max HP.'}, e2:{n:'Echoing Shout',d:'War Cry lasts 40% longer.'} },
   slam:      { name:'Ground Slam', icon:'💥', cd:8, type:'nova', p:{dmg:55,radius:180,stun:1.2}, desc:'Smash the ground: damage and stun all around you.', e1:{n:'Fault Line',d:'Slam radius +30%.'}, e2:{n:'Concussion',d:'Slam stun lasts twice as long.'} },
@@ -1133,8 +1079,8 @@ var SKILLS = {
   ironskin:  { name:'Iron Skin', icon:'🛡️', cd:12, type:'shield', p:{absorb:60,dur:5}, desc:'Harden: absorb the next 60 damage for 5s.', e1:{n:'Spiked Plate',d:'Attackers take damage while the shield holds.'}, e2:{n:'Fortress',d:'Shield absorbs 50% more.'} },
   rampage:   { name:'Rampage', icon:'👟', cd:13, type:'buff', p:{dur:5,aspd:0.35,speed:0.3}, desc:'+35% attack speed and +30% move speed for 5s.', e1:{n:'Adrenaline',d:'Rampage also heals 15% max HP.'}, e2:{n:'Marathon',d:'Rampage lasts 40% longer.'} },
   quake:     { name:'Earthquake', icon:'🌋', cd:11, type:'zone', p:{dps:35,radius:170,dur:4,at:'target'}, desc:'Split the earth under the thickest pack of enemies.', e1:{n:'Epicenter',d:'Earthquake radius +30%.'}, e2:{n:'Rubble',d:'Enemies in the quake are slowed 35%.'} },
-  execute:   { name:'Executioner', icon:'⚔️', cd:10, type:'arc', p:{dmg:130,range:150,arc:1.2}, desc:'A devastating overhead blow in a narrow arc.', e1:{n:'Gore',d:'Executioner makes enemies bleed heavily.'}, e2:{n:'Broad Axe',d:'Executioner arc and range +30%.'} },
-  bladestorm:{ name:'Blade Ward', icon:'🔪', cd:12, type:'aura', p:{dps:30,dur:6,radius:150,visual:'blades'}, desc:'Whirling blades orbit you for 6s, cutting everything near.', e1:{n:'Razor Ring',d:'Blade Ward radius +30%.'}, e2:{n:'Serrated',d:'Blade Ward slows enemies inside it.'} },
+  execute:   { name:'Executioner', icon:'⚔️', cd:10, type:'arc', p:{dmg:130,range:150,arc:1.2}, desc:'An overhead finisher that hits 75% harder below 25% enemy health. Its Bleed ultimate bursts existing wounds for 120% of their remaining damage.', e1:{n:'Gore',d:'Executioner makes enemies bleed heavily.'}, e2:{n:'Broad Axe',d:'Executioner arc and range +30%.'} },
+  bladestorm:{ name:'Blade Ward', icon:'🔪', cd:12, type:'aura', p:{dps:30,dur:6,radius:150,visual:'blades'}, desc:'For 6s, reduce health damage by 20% and counter nearby attackers with a blade sweep at most twice per second.', e1:{n:'Razor Ring',d:'Blade Ward counter radius +30%.'}, e2:{n:'Serrated',d:'The counter sweep slows enemies it hits.'} },
   berserk:   { name:'Berserk', icon:'😤', cd:16, type:'buff', p:{dur:6,dmg:0.7}, desc:'See red: +70% damage for 6s.', e1:{n:'Blood Rage',d:'Berserk also heals 15% max HP.'}, e2:{n:'Endless Fury',d:'Berserk lasts 40% longer.'} },
   /* ---- SORCERER ---- */
   fireball:  { name:'Fireball', icon:'🔥', cd:4, type:'proj', p:{dmg:50,count:1,spread:0,speed:420,radius:100}, desc:'Hurl a blazing orb that explodes on impact.', e1:{n:'Ember Focus',d:'Fireball burns for 40% extra damage over 3s.'}, e2:{n:'Fission',d:'Fireball splits into 3 mini-bolts when it explodes.'} },
@@ -1142,7 +1088,7 @@ var SKILLS = {
   nova:      { name:'Frost Nova', icon:'❄️', cd:10, type:'nova', p:{dmg:32,radius:215,freeze:2}, desc:'A ring of frost freezes enemies around you for 2s.', e1:{n:'Permafrost',d:'Freeze lasts 3.2s instead of 2s.'}, e2:{n:'Deep Winter',d:'Nova radius +30%.'} },
   meteor:    { name:'Meteor', icon:'☄️', cd:12, type:'target', p:{dmg:115,radius:135,delay:0.7,seek:520}, desc:'Call a meteor onto the thickest pack of enemies.', e1:{n:'Aftershock',d:'Meteor leaves burning ground for 4s.'}, e2:{n:'Twin Stars',d:'A second meteor falls right after the first.'} },
   icebolt:   { name:'Ice Shard', icon:'🧊', cd:4.5, type:'proj', p:{dmg:34,count:1,spread:0,speed:520,pierce:2,slow:2}, desc:'A piercing shard that chills enemies it passes through.', e1:{n:'Shard Fan',d:'Fire 2 extra shards.'}, e2:{n:'Glacier Point',d:'Shards pierce 2 extra enemies.'} },
-  storm:     { name:'Thunderstorm', icon:'🌩️', cd:13, type:'aura', p:{dps:28,dur:6,radius:170,visual:'storm'}, desc:'A crackling storm follows you for 6s, zapping nearby foes.', e1:{n:'Storm Front',d:'Storm radius +30%.'}, e2:{n:'Static Field',d:'The storm slows enemies inside it.'} },
+  storm:     { name:'Thunderstorm', icon:'🌩️', cd:13, type:'aura', p:{dps:28,dur:6,radius:170,visual:'storm'}, desc:'A storm follows you for 6s, repeatedly calling a heavy bolt down on the nearest foe.', e1:{n:'Storm Front',d:'Storm radius +30%.'}, e2:{n:'Static Field',d:'The storm slows the enemies it strikes.'} },
   blizzard:  { name:'Blizzard', icon:'🌨️', cd:11, type:'zone', p:{dps:32,radius:160,dur:5,at:'target',slow:1}, desc:'A freezing storm batters the biggest enemy cluster.', e1:{n:'Whiteout',d:'Blizzard radius +30%.'}, e2:{n:'Hailstones',d:'Blizzard damage ticks hit 40% harder.'} },
   teleport:  { name:'Teleport', icon:'✨', cd:8, type:'dash', p:{dmg:0,dist:280,stun:0}, desc:'Blink forward instantly — untouchable while you travel.', e1:{n:'Arrival Nova',d:'Teleport releases a frost burst where you land.'}, e2:{n:'Phase Shift',d:'Teleport grants a 30-damage shield for 3s.'} },
   barrier:   { name:'Arcane Barrier', icon:'🔵', cd:12, type:'shield', p:{absorb:70,dur:6}, desc:'A shimmering shield absorbs the next 70 damage.', e1:{n:'Feedback',d:'Attackers take damage while the barrier holds.'}, e2:{n:'Bulwark of Will',d:'Barrier absorbs 50% more.'} },
@@ -1152,7 +1098,7 @@ var SKILLS = {
   /* ---- BEAST MASTER ---- */
   wolf:      { name:'Summon Wolf', icon:'🐺', cd:8, type:'summon', p:{kind:'wolf'}, desc:'Call a spirit wolf to fight beside you (up to 3, more via tree).', e1:{n:'Alpha Pack',d:'Your wolves can critically strike.'}, e2:{n:'Dire Wolves',d:'Wolves deal 40% more damage.'} },
   stampede:  { name:'Stampede', icon:'🐗', cd:9, type:'proj', p:{dmg:44,count:5,spread:0.5,speed:380,boar:1,pierce:999}, desc:'A line of spectral boars tramples everything ahead.', e1:{n:'Trample',d:'Stampede is wider and briefly stuns.'}, e2:{n:'Thundering Herd',d:'2 extra boars join the stampede.'} },
-  ravens:    { name:'Raven Swarm', icon:'🐦‍⬛', cd:11, type:'aura', p:{dps:26,dur:8,radius:160,visual:'ravens'}, desc:'A murder of ravens circles you for 8s.', e1:{n:'Murder',d:'Ravens slow enemies inside the swarm by 35%.'}, e2:{n:'Black Cloud',d:'Raven swarm radius +30%.'} },
+  ravens:    { name:'Raven Swarm', icon:'🐦‍⬛', cd:11, type:'aura', p:{dps:26,dur:8,radius:160,visual:'ravens'}, desc:'Three ravens take turns diving through nearby foes for 8s, spreading their attacks across the pack.', e1:{n:'Murder',d:'Raven dives slow their targets.'}, e2:{n:'Black Cloud',d:'Raven swarm radius +30%.'} },
   frenzy:    { name:'Primal Frenzy', icon:'🔴', cd:16, type:'buff', p:{dur:6,petDmg:0.6,aspd:0.3}, desc:'You and your pack rage: pets +60% damage, all attack faster.', e1:{n:'Bloodmoon',d:'Frenzy lasts 3s longer and pets heal you as they hit.'}, e2:{n:'Pack Fury',d:'Frenzy grants a further +30% pet damage.'} },
   sting:     { name:'Venom Dart', icon:'🐝', cd:4.5, type:'proj', p:{dmg:26,count:1,spread:0,speed:500,poison:1}, desc:'A dart coated in venom that keeps burning after the hit.', e1:{n:'Dart Volley',d:'Fire 2 extra darts.'}, e2:{n:'Concentrated Venom',d:'Poison damage is doubled.'} },
   vines:     { name:'Entangling Vines', icon:'🌿', cd:10, type:'zone', p:{dps:14,radius:150,dur:4,at:'target',slow:1}, desc:'Vines erupt under enemies, gripping and tearing them.', e1:{n:'Thorn Field',d:'Vines radius +30%.'}, e2:{n:'Strangle',d:'Vine damage ticks hit 40% harder.'} },
@@ -1160,7 +1106,7 @@ var SKILLS = {
   boarpet:   { name:'Summon Boar', icon:'🐖', cd:14, type:'summon', p:{kind:'boarpet',max:1}, desc:'Summon a battle boar — a tough tank that draws attention.', e1:{n:'Iron Tusks',d:'Your boar deals 40% more damage.'}, e2:{n:'Thick Bristles',d:'Your boar has double HP.'} },
   mend:      { name:"Nature's Mend", icon:'🌸', cd:14, type:'heal', p:{pct:0.25,petPct:0.6}, desc:'Heal yourself 25% and your pets 60%.', e1:{n:'Overgrowth',d:'Mend also grants a 30-damage shield.'}, e2:{n:'Full Bloom',d:'Mend heals 40% more.'} },
   roar:      { name:'Primal Roar', icon:'🦁', cd:12, type:'buff', p:{dur:4,dmg:0.25,stunR:220,stun:1}, desc:'A terrifying roar stuns nearby enemies and empowers you.', e1:{n:'Terrify',d:'Roar stun lasts twice as long.'}, e2:{n:'Battle Roar',d:'Roar buff lasts 40% longer.'} },
-  locusts:   { name:'Locust Swarm', icon:'🦗', cd:13, type:'aura', p:{dps:26,dur:7,radius:160,visual:'locusts'}, desc:'A devouring swarm surrounds you for 7s.', e1:{n:'Plague Wind',d:'Locusts slow enemies inside the swarm.'}, e2:{n:'Devour',d:'Locust swarm radius +30%.'} },
+  locusts:   { name:'Locust Swarm', icon:'🦗', cd:13, type:'aura', p:{dps:26,dur:7,radius:160,visual:'locusts'}, desc:'A 7s swarm infects nearby enemies with poison that persists for 2s after they leave.', e1:{n:'Plague Wind',d:'Locusts slow enemies inside the swarm.'}, e2:{n:'Devour',d:'Locust swarm radius +30%.'} },
   stag:      { name:'Spirit Stag', icon:'🦌', cd:8, type:'dash', p:{dmg:45,dist:320,stun:0.5}, desc:'Become the stag: charge forward, trampling the horde.', e1:{n:'Great Migration',d:'The stag leaves a damaging trail.'}, e2:{n:'Sure Hooves',d:'Stag grants a 30-damage shield for 3s.'} },
   /* ---- PALADIN ---- */
   smite:     { name:'Holy Strike', icon:'🔆', cd:3.5, type:'arc', p:{dmg:40,range:130,arc:2.0}, desc:'A radiant swing that sears everything in front of you.', e1:{n:'Searing Light',d:'Holy Strike burns for 40% extra damage over 3s.'}, e2:{n:'Radiant Arc',d:'Strike arc and range +30%.'} },
@@ -1169,7 +1115,7 @@ var SKILLS = {
   consecrate:{ name:'Consecration', icon:'☀️', cd:10, type:'zone', p:{dps:30,radius:160,dur:5,at:'self'}, desc:'Sanctify the ground beneath you — enemies inside burn.', e1:{n:'Hallowed Ground',d:'Consecration radius +30%.'}, e2:{n:'Purifying Flame',d:'Consecration ticks hit 40% harder.'} },
   bash:      { name:'Shield Bash', icon:'🛡️', cd:7, type:'dash', p:{dmg:42,dist:240,stun:1.2}, desc:'Slam forward shield-first, stunning everything you hit.', e1:{n:'Bulwark Rush',d:'Bash grants a 30-damage shield for 3s.'}, e2:{n:'Skull Ring',d:'Bash leaves a damaging shockwave trail.'} },
   holybolt:  { name:'Holy Bolt', icon:'✨', cd:4.5, type:'proj', p:{dmg:44,count:1,spread:0,speed:480,pierce:1}, desc:'A piercing lance of light.', e1:{n:'Triune Light',d:'Fire 2 extra bolts.'}, e2:{n:'Lightspear',d:'Bolts pierce 2 extra enemies.'} },
-  retribution:{ name:'Aura: Retribution', icon:'😇', cd:13, type:'aura', p:{dps:22,dur:8,radius:150,visual:'holy'}, desc:'A punishing aura scorches enemies near you for 8s.', e1:{n:'Judgment Ring',d:'Aura radius +30%.'}, e2:{n:'Condemn',d:'The aura slows enemies inside it.'} },
+  retribution:{ name:'Aura: Retribution', icon:'😇', cd:13, type:'aura', p:{dps:22,dur:8,radius:150,visual:'holy'}, desc:'An 8s holy aura scorches nearby enemies and restores up to 1.2 HP per pulse.', e1:{n:'Judgment Ring',d:'Aura radius +30%.'}, e2:{n:'Condemn',d:'The aura slows enemies inside it.'} },
   lay:       { name:'Lay on Hands', icon:'💖', cd:15, type:'heal', p:{pct:0.35,petPct:0.6}, desc:'Heal yourself for 35% of max HP (pets 60%).', e1:{n:'Blessing',d:'Also grants a 30-damage shield.'}, e2:{n:'Miracle',d:'Heals 40% more.'} },
   fist:      { name:'Fist of the Heavens', icon:'⚡', cd:9, type:'target', p:{dmg:95,radius:120,delay:0.55,seek:520}, desc:'Divine lightning strikes the thickest pack of enemies.', e1:{n:'Thunderclap',d:'The strike stuns survivors.'}, e2:{n:'Heaven’s Wrath',d:'A second strike falls right after.'} },
   judgement: { name:'Judgement', icon:'⚖️', cd:11, type:'nova', p:{dmg:50,radius:200,stun:1.5}, desc:'Pass judgement: damage and stun all enemies around you.', e1:{n:'Final Verdict',d:'Judgement radius +30%.'}, e2:{n:'Guilty',d:'Judgement stun lasts twice as long.'} },
@@ -1229,29 +1175,18 @@ var CAPSTONES = {
 
 
 /* ============================================================================
- * EQUIPMENT + LOOT BOXES — permanent gear across runs.
- * 7 slots · 6 rarities · unique/mythic items carry skill-changing POWERS.
- * Bought with the points/gold students earn in the app (bridged to parent).
+ * EQUIPMENT + LOOT — permanent gear across runs.
  * ========================================================================== */
-var EQUIP_SLOTS = [
-  { id: 'helm',    name: 'Helm',        ic: '🪖' },
-  { id: 'chest',   name: 'Chest Armour',ic: '🛡️' },
-  { id: 'gloves',  name: 'Gloves',      ic: '🧤' },
-  { id: 'greaves', name: 'Greaves',     ic: '🥾' },
-  { id: 'ring1',   name: 'Ring I',      ic: '💍' },
-  { id: 'ring2',   name: 'Ring II',     ic: '💍' },
-  { id: 'amulet',  name: 'Amulet',      ic: '📿' }
-];
-function slotBase(slotId){ return slotId === 'ring1' || slotId === 'ring2' ? 'ring' : slotId; }
+var EQUIP_SLOTS = LegendsLoot.slots;
 var RARITIES = {
-  common:    { name: 'Common',    color: '#9E9E9E', rank: 1, affixes: 1, mult: 1.0,  salvage: 10,  rate: 41 },
+  common:    { name: 'Common',    color: '#9E9E9E', rank: 1, affixes: 1, mult: 1.0,  salvage: 10,  rate: 43 },
   magic:     { name: 'Magic',     color: '#42A5F5', rank: 2, affixes: 2, mult: 1.1,  salvage: 25,  rate: 28 },
   rare:      { name: 'Rare',      color: '#FFB300', rank: 3, affixes: 3, mult: 1.25, salvage: 50,  rate: 19 },
   legendary: { name: 'Legendary', color: '#FF7043', rank: 4, affixes: 4, mult: 1.7,  salvage: 150, rate: 6 },
   unique:    { name: 'Unique',    color: '#C9A227', rank: 5, affixes: 4, mult: 1.9,  salvage: 200, rate: 4 },
-  mythic:    { name: 'Mythic',    color: '#D500F9', rank: 6, affixes: 4, mult: 2.1,  salvage: 300, rate: 2 }
+  mythic:    { name: 'Mythic',    color: '#D500F9', rank: 6, salvage: 300 }
 };
-var RARITY_ORDER = ['common', 'magic', 'rare', 'legendary', 'unique', 'mythic'];
+var BOX_RARITIES = ['common', 'magic', 'rare', 'legendary', 'unique'];
 var BOX_COST = 150;
 
 /* Affix pool — [key, label fn, min, max] per roll (scaled by rarity mult). */
@@ -1313,34 +1248,36 @@ var UNIQUE_ITEMS = [
   ['Vampiric Signet',          'ring',    'vampire'],
   ['Trifold Grimoire',         'amulet',  'tripleball'],
   ['Serpent’s Kiss',           'amulet',  'serpent'],
-  ['Headsman’s Choker',        'amulet',  'executioner']
-];
-var MYTHIC_ITEMS = [
-  ['Crown of the Immortal Sun','helm',    'phoenix'],
-  ['Worldsplitter Plate',      'chest',   'cataclysm'],
-  ['Gloves of the Star Forger','gloves',  'starforge'],
-  ['Greaves of the Comet',     'greaves', 'comet'],
-  ['Ring of Endless Echoes',   'ring',    'echoring'],
-  ['Eye of the Tempest',       'ring',    'tempest'],
-  ['Amulet of the Beast God',  'amulet',  'beastgod'],
-  ['Shroud of Falling Stars',  'amulet',  'starfall']
+  ['Headsman’s Choker',        'amulet',  'executioner'],
+  ['Ironbound Legguards',      'pants',   'guardian'],
+  ['Bloodthorn Blade',         'onehand', 'vampire'],
+  ['Thunderclast',             'twohand', 'thunderhooves'],
+  ['Bastion of the Dawn',      'shield',  'guardian'],
+  ['Packkeeper’s Totem',       'focus',   'packlord'],
+  ['Orb of the First Frost',   'orb',     'frostking']
 ];
 var BASE_NAMES = {
   helm:   ['Cap', 'Sallet', 'Warhelm', 'Crown'],
   chest:  ['Tunic', 'Breastplate', 'Warplate', 'Aegis'],
   gloves: ['Mitts', 'Grips', 'Gauntlets', 'Talons'],
+  pants:  ['Tassets', 'Leggings', 'Chausses', 'Legguards'],
   greaves:['Boots', 'Treads', 'Greaves', 'Striders'],
   ring:   ['Band', 'Loop', 'Signet', 'Eye'],
-  amulet: ['Charm', 'Pendant', 'Talisman', 'Idol']
+  amulet: ['Charm', 'Pendant', 'Talisman', 'Idol'],
+  onehand:['Hand Axe', 'Longsword', 'Sceptre', 'Blade'],
+  twohand:['Greatsword', 'Poleaxe', 'Warstaff', 'Longbow'],
+  shield: ['Buckler', 'Kite Shield', 'Bulwark', 'Ward'],
+  focus:  ['Relic', 'Grimoire', 'Idol', 'Totem'],
+  orb:    ['Sphere', 'Astral Lens', 'Frost Orb', 'Crystal']
 };
 var NAME_PREFIX = ['Bear', 'Wolf', 'Ember', 'Frost', 'Storm', 'Iron', 'Shadow', 'Sun', 'Stone', 'Blood', 'Sky', 'Night'];
 var NAME_SUFFIX = ['of Fury', 'of the Fox', 'of Embers', 'of Winter', 'of the Colossus', 'of Haste', 'of the Eagle', 'of Thorns', 'of the Tide', 'of Kings'];
 
 function rollRarity(){
   var roll = Math.random() * 100, acc = 0;
-  for (var i = 0; i < RARITY_ORDER.length; i++){
-    acc += RARITIES[RARITY_ORDER[i]].rate;
-    if (roll < acc) return RARITY_ORDER[i];
+  for (var i = 0; i < BOX_RARITIES.length; i++){
+    acc += RARITIES[BOX_RARITIES[i]].rate;
+    if (roll < acc) return BOX_RARITIES[i];
   }
   return 'common';
 }
@@ -1355,20 +1292,18 @@ function rollAffixes(n, mult){
   return af;
 }
 var _itemSeq = 0;
-function rollItem(forceRarity){
-  var r = forceRarity || rollRarity();
-  var R = RARITIES[r];
-  var id = 'it' + Date.now().toString(36) + (_itemSeq++).toString(36) + ((Math.random() * 1296) | 0).toString(36);
-  if (r === 'unique' || r === 'mythic'){
-    var named = pick(r === 'unique' ? UNIQUE_ITEMS : MYTHIC_ITEMS);
-    return { id: id, slot: named[1], r: r, name: named[0], af: rollAffixes(R.affixes, R.mult), pw: named[2] };
-  }
-  var base = slotBase(pick(EQUIP_SLOTS).id);
-  var name = pick(NAME_PREFIX) + ' ' + pick(BASE_NAMES[base]) + (R.rank >= 3 ? ' ' + pick(NAME_SUFFIX) : '');
-  return { id: id, slot: base, r: r, name: name, af: rollAffixes(R.affixes, R.mult), pw: null };
+function newItemId(){
+  return 'it' + Date.now().toString(36) + (_itemSeq++).toString(36) + ((Math.random() * 1296) | 0).toString(36);
 }
-function itemFits(item, slotId){ return item && item.slot === slotBase(slotId); }
-function itemIcon(item){ var b = item.slot; var s = EQUIP_SLOTS.find(function(x){ return slotBase(x.id) === b; }); return s ? s.ic : '🎁'; }
+function rollItem(forceRarity){
+  var r = BOX_RARITIES.includes(forceRarity) ? forceRarity : rollRarity();
+  var R = RARITIES[r];
+  var named = r === 'unique' ? pick(UNIQUE_ITEMS) : null;
+  var base = named ? named[1] : pick(Object.keys(BASE_NAMES));
+  var name = named ? named[0] : pick(NAME_PREFIX) + ' ' + pick(BASE_NAMES[base]) + (R.rank >= 3 ? ' ' + pick(NAME_SUFFIX) : '');
+  var item = { id: newItemId(), slot: base, r: r, name: name, af: rollAffixes(R.affixes, R.mult), pw: named ? named[2] : null };
+  return Object.assign(item, LegendsLoot.rollAffinity(item, armoryClass(), Math.random));
+}
 
 /* ---- META — permanent state (gear, loadouts, follower). Saved via the parent
  * app into the student's hero state (Firestore) or localStorage standalone. */
@@ -1376,8 +1311,9 @@ var META = { inv: [], eq: {}, loadout: {}, follower: 'fdef', pts: 0 };
 var appGold = null;         // wallet when embedded (the app's gold)
 var metaReady = false;
 var INV_CAP = 80;
+function gearCacheKey(){ return (embedded() ? 'legends_gear_meta_' : 'legends_meta_') + studentKey; }
 function metaLoadLocal(){
-  var m = _lsGet('legends_meta_' + studentKey, null);
+  var m = _lsGet(gearCacheKey(), null);
   // Once the cloud copy has synced down, only a strictly NEWER local copy may
   // replace it — a stale device must never erase gear bought elsewhere.
   if (m && typeof m === 'object' && (!metaReady || (m.ts || 0) > (META.ts || 0))){
@@ -1389,44 +1325,88 @@ function metaLoadLocal(){
   if (!FOLLOWERS[META.follower]) META.follower = 'fdef';
   if (!(META.pts >= 0)) META.pts = 0;
 }
-var _metaSaveT = null;
-function metaSave(){
-  META.ts = Date.now();
-  if (_metaSaveT) clearTimeout(_metaSaveT);
-  _metaSaveT = setTimeout(function(){
-    _metaSaveT = null;
-    _lsSet('legends_meta_' + studentKey, META);
-    // Never write to the cloud before the cloud copy has synced down — an
-    // unsynced frame pushing its empty boot state was wiping armories.
-    if (embedded() && metaReady){
-      try { window.parent.postMessage({ type: 'LEGENDS_SAVE', meta: { inv: META.inv, eq: META.eq, loadout: META.loadout, follower: META.follower, ts: META.ts } }, '*'); } catch(e){}
-    }
-  }, 600);
+var metaRevision = 0;
+var gearOwner = '', gearRetry = null, gearOutboxes = new Map();
+function postGearMessage(type, fields){
+  if (!embedded()) return false;
+  var context = scienceFeed.context();
+  if (!context.studentKey || !context.studentLevel || context.studentKey !== studentKey) return false;
+  try {
+    window.parent.postMessage(Object.assign({}, fields, context, {type:type}), location.origin);
+    return true;
+  } catch (_) { return false; }
 }
-function metaApplyRemote(m){
-  m = (m && typeof m === 'object') ? m : {};
-  var remoteInv = Array.isArray(m.inv) ? m.inv : [];
-  var remoteNewer = (m.ts || 0) >= (META.ts || 0);
-  var wipeSuspect = remoteInv.length === 0 && META.inv.length > 0;
-  metaReady = true;
-  if (!remoteNewer || wipeSuspect){
-    // This device knows MORE than the cloud (e.g. the cloud copy was wiped by
-    // an unsynced frame) — keep ours and repair the cloud copy from it.
-    metaSave();
-    return;
+function currentGearMessage(message){
+  var context = scienceFeed.context();
+  return !!context.studentKey && !!context.studentLevel && context.studentKey === studentKey
+    && message.studentKey === context.studentKey && message.studentLevel === context.studentLevel;
+}
+function gearOutboxKey(){ return 'legends_gear_outbox_legends_' + studentKey; }
+function gearOutbox(){
+  if (!gearOutboxes.has(studentKey)){
+    gearOutboxes.set(studentKey, _lsGet(gearOutboxKey(), null) || {client:null, seq:0, entries:[]});
   }
-  META.inv = remoteInv;
-  if (m.eq && typeof m.eq === 'object') META.eq = m.eq;
-  if (m.loadout && typeof m.loadout === 'object') META.loadout = m.loadout;
-  if (FOLLOWERS[m.follower]) META.follower = m.follower;
-  META.ts = m.ts || META.ts || 0;
+  return gearOutboxes.get(studentKey);
 }
-function itemById(id){ for (var i = 0; i < META.inv.length; i++) if (META.inv[i].id === id) return META.inv[i]; return null; }
-function equippedItems(){
-  var out = [];
-  EQUIP_SLOTS.forEach(function(s){ var it = itemById(META.eq[s.id]); if (it && itemFits(it, s.id)) out.push(it); });
-  return out;
+function sendGearOutbox(){
+  clearTimeout(gearRetry);
+  var box = gearOutbox(), entry = box.entries[0];
+  if (entry && postGearMessage('LEGENDS_SAVE', {client:box.client, seq:entry.seq, patch:entry.patch})){
+    gearRetry = setTimeout(sendGearOutbox, 5000);
+  }
 }
+function metaSave(patch){
+  META.ts = Date.now();
+  // Persist the learner's optimistic cache and each ordered change before posting.
+  _lsSet(gearCacheKey(), META);
+  if (!embedded() || !patch) return;
+  var box = gearOutbox();
+  if (!box.client){
+    box.client = Array.from(crypto.getRandomValues(new Uint8Array(16)), function(byte){
+      return byte.toString(16).padStart(2, '0');
+    }).join('');
+  }
+  box.entries.push({seq:++box.seq, patch:structuredClone(patch)});
+  _lsSet(gearOutboxKey(), box);
+  if (metaReady && box.entries.length === 1) sendGearOutbox();
+}
+function metaApplyRemote(message){
+  var m = message.meta || {}, revision = Number(m.ts) || 0;
+  var box = gearOutbox(), receipt = message.receipt, wasReady = metaReady;
+  var ack = receipt && receipt.client === box.client && receipt.seq === box.entries[0]?.seq;
+  if (ack){
+    box.entries.shift();
+    _lsSet(gearOutboxKey(), box);
+  }
+  if (wasReady && revision < metaRevision){
+    if (ack) sendGearOutbox();
+    return false;
+  }
+  var remoteInv = Array.isArray(m.inv) ? m.inv : [];
+  var legacy = !wasReady && !box.entries.length && message.legacy && !revision && !remoteInv.length
+    ? _lsGet('legends_meta_' + studentKey, null) : null;
+  metaReady = true;
+  metaRevision = revision;
+  if (legacy && Array.isArray(legacy.inv) && legacy.inv.length){
+    META.inv = legacy.inv;
+    META.eq = legacy.eq || {};
+    META.loadout = legacy.loadout || {};
+    META.follower = FOLLOWERS[legacy.follower] ? legacy.follower : 'fdef';
+    metaSave({seedLegacy:true, add:META.inv, eq:META.eq, loadout:META.loadout, follower:META.follower});
+  } else if (!box.entries.length){
+    var before = JSON.stringify(META.eq);
+    META.inv = remoteInv;
+    META.eq = (m.eq && typeof m.eq === 'object') ? m.eq : {};
+    META.loadout = (m.loadout && typeof m.loadout === 'object') ? m.loadout : {};
+    META.follower = FOLLOWERS[m.follower] ? m.follower : 'fdef';
+    META.ts = revision;
+    _lsSet(gearCacheKey(), META);
+    if (G && G.state === 'play' && before !== JSON.stringify(META.eq)) computeStats();
+  }
+  if (!wasReady || ack) sendGearOutbox();
+  return true;
+}
+function itemById(id){ return id ? META.inv.find(function(item){ return item?.id === id; }) || null : null; }
 
 /* ---- wallet: app gold when embedded, local Legend Points standalone ---- */
 function walletAmount(){ return embedded() ? (appGold == null ? null : appGold) : META.pts; }
@@ -1440,6 +1420,10 @@ function earnPoints(n, why){
 }
 var _pendingBuy = null;
 function buyBox(){
+  if (META.inv.length >= INV_CAP){
+    toast('Salvage an item to make room for another loot box.', 'bad');
+    return;
+  }
   var w = walletAmount();
   if (w != null && w < BOX_COST){
     toast('Need ' + BOX_COST + ' 🪙 for a loot box — earn points by answering questions!', 'bad');
@@ -1448,7 +1432,11 @@ function buyBox(){
   if (embedded()){
     if (_pendingBuy) return;
     _pendingBuy = setTimeout(function(){ _pendingBuy = null; toast('Purchase timed out — try again', 'bad'); }, 5000);
-    try { window.parent.postMessage({ type: 'LEGENDS_GOLD_DELTA', delta: -BOX_COST, reason: 'lootbox' }, '*'); } catch(e){}
+    if (!postGearMessage('LEGENDS_GOLD_DELTA', { delta: -BOX_COST, reason: 'lootbox' })){
+      clearTimeout(_pendingBuy);
+      _pendingBuy = null;
+      toast('Wait for your Armory to sync before opening a loot box.', 'bad');
+    }
   } else {
     META.pts -= BOX_COST;
     grantBoxItem();
@@ -1457,148 +1445,265 @@ function buyBox(){
 function grantBoxItem(){
   var item = rollItem();
   META.inv.push(item);
-  // keep the bag bounded: drop the oldest COMMON items first
-  while (META.inv.length > INV_CAP){
-    var di = META.inv.findIndex(function(x){ return x.r === 'common' && !isEquipped(x.id); });
-    if (di < 0) di = META.inv.findIndex(function(x){ return !isEquipped(x.id); });
-    if (di < 0) break;
-    META.inv.splice(di, 1);
-  }
-  metaSave();
-  sfx(item.r === 'mythic' || item.r === 'legendary' ? 'level' : 'point');
+  metaSave({ add: [item] });
+  sfx(item.r === 'unique' || item.r === 'legendary' ? 'level' : 'point');
   armoryReveal(item);
   renderArmory();
+}
+function grantBossLoot(enemy){
+  if (!G || G.state !== 'play' || !enemy?.boss || enemy.noLoot || enemy.bossLootClaimed) return null;
+  enemy.bossLootClaimed = true;
+  var item = LegendsLoot.rollBossItem(G.cls, Math.random, function(){
+    var quality = Math.random();
+    return rollItem(quality < .70 ? 'rare' : quality < .94 ? 'legendary' : 'unique');
+  }, newItemId);
+  META.inv.push(item);
+  metaSave({ add: [item] });
+  selectArmoryItem(item.id);
+  toast((LegendsLoot.signature(item) ? '✦ Mythic Unique: ' : 'Boss loot: ') + item.name + ' added to the Armory (B)', 'energy');
+  return item;
 }
 function isEquipped(id){ return EQUIP_SLOTS.some(function(s){ return META.eq[s.id] === id; }); }
 function equipItem(id, slotId){
   var it = itemById(id);
   if (!it) return;
-  if (!slotId){
-    // auto-pick: first fitting empty slot, else the first fitting slot
-    var fits = EQUIP_SLOTS.filter(function(s){ return itemFits(it, s.id); });
-    var empty = fits.find(function(s){ return !META.eq[s.id]; });
-    slotId = (empty || fits[0] || {}).id;
-  }
-  if (!slotId || !itemFits(it, slotId)) return;
-  // unequip from any other slot first
-  EQUIP_SLOTS.forEach(function(s){ if (META.eq[s.id] === id) META.eq[s.id] = null; });
-  META.eq[slotId] = id;
-  metaSave();
-  if (G) computeStats();
+  var plan = LegendsLoot.planEquip(META, it, slotId, armoryClass());
+  if (plan.issue){ toast(equipIssueText(plan.issue), 'bad'); return; }
+  var changedSlots = {};
+  EQUIP_SLOTS.forEach(function(slot){
+    if (META.eq[slot.id] !== plan.equipment[slot.id]) changedSlots[slot.id] = plan.equipment[slot.id];
+  });
+  META.eq = plan.equipment;
+  metaSave({ eq: changedSlots });
+  if (G && G.state === 'play') computeStats();
   renderArmory();
-  toast('✅ ' + it.name + ' equipped', 'good');
+  toast('✅ ' + it.name + ' equipped' + (plan.movedOffhand ? ' · Offhand returned to the bag' : ''), 'good');
 }
 function unequipSlot(slotId){
   if (!META.eq[slotId]) return;
   META.eq[slotId] = null;
-  metaSave();
-  if (G) computeStats();
+  metaSave({ eq: { [slotId]: null } });
+  if (G && G.state === 'play') computeStats();
   renderArmory();
 }
 function salvageItem(id){
-  var idx = META.inv.findIndex(function(x){ return x.id === id; });
+  var idx = META.inv.findIndex(function(x){ return x?.id === id; });
   if (idx < 0) return;
   var it = META.inv[idx];
+  var refund = RARITIES[itemRarity(it)].salvage;
+  if (embedded() && !postGearMessage('LEGENDS_GOLD_DELTA', { delta: refund, reason: 'salvage' })){
+    toast('Wait for your Armory to sync before salvaging.', 'bad');
+    return;
+  }
   EQUIP_SLOTS.forEach(function(s){ if (META.eq[s.id] === id) META.eq[s.id] = null; });
   META.inv.splice(idx, 1);
-  var refund = RARITIES[it.r].salvage;
-  if (embedded()){
-    try { window.parent.postMessage({ type: 'LEGENDS_GOLD_DELTA', delta: refund, reason: 'salvage' }, '*'); } catch(e){}
-  } else {
-    META.pts += refund;
-  }
-  metaSave();
-  if (G) computeStats();
+  if (!embedded()) META.pts += refund;
+  metaSave({ remove: [id] });
+  if (G && G.state === 'play') computeStats();
   armorySel = null;
   renderArmory();
   toast('♻️ Salvaged for ' + refund + ' 🪙', 'energy');
 }
 
 /* ---- Armory UI ---- */
-var armorySel = null; // selected inventory item id
+var armorySel = null;
+var armoryPage = 0;
+var ARMORY_PAGE_SIZE = 30;
+var armoryArtImages = null;
+var armoryRevealTimer = null;
+function armoryClass(){
+  return G && G.state === 'play' ? G.cls : chosenClass;
+}
+function armoryEscape(value){
+  return String(value ?? '').replace(/[&<>"']/g, function(char){
+    return {'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[char];
+  });
+}
+function itemRarity(item){
+  return Object.hasOwn(RARITIES, item.r) ? item.r : 'common';
+}
+function rarityTitle(item){
+  return LegendsLoot.signature(item) ? 'Mythic Unique' : RARITIES[itemRarity(item)].name;
+}
+function loadArmoryArt(){
+  if (armoryArtImages) return armoryArtImages;
+  armoryArtImages = ['common', 'exalted', 'mythic'].map(function(art){
+    var image = new Image();
+    image.onload = function(){ $('armoryOverlay').classList.add('gear-art-' + art); };
+    image.src = 'assets/science-legends/v5/items-' + art + '.webp';
+    return image;
+  });
+  return armoryArtImages;
+}
+function itemIcon(item){
+  var type = LegendsLoot.category(item.slot);
+  if (!type) return '<span class="gear-icon" aria-hidden="true">🎁</span>';
+  var named = LegendsLoot.signature(item);
+  var atlas = named ? 'mythic' : RARITIES[itemRarity(item)].rank >= 3 ? 'exalted' : 'common';
+  var columns = named ? 3 : 4;
+  var cell = named ? CLASS_ORDER.indexOf(named.classId) : type.cell;
+  var x = (cell % columns) * 100 / (columns - 1);
+  var y = Math.floor(cell / columns) * (named ? 100 : 50);
+  return '<span class="gear-icon" data-atlas="' + atlas + '" style="--gear-x:' + x + '%;--gear-y:' + y +
+    '%" aria-hidden="true"><span class="gear-icon-fallback">' + type.icon + '</span></span>';
+}
+function equipIssueText(issue){
+  if (issue === 'class') return 'This item is restricted to another class.';
+  if (issue === 'hand') return 'Unequip the two-handed weapon to use an offhand.';
+  return 'This item does not fit that slot.';
+}
 function armoryRefreshWallet(){
-  var el = $('armoryWallet'); if (el) el.textContent = walletLabel();
-  var h = $('hudWallet'); if (h) h.textContent = (walletAmount() == null ? '…' : walletAmount());
+  LegendsPerformance.text($('armoryWallet'), walletLabel());
+  var wallet = walletAmount();
+  LegendsPerformance.text($('hudWallet'), wallet == null ? '…' : wallet);
 }
-function itemCardHtml(it, tag){
-  var R = RARITIES[it.r];
-  return '<button type="button" class="inv-item r-' + it.r + (armorySel === it.id ? ' sel' : '') + (isEquipped(it.id) ? ' eq' : '') + '" data-item="' + it.id + '" title="' + it.name.replace(/"/g, '&quot;') + '">' +
-    '<span class="ii-ico">' + itemIcon(it) + '</span>' +
-    (it.pw ? '<span class="ii-pw">' + POWERS[it.pw].ic + '</span>' : '') +
-    (isEquipped(it.id) ? '<span class="ii-eq">E</span>' : '') +
-    (tag || '') +
-    '</button>';
+function itemCardHtml(item){
+  var selected = item.id === armorySel;
+  var equipped = isEquipped(item.id);
+  var title = armoryEscape(rarityTitle(item) + ' ' + item.name + (equipped ? ', equipped' : ''));
+  return '<button type="button" class="inv-item r-' + itemRarity(item) + (selected ? ' sel' : '') +
+    (LegendsLoot.signature(item) ? ' mythic-unique' : '') + '" data-item="' + armoryEscape(item.id) +
+    '" aria-pressed="' + selected + '" aria-label="' + title + '" title="' + title + '">' +
+    itemIcon(item) + (equipped ? '<span class="ii-eq" aria-hidden="true">E</span>' : '') + '</button>';
 }
-function renderArmory(){
+function selectArmoryItem(id, inspect){
+  armorySel = id;
   if (!$('armoryOverlay').classList.contains('show')) return;
-  armoryRefreshWallet();
-  // slots
-  var sHtml = '';
-  EQUIP_SLOTS.forEach(function(s){
-    var it = itemById(META.eq[s.id]);
-    sHtml += '<div class="eq-slot' + (it ? ' filled r-' + it.r : '') + '" data-slot="' + s.id + '" title="' + s.name + (it ? ' — ' + it.name : '') + '">' +
-      '<span class="eqs-ico">' + (it ? itemIcon(it) : s.ic) + '</span>' +
-      '<span class="eqs-name">' + s.name + '</span>' +
-      (it ? '<span class="eqs-item" style="color:' + RARITIES[it.r].color + ';">' + it.name + '</span>' : '<span class="eqs-item empty">empty</span>') +
-      '</div>';
-  });
-  $('eqSlots').innerHTML = sHtml;
-  Array.prototype.forEach.call(document.querySelectorAll('#eqSlots .eq-slot'), function(el){
-    el.addEventListener('click', function(){
-      var sid = el.getAttribute('data-slot');
-      var it = itemById(META.eq[sid]);
-      if (it){ armorySel = it.id; renderArmory(); }
-    });
-  });
-  // inventory sorted by rarity desc
-  var inv = META.inv.slice().sort(function(a, b){ return RARITIES[b.r].rank - RARITIES[a.r].rank; });
-  $('invGrid').innerHTML = inv.length ? inv.map(function(it){ return itemCardHtml(it); }).join('') : '<div class="inv-empty">Your bag is empty — open a loot box below!</div>';
-  Array.prototype.forEach.call(document.querySelectorAll('#invGrid .inv-item'), function(el){
-    el.addEventListener('click', function(){ armorySel = el.getAttribute('data-item'); renderArmory(); });
+  $('armoryOverlay').querySelectorAll('[data-item]').forEach(function(button){
+    var selected = button.dataset.item === id;
+    LegendsPerformance.toggle(button, 'sel', selected);
+    LegendsPerformance.attr(button, 'aria-pressed', selected ? 'true' : 'false');
   });
   renderArmoryDetail();
+  if (inspect){
+    $('armoryDetail').focus({ preventScroll: true });
+    $('armoryDetail').scrollIntoView({ block: 'nearest' });
+  }
+}
+function renderArmory(){
+  var overlay = $('armoryOverlay');
+  if (!overlay.classList.contains('show')) return;
+  var previousFocus = document.activeElement;
+  armoryRefreshWallet();
+  loadArmoryArt();
+  var cls = armoryClass();
+  var active = LegendsLoot.activeGear(META, cls);
+  var twoHanded = itemById(META.eq.mainhand)?.slot === 'twohand';
+  LegendsPerformance.text($('armoryClassName'), CLASSES[cls].name + ' gear');
+  $('eqSlots').innerHTML = EQUIP_SLOTS.map(function(slot){
+    var item = itemById(META.eq[slot.id]);
+    var name = '<span class="eqs-name">' + slot.name + '</span>';
+    if (!item){
+      var description = slot.id === 'offhand' && twoHanded ? 'Two-handed' : 'Empty';
+      return '<div class="eq-slot" data-slot="' + slot.id + '"><span class="eqs-ico" aria-hidden="true">' +
+        slot.icon + '</span>' + name + '<span class="eqs-item empty">' + description + '</span></div>';
+    }
+    var selected = item.id === armorySel;
+    var inactive = active[slot.id] !== item;
+    var label = slot.name + ', ' + item.name + (inactive ? ', inactive for this build' : '');
+    return '<button type="button" class="eq-slot filled r-' + itemRarity(item) + (selected ? ' sel' : '') +
+      (inactive ? ' gear-inactive' : '') + '" data-slot="' + slot.id + '" data-item="' + armoryEscape(item.id) +
+      '" aria-pressed="' + selected + '" title="' + armoryEscape(label) + '">' + itemIcon(item) + name +
+      '<span class="eqs-item">' + armoryEscape(item.name) + '</span>' +
+      (inactive ? '<span class="gear-inactive-label">Inactive</span>' : '') + '</button>';
+  }).join('');
+
+  var items = META.inv.filter(function(item){ return item?.id; }).sort(function(a,b){
+    return RARITIES[itemRarity(b)].rank - RARITIES[itemRarity(a)].rank;
+  });
+  var pages = Math.max(1, Math.ceil(items.length / ARMORY_PAGE_SIZE));
+  armoryPage = clamp(armoryPage, 0, pages - 1);
+  var pageStart = armoryPage * ARMORY_PAGE_SIZE;
+  var pageItems = items.slice(pageStart, pageStart + ARMORY_PAGE_SIZE);
+  $('invGrid').innerHTML = pageItems.length ? pageItems.map(itemCardHtml).join('') +
+    '<span class="inv-space" aria-hidden="true"></span>'.repeat(ARMORY_PAGE_SIZE - pageItems.length) :
+    '<div class="inv-empty">Defeat a boss or open a loot box to fill your bag.</div>';
+  LegendsPerformance.text($('armoryBagCount'), items.length + (items.length === 1 ? ' item' : ' items'));
+  $('armoryPaging').hidden = pages === 1;
+  LegendsPerformance.text($('armoryPageLabel'), 'Page ' + (armoryPage + 1) + ' of ' + pages);
+  $('armoryPrev').disabled = armoryPage === 0;
+  $('armoryNext').disabled = armoryPage === pages - 1;
+  $('armoryPrev').onclick = function(){ armoryPage--; renderArmory(); };
+  $('armoryNext').onclick = function(){ armoryPage++; renderArmory(); };
+  overlay.querySelectorAll('[data-item]').forEach(function(button){
+    button.onclick = function(){ selectArmoryItem(button.dataset.item, true); };
+  });
+  LegendsPerformance.text($('armoryBoxOdds'), BOX_RARITIES.map(function(rarity){
+    return RARITIES[rarity].name + ' ' + RARITIES[rarity].rate + '%';
+  }).join(' · '));
+  var bagFull = META.inv.length >= INV_CAP;
+  $('buyBoxBtn').disabled = bagFull;
+  LegendsPerformance.text($('armoryBuyHint'), bagFull ? 'Salvage an item to open another box. Boss loot still goes into your bag.' : '');
+  renderArmoryDetail();
+  if (previousFocus && !previousFocus.isConnected && document.activeElement === document.body){
+    var replacement = previousFocus.id && $(previousFocus.id);
+    (replacement && !replacement.disabled ? replacement : $('armoryDetail')).focus({ preventScroll: true });
+  }
+}
+function affixLines(item, cssClass){
+  var lines = Object.entries(item.af || {}).filter(function(entry){
+    return Object.hasOwn(AFFIX_LABEL, entry[0]) && Number.isFinite(entry[1]);
+  }).map(function(entry){
+    return '<div class="' + cssClass + '">' + AFFIX_LABEL[entry[0]](entry[1]) + '</div>';
+  }).join('');
+  if (Object.hasOwn(LegendsLoot.affinityNames, item.affinity) && Number.isFinite(item.affinityPower) && item.affinityPower > 0){
+    lines += '<div class="' + cssClass + ' gear-affinity">+' + item.affinityPower + '% ' +
+      LegendsLoot.affinityNames[item.affinity] + ' skill damage</div>';
+  }
+  return lines;
 }
 function renderArmoryDetail(){
   var box = $('armoryDetail');
-  var it = armorySel ? itemById(armorySel) : null;
-  if (!it){
-    box.innerHTML = '<div class="ad-hint">Select an item to inspect it. Gear is <b>permanent</b> — it applies to every run, on every class.</div>';
+  var item = itemById(armorySel);
+  if (!item){
+    box.innerHTML = '<div class="ad-hint">Select an item to inspect its stats and equip it. Your gear carries over between runs.</div>';
     return;
   }
-  var R = RARITIES[it.r];
-  var afHtml = Object.keys(it.af).map(function(k){ return '<div class="ad-af">▪ ' + AFFIX_LABEL[k](it.af[k]) + '</div>'; }).join('');
-  var pwHtml = it.pw ? '<div class="ad-pw">' + POWERS[it.pw].ic + ' <b>' + POWERS[it.pw].name + '</b> — ' + POWERS[it.pw].desc + '</div>' : '';
-  var slotName = EQUIP_SLOTS.find(function(s){ return slotBase(s.id) === it.slot; }).name;
-  box.innerHTML =
-    '<div class="ad-head"><span class="ad-ico r-' + it.r + '">' + itemIcon(it) + '</span>' +
-    '<div><div class="ad-name" style="color:' + R.color + ';">' + it.name + '</div>' +
-    '<div class="ad-sub">' + R.name + ' · ' + slotName + (isEquipped(it.id) ? ' · <b style="color:var(--good);">equipped</b>' : '') + '</div></div></div>' +
-    afHtml + pwHtml +
-    '<div class="ad-actions">' +
-    (isEquipped(it.id)
-      ? '<button class="btn btn-outline" id="adUnequip" type="button">Unequip</button>'
-      : '<button class="btn btn-primary" id="adEquip" type="button">Equip</button>' +
-        (it.slot === 'ring' ? '<button class="btn btn-outline" id="adEquip2" type="button">Equip as Ring II</button>' : '')) +
-    '<button class="btn btn-outline" id="adSalvage" type="button">♻️ Salvage +' + R.salvage + ' 🪙</button>' +
-    '</div>';
-  var eqB = $('adEquip'); if (eqB) eqB.addEventListener('click', function(){ equipItem(it.id, it.slot === 'ring' ? 'ring1' : null); });
-  var eq2 = $('adEquip2'); if (eq2) eq2.addEventListener('click', function(){ equipItem(it.id, 'ring2'); });
-  var un = $('adUnequip'); if (un) un.addEventListener('click', function(){ EQUIP_SLOTS.forEach(function(s){ if (META.eq[s.id] === it.id) unequipSlot(s.id); }); });
-  var sv = $('adSalvage'); if (sv) sv.addEventListener('click', function(){ salvageItem(it.id); });
+  var rarity = itemRarity(item), R = RARITIES[rarity];
+  var type = LegendsLoot.category(item.slot);
+  var named = LegendsLoot.signature(item);
+  var power = POWERS[named?.power || item.pw];
+  var classes = LegendsLoot.allowedClasses(item);
+  var requirements = classes ? '<div class="ad-sub">Requires ' + classes.map(function(cls){ return CLASSES[cls].name; }).join(' or ') + '</div>' : '';
+  var signatureHtml = '';
+  if (named){
+    var boosts = ['+' + Math.round(named.damage * 100) + '% damage'];
+    if (named.area) boosts.push('+' + Math.round(named.area * 100) + '% radius');
+    if (named.cd) boosts.push('−' + Math.round(named.cd * 100) + '% cooldown');
+    signatureHtml = '<div class="ad-signature"><strong>' + SKILLS[named.skill].name + '</strong> · ' + boosts.join(' · ') + '</div>';
+  }
+  var cls = armoryClass(), mainhand = itemById(META.eq.mainhand);
+  var slots = type?.slots || [];
+  var issue = slots.length ? LegendsLoot.equipIssue(item, slots[0], cls, mainhand) : 'slot';
+  var equippedSlot = EQUIP_SLOTS.find(function(slot){ return META.eq[slot.id] === item.id; });
+  var buttons = slots.filter(function(slot){ return META.eq[slot] !== item.id; }).map(function(slot){
+    var label = slots.length > 1 ? 'Equip ' + (slot === 'ring1' ? 'Ring I' : 'Ring II') : 'Equip';
+    return '<button class="btn btn-primary" data-armory-equip="' + slot + '" type="button"' + (issue ? ' disabled' : '') + '>' + label + '</button>';
+  }).join('');
+  box.innerHTML = '<div class="ad-head r-' + rarity + '">' + itemIcon(item) +
+    '<div><div class="ad-name">' + armoryEscape(item.name) + '</div><div class="ad-sub">' + rarityTitle(item) +
+    ' · ' + (type?.name || 'Equipment') + (equippedSlot ? ' · Equipped' : '') + '</div>' + requirements + '</div></div>' +
+    affixLines(item, 'ad-af') + signatureHtml +
+    (power?.name ? '<div class="ad-pw"><strong>' + power.name + '</strong> · ' + power.desc + '</div>' : '') +
+    (issue ? '<div class="ad-issue">' + equipIssueText(issue) + '</div>' : '') +
+    '<div class="ad-actions">' + buttons +
+    (equippedSlot ? '<button class="btn btn-outline" id="adUnequip" type="button">Unequip</button>' : '') +
+    '<button class="btn btn-outline" id="adSalvage" type="button">Salvage +' + R.salvage + ' 🪙</button></div>';
+  box.querySelectorAll('[data-armory-equip]').forEach(function(button){
+    button.onclick = function(){ equipItem(item.id, button.dataset.armoryEquip); };
+  });
+  if ($('adUnequip')) $('adUnequip').onclick = function(){ unequipSlot(equippedSlot.id); };
+  $('adSalvage').onclick = function(){ salvageItem(item.id); };
 }
 function armoryReveal(item){
-  var R = RARITIES[item.r];
   var el = $('boxReveal');
-  el.innerHTML = '<div class="reveal-card r-' + item.r + '">' +
-    '<div class="rv-rar" style="color:' + R.color + ';">' + (item.r === 'mythic' ? '✦ MYTHIC ✦' : R.name.toUpperCase()) + '</div>' +
-    '<div class="rv-ico">' + itemIcon(item) + '</div>' +
-    '<div class="rv-name" style="color:' + R.color + ';">' + item.name + '</div>' +
-    Object.keys(item.af).map(function(k){ return '<div class="rv-af">' + AFFIX_LABEL[k](item.af[k]) + '</div>'; }).join('') +
-    (item.pw ? '<div class="rv-pw">' + POWERS[item.pw].ic + ' ' + POWERS[item.pw].name + '</div>' : '') +
-    '</div>';
+  el.innerHTML = '<div class="reveal-card r-' + itemRarity(item) + '">' +
+    '<div class="rv-rar">' + rarityTitle(item).toUpperCase() + '</div>' + itemIcon(item) +
+    '<div class="rv-name">' + armoryEscape(item.name) + '</div>' + affixLines(item, 'rv-af') + '</div>';
   el.style.display = 'flex';
   armorySel = item.id;
-  setTimeout(function(){ el.style.display = 'none'; renderArmory(); }, 2600);
+  clearTimeout(armoryRevealTimer);
+  armoryRevealTimer = setTimeout(function(){ el.style.display = 'none'; }, 2600);
 }
 function openArmory(){
   hide('skillSelOverlay'); hide('treeOverlay');
@@ -1650,8 +1755,8 @@ var ULT_DEFS = {
             { n: 'Colossal [S]',   d: '[S] deals +60% damage with +40% reach.' },
             { n: 'Shockwave [S]',  d: '[S] launches a piercing shockwave in front of you.' } ],
   spin:   [ { n: 'Perpetual [S]',  d: '[S] spins 60% longer.' },
-            { n: 'Maelstrom [S]',  d: '[S] is 40% larger, hits harder and drags enemies in.' },
-            { n: 'Razorstorm [S]', d: '[S] flings heavy blades outward while spinning.' } ],
+            { n: 'Inferno [S]',    d: '[S] is 40% larger, hits 20% harder and drags enemies in.' },
+            { n: 'Hemorrhage [S]', d: '[S] stacks wounds on every melee sweep.' } ],
   dash:   [ { n: 'Phantom [S]',    d: '[S] recharges 40% faster.' },
             { n: 'Wrecking [S]',   d: '[S] deals DOUBLE damage.' },
             { n: 'Aftershock [S]', d: '[S] ends in an explosion.' } ],
@@ -1716,11 +1821,15 @@ function genTree(cls){
         desc: B.d.replace(/\[S\]/g, def.name), sm: { sid: sid, dmg: B.sm.dmg || 0, cd: B.sm.cd || 0, area: B.sm.area || 0 } });
     }
     var ults = ULT_DEFS[def.type] || ULT_DEFS.buff;
+    var affinities = LegendsBuilds.choices(cls, def.type, LegendsActions.familyForSkill(sid));
     for (var ui = 0; ui < 3; ui++){
-      nodes.push({ id: 'ult' + (ui + 1) + '_' + sid, name: ults[ui].n.replace(/\[S\]/g, def.name), icon: '☀', tier: tier,
+      var affinity = affinities && LegendsBuilds.kinds[affinities[ui]];
+      var ultName = ults[ui].n.replace(/\[S\]/g, def.name);
+      var ultDetail = ults[ui].d.replace(/\[S\]/g, def.name);
+      nodes.push({ id: 'ult' + (ui + 1) + '_' + sid, name: ultName + (affinity ? ' · ' + affinity.name : ''), icon: '☀', tier: tier,
         col: bc - 0.6 + ui * 1.0, row: r0 + 4, kind: 'ult', max: 1,
         req: ['b4_' + sid, 'b5_' + sid, 'b6_' + sid],
-        desc: 'ULTIMATE (pick ONE of three · needs ' + def.name + ' rank 3): ' + ults[ui].d.replace(/\[S\]/g, def.name),
+        desc: 'Pick one ultimate at rank 3. ' + ultDetail + (affinity ? ' ' + affinity.name + ' damage. ' + affinity.detail : ''),
         ultInfo: { sid: sid, n: ui + 1 } });
     }
   }
@@ -1788,8 +1897,9 @@ function computeStats(){
     if (nd.ultInfo && r) S.ult[nd.ultInfo.sid] = nd.ultInfo.n;
     if (nd.mod) S.mods[nd.mod] = true;
   }
-  // permanent equipment: affixes + powers
-  equippedItems().forEach(function(it){
+  // Only gear that fits this class and its hand setup applies to the run.
+  S.gear = LegendsLoot.activeGear(META, G.cls);
+  Object.values(S.gear).forEach(function(it){
     var a = it.af || {};
     if (a.hp) S.hpAdd += a.hp;
     if (a.dmg) S.dmg += a.dmg / 100;
@@ -1803,7 +1913,16 @@ function computeStats(){
     if (a.speed) S.speed += a.speed / 100;
     if (a.petDmg) S.petDmg += a.petDmg / 100;
     if (a.lifeKill) S.lifeKill += a.lifeKill;
-    if (it.pw) S.mods['pw.' + it.pw] = true;
+    var named = LegendsLoot.signature(it);
+    var power = named ? named.power : it.pw;
+    if (power) S.mods['pw.' + power] = true;
+    if (named){
+      S.signature = named;
+      var skill = S.sm[named.skill] || (S.sm[named.skill] = { dmg: 0, cd: 0, area: 0 });
+      skill.dmg += named.damage;
+      skill.cd += named.cd;
+      skill.area += named.area;
+    }
   });
   // passive item-power stats
   if (S.mods['pw.windrunner']){ S.speed += 0.15; S.dashCd = 0.7; }
@@ -1815,6 +1934,12 @@ function computeStats(){
   if (S.mods['pw.serpent']) S.poisonMult *= 2;
   S.armor = Math.min(0.7, S.armor);
   S.cdr = Math.min(0.6, S.cdr);
+  S.affinity = LegendsBuilds.gearAffinity(Object.values(S.gear));
+  S.builds = {};
+  cls.skills.forEach(function(sid){
+    S.builds[sid] = LegendsBuilds.profiles(G.cls, SKILLS[sid].type, LegendsActions.familyForSkill(sid),
+      S.affinity, sid === 'whirlwind' && S.mods['pw.flamespin']);
+  });
   G.stats = S;
   if (G.player){
     var newMax = cls.hp + S.hpAdd + (G.player.levelHp || 0);
@@ -1844,6 +1969,14 @@ function skillRank(id){ return (G.stats.rank && G.stats.rank[id]) || 1; }
 function skillUnlocked(id){ return !!(G.stats.unlocked && G.stats.unlocked[id]); }
 function skillSm(id){ return (G.stats.sm && G.stats.sm[id]) || { dmg: 0, cd: 0, area: 0 }; }
 function ultN(id){ return (G.stats.ult && G.stats.ult[id]) || 0; }
+function skillBuild(sid){
+  var profiles = G && G.stats && G.stats.builds && G.stats.builds[sid];
+  return profiles ? profiles[ultN(sid)] : null;
+}
+function skillTint(sid){
+  var build = skillBuild(sid);
+  return build?.converted ? build.color : null;
+}
 function skillDmgMult(id){ return G.stats.dmg * (1 + 0.2 * (skillRank(id) - 1)) * (1 + skillSm(id).dmg); }
 function hasEnh(sid, n){ return !!G.stats.mods[sid + '.e' + n]; }
 function skillCd(id){
@@ -2040,8 +2173,9 @@ function loadLoadout(cls){
 }
 function saveLoadout(){
   if (!G) return;
-  META.loadout[G.cls] = G.slots.slice();
-  metaSave();
+  var slots = G.slots.slice();
+  META.loadout[G.cls] = slots;
+  metaSave({loadout:{[G.cls]:slots}});
 }
 var selSlotIdx = 0,equipCandidate=null;
 function openEquipJourney(sid){equipCandidate=sid;var current=G.slots.indexOf(sid);selSlotIdx=current>=0?current:0;openSkillSel();$('selFeedback').textContent='Choose the slot to equip '+SKILLS[sid].name+'. The current skill will be replaced.';$('selSlots').querySelector('[data-slot="'+selSlotIdx+'"]').focus();}
@@ -2102,7 +2236,9 @@ var canvas = $('game'), ctx = canvas.getContext('2d');
 var VW = 800, VH = 600, DPR = 1;
 var chosenClass = 'barb';
 var G = null;
-$('enemyGuideEntries').innerHTML=LegendsVariety.guideEntries.map(function(entry){return '<p style="font-size:12px;line-height:1.5"><strong>'+entry.icon+' '+entry.name+'</strong><br>'+entry.tell+'<br>'+entry.counter+'</p>';}).join('');
+$('enemyGuideEntries').innerHTML=LegendsVariety.guideEntries.concat(LegendsBosses.rotation.slice(1)).map(function(entry){
+  return '<p style="font-size:12px;line-height:1.5"><strong>'+entry.icon+' '+entry.name+'</strong><br>'+entry.tell+'<br>'+entry.counter+'</p>';
+}).join('');
 
 function newGame(cls, presentation){
   cancelSkillGesture();equipCandidate=null;
@@ -2413,7 +2549,8 @@ function updateTargetPanel(){
   var target=G.atkTarget||mouse.over;if(!target||target.dead||target.hp<=0||G.enemies.indexOf(target)<0){LegendsPerformance.hidden(panel,true);return;}
   var intel=LegendsVariety.intelligence(target);
   LegendsPerformance.hidden(panel,false);LegendsPerformance.text($('targetName'),intel?intel.name:{slime:'Mire Slime',imp:'Ash Imp',mite:'Rift Mite',brute:'Stone Brute',spitter:'Venom Spitter',charger:'Iron Charger',boss:'Core Tyrant'}[target.kind]||'Unknown foe');
-  LegendsPerformance.text($('targetType'),intel?(target.elite?'ELITE · ':'')+intel.role:target.boss?'BOSS · HEAVY':(target.elite?'ELITE · ':'')+({brute:'Heavy melee',spitter:'Ranged caster',charger:'Charging attacker',mite:'Swarm',imp:'Skirmisher',slime:'Melee'}[target.kind]||'Enemy'));
+  var rank=target.boss?'BOSS · ':target.elite?'ELITE · ':'';
+  LegendsPerformance.text($('targetType'),rank+(intel?intel.role:({brute:'Heavy melee',spitter:'Ranged caster',charger:'Charging attacker',mite:'Swarm',imp:'Skirmisher',slime:'Melee'}[target.kind]||'Enemy')));
   LegendsPerformance.text($('targetHp'),Math.max(0,Math.round(target.hp*10)/10)+' / '+Math.round(target.maxHp*10)/10+' HP');LegendsPerformance.style($('targetHpFill'),'transform','scaleX('+clamp(target.hp/target.maxHp,0,1)+')');
   LegendsPerformance.text($('targetCounter'),intel?intel.counter:'');
   LegendsPerformance.text($('targetEffects'),LegendsModels.statuses(target).map(function(status){return status.glyph+' '+status.label;}).join(' · ')||'No active effects');
@@ -2509,20 +2646,22 @@ function spawnEnemy(kind, elite){
   if(LegendsVariety.definitions[kind]&&!G.seenRoles?.[kind]){if(!G.seenRoles)G.seenRoles={};G.seenRoles[kind]=true;var guide=LegendsVariety.introduction(kind);if(guide)toast(guide.name+' — '+guide.tell+' '+guide.counter,'energy');}
   return e;
 }
-function spawnBoss(){
-  if(G.enemies.length>=MAX_ENEMIES){G.pendingBoss=true;return null;}
+function spawnBoss(wave = 5){
+  if(G.enemies.length>=MAX_ENEMIES){G.pendingBoss=G.pendingBoss||wave;return null;}
+  var boss = LegendsBosses.forWave(wave);
   var mult = hpScale();
   var p = G.player, ang = rand(0, Math.PI * 2);
   var d = Math.hypot(VW, VH) / 2 + 150;
   var e = {
-    kind: 'boss', x: clamp(p.x + Math.cos(ang) * d, 60, WORLD.w - 60), y: clamp(p.y + Math.sin(ang) * d, 60, WORLD.h - 60),
-    r: 34, hp: 950 * mult, maxHp: 950 * mult, speed: 52,
-    dmg: 24 * dmgScale(), xp: 150, elite: true, boss: true,
+    kind: 'boss', bossId: boss.id, bossWave: wave,
+    x: clamp(p.x + Math.cos(ang) * d, 60, WORLD.w - 60), y: clamp(p.y + Math.sin(ang) * d, 60, WORLD.h - 60),
+    r: boss.r, hp: boss.hp * mult, maxHp: boss.hp * mult, speed: boss.speed,
+    dmg: boss.dmg * dmgScale(), xp: boss.xp, elite: true, boss: true,
     hitCd: 0, stun: 0, frozen: 0, slow: 0, bleed: 0, bleedT: 0,
     slamCd: 5, addCd: 9, shootCd: 3, chargeSt: 0, chargeT: 0, cvx: 0, cvy: 0, animT: 0, kx: 0, ky: 0, kt: 0
   };
   LegendsVariety.initialize(e,{enemies:G.enemies});G.enemies.push(e);G.enemySpatialDirty=true;G.pendingBoss=false;
-  toast('👹 A Core Tyrant emerges!', 'bad');
+  toast(boss.icon + ' ' + boss.name + ' emerges!', 'bad');
   sfx('boom');
   return e;
 }
@@ -2534,7 +2673,7 @@ function wavePool(){
   return pool;
 }
 function doSpawning(dt){
-  if(G.pendingBoss&&G.enemies.length<MAX_ENEMIES)spawnBoss();
+  if(G.pendingBoss&&G.enemies.length<MAX_ENEMIES)spawnBoss(G.pendingBoss);
   G.waveT += dt;
   var waveLen = 40;
   if (G.waveT >= waveLen){
@@ -2542,7 +2681,7 @@ function doSpawning(dt){
     toast('🌊 Wave ' + G.wave + ' — the horde thickens!', 'energy');
     earnPoints(8, 'wave ' + G.wave + ' survived');
     var burst = Math.min(42, 8 + G.wave * 3);
-    if (G.wave % 5 === 0) spawnBoss();
+    if (G.wave % 5 === 0) spawnBoss(G.wave);
     for (var i = 0; i < burst; i++) spawnEnemy(LegendsVariety.pickKind(G.wave,G.enemies,Math.random(),wavePool(),MAX_ENEMIES), Math.random() < 0.06 + G.wave * 0.004);
     updateHud();
   }
@@ -2566,7 +2705,7 @@ function addHostileHazard(spec){
   var list=G.hazards||(G.hazards=[]);if(list.length>=16)return null;
   var hazard=Object.assign({},spec,{age:0,nextTick:0});hazard.warning=Math.max(0,spec.warning||0);hazard.life=Math.max(.05,spec.life||.2);list.push(hazard);return hazard;
 }
-function varietyContext(slowMult){return {time:G.time,slowMult:slowMult||1,player:G.player,ended:G.state!=='play',
+function varietyContext(slowMult){return {time:G.time,slowMult:slowMult||1,player:G.player,world:WORLD,ended:G.state!=='play',
   shoot:function(spec){if(G.eprojs.length<96)G.eprojs.push(Object.assign({},spec,{dmg:spec.damage}));},hazard:addHostileHazard,spawnChild:spawnEnemyChild,
   strike:function(target,damage){if(target===G.player)hurtPlayer(damage);else if(G.pets.indexOf(target)>=0&&target.hp>0)target.hp-=damage;},
   cue:function(text,color,enemy){addText(enemy.x,enemy.y-30,text,color,true,0);}};}
@@ -2587,7 +2726,7 @@ function drawHostileHazards(warnings){(G.hazards||[]).forEach(function(h){if(!wo
   ctx.save();ctx.strokeStyle='#08131f';ctx.lineWidth=7;ctx.beginPath();ctx.arc(h.x,h.y,h.r,0,Math.PI*2);ctx.stroke();ctx.strokeStyle=h.color;ctx.lineWidth=2.5;ctx.stroke();
   if(waiting){ctx.setLineDash([7,4]);ctx.beginPath();ctx.arc(h.x,h.y,h.r+5,-Math.PI/2,-Math.PI/2+Math.PI*2*clamp(h.age/h.warning,0,1));ctx.stroke();ctx.setLineDash([]);}
   else {ctx.fillStyle=h.color;ctx.globalAlpha=.16;ctx.fill();ctx.globalAlpha=.8;for(var i=0;i<6;i++){var a=i*Math.PI/3;ctx.beginPath();ctx.moveTo(h.x+Math.cos(a)*h.r*.35,h.y+Math.sin(a)*h.r*.35);ctx.lineTo(h.x+Math.cos(a)*h.r*.85,h.y+Math.sin(a)*h.r*.85);ctx.stroke();}}
-  ctx.restore();if(waiting)drawThreatCaption(h.x,h.y-h.r-12,h.kind==='volatile'?'DEATH BURST':h.kind==='tyrant'?'GROUND BREAK':'CURSE',h.color);
+  ctx.restore();if(waiting)drawThreatCaption(h.x,h.y-h.r-12,h.kind==='volatile'?'DEATH BURST':h.kind==='tyrant'?'GROUND BREAK':h.kind==='mire'?'POISON BED':'CURSE',h.color);
 });}
 
 /* ---------------- DAMAGE / KILLS ---------------- */
@@ -2611,10 +2750,17 @@ function damageText(enemy,amount,color,big){
 function dealDamage(e, amount, opts){
   opts = opts || {};
   if (e.hp <= 0 || !Number.isFinite(amount) || amount <= 0) return;
+  var build = opts.sid && G.stats.builds ? skillBuild(opts.sid) : null;
+  if(build)amount = LegendsBuilds.scale(build,e,amount);
   var guarded=LegendsVariety.modifyDamage(e,amount,{sourceX:opts.sourceX,sourceY:opts.sourceY,dx:Number.isFinite(opts.impactX)?-opts.impactX:G.player.x-e.x,dy:Number.isFinite(opts.impactY)?-opts.impactY:G.player.y-e.y,heavy:!!(opts.knock||opts.guardBreak)},G.time);amount=guarded.amount;
   if(guarded.blocked||guarded.broken||guarded.interrupted){if((e.guardCueUntil||0)<=G.time){addText(e.x,e.y-28,guarded.broken?'GUARD BROKEN':guarded.interrupted?'INTERRUPTED':'BLOCKED',guarded.broken?'#ffdf9d':'#e5bc76',guarded.broken,0);e.guardCueUntil=G.time+.22;}ringFx(e.x,e.y,e.r+10,guarded.broken?'#ffdf9d':'#e5bc76');}
   e.hitFlash=.12;
   var crit = opts.crit;
+  if(build && (build.status || build.converted)){
+    amount = LegendsBuilds.apply(build,e,amount,G.time);
+    opts.color = build.color;
+    opts.element = build.kind;
+  }
   e.hp -= amount;
   combatImpact(e, amount, opts);
   damageText(e,amount,crit?'#FFD54F':(opts.color||'#FFFFFF'),crit);
@@ -2643,7 +2789,7 @@ function combatImpact(e, amount, opts){
   var d=Math.hypot(dx,dy)||1,ang=Math.atan2(dy,dx),strong=!!(opts.crit||e.hp<=0||opts.knock);
   var color=opts.color||(opts.crit?'#ffe4a1':'#b5efff');
   if(opts.element)elementFx(opts.element,e.x,e.y,30,ang,.28);
-  if(/^(#80deea|#81d4fa|#70dbff)$/i.test(color))actionFx(2,e.x,e.y,26,ang,.24);
+  if(opts.element==='frost'||/^(#80deea|#81d4fa|#70dbff)$/i.test(color))actionFx(2,e.x,e.y,26,ang,.24);
   else if(/^(#b388ff|#ba94ff|#ce93d8)$/i.test(color))actionFx(3,e.x,e.y,28,ang,.3);
   var impacts=G.impacts||(G.impacts=[]);
   if(impacts.length>=48)impacts.shift();
@@ -2661,7 +2807,7 @@ function combatImpact(e, amount, opts){
   }
 }
 function applyBleed(e, total, dur, kind){
-  var mult = G.stats.poisonMult || 1;
+  var mult = kind === 'poison' ? G.stats.poisonMult || 1 : 1;
   var current=e.bleedT>0?(e.bleed||0):0,incoming=(total*mult)/dur;
   if(incoming>=current)e.dotKind=kind||'bleed';
   e.bleed=Math.max(current,incoming);
@@ -2680,8 +2826,10 @@ function killEnemy(e, opts){
   if (!e.noLoot && (e.elite || e.boss) && Math.random() < 0.85) G.orbs.push({ x: e.x, y: e.y, kind: 'heal', t: 0 });
   burst(e.x, e.y, e.boss ? 26 : e.elite ? 14 : 6, e.boss ? '#CE93D8' : '#EF9A9A');
   if (e.boss){
-    toast('👑 Core Tyrant slain! +' + goldGain + ' 🪙', 'good');
+    var bossName = LegendsBosses.get(e.bossId)?.name || 'Core Tyrant';
+    toast('👑 ' + bossName + ' slain! +' + goldGain + ' 🪙', 'good');
     earnPoints(40, 'boss slain');
+    if(!e.noLoot && typeof grantBossLoot === 'function')grantBossLoot(e);
     G.shake = 0.5; sfx('boom');
   }
   updateHud();
@@ -2723,6 +2871,19 @@ function hurtPlayer(raw){
     if (p.shield <= 0) p.thorns = 0;
   }
   if (dmg <= 0){updateBars();return;}
+  var ward = G.auras && G.auras.find(function(aura){ return aura.sid === 'bladestorm' && aura.t > 0; });
+  if(ward){
+    dmg *= .8;
+    if((ward.nextCounter || 0) <= G.time){
+      ward.nextCounter = G.time + .5;
+      var wardBuild = skillBuild(ward.sid);
+      ringFx(p.x,p.y,ward.radius,wardBuild?.color || '#dce8f3');
+      enemiesInRadius(p.x,p.y,ward.radius).forEach(function(enemy){
+        dealDamage(enemy,ward.dps*1.5,{sid:ward.sid,continuous:true,noSplash:true});
+        if(ward.slow)enemy.slowT = Math.max(enemy.slowT || 0, 1.2);
+      });
+    }
+  }
   LegendsFeedback.damage(G,p.hp);
   p.hp -= dmg;
   updateBars();
@@ -2898,8 +3059,13 @@ function burst(x, y, n, color){
 }
 function actionFx(row,x,y,r,ang,duration){if(window.LegendsActions)LegendsActions.emit(G,row,x,y,r,ang,duration);}
 function elementFx(family,x,y,r,ang,duration){if(window.LegendsActions)LegendsActions.emitElement(G,family,x,y,r,ang,duration);}
-function skillFx(sid,x,y,r,ang,duration,options){return LegendsActions.emitSkill(G,sid,x,y,r,ang,duration,options);}
-function drawSkillChannel(channel,x,y,r){return LegendsActions.drawChannel(ctx,{sid:channel.sid,x:x,y:y,r:r,start:channel.start,life:channel.life,t:channel.t,ang:channel.ang||0},G.time,lowMotion,G.presentation.actions);}
+function skillFx(sid,x,y,r,ang,duration,options){
+  var tint = skillTint(sid);
+  return LegendsActions.emitSkill(G,sid,x,y,r,ang,duration,tint ? Object.assign({},options,{tint:tint}) : options);
+}
+function drawSkillChannel(channel,x,y,r){
+  return LegendsActions.drawChannel(ctx,{sid:channel.sid,x:x,y:y,r:r,start:channel.start,life:channel.life,t:channel.t,ang:channel.ang||0,tint:skillTint(channel.sid)},G.time,lowMotion,G.presentation.actions);
+}
 function slashFx(x, y, ang, r, color){ actionFx(0,x,y,r,ang,.24);G.fx.push({ kind: 'slash', x: x, y: y, ang: ang, r: r, t: 0, life: 0.18, color: color || '#FFE082' }); }
 function ringFx(x, y, r, color){ if(/^(#80deea|#81d4fa)$/i.test(color||''))actionFx(2,x,y,r,0,.4);G.fx.push({ kind: 'ring', x: x, y: y, r: r, t: 0, life: 0.4, color: color || '#80DEEA' }); }
 function boltFx(pts, color){ G.fx.push({ kind: 'bolt', pts: pts, t: 0, life: 0.22, color: color || '#FFF176' }); }
@@ -2983,7 +3149,7 @@ function doChain(fromX, fromY, dmg, bounces, range, jump, fork, stunS, sid){
     hit[bi] = true;
     pts.push({ x: best.x, y: best.y });
     var cr = rollCrit();
-    dealDamage(best, dmg * cr.mult, { crit: cr.crit, color: '#FFF176',element:'lightning' });
+    dealDamage(best, dmg * cr.mult, { sid:sid, crit: cr.crit, color: '#FFF176',element:'lightning' });
     if (stunS) best.stun = Math.max(best.stun, stunS);
     if (cr.crit && fork){
       var forks = 0;
@@ -2994,14 +3160,14 @@ function doChain(fromX, fromY, dmg, bounces, range, jump, fork, stunS, sid){
           hit[k] = true; forks++;
           boltFx([{ x: best.x, y: best.y }, { x: fe.x, y: fe.y }], '#FFF176');
           var c2 = rollCrit();
-          dealDamage(fe, dmg * 0.7 * c2.mult, { crit: c2.crit, noSplash: true, color: '#FFF176',element:'lightning' });
+          dealDamage(fe, dmg * 0.7 * c2.mult, { sid:sid, crit: c2.crit, noSplash: true, color: '#FFF176',element:'lightning' });
         }
       }
     }
     cur = { x: best.x, y: best.y };
     rng = jump;
   }
-  if (pts.length > 1){boltFx(pts, '#FFF176');if(sid)skillFx(sid,fromX,fromY,36,0,.38,{points:pts});}
+  if (pts.length > 1){boltFx(pts, skillBuild(sid)?.color || '#FFF176');if(sid)skillFx(sid,fromX,fromY,36,0,.38,{points:pts});}
   return pts.length > 1;
 }
 function strikeAt(x, y, radius, dmg, delay, opts){
@@ -3049,8 +3215,16 @@ function castSkill(idx){
         skillFx(sid,p.x,p.y,range,ang,.38,{arc:arcW});
         slashFx(p.x + fd.x * 40, p.y + fd.y * 40, ang, range, sid === 'smite' ? '#FFF59D' : '#FFB74D');
         enemiesInArc(p.x, p.y, ang, range, arcW).forEach(function(e){
+          var execution = sid === 'execute' && e.hp < e.maxHp * .25 ? 1.75 : 1;
+          if(sid === 'execute' && skillBuild(sid)?.kind === 'bleed'){
+            var rupture = LegendsBuilds.rupture(e);
+            if(rupture > 0){
+              dealDamage(e,rupture,{color:'#ff8190',noSplash:true});
+              addText(e.x,e.y-22,'RUPTURE','#ff8190',true,0);
+            }
+          }
           var cr = rollCrit();
-          dealDamage(e, aDmg * k * cr.mult, { crit: cr.crit, element:LegendsActions.familyForSkill(sid),knock: { x: p.x, y: p.y, f: 160 } });
+          dealDamage(e, aDmg * k * cr.mult * execution, { sid:sid, crit: cr.crit, element:LegendsActions.familyForSkill(sid),knock: { x: p.x, y: p.y, f: 160 } });
           if (hasEnh(sid, 1)) applyBleed(e, aDmg * k * (sid === 'execute' ? 0.8 : 0.4), 3);
           if (sp.stun) e.stun = Math.max(e.stun, sp.stun);
         });
@@ -3061,9 +3235,9 @@ function castSkill(idx){
       break;
     }
     case 'spin':
-      G.spin = { sid: sid, start:G.time, life:sp.dur * (u === 1 ? 1.6 : 1), t: sp.dur * (u === 1 ? 1.6 : 1), tick: 0, bladeT: 0,
-        dps: sp.dps * (u === 2 ? 1.2 : 1), radius: sp.radius * (u === 2 ? 1.4 : 1) * (1 + skillSm(sid).area),
-        pull: hasEnh(sid, 1) || u === 2, blades: hasEnh(sid, 2) || u === 3, bladeMult: u === 3 ? 2 : 1 };
+      G.spin = { sid: sid, start:G.time, life:sp.dur * (u === 1 ? 1.6 : 1), t: sp.dur * (u === 1 ? 1.6 : 1), tick: 0,
+        dps: sp.dps * (u === 2 ? 1.2 : 1), radius: sp.radius * (u === 2 ? 1.4 : 1) * area,
+        pull: hasEnh(sid, 1) || u === 2, innerBonus: hasEnh(sid, 2) ? 1.3 : 1 };
       break;
     case 'dash': {
       if (u === 1) G.cds[sid] *= 0.6;
@@ -3138,14 +3312,15 @@ function castSkill(idx){
       if ((sid === 'slam' || sid === 'judgement') && G.stats.mods['pw.titan']){ nr *= 1.5; G.shake = 0.5; }
       if (sid === 'nova' && G.stats.mods['pw.frostking']) nr *= 1.4;
       var ctlMult = (u === 3 ? 2 : 1);
-      var freeze = sp.freeze ? ((sid === 'nova' && hasEnh(sid, 1)) ? 3.2 : sp.freeze) * ctlMult : 0;
+      var freeze = sp.freeze && (!skillBuild(sid)?.converted || skillBuild(sid)?.kind === 'frost')
+        ? ((sid === 'nova' && hasEnh(sid, 1)) ? 3.2 : sp.freeze) * ctlMult : 0;
       var stun2 = (sp.stun ? sp.stun * (hasEnh(sid, 2) ? 2 : 1) : ((sid === 'net' && hasEnh(sid, 1)) ? 0.8 : 0)) * ctlMult;
       var pulse = function(k){
         skillFx(sid,p.x,p.y,nr,ang,.65);
         ringFx(p.x, p.y, nr, sid === 'nova' ? '#80DEEA' : sid === 'net' ? '#B0BEC5' : '#FF8A65');
         enemiesInRadius(p.x, p.y, nr).forEach(function(e){
           var cr = rollCrit();
-          dealDamage(e, sp.dmg * mult * k * cr.mult, { crit: cr.crit, color: '#80DEEA' });
+          dealDamage(e, sp.dmg * mult * k * cr.mult, { sid:sid, crit: cr.crit, color: '#80DEEA' });
           if (freeze) e.frozen = Math.max(e.frozen, freeze);
           if (stun2) e.stun = Math.max(e.stun, stun2);
           if (sp.slow) e.slowT = Math.max(e.slowT || 0, sp.slow * ctlMult);
@@ -3314,8 +3489,11 @@ function basicAttack(dt){
 /* ---------------- PROJECTILES, ZONES, ORBS ---------------- */
 function explode(x, y, radius, dmg, opts){
   opts = opts || {};
-  var element=opts.poison?'poison':opts.element||'fire';
-  if(element==='poison')elementFx('poison',x,y,radius,0,.4);else actionFx(element==='arcane'?3:1,x,y,radius,0,.36);
+  var build = opts.sid && G.stats.builds ? skillBuild(opts.sid) : null;
+  var element=build?.converted ? build.kind : opts.poison?'poison':opts.element||'fire';
+  if(build?.converted)opts.color = build.color;
+  if(element==='poison')elementFx('poison',x,y,radius,0,.4);
+  else actionFx(element==='arcane'?3:element==='frost'?2:element==='bleed'?0:1,x,y,radius,0,.36);
   if(element==='poison'&&!opts.color)opts.color='#a0d65d';
   if(element==='arcane'&&!opts.color)opts.color='#ba94ff';
   ringFx(x, y, radius, opts.color || '#FF8A65');
@@ -3323,10 +3501,10 @@ function explode(x, y, radius, dmg, opts){
   sfx('boom');
   enemiesInRadius(x, y, radius).forEach(function(e){
     var cr = rollCrit();
-    dealDamage(e, dmg * cr.mult, { crit: cr.crit, color: opts.color || '#FFAB91', impactX:e.x-x,impactY:e.y-y,
+    dealDamage(e, dmg * cr.mult, { sid:opts.sid, crit: cr.crit, color: opts.color || '#FFAB91', impactX:e.x-x,impactY:e.y-y,
       knock:{x:x,y:y,f:Math.min(210,70+radius*.5)} });
-    if (opts.burn) applyBleed(e, dmg * 0.4, 3,'burn');
-    if (opts.poison) applyBleed(e, dmg * (opts.poisonStrong ? 1 : 0.5), 3,'poison');
+    if (opts.burn && (!build || build.kind === 'fire')) applyBleed(e, dmg * 0.4, 3,'burn');
+    if (opts.poison && (!build || build.kind === 'poison')) applyBleed(e, dmg * (opts.poisonStrong ? 1 : 0.5), 3,'poison');
     if (opts.slow) e.slowT = Math.max(e.slowT || 0, 2);
     if (opts.bleed) applyBleed(e, dmg * 0.4, 3);
     if (opts.stun) e.stun = Math.max(e.stun, 1);
@@ -3369,7 +3547,7 @@ function updateProjectiles(dt){
         pr.exploded = true;
         skillFx(pr.sid,pr.x,pr.y,pr.radius,Math.atan2(pr.vy,pr.vx),.65,{phase:'burst'});
         var burn2 = pr.sid === 'fireball' && hasEnh('fireball', 1);
-        explode(pr.x, pr.y, pr.radius, pr.dmg, { element:LegendsActions.familyForSkill(pr.sid),burn: burn2, poison: pr.poison, poisonStrong: pr.sid === 'plague' && hasEnh('plague', 1), slow: pr.sid === 'orb' && hasEnh('orb', 1) });
+        explode(pr.x, pr.y, pr.radius, pr.dmg, { sid:pr.sid, element:LegendsActions.familyForSkill(pr.sid),burn: burn2, poison: pr.poison, poisonStrong: pr.sid === 'plague' && hasEnh('plague', 1), slow: pr.sid === 'orb' && hasEnh('orb', 1) });
         if (pr.sid === 'fireball' && hasEnh('fireball', 2)){
           for (var s = 0; s < 3; s++){
             var sa = rand(0, Math.PI * 2);
@@ -3382,7 +3560,7 @@ function updateProjectiles(dt){
       var cr = pr.pet ? { mult: 1, crit: false } : rollCrit();
       if(pr.sid)skillFx(pr.sid,pr.x,pr.y,24,Math.atan2(pr.vy,pr.vx),.25,{phase:'impact'});
       if (pr.healOwner) healPlayer(1);
-      dealDamage(e, pr.dmg * cr.mult, { crit: cr.crit || pr.emp, basic: pr.basic, pet: pr.pet,element:pr.poison?'poison':pr.basic&&G.cls==='ama'?'arrow':LegendsActions.familyForSkill(pr.sid),impactX:pr.vx,impactY:pr.vy,sourceX:pr.sourceX,sourceY:pr.sourceY,
+      dealDamage(e, pr.dmg * cr.mult, { sid:pr.sid, crit: cr.crit || pr.emp, basic: pr.basic, pet: pr.pet,element:pr.poison?'poison':pr.basic&&G.cls==='ama'?'arrow':LegendsActions.familyForSkill(pr.sid),impactX:pr.vx,impactY:pr.vy,sourceX:pr.sourceX,sourceY:pr.sourceY,
         color: pr.kind === 'boar' ? '#BCAAA4' : pr.sid==='icebolt'?'#94e7ff':pr.sid==='holybolt'?'#fff4a1':'#B39DDB', knock: pr.kind === 'boar' ? { x: pr.x - pr.vx, y: pr.y - pr.vy, f: 190 } : null });
       if (pr.stunHit) e.stun = Math.max(e.stun, pr.stunHit);
       if (pr.slow) e.slowT = Math.max(e.slowT || 0, pr.slow);
@@ -3396,7 +3574,7 @@ function updateProjectiles(dt){
     }
     if(!dead){pr.x=nextX;pr.y=nextY;dead=pr.life<=0||pr.x<10||pr.y<10||pr.x>WORLD.w-10||pr.y>WORLD.h-10;}
     if (dead){
-      if (pr.kind === 'fire' && !pr.exploded){skillFx(pr.sid,pr.x,pr.y,pr.radius,Math.atan2(pr.vy,pr.vx),.65,{phase:'burst'});explode(pr.x, pr.y, pr.radius, pr.dmg, { element:LegendsActions.familyForSkill(pr.sid),poison: pr.poison, poisonStrong: pr.sid === 'plague' && hasEnh('plague', 1) });}
+      if (pr.kind === 'fire' && !pr.exploded){skillFx(pr.sid,pr.x,pr.y,pr.radius,Math.atan2(pr.vy,pr.vx),.65,{phase:'burst'});explode(pr.x, pr.y, pr.radius, pr.dmg, { sid:pr.sid, element:LegendsActions.familyForSkill(pr.sid),poison: pr.poison, poisonStrong: pr.sid === 'plague' && hasEnh('plague', 1) });}
       G.projs.splice(i, 1);
     }
   }
@@ -3417,7 +3595,7 @@ function updateProjectiles(dt){
     if (zn.tick <= 0){
       zn.tick = 0.4;
       enemiesInRadius(zn.x, zn.y, zn.r).forEach(function(e){
-        dealDamage(e, zn.dps * 0.4, { color: '#FF8A65',continuous:true });
+        dealDamage(e, zn.dps * 0.4, { sid:zn.sid, color: '#FF8A65',continuous:true });
         if (zn.slow) e.slowT = Math.max(e.slowT || 0, 0.6);
       });
     }
@@ -3485,6 +3663,10 @@ function updateEnemies(dt){
     e.animT += dt * 2.5;
     e.hitCd -= dt;
     if (e.slowT > 0) e.slowT -= dt;
+    if(e.afflictions || e.chillT > 0){
+      e.hp -= LegendsBuilds.tick(e,dt);
+      if(e.hp <= 0){ killEnemy(e,{}); G.enemies.splice(i,1); continue; }
+    }
     if (e.bleedT > 0){
       e.hp -= e.bleed * Math.min(dt,e.bleedT);
       e.bleedT = Math.max(0,e.bleedT-dt);
@@ -3650,7 +3832,7 @@ function update(dt){
         if (LegendsCombat.sweepCircle(oldX,oldY,p.x,p.y,ce.x,ce.y,p.r+ce.r+14)!==null){
           G.hitEnemies.add(ce);
           var cr = rollCrit();
-          dealDamage(ce, dashDef.p.dmg * chMult * (p.dashDmgMult || 1) * cr.mult, { crit: cr.crit, knock: { x: p.x, y: p.y, f: 260 } });
+          dealDamage(ce, dashDef.p.dmg * chMult * (p.dashDmgMult || 1) * cr.mult, { sid:p.dashSid, crit: cr.crit, knock: { x: p.x, y: p.y, f: 260 } });
           if (dashDef.p.stun) ce.stun = Math.max(ce.stun, dashDef.p.stun);
           if (G.stats.mods['pw.thunderhooves']){
             boltFx([{ x: ce.x, y: ce.y - 60 }, { x: ce.x, y: ce.y }], '#FFF176');
@@ -3670,12 +3852,12 @@ function update(dt){
     if (p.dashT <= 0 && p.dashSid === 'teleport' && hasEnh('teleport', 1)){
       ringFx(p.x, p.y, 160 * G.stats.area, '#80DEEA');
       enemiesInRadius(p.x, p.y, 160 * G.stats.area).forEach(function(e){
-        dealDamage(e, 40 * skillDmgMult('teleport') * buffDmg(), { color: '#80DEEA' });
+        dealDamage(e, 40 * skillDmgMult('teleport') * buffDmg(), { sid:'teleport', color: '#80DEEA' });
         e.frozen = Math.max(e.frozen, 1);
       });
     }
     if (p.dashT <= 0 && p.dashSid && ultN(p.dashSid) === 3){
-      explode(p.x, p.y, 140 * G.stats.area, 0.8 * (SKILLS[p.dashSid].p.dmg || 40) * skillDmgMult(p.dashSid) * buffDmg(), {});
+      explode(p.x, p.y, 140 * G.stats.area, 0.8 * (SKILLS[p.dashSid].p.dmg || 40) * skillDmgMult(p.dashSid) * buffDmg(), {sid:p.dashSid});
     }
   } else if (p.moving){
     var spd = CLASSES[G.cls].speed * G.stats.speed * (1 + buffStat('speed')) * (G.spin ? 0.82 : 1) * (p.hazardSlowT>0?p.hazardSlowFactor:1);
@@ -3699,29 +3881,19 @@ function update(dt){
       p.modelAttackUntil=G.time+(lowMotion?.18:.095);
       var wr = sn.radius;
       var wm = skillDmgMult(sn.sid) * buffDmg();
-      var flame = G.stats.mods['pw.flamespin'];
+      var spinBuild = skillBuild(sn.sid);
       enemiesInRadius(p.x, p.y, wr).forEach(function(e){
         var cr = rollCrit();
-        dealDamage(e, sn.dps * 0.16 * wm * cr.mult, { crit: cr.crit, continuous:true,color: flame ? '#FF7043' : '#FFCC80' });
-        if (flame) applyBleed(e, sn.dps * 0.1 * wm, 2,'burn');
+        var inside = dist2(e.x,e.y,p.x,p.y) < wr*wr*.25;
+        dealDamage(e, sn.dps * .16 * wm * cr.mult * (inside ? sn.innerBonus || 1 : 1),
+          {sid:sn.sid,crit:cr.crit,continuous:true,color:spinBuild?.color || '#ffcc80'});
         if (sn.pull){
           var m = Math.hypot(e.x - p.x, e.y - p.y) || 1;
           e.x -= (e.x - p.x) / m * 90 * dt * 6; e.y -= (e.y - p.y) / m * 90 * dt * 6;
           G.enemySpatialDirty=true;
         }
       });
-      if (flame) burst(p.x + cosmeticRand(-wr, wr) * 0.7, p.y + cosmeticRand(-wr, wr) * 0.7, 2, '#FF7043');
-    }
-    if (sn.blades){
-      sn.bladeT -= dt;
-      if (sn.bladeT <= 0){
-        sn.bladeT = 0.4;
-        var bladeN = 4 + (sn.bladeMult > 1 ? 2 : 0);
-        for (var bi = 0; bi < bladeN; bi++){
-          var baa = rand(0, Math.PI * 2);
-          G.projs.push({ kind: 'skillproj', sid: sn.sid, vfxStart:G.time,vfxLife:.7,x: p.x, y: p.y, vx: Math.cos(baa) * 340, vy: Math.sin(baa) * 340, r: 7, dmg: 16 * (sn.bladeMult || 1) * skillDmgMult(sn.sid) * buffDmg(), life: 0.7, pierce: 2, hitSet: {} });
-        }
-      }
+      if(spinBuild?.status)burst(p.x+cosmeticRand(-wr,wr)*.7,p.y+cosmeticRand(-wr,wr)*.7,2,spinBuild.color);
     }
     if (sn.t <= 0) G.spin = null;
   }
@@ -3729,11 +3901,33 @@ function update(dt){
   for (var au = G.auras.length - 1; au >= 0; au--){
     var A = G.auras[au];
     A.t -= dt; A.tick -= dt;
+    if(A.sid === 'bladestorm'){
+      if(A.t <= 0)G.auras.splice(au,1);
+      continue;
+    }
     if (A.tick <= 0){
       A.tick = 0.3 / (G.stats.mods['pw.swarmqueen'] ? 2 : 1);
-      enemiesInRadius(p.x, p.y, A.radius).forEach(function(e){
-        dealDamage(e, A.dps * 0.3, { continuous:true,element:LegendsActions.familyForSkill(A.sid),color: A.visual === 'storm' ? '#FFF176' : A.visual === 'holy' ? '#FFF59D' : '#90A4AE' });
+      var targets = enemiesInRadius(p.x,p.y,A.radius);
+      var strikePower = A.dps * .3;
+      if(A.sid === 'storm' && targets.length){
+        var nearest = targets[0];
+        targets.forEach(function(enemy){
+          if(dist2(enemy.x,enemy.y,p.x,p.y) < dist2(nearest.x,nearest.y,p.x,p.y))nearest=enemy;
+        });
+        targets = [nearest];
+        strikePower *= 1.8;
+        boltFx([{x:nearest.x,y:nearest.y-75},{x:nearest.x,y:nearest.y}],skillBuild(A.sid)?.color || '#fff176');
+      } else if(A.sid === 'ravens' && targets.length > 3){
+        var dive = A.nextDive || 0;
+        targets = [targets[dive%targets.length],targets[(dive+1)%targets.length],targets[(dive+2)%targets.length]];
+        A.nextDive = dive + 3;
+      }
+      targets.forEach(function(e){
+        if(A.sid === 'locusts')applyBleed(e,LegendsBuilds.scale(skillBuild(A.sid),e,A.dps*2),2,'poison');
+        else dealDamage(e,strikePower,{sid:A.sid,continuous:true,element:LegendsActions.familyForSkill(A.sid),color:A.visual==='holy'?'#fff59d':'#90a4ae'});
+        if(A.slow)e.slowT = Math.max(e.slowT || 0,.45);
       });
+      if(A.sid === 'retribution' && targets.length)healPlayer(Math.min(1.2,targets.length*.3));
     }
     if (A.t <= 0) G.auras.splice(au, 1);
   }
@@ -3751,7 +3945,7 @@ function update(dt){
         if (dist2(hx, hy, he.x, he.y) < (16 + he.r) * (16 + he.r)){
           O.hitCd.set(he,G.time + 0.5);
           var hcr = rollCrit();
-          dealDamage(he, O.dmg * hcr.mult, { crit: hcr.crit,continuous:true,color: '#FFF59D',element:'holy' });
+          dealDamage(he, O.dmg * hcr.mult, { sid:O.sid,crit: hcr.crit,continuous:true,color: '#FFF59D',element:'holy' });
         }
       }
     }
@@ -3779,9 +3973,12 @@ function update(dt){
         } else {
           var so = f.strike || {};
           if(so.sid)skillFx(so.sid,f.x,f.y,f.r,0,.75);
-          explode(f.x, f.y, f.r, f.dmg, { burn: so.burn, bleed: so.bleed, stun: so.stun, slow: so.slow, color: so.star ? '#FFF59D' : undefined });
+          explode(f.x, f.y, f.r, f.dmg, { sid:so.sid,burn: so.burn, bleed: so.bleed, stun: so.stun, slow: so.slow, color: so.star ? '#FFF59D' : undefined });
           G.shake = Math.max(G.shake, 0.35);
-          if (so.burn) G.zones.push({ sid:so.sid,start:G.time,x: f.x, y: f.y, r: f.r * 0.85, dps: 30 * G.stats.dmg, t: 0, life: 4, kind: 'burn' });
+          if (so.burn){
+            var fieldKind = skillBuild(so.sid)?.kind === 'frost' ? 'ice' : 'burn';
+            G.zones.push({sid:so.sid,start:G.time,x:f.x,y:f.y,r:f.r*.85,dps:30*G.stats.dmg,t:0,life:4,kind:fieldKind});
+          }
         }
       }
       G.fx.splice(fi, 1);
@@ -3921,6 +4118,7 @@ function drawActorModel(id,sheet,actor,size,flip){
 }
 function drawHeroModel(){
   var p=G.player,frame=p.moving?((p.animT*2|0)%2):0;
+  if(G.stats.signature && LegendsModels.drawMythicHero(ctx,G.cls,p,G.time,lowMotion,72,G.presentation.models))return;
   var custom=customImage('hero_'+G.cls);
   if(!custom&&window.LegendsModels&&LegendsModels.drawHero(ctx,G.cls,p,G.time,lowMotion,72,G.presentation.models))return;
   drawActorModel('hero_'+G.cls,heroSheets[0][frame],p,72,p.fx<0);
@@ -4011,7 +4209,8 @@ function drawImpacts(){
 }
 function drawProjectile(pr){
   if(!projectileVisible(pr))return;
-  if(pr.sid)LegendsActions.drawChannel(ctx,{sid:pr.sid,x:pr.x,y:pr.y,r:pr.kind==='boar'?22:pr.sid==='orb'?23:pr.sid==='fireball'?17:13,start:pr.vfxStart===undefined?G.time-.2:pr.vfxStart,life:pr.vfxLife||Math.max(.4,pr.life+.2),ang:Math.atan2(pr.vy,pr.vx),phase:'flight',bodyOwned:true},G.time,lowMotion,G.presentation.actions);
+  var tint = skillTint(pr.sid);
+  if(pr.sid)LegendsActions.drawChannel(ctx,{sid:pr.sid,x:pr.x,y:pr.y,r:pr.kind==='boar'?22:pr.sid==='orb'?23:pr.sid==='fireball'?17:13,start:pr.vfxStart===undefined?G.time-.2:pr.vfxStart,life:pr.vfxLife||Math.max(.4,pr.life+.2),ang:Math.atan2(pr.vy,pr.vx),phase:'flight',bodyOwned:true,tint:tint},G.time,lowMotion,G.presentation.actions);
   if (pr.kind === 'boar'){
     var boar={kind:'boarpet',x:pr.x,y:pr.y,r:0,fx:pr.vx,fy:pr.vy,modelRear:pr.modelRear,moving:true,animT:G.time};
     drawPetModel(boar,52);
@@ -4019,7 +4218,7 @@ function drawProjectile(pr){
   }
   var st = projStyle(pr);
   drawProjectileTrail(pr,st);
-  if(G.presentation.legacyArt&&window.LegendsArt&&window.LegendsArt.drawProjectile&&window.LegendsArt.drawProjectile(ctx,pr,st,G.presentation.legacySource))return;
+  if(!tint&&G.presentation.legacyArt&&window.LegendsArt&&window.LegendsArt.drawProjectile&&window.LegendsArt.drawProjectile(ctx,pr,st,G.presentation.legacySource))return;
   var ang = Math.atan2(pr.vy, pr.vx);
   ctx.save();
   ctx.translate(pr.x, pr.y);
@@ -4061,7 +4260,7 @@ function drawProjectile(pr){
       ctx.rotate(G.time * 18 + (pr.x + pr.y) * 0.05);
       ctx.strokeStyle = '#8D6E63'; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(8, 0); ctx.stroke();
-      ctx.fillStyle = '#B0BEC5';
+      ctx.fillStyle = tint || '#B0BEC5';
       ctx.beginPath(); ctx.moveTo(6, -8); ctx.quadraticCurveTo(16, 0, 6, 8); ctx.quadraticCurveTo(10, 0, 6, -8); ctx.closePath(); ctx.fill();
       ctx.strokeStyle = '#ECEFF1'; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.arc(6, 0, 9, -0.9, 0.9); ctx.stroke();
@@ -4071,7 +4270,7 @@ function drawProjectile(pr){
       ctx.rotate(ang);
       ctx.globalAlpha = 0.3; ctx.fillStyle = '#B3E5FC';
       ctx.beginPath(); ctx.arc(-6, 0, 7, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
-      ctx.fillStyle = '#81D4FA';
+      ctx.fillStyle = tint || '#81D4FA';
       ctx.beginPath(); ctx.moveTo(14, 0); ctx.lineTo(3, -4.5); ctx.lineTo(-10, -2.5); ctx.lineTo(-10, 2.5); ctx.lineTo(3, 4.5); ctx.closePath(); ctx.fill();
       ctx.fillStyle = '#E1F5FE';
       ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(2, -1.6); ctx.lineTo(-8, -0.8); ctx.lineTo(2, 0.8); ctx.closePath(); ctx.fill();
@@ -4144,8 +4343,8 @@ function drawProjectile(pr){
     }
     case 'fireorb': {
       ctx.rotate(ang);
-      _trail(3, 9, 8, '#FF7043');
-      ctx.fillStyle = '#FF5722';
+      _trail(3, 9, 8, tint || '#FF7043');
+      ctx.fillStyle = tint || '#FF5722';
       ctx.beginPath(); ctx.arc(0, 0, 8.5, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#FFAB91';
       ctx.beginPath(); ctx.arc(1.5, -1, 5, 0, Math.PI * 2); ctx.fill();
@@ -4196,6 +4395,7 @@ function drawProjectile(pr){
 function drawEnemyGlob(ep){
   if(ep.element==='physical'){if(!worldPointVisible(ep.x,ep.y,28))return;ctx.save();ctx.translate(ep.x,ep.y);ctx.rotate(Math.atan2(ep.vy,ep.vx));ctx.strokeStyle='#08121e';ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(-13,0);ctx.lineTo(8,0);ctx.stroke();ctx.strokeStyle=ep.color||'#edc187';ctx.lineWidth=2;ctx.stroke();ctx.fillStyle='#fff0d5';ctx.beginPath();ctx.moveTo(11,0);ctx.lineTo(4,-3.5);ctx.lineTo(4,3.5);ctx.closePath();ctx.fill();ctx.strokeStyle='#b58353';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(-8,0);ctx.lineTo(-13,-4);ctx.moveTo(-8,0);ctx.lineTo(-13,4);ctx.stroke();ctx.restore();return;}
   if(!worldPointVisible(ep.x,ep.y,(ep.r||6)*3+12))return;
+  if(LegendsBosses.drawProjectile(ctx,ep))return;
   var ph = Math.sin(G.time * 10 + ep.x * 0.1);
   ctx.save();
   ctx.translate(ep.x, ep.y);
@@ -4284,6 +4484,19 @@ function drawActors(camX,camY){
 }
 function drawHeroGround(){
   var p=G.player;ctx.save();
+  if(G.stats.signature){
+    var color = {barb:'#ff8b50',sorc:'#b8e7ff',beast:'#9cf27b',pala:'#ffdf89',ama:'#79cfff'}[G.cls];
+    var pulse = lowMotion ? 0 : Math.sin(G.time * 4);
+    ctx.globalAlpha = .38 + pulse * .08;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+    ctx.beginPath();ctx.ellipse(p.x,p.y+p.r,31+pulse*3,13+pulse,0,0,Math.PI*2);ctx.stroke();
+    ctx.fillStyle = color;
+    for(var i=0;i<6;i++){
+      var angle = i*Math.PI/3 + (lowMotion ? 0 : G.time*1.7);
+      ctx.beginPath();ctx.arc(p.x+Math.cos(angle)*32,p.y+p.r+Math.sin(angle)*13,2,0,Math.PI*2);ctx.fill();
+    }
+  }
   if(G.insightT>0){ctx.globalAlpha=.35;ctx.strokeStyle='#ffd54f';ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(p.x,p.y+12,26,12,0,0,Math.PI*2);ctx.stroke();}
   if(p.shield>0&&!p.shieldSid){ctx.globalAlpha=.4;ctx.strokeStyle='#4fc3f7';ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(p.x,p.y+7,27,19,0,0,Math.PI*2);ctx.stroke();}
   ctx.restore();
@@ -4700,15 +4913,20 @@ function syncCombatLearner(){
     resetFlagUI();show('menuOverlay');renderClassCards();
   }
   var nextKey=context.studentKey||'guest';
-  if(nextKey!==studentKey){
-    if(_metaSaveT){clearTimeout(_metaSaveT);_metaSaveT=null;}
+  if(gearOwner!==owner){
+    gearOwner=owner;metaRevision=0;metaReady=false;
+    clearTimeout(gearRetry);
     if(_pendingBuy){clearTimeout(_pendingBuy);_pendingBuy=null;}
+    _metaReqTries=0;
+  }
+  if(nextKey!==studentKey){
     studentKey=nextKey;META={inv:[],eq:{},loadout:{},follower:'fdef',pts:0};
-    metaReady=false;appGold=null;_gPlaysLeft=null;
+    appGold=null;_gPlaysLeft=null;
     loadAdaptiveState();metaLoadLocal();renderMenuFollowers();
     if(typeof renderContinue==='function')renderContinue();
-    _metaReqTries=0;requestMeta();updateHud();
+    updateHud();
   }
+  if(!metaReady && _metaReqTries===0)requestMeta();
 }
 
 // The portal owns level, mastery, quality and shared repetition decisions.
@@ -4719,6 +4937,7 @@ var scienceFeed = ScienceFeedBridge.create({
   prefetch: true,
   onPool: function(rows, event){ acceptedFeedEvent=event||null; applyBankQuestions(rows); syncCombatLearner(); },
   onInvalidate: function(){
+    resetFlagUI();
     applyBankQuestions.connected=false;
     syncCombatLearner();
     if(typeof qState !== 'undefined' && qState){ qState.active=false; qState.current=null; qState.answered=true; }
@@ -4763,7 +4982,7 @@ async function openQuestion(){
   if(!scienceFeed.current(q))return;
   var ex = $('qExplain'); ex.className = 'q-explain'; ex.innerHTML = '';
   $('qContinueBtn').style.display = 'none';
-  resetFlagUI();
+  questionFlag?.setQuestion(q);
   // Anti-misclick guard: players are usually mid-click-spam (moving/attacking)
   // when the question pops. Swallow held buttons and disarm the answers for a
   // beat so a stray click can never pick an option.
@@ -4817,18 +5036,18 @@ function answerQuestion(idx){
   ex.innerHTML = head + body;
   ex.className = 'q-explain show';
   wireQuestionImages(ex);
-  maybeShowFlag(q);
   var btn = $('qContinueBtn');
   btn.style.display = 'inline-flex';
   btn.onclick = function(){
     if(G!==questionRun || G.state!=='play' || !qState.active || qState.current!==q)return;
     qState.active = false;
+    resetFlagUI();
     hide('questionOverlay');
     updateHud();
   };
   updateHud();
   if(G.player.hp<=0){
-    qState.active=false;hide('questionOverlay');gameOver('question');
+    qState.active=false;resetFlagUI();hide('questionOverlay');gameOver('question');
     $('overSub').textContent=pressure.message+' Your question penalty ended this run.';
   }
 }
@@ -4886,7 +5105,7 @@ var _metaReqTries = 0;
 function requestMeta(){
   if (!embedded()) return;
   if (metaReady) return;
-  try { window.parent.postMessage({ type: 'LEGENDS_REQUEST_META' }, '*'); } catch(e){}
+  postGearMessage('LEGENDS_REQUEST_META');
   _metaReqTries++;
   if (_metaReqTries < 8 && !metaReady) setTimeout(requestMeta, 1200);
 }
@@ -4938,13 +5157,13 @@ window.addEventListener('message', function(ev){
     }
     updateHud();
   } else if (d.type === 'LEGENDS_META'){
-    metaApplyRemote(d.meta);
+    if(!currentGearMessage(d) || !metaApplyRemote(d))return;
     if (typeof d.gold === 'number') appGold = d.gold;
-    metaReady = true;
     renderMenuFollowers();
     if ($('armoryOverlay').classList.contains('show')) renderArmory();
     updateHud();
   } else if (d.type === 'LEGENDS_GOLD_RESULT'){
+    if(!currentGearMessage(d))return;
     if(d.reason==='lootbox' && !_pendingBuy)return; // cancelled old-learner purchase
     if (typeof d.gold === 'number') appGold = d.gold;
     if (d.reason === 'lootbox'){
@@ -4953,65 +5172,17 @@ window.addEventListener('message', function(ev){
       else toast(d.message || 'Not enough points — answer questions in the app to earn more!', 'bad');
     }
     updateHud();
-  } else if (d.type === 'SD_FLAG_RESULT'){
-    if (d.ok) flagSucceeded(); else flagFailed(d.message);
   }
 });
 
-/* ---- flag a question ---- */
-var flagState = { q: null, busy: false };
-function resetFlagUI(){
-  flagState.q = null; flagState.busy = false;
-  $('flagBox').style.display = 'none';
-  $('flagForm').style.display = 'none';
-  $('flagDone').style.display = 'none';
-  $('flagToggle').style.display = '';
-  $('flagComment').value = '';
-  var sb = $('flagSubmit'); sb.disabled = false; sb.textContent = 'Submit flag';
-}
-function maybeShowFlag(q){
-  if (!q || !q.id || !usingBankQuestions || !embedded()) return;
-  flagState.q = q;
-  $('flagBox').style.display = '';
-}
+var questionFlag = null;
+function resetFlagUI(){ questionFlag?.reset(); }
 function wireFlag(){
-  $('flagToggle').addEventListener('click', function(){
-    $('flagToggle').style.display = 'none';
-    $('flagForm').style.display = 'flex';
-    $('flagComment').focus();
+  questionFlag = GameQuestionFlag.embedded($('flagBox'), {
+    mode: 'legends', feed: () => scienceFeed,
+    current: q => qState.active && qState.current === q,
+    title: () => $('qStem').textContent
   });
-  $('flagCancel').addEventListener('click', function(){
-    $('flagForm').style.display = 'none';
-    $('flagToggle').style.display = '';
-    $('flagComment').value = '';
-  });
-  $('flagSubmit').addEventListener('click', submitFlag);
-}
-function submitFlag(){
-  if(!scienceFeed.current(flagState.q)) return;
-  if (flagState.busy || !flagState.q) return;
-  var comment = $('flagComment').value.trim();
-  if (!comment){ toast('Please describe the issue', 'bad'); $('flagComment').focus(); return; }
-  flagState.busy = true;
-  var sb = $('flagSubmit'); sb.disabled = true; sb.textContent = 'Submitting…';
-  try {
-    window.parent.postMessage({ type:'SD_FLAG', studentKey:scienceFeed.context().studentKey, studentLevel:scienceFeed.context().studentLevel, mode: 'legends', questionId: flagState.q.id, questionTitle: (flagState.q.q || '').slice(0, 140), comment: comment }, '*');
-  } catch(e){ flagFailed('Could not submit — try again'); }
-  flagState.timeout = setTimeout(function(){ if (flagState.busy) flagSucceeded(); }, 4000);
-}
-function flagSucceeded(){
-  if (flagState.timeout) clearTimeout(flagState.timeout);
-  flagState.busy = false;
-  $('flagForm').style.display = 'none';
-  $('flagToggle').style.display = 'none';
-  $('flagDone').style.display = 'block';
-  toast('⚑ Question flagged — thanks!', 'good');
-}
-function flagFailed(msg){
-  if (flagState.timeout) clearTimeout(flagState.timeout);
-  flagState.busy = false;
-  var sb = $('flagSubmit'); sb.disabled = false; sb.textContent = 'Submit flag';
-  toast(msg || 'Could not submit the flag', 'bad');
 }
 
 /* ============================================================================
@@ -5117,7 +5288,7 @@ function renderClassCards(){
 }
 function renderMenuFollowers(){
   var wrap=$('followerPills');if(!wrap)return;
-  if(!wrap.childElementCount)FOLLOWER_ORDER.forEach(function(key){var f=FOLLOWERS[key],el=document.createElement('button');el.type='button';el.className='fol-pill';el.dataset.follower=key;el.innerHTML='<span class="fp-ico">'+f.icon+'</span><span class="fp-body"><b>'+f.name+'</b><span>'+f.desc+'</span></span>';el.addEventListener('click',function(){META.follower=key;metaSave();renderMenuFollowers();});wrap.appendChild(el);});
+  if(!wrap.childElementCount)FOLLOWER_ORDER.forEach(function(key){var f=FOLLOWERS[key],el=document.createElement('button');el.type='button';el.className='fol-pill';el.dataset.follower=key;el.innerHTML='<span class="fp-ico">'+f.icon+'</span><span class="fp-body"><b>'+f.name+'</b><span>'+f.desc+'</span></span>';el.addEventListener('click',function(){META.follower=key;metaSave({follower:key});renderMenuFollowers();});wrap.appendChild(el);});
   Array.from(wrap.children).forEach(function(el){var selected=el.dataset.follower===META.follower;LegendsPerformance.toggle(el,'sel',selected);LegendsPerformance.attr(el,'aria-pressed',selected?'true':'false');});
 }
 var pendingHunt = null;
@@ -5166,14 +5337,14 @@ function huntEffectKeys(cls){
 async function prepareHuntArt(hunt){
   LegendsModels.prepareAll();
   if(!huntInterfaceImages){
-    huntInterfaceImages = ['interface', 'skill-tree'].map(function(name){
+    huntInterfaceImages = ['v2/interface', 'v2/skill-tree'].map(function(name){
       var image = new Image();
-      image.src = 'assets/science-legends/v2/' + name + '.webp';
+      image.src = 'assets/science-legends/' + name + '.webp';
       return image;
     });
   }
   var images = LegendsArt.images().concat(LegendsActions.images(), LegendsIcons.images(),
-    huntInterfaceImages, [_barbBuiltin], Object.values(_ovrImgs));
+    huntInterfaceImages, loadArmoryArt(), [_barbBuiltin], Object.values(_ovrImgs));
   var deadline = performance.now() + HUNT_ASSET_WAIT_MS;
   while(pendingHunt === hunt){
     var states = LegendsModels.assetStates().concat(images.map(huntImageState));

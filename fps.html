@@ -451,6 +451,7 @@
       <div id="qStem" tabindex="-1"></div>
       <div id="qOptions"></div>
       <div id="qFeedback" role="status" aria-live="polite" tabindex="-1"><div class="verdict"></div><div class="explain"></div></div>
+      <div id="flagBox" hidden></div>
       <button class="btn" id="qContinue">Return to action ▶</button>
     </div>
   </div>
@@ -508,6 +509,7 @@
 <div id="versionBadge">Science Strike v2.1.0 · Reactor Frontier</div>
 
 <script src="game-question-pressure.js?v=1.457.0"></script>
+<script src="game-question-flag.js?v=1.460.0"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app-check.js";
@@ -516,6 +518,7 @@ import { getFirestore, doc, getDoc, setDoc, getDocs, collection, addDoc, Timesta
 import { createGameUsageRecorder, createGameUsageWriter } from './game-usage.js?v=1.458.0';
 
 import { buildScienceFeedContext, planScienceQuestions, evaluateScienceFit, scienceQuestionContentKey, scienceQuestionIsSec1 } from './science-feed-core.js?v=sec1-retired-1';
+import { questionQualitySignature } from './science-feed-quality.js';
 import { createStudentQuestionHistory } from './student-question-history.js?v=1';
 import { strikeQuestionQualityOptions, strikeAttemptProgress, STRIKE_DEFAULT_OBJECTIVES } from './science-strike-feed.js?v=1.415.0';
 
@@ -547,6 +550,7 @@ let qCursor = 0;
 let fpsFeedBank = [], fpsFeedAttempts = [], fpsFeedReady = false, fpsFeedLoad = 0;
 let fpsProfileStop = null, fpsProfileSignature = '', fpsAssignedFallback = '';
 let fpsQuestionStops = [], fpsFeedObjectives = [], fpsFeedObjectiveMap = {}, fpsFeedFlags = [];
+let fpsQuestionFlag = null;
 let fpsFeedError = '';
 const fpsServedMemory = new Map();
 const fpsFailedImages = new Map();
@@ -909,6 +913,7 @@ function fpsWireQuestionImages(container,q) {
     const fail=()=>{
       if(!G || G.activeQ!==q || q.feedKey!==fpsFeedKey())return;
       const failed=fpsFailedImages.get(q.id)||new Set();failed.add(img.getAttribute('src')||img.src);fpsFailedImages.set(q.id,failed);
+      fpsQuestionFlag?.reset();
       G.activeQ=null;G.qTimerMs=QUESTION_INTERVAL;$('questionOverlay').classList.remove('active');
       pauseRun('A diagram could not load, so that question was set aside. Click Resume to continue safely.');
     };
@@ -921,13 +926,14 @@ function fpsDatabaseQuestionAvailable(q) {
   const today=new Date(Date.now()+8*3600000).toISOString().slice(0,10);
   return !!q && (isAdmin() || !(q.holdBack===true || /^\d{4}-\d{2}-\d{2}$/.test(q.releaseOn||'') && q.releaseOn>today));
 }
-function fpsQuestionContext() {
+function fpsQuestionContext(displayedQuestionId) {
   let flags={};try{flags=JSON.parse(localStorage.getItem('scienceFeed:flags:'+fpsFeedKey())||'{}')||{};}catch(e){}
   if(typeof flags!=='object' || Array.isArray(flags))flags={};
   for(const report of fpsFeedFlags){
     if(!report || report.status!=='open' || String(report.flaggedBy||'').trim()!==String(currentUser?.name||'').trim())continue;
     if(report.questionSignature)flags[report.questionId]={signature:report.questionSignature,at:report.timestamp?.toMillis?.()||0};
   }
+  if (displayedQuestionId) delete flags[displayedQuestionId];
   return buildScienceFeedContext({bank:fpsFeedBank,studentLevel:studentLevelCap?levelLabel(studentLevelCap):'',
     topicLevels:Object.assign({},TOPIC_LEVEL_MAP,customTopicLevels),objectives:fpsFeedObjectives,objectiveMap:fpsFeedObjectiveMap,
     progress:fpsFeedProgress(),served:qSeenLoad(),seen:fpsHistory.snapshot().seen,seenContentKeys:fpsHistory.snapshot().contentKeys,
@@ -936,9 +942,11 @@ function fpsQuestionContext() {
 function fpsRecheckActiveQuestion() {
   const active=typeof G!=='undefined' && G?.activeQ;
   if(!active || G.questionAnswered)return;
-  const live=fpsFeedBank.find(q=>q.id===active.id), context=fpsQuestionContext();
+  // Reports affect future picks. The question already on screen can still be answered.
+  const live=fpsFeedBank.find(q=>q.id===active.id), context=fpsQuestionContext(active.id);
   if(fpsFeedReady && fpsDatabaseQuestionAvailable(live) && JSON.stringify(live)===JSON.stringify(active.feedSource)
     && evaluateScienceFit(live,{context,manual:true}).eligible && context.qualityById.get(live.id)?.tier==='sound')return;
+  fpsQuestionFlag?.reset();
   G.activeQ=null;G.qTimerMs=QUESTION_INTERVAL;$('questionOverlay').classList.remove('active');
   pauseRun('This database question was updated or is no longer suitable. It has been set aside without marking your answer.');
 }
@@ -1065,6 +1073,59 @@ function recordAttempt(q, correct, ms) {
     }).catch(err => console.warn('fps attempt log failed', err));
   } catch (e) { console.warn('fps attempt log', e); }
 }
+
+async function submitStrikeQuestionFlag(payload, question, signal) {
+  const reporter = currentUser;
+  const key = fpsFeedKey();
+  const run = G;
+  const current = () => !signal.aborted && currentUser?.uid === reporter?.uid &&
+    G === run && !run?.over && run?.activeQ === question && key === fpsFeedKey();
+  if (!reporter?.uid || !current()) return { ok: false, message: 'Sign in to flag a question.' };
+
+  // A retry after a slow write uses the same document instead of adding a report.
+  const reportId = 'strike-' + encodeURIComponent(reporter.uid) + '-' + payload.requestId;
+  const reportRef = doc(db, 'flaggedQuestions', reportId);
+  const previous = await getDoc(reportRef).catch(() => null);
+  if (previous?.exists() && previous.data().flaggedByUid === reporter.uid) return { ok: true };
+  if (!current()) return { ok: false, message: 'The current question changed.' };
+
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  let count = 0;
+  try {
+    const reports = await getDocs(query(collection(db, 'flaggedQuestions'), where('flaggedByUid', '==', reporter.uid)));
+    reports.forEach(snapshot => {
+      const timestamp = snapshot.data()?.timestamp;
+      if (timestamp && (timestamp.toDate ? timestamp.toDate() : new Date(timestamp)) >= dayStart) count++;
+    });
+  } catch (error) {
+    console.warn('Science Strike flag count could not load', error);
+  }
+  if (!current()) return { ok: false, message: 'The current question changed.' };
+  if (count >= 10) return { ok: false, message: 'Daily flag limit reached. Try again tomorrow.' };
+
+  const report = {
+    questionId: payload.questionId,
+    questionTitle: payload.questionTitle,
+    questionSignature: questionQualitySignature(question.feedSource),
+    comment: '[Science Strike] ' + payload.comment,
+    flaggedBy: reporter.name,
+    flaggedByEmail: reporter.email || '',
+    flaggedByUid: reporter.uid,
+    timestamp: Timestamp.now(),
+    status: 'open'
+  };
+  await setDoc(reportRef, report);
+  if (current()) fpsFeedFlags.push(report);
+  return { ok: true };
+}
+
+fpsQuestionFlag = GameQuestionFlag.create($('flagBox'), {
+  current: q => !!G && !G.over && G.activeQ === q && q.feedKey === fpsFeedKey(),
+  title: () => $('qStem').textContent,
+  unavailable: () => currentUser?.uid ? '' : 'Sign in to submit a flag.',
+  submit: submitStrikeQuestionFlag
+});
 
 /* ════════════════ META PROGRESSION (roguelite persistence) ════════════════ */
 const UPGRADES = [
@@ -1979,6 +2040,7 @@ function suspendCombat() {
 }
 function fpsCancelRunForIdentityChange(showMenu = true) {
   if (!G) return;
+  fpsQuestionFlag?.reset();
   suspendCombat(); clearTimeout(qLockT); cancelAnimationFrame(raf);
   G = null; skillsOpen = false; skillsFromPause = false;
   hideOverlays(); $('skillOverlay').classList.remove('active');
@@ -2139,7 +2201,7 @@ document.addEventListener('keydown', e => {
   if (e.code !== 'Tab') return;
   const modal = ['skillOverlay', 'questionOverlay', 'draftOverlay', 'pauseOverlay', 'deathOverlay'].map($).find(el => el.classList.contains('active'));
   if (!modal) return;
-  const controls = [...modal.querySelectorAll('button:not(:disabled), a[href], input, select, summary, [tabindex="0"]')].filter(el => el.getClientRects().length);
+  const controls = [...modal.querySelectorAll('button:not(:disabled), a[href], input, textarea, select, summary, [tabindex="0"]')].filter(el => el.getClientRects().length);
   if (!controls.length) return;
   if (!e.shiftKey && document.activeElement === $('qFeedback') && G && G.questionAnswered) { e.preventDefault(); $('qContinue').focus(); return; }
   const first = controls[0], last = controls[controls.length - 1];
@@ -3018,6 +3080,7 @@ async function openQuestion() {
   });
   fpsWireQuestionImages(host,q);
   if(G.activeQ!==q)return;
+  fpsQuestionFlag.setQuestion(q);
   // the player was mid-fight: drop held mouse buttons and lock the answers for
   // a beat so a shooting/ADS click can't accidentally answer the question
   mouseDown = false;
@@ -3115,6 +3178,7 @@ function bankPortalPoints(q, correct, ms) {
 $('qContinue').addEventListener('click', () => {
   if (!G || G.over || G.player.hp <= 0 || !G.activeQ || !G.questionAnswered || G.activeQ.feedKey!==fpsFeedKey()) return;
   G.activeQ = null;
+  fpsQuestionFlag.reset();
   G.qTimerMs = QUESTION_INTERVAL;
   $('questionOverlay').classList.remove('active');
   requestLock();

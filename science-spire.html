@@ -296,6 +296,7 @@ svg.spr.anim-death{animation:sprDeath .55s ease-in forwards;transform-origin:50%
     <div id="qOptions"></div>
     <p class="q-pressure-rule" style="font-size:.78rem;line-height:1.45;">Wrong answers in a row deal increasing damage. Five in a row ends the run. A correct answer resets the streak.</p>
     <div id="qExplain" style="display:none;font-size:0.85rem;color:var(--muted);margin-top:8px;line-height:1.5;"></div>
+    <div id="flagBox" hidden></div>
     <div class="center" style="margin-top:12px;"><button class="btn primary" id="qContinueBtn" type="button" style="display:none;">Fight! ⚔️</button></div>
   </div>
 </div>
@@ -364,6 +365,7 @@ svg.spr.anim-death{animation:sprDeath .55s ease-in forwards;transform-origin:50%
 <div class="toast" id="toast"></div>
 
 <script src="science-feed-bridge.js"></script>
+<script src="game-question-flag.js?v=1.460.0"></script>
 <script src="game-question-pressure.js?v=1.457.0"></script>
 <script src="spire-svg-art.js"></script>
 <script>
@@ -757,12 +759,18 @@ var spireAcceptedFeedEvent=null;
 var scienceFeed = ScienceFeedBridge.create({
   onPool: function(rows,event){ applyBank(rows); if(event)spireAcceptedFeedEvent=event; },
   onInvalidate: function(){
+    spireQuestionFlag?.reset();
     if(_gameCreditOwner!==JSON.stringify(scienceFeed.context())){ _gPlaysLeft=null; _gameCreditOwner=''; SEEN_STATS={}; CUSTOM_DECK=[]; OWNED_CARDS={}; scienceFeed.refresh(); }
     if(spireCancelChangedLearner()) return;
     if(G && G.state==='question'){G.questionBonus=0;beginCombat();}
     if(typeof qState !== 'undefined' && qState){ qState.active=false; qState.current=null; qState.answered=true; }
     var overlay=document.getElementById('qOverlay'); if(overlay) overlay.classList.remove('show');
   }
+});
+var spireQuestionFlag = GameQuestionFlag.embedded($('flagBox'), {
+  mode: 'spire', feed: () => scienceFeed,
+  current: q => G?.state === 'question' && qState.current === q && spireRunCurrent(),
+  title: () => $('qStem').textContent
 });
 function spireRunCurrent(){
   if(!G) return false;
@@ -804,6 +812,7 @@ async function askQuestion(){
     opts.appendChild(b);
   });
   opts.querySelectorAll('img').forEach(function(img){img.addEventListener('error',function(){scienceFeed.fail(q,img.getAttribute('src')||img.src);},{once:true});});
+  spireQuestionFlag.setQuestion(q);
   G.state='question'; show('qOverlay');
 }
 function answerQuestion(idx, btn){
@@ -830,7 +839,7 @@ function answerQuestion(idx, btn){
   try {
     if (embedded()) window.parent.postMessage({ type:'SD_RECORD', studentKey:scienceFeed.context().studentKey, studentLevel:scienceFeed.context().studentLevel, mode:'spire', questionId:q.id, questionTitle:(q.q||'').slice(0,140), correct:!!correct, topic:q.topic||'', ms: Math.max(0, Math.round(performance.now() - (qState.shownAt||performance.now()))) }, '*');
   } catch(e){}
-  var btnc=$('qContinueBtn'); btnc.style.display=''; btnc.onclick=function(){ if(G!==run || G.state!=='question' || qState.current!==q || !scienceFeed.current(q) || !spireRunCurrent()) return; hide('qOverlay'); beginCombat(); };
+  var btnc=$('qContinueBtn'); btnc.style.display=''; btnc.onclick=function(){ if(G!==run || G.state!=='question' || qState.current!==q || !scienceFeed.current(q) || !spireRunCurrent()) return; spireQuestionFlag.reset(); hide('qOverlay'); beginCombat(); };
   updateHud();
   if(G.player.hp<=0){gameOver();$('overMsg').textContent=pressure.message+' Your question penalty ended this climb.';}
 }

@@ -1,6 +1,6 @@
 import './worksheet-art.js?v=1';
-import { createGameInsightsController } from './game-insights.js?v=1.459.0';
-import { createGameUsageRecorder, createGameUsageWriter } from './game-usage.js?v=1.459.0';
+import { createGameInsightsController } from './game-insights.js?v=1.460.0';
+import { createGameUsageRecorder, createGameUsageWriter } from './game-usage.js?v=1.460.0';
 import './worksheet-art-editor.js?v=1';
 import './vendor/qrcode-generator.js';
 import './question-apps.js?v=1';
@@ -22,7 +22,7 @@ let ainsteinVoiceEpoch = 0;
 let ainsteinVoiceReady = false;
 import { createAinsteinAdminAgent } from './ainstein-admin-agent.js?v=1';
 import { installPirateRiftPortal } from "./pirate-rift-portal.js?v=1.0.2";
-import { installGrandLinePortal } from "./grand-line-portal.js?v=3.5.3";
+import { installGrandLinePortal } from "./grand-line-portal.js?v=3.5.4";
 import { createGrandLineScienceAdapter } from "./grand-line-science-adapter.js?v=question-history-1";
 import { createGrandLineEconomy, createGrandLineRpgCommit, createGrandLineRpgSaveGate } from "./grand-line-economy.js?v=3.5.0";
 const grandLineRpgSaveGate = createGrandLineRpgSaveGate({getUser:()=>currentUser,flush:()=>rpgSave()});
@@ -36,6 +36,7 @@ const grandLinePortal=installGrandLinePortal({
         :Promise.resolve(localStorage.setItem('scienceQuestRpg:'+uid,JSON.stringify(state)))})
   }),
   subject:'Science',getUser:()=>currentUser,getLevel:_scienceFeedGameLevel,getProfileKey:()=>JSON.stringify([_scienceFeedKey(),familyProfile.activeStudent]),
+  submitFlag:(payload,current)=>submitGameQuestionFlag(payload,'grand-line',current),
   onRunStarted: runId => recordGameStart('grand-line', 'grand-line:' + runId),
   getPreviewLevel:()=>LEVEL_DEFAULT_CAP,isLevel:isLevelCode,notify:message=>showToast(message,'error'),
   beforeOpen:()=>{pirateRiftPortal.close();if(document.getElementById('page-hades')?.classList.contains('active'))navigateTo('arcade');else _hadesResetLearning('Grand Line Chronicles was opened.');},
@@ -59,7 +60,7 @@ const pirateRiftPortal = installPirateRiftPortal({
     else _hadesResetLearning('Pirate Rift was opened.');
   }
 });
-import { installHadesLearningParent } from "./hades-learning-parent.js?v=2.2.3";
+import { installHadesLearningParent } from "./hades-learning-parent.js?v=2.2.4";
 import { scienceTcgIdentity, scienceTcgIdentityText, scienceTcgSkillPath } from './science-tcg-identity.js';
 import { applyScienceTcgSignature, scienceTcgBrandedDamage, scienceTcgAbsorbBarrier } from './science-tcg-runtime.js';
 import { createTcgMedia } from './tcg-media.js';
@@ -4589,7 +4590,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.459.0';
+const APP_VERSION = 'v1.460.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -7307,26 +7308,26 @@ function navigateTo(page) {
   }
   if (page === 'defenders') {
     const f = document.getElementById('defendersFrame');
-    if (f && !f.getAttribute('src')) f.setAttribute('src', 'science-defenders.html?v=1.459.0');
+    if (f && !f.getAttribute('src')) f.setAttribute('src', 'science-defenders.html?v=1.460.0');
   }
   if (page === 'raiders') {
     const f = document.getElementById('raidersFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-raiders.html?v=1.459.0'); f.addEventListener('load', pushRaidersAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-raiders.html?v=1.460.0'); f.addEventListener('load', pushRaidersAssets); }
     else pushRaidersAssets();
   }
   if (page === 'spire') {
     const f = document.getElementById('spireFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-spire.html?v=1.459.0'); f.addEventListener('load', pushSpireAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-spire.html?v=1.460.0'); f.addEventListener('load', pushSpireAssets); }
     else pushSpireAssets();
   }
   if (page === 'legends') {
     const f = document.getElementById('legendsFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-legends.html?v=1.459.0'); f.addEventListener('load', pushLegendsAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-legends.html?v=1.460.0'); f.addEventListener('load', pushLegendsAssets); }
     else pushLegendsAssets();
   }
   if (page === 'slayers') {
     const f = document.getElementById('slayersFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-slayers.html?v=1.459.0'); f.addEventListener('load', pushLegendsAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-slayers.html?v=1.460.0'); f.addEventListener('load', pushLegendsAssets); }
     else pushLegendsAssets();
   }
   if (page === 'hades') _hadesInit();
@@ -35931,12 +35932,12 @@ function _scienceFeedImageEvent(event) {
 document.addEventListener('error', _scienceFeedImageEvent, true);
 document.addEventListener('load', _scienceFeedImageEvent, true);
 
-function _scienceFeedFlagOwn(id, signature, key = _scienceFeedKey()) {
+function _scienceFeedFlagOwn(id, signature, key = _scienceFeedKey(), refreshFrames = true) {
   if (!id || key !== _scienceFeedKey()) return;
   const flags = _scienceFeedStoreRead('flags');
   flags[String(id)] = { signature, at: Date.now() };
   _scienceFeedStoreWrite('flags', flags);
-  _scienceFeedRefreshFrames();
+  if (refreshFrames) _scienceFeedRefreshFrames();
 }
 function _scienceFeedSummary(q) {
   const options = _scienceFeedQualityOptions(q);
@@ -57118,7 +57119,7 @@ function rpgReadLocal() {
   try { return JSON.parse(localStorage.getItem(rpgStorageKey()) || "null"); } catch (e) { return null; }
 }
 function rpgWriteLocal() {
-  try { localStorage.setItem(rpgStorageKey(), JSON.stringify(rpgState)); } catch (_) {}
+  try { localStorage.setItem(rpgStorageKey(), JSON.stringify(rpgState)); return true; } catch (_) { return false; }
 }
 async function rpgLoadState() {
   if (RPG_STORAGE_MODE === "firestore") {
@@ -57203,15 +57204,18 @@ function rpgSave() {
   if (!rpgState || !currentUser) return;
   if (grandLineRpgSaveGate.defer()) return;
   rpgState.updatedAt = new Date().toISOString();
+  let saved;
   if (RPG_STORAGE_MODE === "firestore") {
-    setDoc(doc(db, "users", currentUser.uid, "settings", "scienceRpg"), rpgState)
-      .catch(e => { console.warn("rpg save", e); rpgWriteLocal(); });
+    const uid = currentUser.uid;
+    saved = setDoc(doc(db, "users", uid, "settings", "scienceRpg"), rpgState)
+      .then(() => true, e => { console.warn("rpg save", e); if (currentUser?.uid === uid) rpgWriteLocal(); return false; });
   } else {
-    rpgWriteLocal();
+    saved = Promise.resolve(rpgWriteLocal());
   }
   rpgRenderSide();
   // Keep CER's own leaderboard current after progression and equipment changes.
   rpgPublishLeaderboard();
+  return saved;
 }
 function rpgSetGender(g) {
   if (!rpgState) return;
@@ -62543,6 +62547,7 @@ function _hadesInit() {
     isActive:()=>!!document.getElementById('page-hades')?.classList.contains('active'),
     getIdentity:()=>_hadesAllowed() && _hadesPreviewLevel() ? JSON.stringify([_scienceFeedKey(_hadesPreviewProfile()),_hadesPreviewLevel(),_isAdmin() ? 'preview' : 'student']) : '',
     getQuestions:_hadesScienceQuestions,
+    submitFlag:(payload,current)=>submitGameQuestionFlag(payload,'hades',current),
     markShown:q=>_scienceFeedMark(q.id,_hadesPreviewProfile()),
     recordAnswer:({question,correct,ms})=>{
       _scienceFeedRememberResult(question.id,correct ? 1 : 0,1,_hadesPreviewProfile());
@@ -62555,7 +62560,7 @@ function _hadesInit() {
   const ready = !!_hadesPreviewLevel();
   if (note && !_isAdmin()) note.textContent = ready ? 'BETA · '+_hadesPreviewLevel()+' · Answer five Science questions between chambers to heal and earn stronger boons.' : 'Set your school level in your profile to start Hades.';
   else if (note) note.textContent = ready ? 'Administrator beta · Five fresh science MCQs between rooms determine healing and boon tier. Preview answers stay separate from student records.' : 'Choose the school level to test the same question selection used for students.';
-  if (frame) { frame.hidden = !ready; if (ready && !frame.getAttribute('src')) frame.setAttribute('src','hades-game.html?learning=1&subject=science&v=2.2.3'); }
+  if (frame) { frame.hidden = !ready; if (ready && !frame.getAttribute('src')) frame.setAttribute('src','hades-game.html?learning=1&subject=science&v=2.2.4'); }
 }
 
 function buildDefenderQuestions() {
@@ -62808,16 +62813,15 @@ function _sdRecordAttempt(d) {
     }
   } catch (e) {}
 }
-// A student may flag at most this many questions per calendar day (across
-// practice + both mini-games) to deter spamming the review queue.
+// Practice and games share the same daily flag limit and teacher review queue.
 const FLAG_DAILY_LIMIT = 10;
 // Count how many questions the current user has flagged so far today. Best-effort:
 // returns 0 on a read error so a transient failure never blocks a genuine flag.
-async function _flagsTodayCount() {
+async function _flagsTodayCount(uid = currentUser?.uid) {
   try {
-    if (!currentUser || !currentUser.uid) return 0;
+    if (!uid) return 0;
     const start = new Date(); start.setHours(0, 0, 0, 0);
-    const snap = await getDocs(query(collection(db, 'flaggedQuestions'), where('flaggedByUid', '==', currentUser.uid)));
+    const snap = await getDocs(query(collection(db, 'flaggedQuestions'), where('flaggedByUid', '==', uid)));
     let n = 0;
     snap.forEach(doc => {
       const a = doc.data(); if (!a) return;
@@ -62828,34 +62832,84 @@ async function _flagsTodayCount() {
   } catch (e) { console.warn('flag count read failed', e); return 0; }
 }
 
-// Flag a question from inside a mini-game (tower defense / roguelite). Writes to
-// the same `flaggedQuestions` collection the in-app flag dialog uses so it shows
-// up on the admin "Flagged Questions" page. Acks back so the game can confirm.
-async function _sdRecordFlag(d, source) {
-  function ack(ok, msg) { try { source && source.postMessage({ type: 'SD_FLAG_RESULT', ok: ok, message: msg || '' }, '*'); } catch (e) {} }
-  try {
-    const comment = (d && typeof d.comment === 'string') ? d.comment.trim() : '';
-    if (!comment) { ack(false, 'Please describe the issue'); return; }
-    if (!currentUser || !d || !d.questionId) { ack(false, 'Sign in to flag a question'); return; }
-    if (await _flagsTodayCount() >= FLAG_DAILY_LIMIT) { ack(false, `Daily flag limit reached (${FLAG_DAILY_LIMIT}/day) — try again tomorrow`); return; }
-    const game = d.mode === 'raiders' ? 'Science Raiders' : d.mode === 'spire' ? 'Science Spire' : d.mode === 'legends' ? 'Science Legends' : d.mode === 'slayers' ? 'Science Slayers' : 'Science Defenders';
-    const feedKey = _scienceFeedKey();
-    const questionSignature = questionQualitySignature(questionBank.find(q => String(q.id) === String(d.questionId)) || {});
+const GAME_FLAG_LABELS = Object.freeze({
+  defenders: 'Science Defenders', raiders: 'Science Raiders', spire: 'Science Spire',
+  legends: 'Science Legends', slayers: 'Science Slayers', hades: 'Hades Sanctuary',
+  'grand-line': 'Crew Defense', 'tcg-train': 'Embers Training', 'tcg-duel': 'Ember Duel',
+  'tcg-siege': 'Ember Siege', 'tcg-legends': 'Ember Legends'
+});
+const _gameFlagRequests = new Map(), _gameFlagQueues = new Map();
+
+function submitGameQuestionFlag(data, mode, isCurrent = () => true) {
+  const user = currentUser;
+  const comment = typeof data?.comment === 'string' ? data.comment.trim() : '';
+  const id = ['number', 'string'].includes(typeof data?.questionId) ? String(data.questionId) : '';
+  const requestId = typeof data?.requestId === 'string' ? data.requestId : '';
+  if (!user?.uid) return Promise.resolve({ ok: false, message: 'Sign in to flag a question.' });
+  if (!comment || comment.length > 1000) return Promise.resolve({ ok: false, message: 'Describe the issue in 1–1000 characters.' });
+  if (!Object.hasOwn(GAME_FLAG_LABELS, mode) || !id.trim() || id.length > 256 || /[\u0000-\u001f\u007f]/.test(id)
+      || !/^[A-Za-z0-9_-]{1,80}$/.test(requestId)) {
+    return Promise.resolve({ ok: false, message: 'This question could not be identified.' });
+  }
+  const uid = user.uid, key = _scienceFeedKey(), level = _scienceFeedGameLevel();
+  const reporter = { flaggedBy: user.name || '', flaggedByEmail: user.email || '', flaggedByUid: uid };
+  const sameLearner = () => currentUser?.uid === uid && key === _scienceFeedKey() && level === _scienceFeedGameLevel();
+  const current = () => sameLearner() && isCurrent();
+  const token = JSON.stringify([uid, key, level, mode, requestId]);
+  const prior = _gameFlagRequests.get(token);
+  if (prior) return prior.questionId === id ? prior.promise : Promise.resolve({ ok: false, message: 'Open a new report for this question.' });
+
+  // Serialize reports for this account so simultaneous game flags see the
+  // previous write before testing the daily limit. A retry shares its job.
+  const changed = { ok: false, message: 'The learner or question changed. Open the report again.' };
+  const job = Promise.resolve(_gameFlagQueues.get(uid)).then(async () => {
+    if (!current()) return changed;
+    const count = await _flagsTodayCount(uid);
+    if (!current()) return changed;
+    if (count >= FLAG_DAILY_LIMIT) return { ok: false, message: `Daily flag limit reached (${FLAG_DAILY_LIMIT}/day).` };
+    const question = _scienceFeedSources().find(q => String(q?.id) === id);
+    const signature = question ? questionQualitySignature(question) : '';
+    const title = question?.title || (typeof data.questionTitle === 'string' ? data.questionTitle : '');
     await addDoc(collection(db, 'flaggedQuestions'), {
-      questionSignature,
-      questionId: d.questionId,
-      questionTitle: d.questionTitle || '',
-      comment: `[${game}] ${comment}`,
-      flaggedBy: currentUser.name,
-      flaggedByEmail: currentUser.email,
-      flaggedByUid: currentUser.uid,
-      timestamp: Timestamp.now(),
-      status: 'open'
+      ...reporter, questionId: id, questionTitle: String(title).trim().slice(0, 160), questionSignature: signature,
+      comment: '[' + GAME_FLAG_LABELS[mode] + '] ' + comment, timestamp: Timestamp.now(), status: 'open'
     });
-    _scienceFeedFlagOwn(d.questionId, questionSignature, feedKey);
-    if (currentUser.role === 'admin') { try { loadFlaggedQuestions(); } catch (e) {} }
-    ack(true);
-  } catch (e) { console.warn('SD flag failed', e); ack(false, 'Could not submit — check your connection'); }
+    // The current question remains answerable. The report excludes future picks.
+    try {
+      if (sameLearner()) {
+        _scienceFeedFlagOwn(id, signature, key, false);
+        if (currentUser.role === 'admin') void loadFlaggedQuestions();
+      }
+    } catch (error) { console.warn('Game report saved but local refresh failed', error); }
+    return { ok: true };
+  }).catch(error => {
+    console.warn('Game question flag failed', error);
+    return { ok: false, message: 'Could not submit the flag. Check your connection and try again.' };
+  });
+  const entry = { questionId: id, promise: job, complete: false };
+  _gameFlagRequests.set(token, entry);
+  _gameFlagQueues.set(uid, job);
+  job.then(result => {
+    if (_gameFlagQueues.get(uid) === job) _gameFlagQueues.delete(uid);
+    if (!result.ok) _gameFlagRequests.delete(token);
+    else entry.complete = true;
+    for (const [old, report] of _gameFlagRequests) {
+      if (_gameFlagRequests.size <= 100) break;
+      if (report.complete) _gameFlagRequests.delete(old);
+    }
+  });
+  return job;
+}
+
+async function _sdRecordFlag(d, source) {
+  const mode = ['defenders', 'raiders', 'spire', 'legends', 'slayers']
+    .find(name => document.getElementById(name + 'Frame')?.contentWindow === source);
+  if (!mode || mode !== d.mode) return;
+  const result = await submitGameQuestionFlag(d, mode, () => _scienceFeedGameMessageCurrent(d, source));
+  try {
+    source.postMessage({ type: 'SD_FLAG_RESULT', requestId: d.requestId, questionId: String(d.questionId),
+      studentKey: d.studentKey, studentLevel: d.studentLevel, ...result }, location.origin);
+  } catch (_) {}
 }
 // Students get a shared daily pool of GAME CREDITS. Playing ANY game — Science
 // Defenders / Raiders / Spire AND the Dungeon raids — spends one credit, and the
@@ -63350,7 +63404,7 @@ window.addEventListener('message', function (ev) {
     const q = questionBank.find(q => String(q.id) === String(d.questionId));
     _scienceFeedImageResult(q, d.url, true);
   } else if (d.type === 'SD_FLAG') {
-    if (!_scienceFeedGameMessageCurrent(d, ev.source)) return;
+    if (ev.origin !== location.origin || !_scienceFeedGameMessageCurrent(d, ev.source)) return;
     _sdRecordFlag(d, ev.source);
   } else if (d.type === 'SD_SCORE') {
     if (!_scienceFeedGameMessageCurrent(d, ev.source)) return;
@@ -63386,11 +63440,11 @@ window.addEventListener('message', function (ev) {
   } else if (d.type === 'LEGENDS_SPRITES') {
     _legendsThumbs = d.thumbs || {};
   } else if (d.type === 'LEGENDS_REQUEST_META') {
-    try { ev.source && ev.source.postMessage({ type: 'LEGENDS_META', meta: (rpgState && rpgState.legends) || {}, gold: rpgState ? (rpgState.gold | 0) : 0 }, '*'); } catch (e) {}
+    if (_legendsMessageCurrent(ev)) _sendLegendsMeta(ev.source);
   } else if (d.type === 'LEGENDS_GOLD_DELTA') {
-    _legendsGoldDelta(d, ev.source);
+    if (_legendsMessageCurrent(ev)) _legendsGoldDelta(d, ev.source);
   } else if (d.type === 'LEGENDS_SAVE') {
-    _legendsSaveMeta(d, ev.source);
+    if (_legendsMessageCurrent(ev)) _legendsSaveMeta(d, ev.source);
   }
 });
 
@@ -63401,9 +63455,6 @@ window.addEventListener('message', function (ev) {
 // loadout persist on rpgState.legends so gear follows the student
 // across devices, like the Spire card collection.
 // =====================================================================
-// Only the game iframes this page embeds may move the wallet. Without this any
-// window that can postMessage here — including the console on this very page —
-// could repeat a positive LEGENDS_GOLD_DELTA for unlimited points.
 function _isEmbeddedGameWindow(source) {
   if (!source) return false;
   return ['legendsFrame', 'slayersFrame'].some(id => {
@@ -63411,48 +63462,112 @@ function _isEmbeddedGameWindow(source) {
     try { return !!f && f.contentWindow === source; } catch (e) { return false; }
   });
 }
+function _legendsMessageCurrent(event) {
+  return event.origin === location.origin && _isEmbeddedGameWindow(event.source)
+    && _scienceFeedGameMessageCurrent(event.data, event.source);
+}
+function _legendsGearScope(studentKey) {
+  const roster = famStudents();
+  if (roster.length < 2 && !rpgState.legendsByLearner) return { bags: rpgState, key: 'legends', legacy: true };
+  const primaryKey = _scienceFeedKey(roster[0]);
+  let bags = rpgState.legendsByLearner;
+  if (!bags) {
+    bags = rpgState.legendsByLearner = {};
+    if (rpgState.legends) bags[primaryKey] = rpgState.legends;
+    delete rpgState.legends;
+    rpgSave();
+  }
+  return { bags, key: studentKey, legacy: studentKey === primaryKey };
+}
+function _sendLegendsMeta(source, receipt) {
+  if (!source || !rpgState) return;
+  const studentKey = _scienceFeedKey(), studentLevel = _scienceFeedGameLevel();
+  const scope = _legendsGearScope(studentKey);
+  try {
+    source.postMessage({
+      type: 'LEGENDS_META', studentKey, studentLevel, receipt, legacy: scope.legacy,
+      meta: scope.bags[scope.key] || {}, gold: rpgState.gold | 0
+    }, location.origin);
+  } catch (_) {}
+}
 function _legendsGoldDelta(d, source) {
-  const reason = (d && d.reason) || '';
+  const { studentKey, studentLevel, reason = '' } = d;
   function reply(ok, message) {
-    try { source && source.postMessage({ type: 'LEGENDS_GOLD_RESULT', ok, reason, message: message || '', gold: rpgState ? (rpgState.gold | 0) : 0 }, '*'); } catch (e) {}
+    try {
+      source.postMessage({ type: 'LEGENDS_GOLD_RESULT', studentKey, studentLevel,
+        ok, reason, message: message || '', gold: rpgState ? (rpgState.gold | 0) : 0 }, location.origin);
+    } catch (_) {}
   }
   if (!rpgState) { reply(false, 'No hero yet — answer a question in the app first'); return; }
-  const delta = Math.round(Number(d && d.delta) || 0);
-  // A spend can come from anywhere (it only ever costs the student); a CREDIT
-  // must come from the embedded Armory itself.
-  if (delta > 0 && !_isEmbeddedGameWindow(source)) { reply(false, 'Points can only be credited from inside the game'); return; }
+  const delta = Math.round(Number(d.delta) || 0);
   if (!delta || delta < -2000 || delta > 500) { reply(false, 'Invalid amount'); return; }
   if (delta < 0 && (rpgState.gold | 0) + delta < 0) { reply(false, `Not enough points — that costs 🪙 ${-delta}. Answer questions to earn more!`); return; }
   rpgState.gold = (rpgState.gold | 0) + delta;
   rpgSave();
   reply(true);
 }
+const _legendsGearSaves = new WeakMap();
 function _legendsSaveMeta(d, source) {
-  if (!rpgState || !d || !d.meta || typeof d.meta !== 'object') return;
-  const m = d.meta;
-  const cur = (rpgState.legends && typeof rpgState.legends === 'object') ? rpgState.legends : {};
-  const curInv = Array.isArray(cur.inv) ? cur.inv.length : 0;
-  const newInv = Array.isArray(m.inv) ? m.inv.length : 0;
-  const curTs = cur.ts || 0, newTs = m.ts || 0;
-  // Refuse stale writes and suspicious wipes: a game frame that hasn't synced
-  // down yet (or a second open game with an old copy) must never erase the
-  // armory. Resync the sender with the good copy instead of saving.
-  if ((curTs && newTs && newTs < curTs) || (curInv >= 2 && newInv === 0)) {
-    try { source && source.postMessage({ type: 'LEGENDS_META', meta: cur, gold: rpgState.gold | 0 }, '*'); } catch (e) {}
-    return;
-  }
-  rpgState.legends = {
-    inv: Array.isArray(m.inv) ? m.inv.slice(0, 100) : [],
-    eq: (m.eq && typeof m.eq === 'object') ? m.eq : {},
-    loadout: (m.loadout && typeof m.loadout === 'object') ? m.loadout : {},
-    follower: typeof m.follower === 'string' ? m.follower : 'fdef',
-    ts: newTs || Date.now()
+  if (!rpgState) return;
+  let patch = d.patch;
+  const { studentKey, studentLevel, client, seq } = d;
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch)
+      || typeof client !== 'string' || !/^[a-f0-9]{32}$/.test(client) || !Number.isSafeInteger(seq) || seq < 1) return;
+  const scope = _legendsGearScope(studentKey);
+  const cur = scope.bags[scope.key] || {};
+  const previous = cur.gearWrites?.[client] || 0;
+  const saveReceipt = () => {
+    const state = rpgState;
+    if (!_legendsGearSaves.has(state)) _legendsGearSaves.set(state, new Set());
+    const pending = _legendsGearSaves.get(state), token = JSON.stringify([studentKey, client, seq]);
+    if (pending.has(token)) return;
+    const persistence = rpgSave();
+    if (!persistence) return;
+    pending.add(token);
+    persistence.then(saved => {
+      pending.delete(token);
+      if (saved && state === rpgState && studentKey === _scienceFeedKey() && studentLevel === _scienceFeedGameLevel()) {
+        _sendLegendsMeta(source, { client, seq });
+      }
+    });
   };
-  rpgSave();
-  // keep BOTH game frames on the fresh copy so a stale frame can't clobber it
+  // A retried add stays applied exactly once even after another game salvages it.
+  if (seq <= previous) { saveReceipt(); return; }
+  if (seq !== previous + 1) return;
+  if (patch.seedLegacy && (!scope.legacy || cur.ts || cur.inv?.length)) patch = {};
+  const removed = new Set(Array.isArray(patch.remove) ? patch.remove : []);
+  // Apply only the sender's mutation. A second game can save from an older
+  // view of the armory without discarding new drops or reviving salvaged gear.
+  const inv = (Array.isArray(cur.inv) ? cur.inv : []).filter(item => !removed.has(item?.id));
+  const owned = new Set(inv.map(item => item?.id));
+  for (const item of Array.isArray(patch.add) ? patch.add : []) {
+    if (typeof item?.id !== 'string' || !item.id || owned.has(item.id) || removed.has(item.id)) continue;
+    inv.push(item);
+    owned.add(item.id);
+  }
+  const eq = { ...cur.eq };
+  for (const slot of Object.keys(eq)) if (removed.has(eq[slot])) eq[slot] = null;
+  for (const slot of ['helm', 'chest', 'gloves', 'greaves', 'ring1', 'ring2', 'amulet', 'pants', 'mainhand', 'offhand']) {
+    const itemId = patch.eq?.[slot];
+    if (itemId === null) eq[slot] = null;
+    else if (typeof itemId === 'string' && owned.has(itemId)) {
+      for (const other of Object.keys(eq)) if (other !== slot && eq[other] === itemId) eq[other] = null;
+      eq[slot] = itemId;
+    }
+  }
+  const loadout = { ...cur.loadout };
+  for (const cls of ['barb', 'sorc', 'beast', 'pala', 'ama']) {
+    if (Array.isArray(patch.loadout?.[cls])) loadout[cls] = patch.loadout[cls];
+  }
+  scope.bags[scope.key] = {
+    ...cur, inv, eq, loadout,
+    follower: ['fdef', 'fmag', 'fpri'].includes(patch.follower) ? patch.follower : cur.follower || 'fdef',
+    gearWrites: { ...cur.gearWrites, [client]: seq },
+    ts: Math.max(Date.now(), (Number(cur.ts) || 0) + 1)
+  };
+  saveReceipt();
   ['legendsFrame', 'slayersFrame'].forEach(id => {
-    const f = document.getElementById(id);
-    try { f && f.contentWindow && f.contentWindow !== source && f.contentWindow.postMessage({ type: 'LEGENDS_META', meta: rpgState.legends, gold: rpgState.gold | 0 }, '*'); } catch (e) {}
+    _sendLegendsMeta(document.getElementById(id)?.contentWindow);
   });
 }
 
@@ -63602,7 +63717,7 @@ function loadLegendsThumbs(){
       f = document.createElement('iframe');
       f.id = 'legendsThumbFrame';
       f.style.cssText = 'position:absolute;width:2px;height:2px;opacity:0;pointer-events:none;left:-9999px;top:-9999px;';
-      f.src = 'science-legends.html?v=1.459.0';
+      f.src = 'science-legends.html?v=1.460.0';
       document.body.appendChild(f);
     }
     let tries = 0;
@@ -64959,7 +65074,7 @@ function openFpsGame() {
     showToast(`🎮 No game credits left today — answer ${need} more question${need === 1 ? '' : 's'} in practice to earn one`, 'error');
     return;
   }
-  window.location.href = 'fps.html?v=1.459.0';
+  window.location.href = 'fps.html?v=1.460.0';
 }
 // ---- Release announcement banner (top of screen, dismissible per device) ----
 const FPS_ANNOUNCE_KEY = 'fpsAnnounceDismissed_v1';
@@ -70038,6 +70153,20 @@ function _tcgServedKey() { return 'tcgTrainServed_' + ((currentUser && currentUs
 function _tcgServedLoad() { try { return JSON.parse(localStorage.getItem(_tcgServedKey())) || {}; } catch (e) { return {}; } }
 function _tcgServedMark(id) { if (!id) return; _scienceFeedMark(id); try { const m = _tcgServedLoad(); m[id] = Date.now(); localStorage.setItem(_tcgServedKey(), JSON.stringify(m)); } catch (e) {} }
 let _tcgQuiz = null;
+function mountTcgQuestionFlag(host, question, mode, readQuestion) {
+  if (!window.GameQuestionFlag || !host || !question) return;
+  const key = _scienceFeedKey(), level = _scienceFeedGameLevel();
+  const control = document.createElement('div');
+  host.appendChild(control);
+  const current = q => control.isConnected && q === readQuestion()
+    && key === _scienceFeedKey() && level === _scienceFeedGameLevel();
+  window.GameQuestionFlag.create(control, {
+    current,
+    title: q => q.feedSource?.title || q.q || _htmlPlainText(q.html),
+    unavailable: () => currentUser?.uid ? '' : 'Sign in to flag a question.',
+    submit: (data, q, signal) => submitGameQuestionFlag(data, mode, () => !signal.aborted && current(q))
+  }).setQuestion(question);
+}
 function tcgTrainCard(id) {
   const s = tcgState();
   if (!s || !s.cards[id]) { showToast('Collect this monster first', 'error'); return; }
@@ -70099,6 +70228,7 @@ async function _tcgQuizRender() {
         + '<span class="tcg-quiz-let">' + escapeHtml(_gameLab(q, idx)) + '</span>' + (q.optsHtml?.[idx] || escapeHtml(o)) + '</button>').join('')
     + '</div>'
     + '<div class="tcg-quiz-fb" id="tcgqFb"></div>';
+  mountTcgQuestionFlag(body, q, 'tcg-train', () => _tcgQuiz === run ? run.cur : null);
   } finally { run.loading = false; }
 }
 function _tcgQuizAnswer(idx) {
@@ -74119,6 +74249,7 @@ async function duelOpenQuiz() {
         + '<b>' + escapeHtml(_gameLab(q, i)) + '</b> ' + (q.optsHtml?.[i] || escapeHtml(o)) + '</button>').join('')
     + '</div><div class="duel-quiz-foot" id="duelQuizFoot"></div></div>';
   host.appendChild(box);
+  mountTcgQuestionFlag(box.querySelector('.duel-quiz-card'), q, 'tcg-duel', () => duelRun === r ? r.quiz?.q : null);
   r.insightUsed = true;             // spent on OPENING it, so the button cannot re-arm
   } finally { r.feedLoading = false; }
   duelRender();
@@ -75420,6 +75551,7 @@ async function emsNextQuestion() {
     + '<div class="ems-quiz-fb" id="emsQuizFb">' + (r.roundTotal
         ? '⏸ The battle is paused and there is no timer — read carefully, every correct answer pays full mana.'
         : 'No timer — take the time to read it. Every correct answer pays ⚡ ' + EMS_MANA_CORRECT + ' mana, but the horde keeps walking while you think.') + '</div>';
+  mountTcgQuestionFlag(body, q, 'tcg-siege', () => emsRun === r ? r.quiz?.q : null);
   emsQuizStreakHud();
   emsQuizHeadHud();
 }
@@ -75491,6 +75623,16 @@ function emsAnswer(i) {
     emsGameOver();
     return;
   }
+  const answered = r.quiz;
+  function afterFeedback(delay, advance) {
+    function proceed() {
+      const box = document.getElementById('emsQuiz');
+      if (!box || emsRun !== r || r.over || r.quiz !== answered) return;
+      if (box.querySelector('.game-question-flag form:not([hidden])')) setTimeout(proceed, 250);
+      else advance();
+    }
+    setTimeout(proceed, delay);
+  }
   // A fixed round ends itself (with a small bonus for finishing all five);
   // the open-ended panel just rolls on to the next question.
   if (r.roundTotal) {
@@ -75500,11 +75642,11 @@ function emsAnswer(i) {
       emsSyncHud(); emsManaPop(EMS_ROUND_BONUS); emsRefreshDeckState();
       const done = document.getElementById('emsQuizFb');
       if (done) done.innerHTML += '<div class="ok" style="margin-top:8px;">🧪 Mana round complete — <b>⚡ +' + EMS_ROUND_BONUS + ' bonus</b>. Back to the battle!</div>';
-      setTimeout(() => { if (emsRun === r && !r.over && r.roundTotal && r.roundDone >= r.roundTotal) emsCloseQuiz(); }, 1800);
+      afterFeedback(1800, () => { if (r.roundTotal && r.roundDone >= r.roundTotal) emsCloseQuiz(); });
       return;
     }
   }
-  setTimeout(() => { if (emsRun === r && !r.over && r.quiz && r.quiz.answered && document.getElementById('emsQuiz')) emsNextQuestion(); }, correct ? 900 : 1900);
+  afterFeedback(correct ? 900 : 1900, () => emsNextQuestion());
 }
 // Siege answers count like every other attempt in the app: same shared
 // rotation, same teacher-visible attempt log.
@@ -75521,6 +75663,7 @@ function emsManaPop(gain) {
 // 1–4 answer the open question; Esc closes it.
 document.addEventListener('keydown', e => {
   if (!emsRun || !emsRun.quiz || !document.getElementById('emsQuiz')) return;
+  if (e.target?.closest?.('.game-question-flag')) return;
   if (e.key === 'Escape') { emsCloseQuiz(); return; }
   const n = parseInt(e.key, 10);
   if (n >= 1 && n <= 9) { const q = emsRun.quiz.q; if (q && n <= q.opts.length) emsAnswer(n - 1); }
@@ -76134,6 +76277,7 @@ function elgBindInput() {
     elgBindInput._keys = true;
     document.addEventListener('keydown', e => {
       const r = elgRun; if (!r) return;
+      if (e.target?.closest?.('.game-question-flag')) return;
       if (e.key === 'Escape') {
         if (document.getElementById('elgTree')) { elgCloseTree(); return; }
         elgCloseQuiz(); return;
@@ -76822,6 +76966,7 @@ async function elgNextQuestion() {
     + '</div>'
     + '<div class="elg-quiz-fb" id="elgQuizFb"></div>'
     + '</div>';
+  mountTcgQuestionFlag(box.querySelector('.elg-quiz-card'), q, 'tcg-legends', () => elgRun === r ? r.quiz?.q : null);
 }
 function elgAnswer(i) {
   const r = elgRun; if (!r || r.over || !r.quiz || r.quiz.answered || !Number.isInteger(i) || i < 0 || i >= r.quiz.q.opts.length) return;
