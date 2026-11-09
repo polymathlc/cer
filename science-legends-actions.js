@@ -122,6 +122,7 @@
     return {progress:progress,age:age,frame:f,cycle:cycle,alpha:Math.max(0,envelope)*(reduced?.38:.78)};
   }
   function ready(sheet){var atlas=atlases[sheet||'attacks'];return !!atlas&&atlas.complete&&atlas.naturalWidth>0;}
+  function drawable(source){return source&&(source.complete===undefined?source.width>0:source.complete&&source.naturalWidth>0);}
   function snapshot(){var profile={};Object.keys(atlases).forEach(function(sheet){profile[sheet]=ready(sheet)?atlases[sheet]:null;});return Object.freeze(profile);}
   var TAU=Math.PI*2;
   function line(ctx,x1,y1,x2,y2){ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();}
@@ -145,9 +146,9 @@
     var rec=recipes[sid];if(!rec)return null;
     var sheet='fx-'+rec.cls,atlas=profile?profile[sheet]:atlases[sheet],cols=8,rows=6,col=(rec.index%2)*4+Math.min(3,frame),row=Math.floor(rec.index/2);
     var cyclone=sid==='whirlwind'&&(profile?profile.whirlwind:atlases.whirlwind);
-    if(cyclone&&cyclone.complete&&cyclone.naturalWidth){atlas=cyclone;cols=4;rows=2;col=frame%4;row=Math.floor(frame/4);}
-    if(!atlas||!atlas.complete||!atlas.naturalWidth)return null;
-    var w=atlas.naturalWidth/cols,h=atlas.naturalHeight/rows;
+    if(drawable(cyclone)){atlas=cyclone;cols=4;rows=2;col=frame%4;row=Math.floor(frame/4);}
+    if(!drawable(atlas))return null;
+    var w=(atlas.naturalWidth||atlas.width)/cols,h=(atlas.naturalHeight||atlas.height)/rows;
     return {image:atlas,x:col*w,y:row*h,w:w,h:h,heading:rec.sourceHeading};
   }
   function atlasRotation(action){var rec=recipes[action.sid];return rec&&(action.phase==='flight'||rec.mode==='arc'||rec.mode==='dash'||rec.mode==='projectile')?(action.ang||0)-rec.sourceHeading:0;}
@@ -352,7 +353,7 @@
   }
   function draw(ctx,action,time,reduced,profile){
     if(action.sid)return drawSkill(ctx,action,time,reduced,profile);
-    var sheet=action.sheet||'attacks',atlas=profile?profile[sheet]:atlases[sheet];if(!atlas||!atlas.complete||!atlas.naturalWidth)return false;var state=sample(action,time,reduced),w=atlas.naturalWidth/4,h=atlas.naturalHeight/4;
+    var sheet=action.sheet||'attacks',atlas=profile?profile[sheet]:atlases[sheet];if(!drawable(atlas))return false;var state=sample(action,time,reduced),w=(atlas.naturalWidth||atlas.width)/4,h=(atlas.naturalHeight||atlas.height)/4;
     var size=Math.max(36,Math.min(reduced?180:340,action.r*2.1));
     var height=size*h/w;
     ctx.save();ctx.translate(action.x,action.y);if((sheet==='attacks'&&action.row===0)||(sheet==='elements'&&action.row===3))ctx.rotate(action.ang);
@@ -360,6 +361,7 @@
     ctx.drawImage(atlas,state.frame*w,action.row*h,w,h,-size/2,-height/2,size,height);ctx.restore();return true;
   }
   var api={frame:frame,emit:emit,emitElement:emitElement,emitSkill:emitSkill,recipe:recipe,recipes:recipes,familyForSkill:familyForSkill,expire:expire,sample:sample,sampleSkill:sampleSkill,atlasFrame:atlasFrame,atlasRotation:atlasRotation,ready:ready,snapshot:snapshot,draw:draw,drawSkill:drawSkill,drawChannel:drawChannel,drawAnticipation:drawAnticipation};
+  api.images = function () { return Object.values(atlases).filter(Boolean); };
   if(typeof module==='object'&&module.exports)module.exports=api;root.LegendsActions=api;
   if(typeof root.Image==='function')Object.keys(atlases).forEach(function(sheet){var image=atlases[sheet]=new root.Image();image.onload=function(){if(typeof image.decode==='function')image.decode().catch(function(){});};image.src=sheet==='attacks'||sheet==='elements'?'assets/science-legends/v2/'+(sheet==='elements'?'elements-clean':'attacks')+'.webp':'assets/science-legends/v3/'+sheet+'.webp';});
 })(typeof window==='object'?window:globalThis);

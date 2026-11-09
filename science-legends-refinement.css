@@ -22,3 +22,59 @@
 .skill-slot .cd{z-index:1}.skill-slot .skill-name{z-index:3;color:#fff3d6;background:#071823;border-radius:3px;padding:1px 0;text-shadow:0 1px 2px #000;pointer-events:none}.skill-slot .key{z-index:4}.touch-aim-hint[hidden]{display:none!important}
 .combat-controls{text-align:left;font-size:.75rem;line-height:1.5;margin:12px 0}.combat-controls summary{font-weight:700;cursor:pointer}.combat-controls p{margin:7px 0}
 @media(max-width:700px){.skill-slot .skill-name{font-size:9px;line-height:10px;max-height:22px;bottom:2px}.skill-slot .cd-value{margin-top:-10px}}
+
+/* Keep skill setup within reach of the hotbar. */
+.combat-skill-tools {
+  position: absolute;
+  left: 50%;
+  bottom: 82px;
+  transform: translateX(-50%);
+  z-index: 4;
+  display: flex;
+  gap: 6px;
+}
+.combat-skill-tools button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 5px 12px;
+  border: 1px solid #c4a36b99;
+  border-radius: 10px;
+  background: #172d3b;
+  color: #ffe2ae;
+  font-family: inherit;
+  font-size: .75rem;
+  font-weight: 800;
+  line-height: 1.2;
+  cursor: pointer;
+}
+.combat-skill-tools button:focus-visible {
+  outline: 2px solid #8ce5ec;
+  outline-offset: 2px;
+}
+.combat-skill-tools .tree-btn.has-pts { border-color: #ffe0a0; }
+.hint-bar { bottom: 134px; }
+
+@media (max-width: 700px) {
+  .combat-skill-tools {
+    left: auto;
+    right: 106px;
+    bottom: 85px;
+    transform: none;
+    gap: 4px;
+  }
+  .combat-skill-tools button {
+    flex-direction: column;
+    gap: 1px;
+    width: 44px;
+    padding: 3px 1px;
+    font-size: .68rem;
+  }
+  .combat-skill-tools .pts {
+    padding: 0 5px;
+    font-size: .62rem;
+  }
+  .touch-aim-hint { bottom: 136px; }
+}

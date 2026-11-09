@@ -50,6 +50,7 @@ try {
   await waiting.page.evaluate(()=>{for(const data of delayed)document.querySelector('iframe').contentWindow.postMessage(data,location.origin);delayed=[];holdFeed=false;});
   await waiting.game.waitForFunction(()=>_gameCreditsReady());
   await waiting.game.locator('#startBtn').click();
+  await waiting.game.waitForFunction(()=>G&&G.state==='play');
   check(await waiting.game.evaluate(()=>G&&G.state==='play'),`${slug}: accepted metadata unlocks Start without a loading deadlock`);
   await waiting.page.waitForFunction(()=>records.some(r=>r.type==='SD_PLAY_START'));
   const sentStart=await waiting.page.evaluate(()=>records.find(r=>r.type==='SD_PLAY_START'));

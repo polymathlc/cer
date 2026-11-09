@@ -65,7 +65,7 @@ try {
     // actual visible HUD rectangles rather than the renderer cache's counters.
     const captions=await page.evaluate(()=>{
       G.enemies=[];G.pets=[];G.atkTarget=null;mouse.over=null;updateTargetPanel();updateBars();updateCombatReadability(0);draw();
-      const canvasBox=canvas.getBoundingClientRect(),ids=['pBars','skillBar','skillSelBtn','evadeBtn','hintBar','joy','qTimer','battleStatus','targetPanel','toastWrap'],nodes=ids.map(id=>document.getElementById(id)).concat([document.querySelector('.touch-aim-hint'),document.querySelector('.beta-ribbon')]);
+      const canvasBox=canvas.getBoundingClientRect(),ids=['pBars','skillBar','combatSkillTools','evadeBtn','hintBar','joy','qTimer','battleStatus','targetPanel','toastWrap'],nodes=ids.map(id=>document.getElementById(id)).concat([document.querySelector('.touch-aim-hint'),document.querySelector('.beta-ribbon')]);
       const blocked=nodes.filter(n=>n&&!n.hidden).map(n=>n.getBoundingClientRect()).filter(r=>r.width>0&&r.height>0).map(r=>({left:(r.left-canvasBox.left)*VW/canvasBox.width,top:(r.top-canvasBox.top)*VH/canvasBox.height,right:(r.right-canvasBox.left)*VW/canvasBox.width,bottom:(r.bottom-canvasBox.top)*VH/canvasBox.height}));
       const points=blocked.map(b=>({x:(b.left+b.right)/2,y:(b.top+b.bottom)/2})).concat([{x:4,y:4},{x:VW-4,y:VH-4},{x:VW/2,y:VH/2}]);const records=[];
       const fill=ctx.fillRect;let paint=null;ctx.fillRect=function(x,y,w,h){if(h===18)paint={x,y,w,h};return fill.apply(this,arguments);};

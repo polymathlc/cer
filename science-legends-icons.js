@@ -45,6 +45,7 @@
     return markup(sid,skills[sid],{kind:kind,badge:badge,label:label});
   }
   var api={index:index,markup:markup,treeMarkup:treeMarkup,ready:ready,mapping:mapping};
+  api.images = function () { return Object.values(images); };
   if(typeof module==='object'&&module.exports)module.exports=api;
   root.LegendsIcons=api;
   if(typeof root.Image==='function')classIds.forEach(function(classId){

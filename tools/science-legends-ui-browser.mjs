@@ -7,14 +7,51 @@ const browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_BR
 function check(value,message){assert.ok(value,message);checks++;}
 try{
  for(const width of [1280,390,320]){
-  const context=await browser.newContext({viewport:{width,height:900}}),page=await context.newPage(),errors=[];
+  const context=await browser.newContext({viewport:{width,height:900},hasTouch:width<600}),page=await context.newPage(),errors=[];
   page.on('pageerror',error=>errors.push(error.message));
   await page.route('**/*',route=>{const url=new URL(route.request().url());if(url.hostname!=='ui.test')return route.abort();const f=path.join(root,decodeURIComponent(url.pathname));return fs.existsSync(f)&&fs.statSync(f).isFile()?route.fulfill({path:f}):route.abort();});
   await page.goto('http://ui.test/science-legends.html');await page.waitForFunction(()=>document.querySelectorAll('.class-card').length===5&&LegendsModels.allReady());
   await page.screenshot({path:path.join(output,`menu-${width}.png`),animations:'disabled'});
   await page.locator('.class-card').nth(1).click();await page.locator('#startBtn').click();await page.waitForFunction(()=>G&&G.time>.05);
   await page.evaluate(()=>{G.spawnT=999;G.qTimer=7;G.enemies=[];G.pets=[];G.player.hp=G.player.maxHp=CLASSES[G.cls].hp+G.stats.hpAdd+(G.player.levelHp||0);});
-  await page.keyboard.press('t');await page.locator('#treeOverlay').waitFor({state:'visible'});
+  const controls=await page.evaluate(()=>{
+    const box=id=>$(id).getBoundingClientRect();
+    const tree=box('treeBtn'),equip=box('skillSelBtn'),hotbar=box('skillBar');
+    const intersects=(a,b)=>a.width>0&&b.width>0&&a.left<b.right&&a.right>b.left&&a.top<b.bottom&&a.bottom>b.top;
+    return {
+      nearHotbar:tree.bottom<=hotbar.top&&hotbar.top-tree.bottom<18&&tree.right>hotbar.left&&tree.left<hotbar.right,
+      accessible:[tree,equip].every(r=>r.width>=44&&r.height>=44&&r.left>=0&&r.right<=innerWidth),
+      overlap:['evadeBtn','joy','pBars'].filter(id=>[tree,equip].some(r=>intersects(r,box(id)))),
+      points:$('treeBtn').getAttribute('aria-label')
+    };
+  });
+  check(controls.nearHotbar&&controls.accessible&&!controls.overlap.length&&controls.points?.includes('1 unspent point'),`${width}: tree and Equip sit beside the hotbar with reachable targets and a point count: ${JSON.stringify(controls)}`);
+
+  const treeButton=page.locator('#treeBtn'),treeOverlay=page.locator('#treeOverlay');
+  const resetEvade=()=>page.evaluate(()=>{G.player.evadeCd=0;G.player.evadeT=0;});
+  await treeButton.focus();
+  await page.keyboard.down('Space');
+  check(await page.evaluate(()=>G.player.evadeCd>4&&!overlayOpen()),`${width}: Space dodges with the tree button focused`);
+  await resetEvade();
+  await page.keyboard.down('Space');
+  check(await page.evaluate(()=>G.player.evadeCd===0&&!overlayOpen()),`${width}: held Space never retriggers evade or activates its focused button`);
+  await page.keyboard.press('t');await treeOverlay.waitFor({state:'visible'});
+  await page.locator('#treeCloseBtn').focus();
+  await page.keyboard.down('Space');await page.keyboard.up('Space');
+  check(await treeOverlay.isVisible(),`${width}: a held combat Space press cannot activate a newly focused dialog button`);
+  await page.keyboard.press('Space');await treeOverlay.waitFor({state:'hidden'});
+  await page.waitForFunction(()=>document.activeElement===$('treeBtn'));
+  await page.keyboard.press('Space');
+  check(await page.evaluate(()=>G.player.evadeCd>4&&!overlayOpen()),`${width}: Space dodges after the dialog restores focus to the tree button`);
+
+  for(const selector of ['#skillSelBtn','#skillBar .skill-slot:first-child']){
+    await resetEvade();
+    await page.locator(selector).focus();await page.keyboard.press('Space');
+    check(await page.evaluate(()=>G.player.evadeCd>4&&!overlayOpen()&&!G.cds[G.slots[0]]),`${width}: Space dodges without activating ${selector}`);
+  }
+  if(width<600)await treeButton.tap();
+  else{await treeButton.focus();await page.keyboard.press('Enter');}
+  await treeOverlay.waitFor({state:'visible'});
   check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`${width}: illustrated tree does not make the page wider than the screen`);
   check(await page.locator('#treeOverlay').getAttribute('role')==='dialog',`${width}: tree remains a named modal dialog`);
   const initial=await page.evaluate(()=>{const nd=TREES[G.cls].find(canLearn),wrap=$('treeBoardWrap'),p=nodeXY(nd);wrap.scrollLeft=Math.max(0,p.x-wrap.clientWidth/2);wrap.scrollTop=Math.max(0,p.y-wrap.clientHeight/2);return {id:nd.id,rank:nodeRank(nd.id),points:G.points};});
