@@ -349,6 +349,86 @@
   .class-row select, .class-row input { width:100%; padding:8px 9px; border:1px solid var(--line); border-radius:9px; background:#fff; font-size:13px; }
   .split { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.25fr); gap:24px; }
 
+  /* ─── Family records: type of lesson, slots, payment record ─── */
+  .lt { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:7px; font-size:11.5px; font-weight:700; border:1px solid; white-space:nowrap; }
+  .lt.online { color:#6d28d9; background:#f5f3ff; border-color:#ddd6fe; }
+  .lt.physical { color:var(--deep); background:#eaf6f7; border-color:var(--line); }
+  .lt.master { color:var(--gold); background:var(--gold-bg); border-color:var(--gold-line); }
+  .lt.none { color:var(--amber); background:var(--amber-bg); border-color:var(--amber-line); }
+  .lt.guess { border-style:dashed; }
+  .kid-school { margin:-3px 0 2px 4px; }
+  .fam-rec { display:flex; align-items:center; gap:12px; flex-wrap:wrap; font-size:12.5px; color:var(--ink-2); }
+  .mdots { display:inline-flex; gap:3px; flex-wrap:wrap; }
+  .md { display:inline-block; font-size:10.5px; font-weight:800; letter-spacing:.02em; padding:1px 5px; border-radius:5px; border:1px solid var(--grey-line); background:var(--grey-bg); color:var(--faint); }
+  .md.paid, .md.hand { background:var(--green-bg); border-color:var(--green-line); color:var(--green); }
+  .md.hand { border-style:dashed; }
+  .md.waiting, .md.part { background:var(--amber-bg); border-color:var(--amber-line); color:var(--amber); }
+  .md.overdue { background:var(--red-bg); border-color:var(--red-line); color:var(--red); }
+  .md.draft { color:var(--grey); }
+  .md.cur { box-shadow:0 0 0 1.5px var(--ink-2); }
+  .segs { display:inline-flex; border:1px solid var(--line); border-radius:10px; overflow:hidden; background:var(--white); }
+  .seg { border:none; background:none; padding:9px 13px; font-weight:700; font-size:13px; color:var(--muted); }
+  .seg + .seg { border-left:1px solid var(--line); }
+  .seg.on { background:var(--deep); color:#fff; }
+  table.rec { font-size:13px; }
+  table.rec td { padding:10px 12px; vertical-align:top; }
+  table.rec tr.fam-more td { border-top:none; padding-top:2px; }
+  table.rec tr.fam-first td { border-top:1px solid var(--line); }
+  table.rec tr.off td { opacity:.6; }
+  table.rec td.slots { min-width:210px; }
+  table.rec td.slots .subj { margin:0 3px 3px 0; }
+  table.rec td.em { max-width:220px; word-break:break-all; }
+  table.rec td.notes { max-width:220px; color:var(--ink-2); }
+  table.rec .mdots { flex-wrap:nowrap; }
+  table.rec td.slots .subj { white-space:nowrap; }
+  .fix { font-size:12.5px; padding:7px 10px; border-radius:9px; margin-top:6px; border:1px solid; }
+  .fix.block { color:#7f1d1d; background:var(--red-bg); border-color:var(--red-line); }
+  .fix.warn { color:#78350f; background:var(--amber-bg); border-color:var(--amber-line); }
+  .lt-issues { margin-top:8px; font-size:12.5px; color:#78350f; background:var(--amber-bg); border:1px solid var(--amber-line); border-radius:9px; padding:7px 10px; }
+  .cls-name { min-width:0; overflow:hidden; }
+  .cls-name .subj { max-width:100%; overflow:hidden; text-overflow:ellipsis; }
+  /* The slot drop-down: opens in place, ticks for each slot. */
+  .ms { position:relative; }
+  .ms-btn { width:100%; display:flex; align-items:center; gap:8px; text-align:left; padding:8px 10px; min-height:42px; border:1px solid var(--line); border-radius:10px; background:var(--white); }
+  .ms-btn:hover, .ms-btn.open { border-color:var(--teal); }
+  .ms-btn.open { box-shadow:0 0 0 3px rgba(46,156,166,.15); }
+  .ms-val { flex:1; display:flex; flex-wrap:wrap; gap:5px; min-width:0; }
+  .ms-caret { color:var(--muted); font-size:12px; }
+  .ms-pop { margin-top:6px; border:1px solid var(--line); border-radius:12px; background:var(--white); padding:10px; box-shadow:var(--shadow); }
+  .ms-hint { font-size:12px; color:var(--muted); margin-bottom:8px; }
+  .ms-empty { font-size:13px; color:var(--amber); padding:6px 2px; }
+  .ms-day + .ms-day { margin-top:8px; }
+  .ms-dayname { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin:2px 0 4px; }
+  .ms label.ms-opt { display:grid; margin:0; font-weight:500; color:var(--ink); grid-template-columns:20px 64px minmax(0,1fr) auto; align-items:center; gap:8px; padding:7px 8px; border-radius:9px; border:1px solid transparent; cursor:pointer; font-size:13px; }
+  .ms-opt:hover { background:var(--paper); }
+  .ms-opt.on { border-color:var(--line); background:#f2fafb; }
+  .ms-opt.dim { opacity:.5; }
+  .ms-opt input { width:16px; height:16px; accent-color:var(--deep); }
+  .ms-t { font-weight:700; color:var(--ink-2); font-variant-numeric:tabular-nums; }
+  .ms-ttl { font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ms-opt.math .ms-ttl { color:var(--math); } .ms-opt.science .ms-ttl { color:var(--sci); } .ms-opt.master .ms-ttl { color:var(--gold); }
+  .ms-meta { font-size:11.5px; color:var(--muted); white-space:nowrap; }
+  .ms-foot { display:flex; justify-content:space-between; align-items:center; gap:10px; border-top:1px solid var(--line-2); margin-top:8px; padding-top:8px; }
+  /* Payment record */
+  .rec-sum { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+  .rec-sum > div { background:var(--paper); border:1px solid var(--line-2); border-radius:12px; padding:10px 12px; min-width:0; }
+  .rec-sum .lbl { display:block; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); }
+  .rec-sum b { display:block; font-size:14px; margin-top:2px; overflow-wrap:anywhere; }
+  .rec-sum small { display:block; font-size:12px; color:var(--muted); }
+  .months { display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; }
+  .mo { display:flex; flex-direction:column; align-items:center; min-width:50px; padding:6px 6px 5px; border-radius:10px; border:1px solid var(--grey-line); background:var(--grey-bg); color:var(--grey); line-height:1.15; }
+  .mo b { font-size:12.5px; } .mo small { font-size:10.5px; opacity:.8; } .mo-i { font-size:12px; }
+  .mo.paid, .mo.hand { background:var(--green-bg); border-color:var(--green-line); color:var(--green); }
+  .mo.hand { border-style:dashed; }
+  .mo.waiting, .mo.part { background:var(--amber-bg); border-color:var(--amber-line); color:var(--amber); }
+  .mo.overdue { background:var(--red-bg); border-color:var(--red-line); color:var(--red); }
+  .mo.cur { box-shadow:0 0 0 2px var(--ink-2); }
+  .mo:hover { filter:brightness(.97); }
+  .shots-head { display:flex; justify-content:space-between; align-items:center; gap:10px; margin:16px 0 8px; font-size:13.5px; flex-wrap:wrap; }
+  .shots { display:flex; flex-direction:column; gap:6px; }
+  .shot-row { display:grid; grid-template-columns:150px 150px minmax(0,1fr) 34px; gap:6px; align-items:center; }
+  .shot-row input, .shot-row select { width:100%; padding:7px 8px; border:1px solid var(--line); border-radius:8px; font-size:13px; background:#fff; }
+
   /* ─── Invoice preview ─── */
   .inv-paper { border:1px solid var(--line); border-radius:16px; overflow:hidden; background:#fff; }
   .inv-paper .hd { background:#10303a; color:#fff; padding:16px 18px; }
@@ -438,6 +518,12 @@
     .form, .student-card .form { grid-template-columns:1fr; }
     .class-row { grid-template-columns:1fr 1fr; }
     .class-row > :first-child { grid-column:1 / -1; }
+    .rec-sum { grid-template-columns:1fr; }
+    .shot-row { grid-template-columns:1fr 1fr; }
+    .shot-row input[type="text"] { grid-column:1; }
+    .ms label.ms-opt { grid-template-columns:20px 56px minmax(0,1fr); }
+    .ms-meta { grid-column:3; white-space:normal; }
+    .toolbar .segs { width:100%; } .toolbar .seg { flex:1; }
     .fam-grid { grid-template-columns:1fr; }
     .step { flex-wrap:wrap; }
     .step .actions { width:100%; }

@@ -35,7 +35,7 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 import * as C from './office-core.mjs?v=1.1.0';
 
-const OFFICE_VERSION = 'v1.1.0';
+const OFFICE_VERSION = 'v1.2.0';
 
 /* ═══════════════ Firebase — the CER project ═══════════════ */
 firebase.initializeApp({
@@ -75,7 +75,7 @@ const S = {
   view: 'home',
   period: C.sgMonthKey(),
   ui: {
-    famSearch: '', famFilter: 'all',
+    famSearch: '', famFilter: 'all', famType: '', famView: savedFamView(),
     stuSearch: '', stu: { level: '', subject: '', mode: '', day: '', status: 'active', pay: '', cls: '' }, stuSort: { key: 'name', dir: 1 },
     tt: { level: '', subject: '', mode: '' },
     invFilter: 'all', invSearch: ''
@@ -85,6 +85,9 @@ const S = {
   lastApply: null,                    // the result card after applying payments
   mailState: {}                       // mailId → delivery state, read on demand
 };
+// The Families tab remembers cards or table on this computer only.
+function savedFamView() { try { return localStorage.getItem('polymath-office-famview') === 'table' ? 'table' : 'cards'; } catch (e) { return 'cards'; } }
+function rememberFamView(v) { try { localStorage.setItem('polymath-office-famview', v); } catch (e) { /* private window */ } }
 let IX = { fam: new Map(), invByFam: new Map(), invById: new Map(), payByKey: new Map(), roster: new Map(), rows: [] };
 const unsubs = [];
 
@@ -173,7 +176,28 @@ function reindex() {
   });
   invByFam.forEach(a => a.sort(by('period', -1)));
   const payByKey = new Map(S.payments.map(p => [p.id, p]));
-  IX = { fam, invByFam, invById, payByKey, roster: C.slotRoster(S.families, S.schedule), rows: C.studentRows(S.families, S.schedule) };
+  IX = { fam, invByFam, invById, payByKey, roster: C.slotRoster(S.families, S.schedule), rows: C.studentRows(S.families, S.schedule), rec: new Map(), shared: C.sharedEmails(S.families) };
+}
+// A family's payment record (months paid, last payment, last screenshot), worked
+// out once per data change and kept until the next one.
+function recordOf(f) {
+  if (!f) return null;
+  if (f.id && IX.rec.has(f.id) && IX.fam.get(f.id) === f) return IX.rec.get(f.id);
+  const r = C.familyPaymentRecord(f, S.invoices, S.payments, { today: today(), months: 12 });
+  if (f.id && IX.fam.get(f.id) === f) IX.rec.set(f.id, r);
+  return r;
+}
+function lessonTypeChip(type, chosen, full) {
+  const t = C.lessonTypeMeta(type);
+  if (!t) return '<span class="lt none" title="Type of lesson not chosen yet">Type?</span>';
+  return '<span class="lt ' + t.key + (chosen ? '' : ' guess') + '" title="' + esc(t.label + (chosen ? '' : ' (read from the classes — open the family to choose)')) + '">' + t.icon + ' ' + esc(full ? t.label : t.short) + '</span>';
+}
+function monthDots(months, n) {
+  return '<span class="mdots">' + months.slice(-n).map(m => '<span class="md ' + m.key + (m.current ? ' cur' : '') + '" title="' + esc(C.periodLabel(m.period) + ': ' + C.MONTH_STATE_META[m.key].label) + '">' + esc(m.label) + '</span>').join('') + '</span>';
+}
+function whenText(dayKey) {
+  if (!C.isDayKey(dayKey)) return '';
+  return C.daysAgoText(C.daysBetween(dayKey, today()), dayKey);
 }
 const famById = id => IX.fam.get(id) || null;
 const invoicesOf = id => IX.invByFam.get(id) || [];
@@ -447,47 +471,113 @@ function dropHtml() {
   return '<div class="drop" data-act="pickStatement" data-drop="statement"><div class="big">📄</div><b>Drop the statement here</b><span>or click to choose a file · ' + (S.settings.useAi ? 'ChatGPT reads it and matches payments' : 'read on this computer') + '</span></div>';
 }
 
-/* ═══════════════ 👪 Families ═══════════════ */
+/* ═══════════════ 👪 Families ═══════════════
+   Every confirmed sign-up is a family record: status, the ONE account email,
+   the parent, WhatsApp, and each child's school, start date, type of lesson,
+   slots on the schedule, payment record and notes. Cards for a quick look;
+   the table lists one row per child with every field, and downloads as CSV. */
+const FAM_FILTERS = {
+  all: f => f.status === 'active',
+  owing: f => familyOwing(f.id) > 0,
+  unpaid: f => f.status === 'active' && C.familyIsBillable(f) && !recordOf(f).thisMonthPaid,
+  noshot: f => f.status === 'active' && C.familyIsBillable(f) && !(recordOf(f).lastScreenshot && recordOf(f).lastScreenshot.date.slice(0, 7) === C.sgMonthKey()),
+  noemail: f => f.status === 'active' && !C.familyEmails(f).length,
+  shared: f => C.familyEmails(f).some(e => IX.shared.has(e)),
+  noclass: f => studentsWithoutClass().some(r => r.familyId === f.id),
+  inactive: f => f.status === 'inactive'
+};
+function familyMatchesType(f, type) {
+  if (!type) return true;
+  return f.students.some(s => s.status !== 'left' && C.studentLessonType(s, S.schedule) === type);
+}
+function familyMatchesSearch(f, q) {
+  if (!q) return true;
+  const hay = C.normText([f.parentName, f.email, f.email2, f.whatsapp, f.code, f.address, f.notes,
+    ...f.students.map(s => s.name + ' ' + s.school + ' ' + s.notes + ' ' + C.lessonTypeLabel(C.studentLessonType(s, S.schedule)))].join(' '));
+  return q.split(' ').every(w => hay.includes(w));
+}
+function familyList() {
+  const q = C.normText(S.ui.famSearch);
+  return S.families.filter(FAM_FILTERS[S.ui.famFilter] || FAM_FILTERS.all)
+    .filter(f => familyMatchesType(f, S.ui.famType))
+    .filter(f => familyMatchesSearch(f, q));
+}
+function recordRows(list) {
+  const rows = C.familyRecordRows(list, { schedule: S.schedule, invoices: S.invoices, payments: S.payments, today: today(), months: 12 });
+  // The table shows only the children of the type filtered to.
+  return S.ui.famType ? rows.filter(r => !r.studentId || r.lessonType === S.ui.famType) : rows;
+}
 VIEWS.families = function () {
   const period = C.sgMonthKey();
-  const q = C.normText(S.ui.famSearch);
-  const noClassFam = new Set(studentsWithoutClass().map(r => r.familyId));
-  const filters = {
-    all: f => f.status === 'active',
-    owing: f => familyOwing(f.id) > 0,
-    noemail: f => f.status === 'active' && !C.familyEmails(f).length,
-    noclass: f => noClassFam.has(f.id),
-    inactive: f => f.status === 'inactive'
-  };
-  const count = k => S.families.filter(filters[k]).length;
-  const list = S.families.filter(filters[S.ui.famFilter] || filters.all).filter(f => {
-    if (!q) return true;
-    const hay = C.normText([f.parentName, f.email, f.email2, f.whatsapp, f.code, f.address, ...f.students.map(s => s.name + ' ' + s.school)].join(' '));
-    return q.split(' ').every(w => hay.includes(w));
-  });
-  const chip = (k, label) => '<button class="chip ' + (S.ui.famFilter === k ? 'on' : '') + '" data-act="famFilter" data-k="' + k + '">' + label + ' <span class="n">' + count(k) + '</span></button>';
-  return '<div class="page-head"><div><h1>Families</h1><p>Each family has its own PayNow reference code. Students sit under their parent.</p></div>'
-    + '<div class="actions"><button class="btn ghost" data-act="openImport">⬆ Import spreadsheet</button><button class="btn" data-act="newFamily">＋ Add a family</button></div></div>'
-    + '<div class="toolbar"><div class="search"><input type="search" placeholder="Search parent, student, phone, email or code" value="' + esc(S.ui.famSearch) + '" data-in="famSearch" data-keep="famSearch" aria-label="Search families"></div></div>'
-    + '<div class="chips" style="margin-bottom:18px;">' + chip('all', 'Active') + chip('owing', '💰 Owing') + chip('noemail', '✉ No email') + chip('noclass', '🧩 No class') + chip('inactive', '💤 Inactive') + '</div>'
-    + (!S.familiesLoaded ? emptyHtml('⏳', 'Loading…', '')
-      : !S.families.length ? emptyHtml('👪', 'No families yet', 'Import your spreadsheet of students and parents, or add a family by hand.', '<button class="btn" data-act="openImport">⬆ Import a spreadsheet</button><button class="btn ghost" data-act="newFamily">＋ Add a family</button>')
-        : !list.length ? emptyHtml('🔍', 'Nobody matches', 'Try a different search or filter.')
-          : '<div class="fam-grid">' + list.map(f => famCardHtml(f, period)).join('') + '</div>');
+  const count = k => S.families.filter(FAM_FILTERS[k]).length;
+  const list = familyList();
+  const chip = (k, label, hideEmpty) => (hideEmpty && !count(k) && S.ui.famFilter !== k) ? '' : '<button class="chip ' + (S.ui.famFilter === k ? 'on' : '') + '" data-act="famFilter" data-k="' + k + '">' + label + ' <span class="n">' + count(k) + '</span></button>';
+  const typeChip = (k, label) => '<button class="chip ' + (S.ui.famType === k ? 'on' : '') + '" data-act="famType" data-k="' + k + '">' + label + '</button>';
+  const viewChip = (k, label) => '<button class="seg ' + (S.ui.famView === k ? 'on' : '') + '" data-act="famView" data-k="' + k + '" aria-pressed="' + (S.ui.famView === k) + '">' + label + '</button>';
+  const shared = [...IX.shared.entries()];
+  const sharedBanner = shared.length ? '<div class="banner amber"><div class="big">✉</div><div><b>' + C.plural(shared.length, 'email is', 'emails are') + ' used by more than one family</b>'
+    + 'The email is the family\'s account ID, so each one should belong to one family only. Open them and move the children into one family: '
+    + shared.map(([e, fs]) => esc(e) + ' (' + fs.map(f => '<button class="linkbtn" data-act="openFamily" data-id="' + esc(f.id) + '">' + esc(f.parentName || 'Unnamed') + '</button>').join(', ') + ')').join('; ') + '</div></div>' : '';
+  let body;
+  if (!S.familiesLoaded) body = emptyHtml('⏳', 'Loading…', '');
+  else if (!S.families.length) body = emptyHtml('👪', 'No families yet', 'Import your spreadsheet of students and parents, or add a family by hand.', '<button class="btn" data-act="openImport">⬆ Import a spreadsheet</button><button class="btn ghost" data-act="newFamily">＋ Add a family</button>');
+  else if (!list.length) body = emptyHtml('🔍', 'Nobody matches', 'Try a different search or filter.');
+  else if (S.ui.famView === 'table') body = familyTableHtml(recordRows(list));
+  else body = '<div class="fam-grid">' + list.map(f => famCardHtml(f, period)).join('') + '</div>';
+  return '<div class="page-head"><div><h1>Families</h1><p>One record per confirmed sign-up. The email is the family\'s account ID, the same for every child.</p></div>'
+    + '<div class="actions"><button class="btn ghost" data-act="exportRecords" title="Every field of the families shown, one row per child">⬇ CSV</button><button class="btn ghost" data-act="openImport">⬆ Import spreadsheet</button><button class="btn" data-act="newFamily">＋ Add a family</button></div></div>'
+    + sharedBanner
+    + '<div class="toolbar"><div class="search"><input type="search" placeholder="Search parent, student, school, phone, email or code" value="' + esc(S.ui.famSearch) + '" data-in="famSearch" data-keep="famSearch" aria-label="Search families"></div>'
+    + '<div class="segs" role="group" aria-label="Show as">' + viewChip('cards', '▦ Cards') + viewChip('table', '☰ Table') + '</div></div>'
+    + '<div class="chips" style="margin-bottom:10px;">' + chip('all', 'Active') + chip('owing', '💰 Owing') + chip('unpaid', '⏳ ' + esc(C.monthShort(period)) + ' not paid')
+    + chip('noshot', '📸 No screenshot in ' + esc(C.monthShort(period))) + chip('noemail', '✉ No email') + chip('shared', '⚠ Shared email', true) + chip('noclass', '🧩 No class') + chip('inactive', '💤 Not active') + '</div>'
+    + '<div class="filterrow"><span class="lbl">Type of lesson</span><div class="chips">' + typeChip('', 'All') + C.LESSON_TYPES.map(t => typeChip(t.key, t.icon + ' ' + t.label)).join('') + '</div></div>'
+    + body;
 };
+function familyTableHtml(rows) {
+  const cur = C.sgMonthKey();
+  return '<div class="table-wrap rec-wrap"><table class="t rec"><thead><tr>'
+    + '<th>Status</th><th>Email (account ID)</th><th>Student</th><th>Parent · WhatsApp</th><th>Primary school</th><th>With us since</th>'
+    + '<th>Type of lesson</th><th>Slots</th><th>Months paid</th><th>Last payment</th><th>Last screenshot</th><th>Notes</th><th></th></tr></thead><tbody>'
+    + rows.map((r, i) => {
+      const first = i === 0 || rows[i - 1].familyId !== r.familyId;
+      const shotThisMonth = r.lastScreenshot && r.lastScreenshot.date.slice(0, 7) === cur;
+      return '<tr class="click ' + (first ? 'fam-first' : 'fam-more') + (r.status === 'inactive' ? ' off' : '') + '" data-act="openFamily" data-id="' + esc(r.familyId) + '">'
+        + '<td>' + (first ? '<span class="pill ' + (r.status === 'inactive' ? 'grey' : 'green') + '">' + esc(r.statusLabel) + '</span>' : '') + '</td>'
+        + '<td class="em">' + (first ? (r.email ? esc(r.email) + (IX.shared.has(r.email) ? ' <span class="warn-t" title="Another family uses this email">⚠</span>' : '') : '<span class="warn-t">no email</span>') : '<span class="muted small">〃</span>') + '</td>'
+        + '<td><b>' + esc(r.studentName || '—') + '</b>' + (r.level ? ' <span class="muted small">' + esc(C.levelLabel(r.level)) + '</span>' : '') + (r.studentStatus && r.studentStatus !== 'active' ? ' <span class="pill grey">' + esc(C.cap(r.studentStatus)) + '</span>' : '') + '</td>'
+        + '<td>' + (first ? esc(r.parentName) + '<div class="small nowrap">' + (r.whatsapp ? '💬 ' + esc(C.displayPhone(r.whatsapp)) : '<span class="warn-t">💬 no WhatsApp</span>') + '</div>' : '<span class="muted small">〃</span>') + '</td>'
+        + '<td>' + (r.school ? esc(r.school) : '<span class="muted">—</span>') + '</td>'
+        + '<td class="nowrap">' + (r.since ? esc(C.prettyDate(r.since)) : '<span class="muted">—</span>') + '</td>'
+        + '<td>' + (r.studentId ? lessonTypeChip(r.lessonType, r.lessonTypeChosen, true) : '') + '</td>'
+        + '<td class="slots">' + (r.slots.length || r.otherClasses.length ? r.slots.map(x => subjChip(x.subject, x.master, x.label.replace(/ · .*$/, '') + ' · ' + (x.subject || 'Class') + (x.mode === 'Online' ? ' 💻' : ''))).join(' ') + r.otherClasses.map(x => ' <span class="subj other">📘 ' + esc(x) + '</span>').join('') : (r.studentId ? '<span class="warn-t">⚠ none</span>' : '')) + '</td>'
+        + '<td title="' + esc(r.paidText ? 'Paid: ' + r.paidText : 'No month paid yet') + '">' + (first ? monthDots(r.months, 4) : '') + '</td>'
+        + '<td class="nowrap">' + (first ? (r.lastPayment ? '<b>' + esc(C.prettyDateShort(r.lastPayment.date)) + '</b>' + (r.lastPayment.amount ? '<div class="small muted">' + money(r.lastPayment.amount) + '</div>' : '') : '<span class="muted">—</span>') : '') + '</td>'
+        + '<td class="nowrap">' + (first ? (r.lastScreenshot ? '<span class="' + (shotThisMonth ? '' : 'muted') + '">📸 ' + esc(C.prettyDateShort(r.lastScreenshot.date)) + '</span><div class="small muted">' + esc(whenText(r.lastScreenshot.date)) + '</div>' : '<span class="muted">—</span>') : '') + '</td>'
+        + '<td class="notes">' + (r.notes ? '<span title="' + esc(r.notes) + '">' + esc(r.notes.length > 70 ? r.notes.slice(0, 68) + '…' : r.notes) + '</span>' : '') + '</td>'
+        + '<td class="r">' + (first ? '<button class="iconbtn" data-act="quickShot" data-id="' + esc(r.familyId) + '" title="Log a payment screenshot received today">📸</button>' : '') + '</td></tr>';
+    }).join('') + '</tbody></table></div>'
+    + '<div class="small muted" style="margin-top:8px;">Months: ✅ paid · ✔︎ marked paid by hand · ⏳ waiting · ⚠️ overdue · 📝 not sent · · no invoice. 📸 logs a PayNow screenshot received today.</div>';
+}
 function famCardHtml(f, period) {
   const st = famStateFor(f, period);
   const owe = familyOwing(f.id);
+  const rec = recordOf(f);
   const kids = f.students.filter(s => s.status !== 'left');
   const rowsById = new Map(IX.rows.filter(r => r.familyId === f.id).map(r => [r.studentId, r]));
   return '<button type="button" class="fam ' + (f.status === 'inactive' ? 'inactive' : '') + '" data-act="openFamily" data-id="' + esc(f.id) + '">'
     + '<div class="fam-top"><div><div class="fam-name">' + esc(f.parentName || 'Unnamed parent') + '</div>'
-    + '<span class="code">' + esc(C.familyReference(f.code)) + '</span></div>' + pill(st) + '</div>'
+    + '<span class="code">' + esc(C.familyReference(f.code)) + '</span>' + (f.status === 'inactive' ? ' <span class="pill grey">Not active</span>' : '') + '</div>' + pill(st) + '</div>'
     + '<div class="fam-kids">' + (kids.length ? kids.map(s => {
       const r = rowsById.get(s.id);
       return '<div class="fam-kid"><span class="kid"><span class="lv">' + esc(C.levelLabel(s.level) || '—') + '</span><b>' + esc(s.name) + '</b></span>'
-        + (s.status === 'paused' ? '<span class="pill grey">Paused</span>' : (r ? classChips(r) : '')) + '</div>';
+        + lessonTypeChip(C.studentLessonType(s, S.schedule), !!s.lessonType)
+        + (s.status === 'paused' ? '<span class="pill grey">Paused</span>' : (r ? classChips(r) : '')) + '</div>'
+        + (s.school ? '<div class="small muted kid-school">🏫 ' + esc(s.school) + (s.startDate ? ' · since ' + esc(C.prettyDate(s.startDate)) : '') + '</div>' : (s.startDate ? '<div class="small muted kid-school">Since ' + esc(C.prettyDate(s.startDate)) + '</div>' : ''));
     }).join('') : '<span class="muted small">No students yet</span>') + '</div>'
+    + '<div class="fam-rec">' + monthDots(rec.months, 4)
+    + '<span>' + (rec.lastPayment ? '💵 ' + esc(C.prettyDateShort(rec.lastPayment.date)) : '<span class="muted">💵 —</span>') + '</span>'
+    + '<span>' + (rec.lastScreenshot ? '📸 ' + esc(C.prettyDateShort(rec.lastScreenshot.date)) : '<span class="muted">📸 —</span>') + '</span></div>'
     + '<div class="fam-foot"><div class="contact">'
     + (C.familyEmails(f).length ? '<span>✉ ' + esc(C.familyEmails(f)[0]) + '</span>' : '<span class="warn-t">✉ no email</span>')
     + (f.whatsapp ? '<span>💬 ' + esc(C.displayPhone(f.whatsapp)) + '</span>' : '<span class="warn-t">💬 no WhatsApp</span>') + '</div>'
@@ -832,49 +922,129 @@ function slotOptionsHtml(selected, level) {
   html += '<option value="custom" ' + (selected === 'custom' ? 'selected' : '') + '>Other — a private arrangement…</option>';
   return html;
 }
+// The slot drop-down: tick as many slots as the child takes (Math on one day,
+// Science on another). It opens in place, so it works the same on a phone.
+function slotPickerHtml(s, si, open) {
+  const ids = C.studentSlotIds(s);
+  const type = s.lessonType;
+  const btn = '<button type="button" class="ms-btn ' + (open ? 'open' : '') + '" data-act="togglePicker" data-s="' + si + '" aria-expanded="' + !!open + '">'
+    + '<span class="ms-val">' + (ids.length ? ids.map(id => { const sl = C.scheduleSlot(S.schedule, id); return subjChip(sl.subject, C.isMaster(sl), C.slotShortLabel(id) + ' · ' + (C.slotHasClass(sl) ? C.levelLabel(sl.level) + ' ' + sl.subject : 'no class')); }).join(' ') : '<span class="muted">Choose slots from the schedule…</span>') + '</span>'
+    + '<span class="ms-caret">▾</span></button>';
+  if (!open) return '<div class="ms">' + btn + '</div>';
+  const groups = C.slotPickerGroups(S.schedule, { selected: ids, level: s.level, lessonType: type, roster: IX.roster });
+  const any = groups.some(g => g.options.some(o => o.has));
+  const pop = '<div class="ms-pop" role="group" aria-label="Slots for ' + esc(s.name || 'this child') + '">'
+    + '<div class="ms-hint">' + (type ? 'Slots that suit <b>' + esc(C.lessonTypeLabel(type)) + '</b> are bright; the rest are faded but can still be ticked.' : 'Pick the type of lesson to see which slots suit it.')
+    + (s.level ? ' ★ = ' + esc(C.levelLabel(s.level)) + '.' : '') + '</div>'
+    + (!any ? '<div class="ms-empty">The schedule has no classes yet. Add them at <a href="../schedule/#admin" target="_blank" rel="noopener">/schedule</a>.</div>' : '')
+    + groups.map(g => {
+      const opts = g.options.filter(o => o.has || o.chosen);
+      if (!opts.length) return '';
+      return '<div class="ms-day"><div class="ms-dayname">' + esc(g.name) + '</div>' + opts.map(o => {
+        const k = o.master ? 'master' : (C.subjectKey(o.subject) || 'other');
+        return '<label class="ms-opt ' + k + (o.fits || o.chosen ? '' : ' dim') + (o.chosen ? ' on' : '') + '">'
+          + '<input type="checkbox" data-ch="pickSlot" data-s="' + si + '" value="' + o.id + '" ' + (o.chosen ? 'checked' : '') + (o.disabled ? ' disabled' : '') + '>'
+          + '<span class="ms-t">' + esc(o.start) + '</span>'
+          + '<span class="ms-ttl">' + (o.levelMatch ? '★ ' : '') + esc(o.title) + '</span>'
+          + '<span class="ms-meta">' + o.modes.map(md => md === 'Online' ? '💻' : '🏫').join('') + ' · ' + C.plural(o.count, 'student')
+          + (o.status === 'full' ? ' · Full' : o.status === 'closed' ? ' · hidden on /schedule' : '') + '</span></label>';
+      }).join('') + '</div>';
+    }).join('')
+    + '<div class="ms-foot"><span class="small muted">' + C.plural(ids.length, 'slot') + ' chosen</span><button type="button" class="btn xs" data-act="togglePicker" data-s="' + si + '">Done</button></div></div>';
+  return '<div class="ms">' + btn + pop + '</div>';
+}
+function emailWarningsKey(f) {
+  return JSON.stringify(C.familyRecordProblems(f, S.families).filter(p => p.field === 'email' || p.field === 'email2').map(p => p.text));
+}
+function paymentRecordHtml(f) {
+  const rec = recordOf(f);
+  const m = S.modal;
+  const shots = rec.screenshots;
+  const shown = m.allShots ? shots : shots.slice(0, 5);
+  const periods = [];
+  for (let i = -6; i <= 1; i++) periods.push(C.addMonths(C.sgMonthKey(), i));
+  const lp = rec.lastPayment;
+  const howLbl = !lp ? '' : lp.source === 'hand' ? 'month marked by hand' : (lp.how === 'manual' || lp.how === 'cash') ? 'recorded by hand' : 'matched from the bank statement';
+  return '<div class="section-title" style="margin-top:22px;">Payment record</div>'
+    + '<div class="rec-sum">'
+    + '<div><span class="lbl">Months paid</span><b>' + (rec.paidText ? esc(rec.paidText) : '<span class="muted">None yet</span>') + '</b></div>'
+    + '<div><span class="lbl">Last payment</span><b>' + (lp ? esc(C.prettyDate(lp.date)) + (lp.amount ? ' · ' + money(lp.amount) : '') : '<span class="muted">None yet</span>') + '</b>' + (lp ? '<small>' + esc(whenText(lp.date)) + (howLbl ? ' · ' + esc(howLbl) : '') + '</small>' : '') + '</div>'
+    + '<div><span class="lbl">Last screenshot</span><b>' + (rec.lastScreenshot ? esc(C.prettyDate(rec.lastScreenshot.date)) : '<span class="muted">None yet</span>') + '</b>' + (rec.lastScreenshot ? '<small>' + esc(whenText(rec.lastScreenshot.date)) + (rec.lastScreenshot.period ? ' · for ' + esc(C.periodLabel(rec.lastScreenshot.period)) : '') + '</small>' : '') + '</div>'
+    + '</div>'
+    + '<div class="months" role="group" aria-label="Months">' + rec.months.map(mo => '<button type="button" class="mo ' + mo.key + (mo.current ? ' cur' : '') + '" data-act="markMonth" data-p="' + mo.period + '" title="' + esc(C.periodLabel(mo.period) + ': ' + C.MONTH_STATE_META[mo.key].label + (mo.handDate ? ' on ' + C.prettyDate(mo.handDate) : '') + (mo.outstanding ? ' · ' + money(mo.outstanding) + ' to pay' : '')) + '">'
+      + '<span class="mo-i">' + C.MONTH_STATE_META[mo.key].icon + '</span><b>' + esc(mo.label) + '</b><small>' + esc(mo.year.slice(2)) + '</small></button>').join('') + '</div>'
+    + '<div class="small muted" style="margin-top:6px;">Months come from paid invoices. Tap a month to mark it paid by hand (cash, or paid before the office), tap again to undo; tap a paid invoice\'s month to open it.</div>'
+    + '<div class="shots-head"><b>📸 Payment screenshots received</b><button type="button" class="btn xs" data-act="addShot">📸 Received today</button></div>'
+    + (shown.length ? '<div class="shots">' + shown.map((x, i) => '<div class="shot-row">'
+      + '<input type="date" value="' + esc(x.date) + '" data-ch="shot" data-i="' + i + '" data-k="date" aria-label="Date received">'
+      + '<select data-ch="shot" data-i="' + i + '" data-k="period" aria-label="For which month"><option value="">For month…</option>' + [...new Set([...periods, x.period].filter(Boolean))].sort().map(p => '<option value="' + p + '" ' + (p === x.period ? 'selected' : '') + '>' + esc(C.periodLabel(p)) + '</option>').join('') + '</select>'
+      + '<input type="text" placeholder="Note (optional)" value="' + esc(x.note) + '" data-in="shot" data-i="' + i + '" data-k="note" data-keep="shot-' + i + '">'
+      + '<button type="button" class="iconbtn" data-act="delShot" data-i="' + i + '" title="Remove">✕</button></div>').join('') + '</div>'
+      + (shots.length > 5 ? '<button type="button" class="linkbtn small" data-act="allShots">' + (m.allShots ? 'Show fewer' : 'Show all ' + shots.length) + '</button>' : '')
+      : '<div class="small muted">None logged yet. When a parent WhatsApps a PayNow screenshot, tap “Received today”.</div>');
+}
 MODALS.family = function (m) {
   const f = m.draft;
   const isNew = !f.id;
   const fld = (k, label, type, extra) => '<div class="field ' + (extra && extra.full ? 'full' : '') + '"><label>' + label + '</label>'
     + (type === 'textarea' ? '<textarea data-in="fam" data-k="' + k + '">' + esc(f[k]) + '</textarea>'
-      : '<input type="' + (type || 'text') + '" value="' + esc(k === 'whatsapp' && /^\d{9,}$/.test(f[k] || '') ? C.displayPhone(f[k]) : f[k]) + '" data-in="fam" data-k="' + k + '" data-keep="fam-' + k + '"' + (extra && extra.ph ? ' placeholder="' + esc(extra.ph) + '"' : '') + '>') + '</div>';
+      : '<input type="' + (type || 'text') + '" value="' + esc(k === 'whatsapp' && /^\d{9,}$/.test(f[k] || '') ? C.displayPhone(f[k]) : f[k]) + '" data-in="fam" data-k="' + k + '" data-keep="fam-' + k + '"' + (extra && extra.ch ? ' data-ch="' + extra.ch + '"' : '') + (extra && extra.ph ? ' placeholder="' + esc(extra.ph) + '"' : '') + '>')
+    + (extra && extra.help ? '<div class="help">' + extra.help + '</div>' : '') + '</div>';
   const inv = f.id ? invoicesOf(f.id) : [];
   const owe = f.id ? familyOwing(f.id) : 0;
+  const problems = C.familyRecordProblems(f, S.families);
+  const emailProblems = problems.filter(p => p.field === 'email' || p.field === 'email2');
+  m.emailKey = emailWarningsKey(f);
   const stud = f.students.map((s, si) => {
     const classes = s.classes.map((c, ci) => {
       const slot = c.custom ? null : C.scheduleSlot(S.schedule, c.slotId);
       const fee = slot ? C.monthlyFeeFor(slot, c.mode, S.schedule) : 0;
+      const modes = slot && c.slotId ? C.slotModes(slot) : ['Physical', 'Online'];
       return '<div class="class-row">'
         + (c.custom ? '<input type="text" placeholder="What is it? e.g. 1-to-1 Science" value="' + esc(c.label) + '" data-in="cls" data-s="' + si + '" data-c="' + ci + '" data-k="label" data-keep="cl-' + si + '-' + ci + '">'
-          : '<select data-ch="clsSlot" data-s="' + si + '" data-c="' + ci + '">' + slotOptionsHtml(c.slotId, s.level) + '</select>')
-        + '<select data-ch="cls" data-s="' + si + '" data-c="' + ci + '" data-k="mode"><option value="Physical" ' + (c.mode === 'Physical' ? 'selected' : '') + '>🏫 Physical</option><option value="Online" ' + (c.mode === 'Online' ? 'selected' : '') + '>💻 Online</option></select>'
-        + '<input type="number" min="0" step="0.01" placeholder="' + (c.custom ? 'Fee per month' : (fee ? 'Schedule ' + money(fee) : 'No fee set')) + '" value="' + esc(c.rate) + '" data-in="cls" data-s="' + si + '" data-c="' + ci + '" data-k="rate" data-keep="cr-' + si + '-' + ci + '" title="Leave blank to use the schedule\'s fee">'
+          : c.slotId ? '<div class="cls-name">' + subjChip(slot.subject, C.isMaster(slot), C.slotShortLabel(c.slotId) + ' · ' + C.slotTitle(slot)) + '</div>'
+            : '<select data-ch="clsSlot" data-s="' + si + '" data-c="' + ci + '">' + slotOptionsHtml(c.slotId, s.level) + '</select>')
+        + '<select data-ch="cls" data-s="' + si + '" data-c="' + ci + '" data-k="mode" aria-label="Physical or online">' + ['Physical', 'Online'].map(md => '<option value="' + md + '" ' + (c.mode === md ? 'selected' : '') + (modes.includes(md) || c.mode === md ? '' : ' disabled') + '>' + (md === 'Online' ? '💻 Online' : '🏫 Physical') + '</option>').join('') + '</select>'
+        + '<input type="number" min="0" step="0.01" placeholder="' + (c.custom ? 'Fee per month' : (fee ? 'Schedule ' + money(fee) : 'No fee set')) + '" value="' + esc(c.rate) + '" data-in="cls" data-s="' + si + '" data-c="' + ci + '" data-k="rate" data-keep="cr-' + si + '-' + ci + '" title="Leave blank to use the schedule\'s fee" aria-label="Monthly fee">'
         + '<button class="iconbtn" data-act="delClass" data-s="' + si + '" data-c="' + ci + '" title="Remove this class">✕</button></div>';
     }).join('');
+    const type = s.lessonType;
+    const guess = C.derivedLessonType(s, S.schedule);
+    const issues = C.lessonTypeIssues(s, S.schedule);
     return '<div class="student-card"><div class="form">'
       + '<div class="field"><label>Student name</label><input type="text" value="' + esc(s.name) + '" data-in="stu" data-s="' + si + '" data-k="name" data-keep="sn-' + si + '"></div>'
       + '<div class="field"><label>Level</label><select data-ch="stu" data-s="' + si + '" data-k="level"><option value="">—</option>' + C.LEVELS.map(l => '<option value="' + l + '" ' + (C.normalizeLevel(s.level) === l ? 'selected' : '') + '>' + C.levelLabel(l) + '</option>').join('') + '</select></div>'
       + '<div class="field"><label>Status</label><select data-ch="stu" data-s="' + si + '" data-k="status">' + [['active', 'Active'], ['paused', 'Paused (not billed)'], ['left', 'Left']].map(([v, l]) => '<option value="' + v + '" ' + (s.status === v ? 'selected' : '') + '>' + l + '</option>').join('') + '</select></div>'
-      + '<div class="field"><label>School <span class="opt">(optional)</span></label><input type="text" value="' + esc(s.school) + '" data-in="stu" data-s="' + si + '" data-k="school" data-keep="ss-' + si + '"></div>'
-      + '<div class="field"><label>Started</label><input type="date" value="' + esc(s.startDate) + '" data-in="stu" data-s="' + si + '" data-k="startDate"></div>'
-      + '<div class="field"><label>Own monthly fee <span class="opt">(optional)</span></label><input type="number" min="0" step="0.01" placeholder="From classes" value="' + esc(s.monthlyFee) + '" data-in="stu" data-s="' + si + '" data-k="monthlyFee" data-keep="sm-' + si + '"></div>'
-      + '</div><div class="section-title" style="margin-top:14px;">Classes</div>' + (classes || '<div class="small muted">Not in a class yet.</div>')
-      + '<div class="actions" style="margin-top:10px;"><button class="btn xs ghost" data-act="addClass" data-s="' + si + '">＋ Add a class</button><button class="btn xs ghost" data-act="addCustom" data-s="' + si + '">＋ Other arrangement</button>'
+      + '<div class="field"><label>Primary school</label><input type="text" value="' + esc(s.school) + '" placeholder="e.g. Nanyang Primary" data-in="stu" data-s="' + si + '" data-k="school" data-keep="ss-' + si + '"></div>'
+      + '<div class="field"><label>With us since</label><input type="date" value="' + esc(s.startDate) + '" data-in="stu" data-s="' + si + '" data-k="startDate"></div>'
+      + '<div class="field"><label>Type of lesson</label><select data-ch="stuType" data-s="' + si + '"><option value="">' + (guess ? 'Not chosen (' + esc(C.lessonTypeLabel(guess)) + ' from classes)' : 'Choose…') + '</option>'
+      + C.LESSON_TYPES.map(t => '<option value="' + t.key + '" ' + (type === t.key ? 'selected' : '') + '>' + t.icon + ' ' + esc(t.label) + '</option>').join('') + '</select></div>'
+      + '</div>'
+      + '<div class="field" style="margin-top:14px;"><label>Slots <span class="opt">(tick more than one if the child takes Math and Science)</span></label>' + slotPickerHtml(s, si, m.picker === si) + '</div>'
+      + (issues.length ? '<div class="lt-issues">' + issues.map(x => '<div>⚠ ' + esc(x) + '</div>').join('') + '</div>' : '')
+      + (classes ? '<div class="section-title" style="margin-top:14px;">Mode and fee</div>' + classes : '')
+      + '<div class="actions" style="margin-top:10px;"><button class="btn xs ghost" data-act="addCustom" data-s="' + si + '">＋ Other arrangement</button>'
       + '<span style="flex:1"></span><button class="btn xs danger" data-act="delStudent" data-s="' + si + '">Remove student</button></div>'
-      + (s.notes ? '<div class="small muted" style="margin-top:8px;">📝 ' + esc(s.notes) + '</div>' : '') + '</div>';
+      + '<div class="form" style="margin-top:12px;grid-template-columns:2fr 1fr;">'
+      + '<div class="field"><label>Notes about ' + esc(C.firstName(s.name) || 'this child') + ' <span class="opt">(optional)</span></label><input type="text" value="' + esc(s.notes) + '" data-in="stu" data-s="' + si + '" data-k="notes" data-keep="sno-' + si + '"></div>'
+      + '<div class="field"><label>Own monthly fee <span class="opt">(optional)</span></label><input type="number" min="0" step="0.01" placeholder="From classes" value="' + esc(s.monthlyFee) + '" data-in="stu" data-s="' + si + '" data-k="monthlyFee" data-keep="sm-' + si + '"></div>'
+      + '</div></div>';
   }).join('');
   const d = f.discount || { kind: '', value: '', label: '' };
   const body = '<div class="split"><div>'
-    + '<div class="section-title">Parent</div><div class="form">'
+    + '<div class="section-title">Family</div><div class="form">'
+    + '<div class="field"><label>Status</label><select data-ch="fam" data-k="status"><option value="active" ' + (f.status === 'active' ? 'selected' : '') + '>✅ Active</option><option value="inactive" ' + (f.status === 'inactive' ? 'selected' : '') + '>💤 Not active (not billed)</option></select></div>'
+    + fld('signUpDate', 'Signed up on', 'date')
+    + fld('email', 'Email <span class="opt">— the family\'s account ID</span>', 'email', { full: true, ch: 'famEmail', ph: 'one email for every child', help: 'Use the same email for all the family\'s children. One email = one family.' })
+    + (emailProblems.length ? '<div class="full">' + emailProblems.map(p => '<div class="fix ' + p.level + '">' + (p.level === 'block' ? '⛔ ' : '✉ ') + esc(p.text)
+      + (p.familyId ? ' <button class="linkbtn" data-act="openOwner" data-id="' + esc(p.familyId) + '">Open that family</button>' : '') + '</div>').join('') + '</div>' : '')
     + fld('parentName', 'Parent name', 'text', { full: true })
-    + fld('email', 'Email', 'email') + fld('email2', 'Second email <span class="opt">(optional)</span>', 'email')
-    + fld('whatsapp', 'WhatsApp number', 'tel', { ph: '9123 4567' }) + fld('signUpDate', 'Date of sign-up', 'date')
-    + fld('address', 'Address', 'textarea', { full: true })
-    + '<div class="field"><label>Status</label><select data-ch="fam" data-k="status"><option value="active" ' + (f.status === 'active' ? 'selected' : '') + '>Active</option><option value="inactive" ' + (f.status === 'inactive' ? 'selected' : '') + '>Inactive (not billed)</option></select></div>'
+    + fld('whatsapp', 'WhatsApp number', 'tel', { ph: '9123 4567' }) + fld('email2', 'Second email <span class="opt">(copied on invoices)</span>', 'email', { ch: 'famEmail' })
+    + fld('address', 'Address <span class="opt">(optional)</span>', 'textarea', { full: true })
     + '<div class="field"><label>Standing discount <span class="opt">(optional)</span></label><div style="display:flex;gap:6px;"><select data-ch="disc" data-k="kind" style="flex:0 0 112px;width:112px;"><option value="">None</option><option value="amount" ' + (d.kind === 'amount' ? 'selected' : '') + '>$ off</option><option value="percent" ' + (d.kind === 'percent' ? 'selected' : '') + '>% off</option></select>'
     + '<input type="number" min="0" step="0.01" value="' + esc(d.value) + '" data-in="disc" data-k="value" data-keep="dv" ' + (d.kind ? '' : 'disabled') + '></div></div>'
-    + (d.kind ? '<div class="field full"><label>Discount name</label><input type="text" value="' + esc(d.label || 'Sibling discount') + '" data-in="disc" data-k="label" data-keep="dl"></div>' : '')
-    + fld('notes', 'Notes <span class="opt">(only you see these)</span>', 'textarea', { full: true }) + '</div>'
+    + (d.kind ? '<div class="field"><label>Discount name</label><input type="text" value="' + esc(d.label || 'Sibling discount') + '" data-in="disc" data-k="label" data-keep="dl"></div>' : '<div></div>')
+    + fld('notes', 'Notes <span class="opt">(anything — only staff see these)</span>', 'textarea', { full: true }) + '</div>'
     + '<div class="section-title" style="margin-top:20px;">PayNow reference</div>'
     + (f.code ? '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span class="code" style="font-size:15px;padding:6px 12px;">' + esc(C.familyReference(f.code)) + '</span>'
       + '<button class="btn xs ghost" data-act="copy" data-text="' + esc(C.familyReference(f.code)) + '">Copy</button><button class="btn xs ghost" data-act="familyQr">📱 QR for any amount</button></div>'
@@ -883,15 +1053,16 @@ MODALS.family = function (m) {
     + (f.credit > 0 ? '<div class="banner green" style="margin-top:14px;"><div class="big">💳</div><div><b>Credit ' + money(f.credit) + '</b>Taken off the next invoice automatically.</div></div>' : '')
     + (f.payerNames && f.payerNames.length ? '<div class="small muted" style="margin-top:10px;">🏦 Bank names seen: ' + f.payerNames.map(p => esc(p.toUpperCase())).join(', ') + '</div>' : '')
     + '</div><div>'
-    + '<div class="section-title">Students</div>' + stud
+    + '<div class="section-title">Children</div>' + stud
     + '<button class="btn ghost sm" data-act="addStudent">＋ Add another child</button>'
+    + paymentRecordHtml(f)
     + (inv.length ? '<div class="section-title" style="margin-top:22px;">Invoices' + (owe > 0 ? ' · owes ' + money(owe) : '') + '</div><div class="history">'
       + inv.slice(0, 8).map(i => { const st = stateOf(i); return '<div><time>' + esc(C.periodLabel(i.period)) + '</time><span>' + money(i.total) + ' ' + pill(st) + ' <button class="linkbtn small" data-act="openInvoice" data-id="' + esc(i.id) + '">open</button></span></div>'; }).join('') + '</div>' : '')
     + '</div></div>';
   return {
     size: 'wide',
     title: isNew ? 'New family' : esc(f.parentName || 'Family'),
-    sub: isNew ? 'Parent details, then each child and their classes. Fees come from the schedule.' : esc(C.plural(f.students.filter(s => s.status === 'active').length, 'active student')),
+    sub: isNew ? 'One record per confirmed sign-up: the family\'s email, then each child, their type of lesson and slots.' : esc(C.familyStatusLabel(f.status) + ' · ' + C.plural(f.students.filter(s => s.status === 'active').length, 'active student') + (f.email ? ' · ' + f.email : '')),
     body,
     foot: (isNew ? '' : '<button class="btn danger left" data-act="deleteFamily">Delete family</button>')
       + (f.whatsapp ? '<a class="btn wa" href="' + esc(C.whatsappLink(f.whatsapp, 'Hi ' + (f.parentName || ''), !TOUCH)) + '" target="polymath_whatsapp" rel="noopener" data-act="noop">💬 WhatsApp</a>' : '')
@@ -1373,9 +1544,11 @@ function stripLocal(f) {
 async function saveFamily() {
   if (!requireProtected()) return;
   const draft = C.normalizeFamily(S.modal.draft);
-  if (!draft.parentName) { toast('Type the parent\'s name first.', 'err'); return; }
-  if (draft.email && !C.isEmail(draft.email)) { toast('That email address does not look right.', 'err'); return; }
   draft.students = draft.students.filter(s => s.name);
+  const problems = C.familyRecordProblems(draft, S.families);
+  const block = problems.find(p => p.level === 'block');
+  if (block) { S.modal.picker = null; renderModal(); toast(block.text, 'err'); return; }
+  if (!draft.id && !draft.email && !confirm('This family has no email yet. The email is the family\'s account ID with the centre. Save without one?')) return;
   draft.students.forEach(s => { if (!s.id) s.id = sid(); });
   const btn = document.querySelector('[data-act="saveFamily"]');
   busy(btn, true);
@@ -1904,6 +2077,52 @@ const ACT = {
   newFamily() { openModal({ type: 'family', draft: newFamilyDraft() }); },
   openFamily(el) { const f = famById(el.dataset.id); if (!f) return; S.drawer = null; renderDrawer(); openModal({ type: 'family', draft: clone(Object.assign({}, f, { _raw: undefined })) }); },
   famFilter(el) { S.ui.famFilter = el.dataset.k; render(); },
+  famType(el) { S.ui.famType = el.dataset.k; render(); },
+  famView(el) { S.ui.famView = el.dataset.k === 'table' ? 'table' : 'cards'; rememberFamView(S.ui.famView); render(); },
+  exportRecords() {
+    const rows = recordRows(familyList());
+    if (!rows.length) { toast('Nothing to download — clear a filter first.', 'err'); return; }
+    downloadText(C.familyRecordCsv(rows), 'polymath-families-' + today() + '.csv', 'text/csv');
+  },
+  // The family that already uses this email: leave this (unsaved) one and open it.
+  openOwner(el) {
+    const f = famById(el.dataset.id); if (!f) return;
+    const draft = S.modal && S.modal.draft;
+    const unsaved = draft && !draft.id && draft.students.some(x => x.name);
+    if (unsaved && !confirm('Leave this new family without saving and open ' + (f.parentName || 'that family') + '? (Add the child there instead.)')) return;
+    openModal({ type: 'family', draft: clone(Object.assign({}, f, { _raw: undefined })) });
+  },
+  togglePicker(el) { const si = +el.dataset.s; S.modal.picker = S.modal.picker === si ? null : si; renderModal(); },
+  markMonth(el) {
+    const m = S.modal, f = m.draft, period = el.dataset.p;
+    const mo = recordOf(f).months.find(x => x.period === period);
+    if (!mo) return;
+    if (mo.key === 'paid' && mo.invoiceId) { openModal({ type: 'invoice', id: mo.invoiceId, back: m }); refreshMailState(mo.invoiceId); return; }
+    if (mo.key !== 'hand' && ['waiting', 'overdue', 'part', 'draft'].includes(mo.key)
+        && !confirm(C.periodLabel(period) + ' has an invoice that is not paid (' + money(mo.outstanding) + '). Mark the month paid by hand anyway?\n\nTo record the money against the invoice, use 💵 Record a payment instead.')) return;
+    const next = C.togglePaidMonth(f, period, { date: today(), by: S.user.email });
+    f.paidMonths = next.paidMonths;
+    renderModal();
+  },
+  addShot() {
+    const f = S.modal.draft;
+    f.screenshots = C.normalizeScreenshots([C.newScreenshot({ by: S.user.email }), ...(f.screenshots || [])]);
+    renderModal();
+    toast('Screenshot logged for today — press Save to keep it.', 'ok');
+  },
+  delShot(el) { const f = S.modal.draft; const list = C.normalizeScreenshots(f.screenshots); list.splice(+el.dataset.i, 1); f.screenshots = list; renderModal(); },
+  allShots() { S.modal.allShots = !S.modal.allShots; renderModal(); },
+  // From the table: a parent has just sent a screenshot. Saved at once.
+  async quickShot(el) {
+    if (!requireProtected()) return;
+    const f = famById(el.dataset.id); if (!f) return;
+    busy(el, true);
+    try {
+      const entry = C.newScreenshot({ by: S.user.email });
+      await famRef(f.id).update({ screenshots: C.normalizeScreenshots([entry, ...(f.screenshots || [])]), updatedAt: ts(), updatedBy: S.user.email });
+      toast('📸 Screenshot from ' + (f.parentName || 'the family') + ' logged for today', 'ok');
+    } catch (e) { fail('Could not log the screenshot', e); } finally { busy(el, false); }
+  },
   addStudent() { S.modal.draft.students.push(newStudent()); renderModal(); },
   delStudent(el) { const s = S.modal.draft.students[+el.dataset.s]; if (s.name && !confirm('Remove ' + s.name + '? (To keep their history, set Status to Left instead.)')) return; S.modal.draft.students.splice(+el.dataset.s, 1); renderModal(); },
   addClass(el) { S.modal.draft.students[+el.dataset.s].classes.push({ slotId: '', mode: 'Physical', rate: '', custom: false, label: '' }); renderModal(); },
@@ -2272,6 +2491,8 @@ const INP = {
   stu(el) { S.modal.draft.students[+el.dataset.s][el.dataset.k] = el.value; },
   cls(el) { S.modal.draft.students[+el.dataset.s].classes[+el.dataset.c][el.dataset.k] = el.value; },
   disc(el) { const d = S.modal.draft.discount || (S.modal.draft.discount = { kind: '', value: '', label: 'Sibling discount' }); d[el.dataset.k] = el.value; },
+  // A screenshot's note: typed straight into the (already sorted) list.
+  shot(el) { const list = S.modal.draft.screenshots || []; const x = list[+el.dataset.i]; if (x) x[el.dataset.k] = el.value; },
   qrAmount(el) { S.modal.amount = el.value; renderModal(); },
   importPaste(el) { S.modal.paste = el.value; const b = document.querySelector('[data-act="importPreview"]'); if (b) b.disabled = !el.value.trim(); },
   // The invoice editor: every keystroke updates the preview (focus is kept).
@@ -2286,6 +2507,23 @@ const CHG = {
   fam(el) { S.modal.draft[el.dataset.k] = el.value; renderModal(); },
   stu(el) { S.modal.draft.students[+el.dataset.s][el.dataset.k] = el.value; renderModal(); },
   cls(el) { S.modal.draft.students[+el.dataset.s].classes[+el.dataset.c][el.dataset.k] = el.value; renderModal(); },
+  // Re-draw only when the email's warnings change, so a click on Save that
+  // caused this change event is not lost to a re-drawn button.
+  famEmail(el) {
+    S.modal.draft[el.dataset.k] = el.value;
+    if (emailWarningsKey(S.modal.draft) !== S.modal.emailKey) renderModal();
+  },
+  stuType(el) { const st = S.modal.draft.students; st[+el.dataset.s] = C.applyLessonType(st[+el.dataset.s], el.value, S.schedule); renderModal(); },
+  pickSlot(el) { const st = S.modal.draft.students; st[+el.dataset.s] = C.toggleStudentSlot(st[+el.dataset.s], el.value, S.schedule); renderModal(); },
+  shot(el) {
+    const f = S.modal.draft;
+    const list = C.normalizeScreenshots(f.screenshots);
+    const x = list[+el.dataset.i]; if (!x) return;
+    if (el.dataset.k === 'date' && !C.isDayKey(el.value)) { renderModal(); return; }
+    x[el.dataset.k] = el.value;
+    f.screenshots = C.normalizeScreenshots(list);
+    renderModal();
+  },
   clsSlot(el) {
     const c = S.modal.draft.students[+el.dataset.s].classes[+el.dataset.c];
     if (el.value === 'custom') { c.custom = true; c.slotId = ''; }

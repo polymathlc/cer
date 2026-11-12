@@ -193,8 +193,12 @@ try {
   await page.click('text=Chen Li');
   await page.waitForSelector('.modal .student-card');
   await shot(page, '04-family-editor');
-  await page.click('.modal [data-act="addClass"]');
-  await page.selectOption('.modal .class-row select[data-ch="clsSlot"]', 'SAT-2');
+  // The slot drop-down: open it, tick the Master Class.
+  await page.click('.modal [data-act="togglePicker"][data-s="0"]');
+  await page.waitForSelector('.modal .ms-pop');
+  assert.ok(await page.locator('.modal .ms-opt input[value="MON-1"]').count() === 0, 'a slot with no class is not offered');
+  await page.check('.modal .ms-opt input[value="SAT-2"]');
+  await page.waitForSelector('.modal .class-row .cls-name');
   await page.fill('.modal input[data-in="fam"][data-k="address"], .modal textarea[data-in="fam"][data-k="address"]', '1 Clementi Road, Singapore 129000');
   await page.click('.modal [data-act="saveFamily"]');
   await page.waitForSelector('#modal.show', { state: 'detached' });
@@ -202,6 +206,7 @@ try {
   const chen = docsIn(all, 'officeFamilies').find(f => f.parentName === 'Chen Li');
   assert.deepEqual(chen.students[0].classes.map(c => c.slotId), ['SAT-2']);
   assert.equal(chen.address, '1 Clementi Road, Singapore 129000');
+
 
   // The timetable counts students per class.
   await page.click('#tabs [data-view="timetable"]');
@@ -537,6 +542,86 @@ try {
   await page.keyboard.press('Escape');
   await page.click('#tabs [data-view="settings"]');
 
+  // ── Family records: the Lim family, two children, one email ──
+  await page.click('#tabs [data-view="families"]');
+  await page.click('text=Lim Wei Ming');
+  await page.waitForSelector('.modal .student-card');
+  const limCard = n => page.locator('.modal .student-card').nth(n);
+  await limCard(0).locator('input[data-k="school"]').fill('Nanyang Primary');
+  await limCard(0).locator('select[data-ch="stuType"]').selectOption('physical');
+  await page.click('.modal [data-act="togglePicker"][data-s="0"]');
+  await page.waitForSelector('.modal .ms-pop');
+  assert.ok(await page.locator('.modal .ms-opt.dim input[value="WED-1"]').count() === 1, 'an online-only slot is faded for physical regular');
+  await page.check('.modal .ms-opt input[value="SAT-1"]');                 // Science as well as Math
+  await page.waitForSelector('.modal .ms-opt.on input[value="SAT-1"]');
+  await page.click('.modal .ms-foot [data-act="togglePicker"]');
+  await limCard(0).locator('input[data-k="notes"]').fill('Weak in fractions');
+  await limCard(1).locator('select[data-ch="stuType"]').selectOption('online');
+  await limCard(1).locator('input[data-k="school"]').fill('Rosyth School');
+  await page.click('.modal [data-act="addShot"]');
+  await page.waitForSelector('.modal .shot-row');
+  await page.click('.modal .mo[data-p="2026-10"]');                         // October paid in cash, by hand
+  await page.waitForSelector('.modal .mo.hand[data-p="2026-10"]');
+  assert.match(await page.locator('.modal .rec-sum').innerText(), /Oct/);
+  assert.match(await page.locator('.modal .rec-sum').innerText(), /3 Nov 2026/);
+  await shot(page, '04b-family-record');
+  await page.click('.modal [data-act="saveFamily"]');
+  await page.waitForSelector('#modal.show', { state: 'detached' });
+  let all2 = await store(page);
+  const limSaved = docsIn(all2, 'officeFamilies').find(f => f.parentName === 'Lim Wei Ming');
+  assert.deepEqual(limSaved.students.map(s => [s.school, s.lessonType]), [['Nanyang Primary', 'physical'], ['Rosyth School', 'online']]);
+  assert.deepEqual(limSaved.students[0].classes.map(c => c.slotId + ':' + c.mode), ['TUE-3:Physical', 'SAT-1:Physical'], 'two slots, Math and Science');
+  assert.equal(limSaved.students[0].notes, 'Weak in fractions');
+  assert.deepEqual(limSaved.paidMonths.map(x => x.period + '@' + x.date), ['2026-10@2026-11-03']);
+  assert.deepEqual(limSaved.screenshots.map(x => x.date + ':' + x.period), ['2026-11-03:2026-11']);
+
+  // One email, one family: a new family with Lim's email is refused, with a way to the right family.
+  await page.click('[data-act="newFamily"]');
+  await page.fill('.modal input[data-k="parentName"]', 'Lim Again');
+  await page.fill('.modal input[data-k="email"]', 'LIM@example.com');
+  await page.locator('.modal input[data-k="email"]').blur();
+  await page.waitForSelector('.modal .fix.block');
+  assert.match(await page.locator('.modal .fix.block').innerText(), /already the account email of Lim Wei Ming/);
+  await page.fill('.modal .student-card input[data-k="name"]', 'Lim Third');
+  await page.click('.modal [data-act="saveFamily"]');
+  await settle(page, 300);
+  assert.equal(docsIn(await store(page), 'officeFamilies').length, 6, 'a second family with the same email is not saved');
+  await shot(page, '04c-same-email');
+  await page.click('.modal [data-act="openOwner"]');
+  await page.waitForSelector('.modal-head h2:has-text("Lim Wei Ming")');
+  assert.equal(await page.locator('.modal .student-card').count(), 2, 'the right family is open');
+  await page.keyboard.press('Escape');
+
+  // The records table: one row per child, every field; 📸 logs a screenshot at once; CSV.
+  await page.click('[data-act="famView"][data-k="table"]');
+  await page.waitForSelector('table.rec');
+  const recText = await page.locator('table.rec').innerText();
+  for (const want of ['Email (account ID)', 'Primary school', 'Type of lesson', 'Months paid', 'Last screenshot', 'Nanyang Primary', 'Physical regular', 'lim@example.com'])
+    assert.ok(recText.toLowerCase().includes(want.toLowerCase()), 'the table shows ' + want);
+  assert.equal(await page.locator('table.rec tbody tr').count(), 7, 'seven children');
+  await shot(page, '04d-family-table');
+  const tanRow = page.locator('table.rec tbody tr', { hasText: 'Tan Jun Wei' });
+  await tanRow.locator('[data-act="quickShot"]').click();
+  await settle(page, 300);
+  const tanSaved = docsIn(await store(page), 'officeFamilies').find(f => f.parentName === 'Tan Mei Ling');
+  assert.equal((tanSaved.screenshots || []).length, 1, '📸 saves straight away');
+  assert.equal(tanSaved.screenshots[0].date, '2026-11-03');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('[data-act="exportRecords"]')]);
+  const recCsvPath = join(OUT, 'families.csv');
+  await dl.saveAs(recCsvPath);
+  const csvText = readFileSync(recCsvPath, 'utf8');
+  assert.ok(csvText.startsWith(C.FAMILY_RECORD_HEADERS.join(',')), 'the CSV has the record headings');
+  assert.ok(csvText.includes('Nanyang Primary') && csvText.includes('Online regular'));
+  // Filter by type of lesson.
+  await page.click('[data-act="famType"][data-k="online"]');
+  await settle(page);
+  assert.ok(await page.locator('table.rec tbody tr').count() >= 2);
+  assert.ok(!(await page.locator('table.rec').innerText()).includes('Lim Kai'), 'only online children');
+  await page.click('[data-act="famType"][data-k=""]');
+  await page.click('[data-act="famView"][data-k="cards"]');
+  await page.waitForSelector('.fam-grid');
+  await page.click('#tabs [data-view="settings"]');
+
   // An office whose rules are NOT published refuses to save.
   lockStatus = 404;
   await page.click('[data-act="recheckLock"]');
@@ -563,6 +648,19 @@ try {
   assert.ok(await page.evaluate(() => { const b = document.getElementById('modal-box'); return b.scrollWidth <= b.clientWidth + 1; }), 'the invoice editor fits a phone');
   await shot(page, '19b-phone-custom-editor');
   await page.keyboard.press('Escape');
+  await page.click('#tabs [data-view="families"]');
+  await page.click('text=Lim Wei Ming');
+  await page.waitForSelector('.modal .student-card');
+  await page.click('.modal [data-act="togglePicker"][data-s="0"]');
+  await page.waitForSelector('.modal .ms-pop');
+  assert.ok(await page.evaluate(() => { const b = document.getElementById('modal-box'); return b.scrollWidth <= b.clientWidth + 1; }), 'the family record fits a phone');
+  await shot(page, '19c-phone-family');
+  await page.keyboard.press('Escape');
+  await page.click('[data-act="famView"][data-k="table"]');
+  await settle(page);
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'the records table scrolls inside itself on a phone');
+  await shot(page, '19d-phone-family-table');
+  await page.click('[data-act="famView"][data-k="cards"]');
   await page.click('#tabs [data-view="home"]');
   await settle(page);
   await shot(page, '20-phone-home');
