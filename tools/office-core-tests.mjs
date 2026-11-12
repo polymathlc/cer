@@ -649,3 +649,214 @@ test('custom invoices in words: the email, the reminder, WhatsApp, the parent\'s
   assert.equal(m.subject, 'Polymath tuition fees — November 2026 ($220.00)');
   assert.ok(m.html.includes('Jun\'s tuition fees for <b>November 2026</b>'));
 });
+
+/* ─────────── 9. Family records ─────────── */
+const REC_SCHEDULE = {
+  monthlyFee: 220, monthlyFeeOnline: 180, masterMonthlyFee: 320,
+  slots: {
+    'TUE-3': { level: 'P6', subject: 'Math', mode: 'Physical', status: 'open', type: 'regular' },
+    'WED-1': { level: 'P4', subject: 'Math', mode: 'Online', status: 'open', type: 'regular' },
+    'FRI-2': { level: 'P5', subject: 'Math', mode: 'Both', status: 'open', type: 'regular' },
+    'SAT-1': { level: 'P5', subject: 'Science', mode: 'Both', status: 'open', type: 'regular' },
+    'SAT-2': { level: 'P6', subject: 'Science', mode: 'Physical', status: 'full', type: 'master' }
+  }
+};
+
+test('older records need no migration: new fields default, lesson type is read from the classes', () => {
+  const old = C.normalizeFamily({ id: 'f1', parentName: 'Tan', email: ' Tan@Example.com ', students: [
+    { id: 's1', name: 'Jun', classes: [{ slotId: 'FRI-2', mode: 'Online' }, { slotId: 'SAT-1', mode: 'Online' }] },
+    { id: 's2', name: 'Mei', classes: [{ slotId: 'SAT-2', mode: 'Physical' }, { slotId: 'FRI-2', mode: 'Physical' }] },
+    { id: 's3', name: 'Kai', classes: [{ slotId: 'FRI-2', mode: 'Physical' }, { slotId: 'SAT-1', mode: 'Online' }] },
+    { id: 's4', name: 'New', classes: [] }
+  ] });
+  assert.equal(old.email, 'tan@example.com');
+  assert.deepEqual(old.paidMonths, []);
+  assert.deepEqual(old.screenshots, []);
+  assert.deepEqual(old.students.map(s => s.lessonType), ['', '', '', '']);
+  assert.deepEqual(old.students.map(s => C.studentLessonType(s, REC_SCHEDULE)), ['online', 'master', 'physical', '']);
+  const chosen = C.normalizeStudent({ name: 'X', lessonType: 'master', classes: [{ slotId: 'FRI-2', mode: 'Online' }] });
+  assert.equal(C.studentLessonType(chosen, REC_SCHEDULE), 'master', 'a chosen type wins');
+  assert.equal(C.normalizeStudent({ lessonType: 'weekend' }).lessonType, '', 'an unknown type is dropped');
+  assert.equal(C.normalizeStudent({ startDate: '3 Nov 2026' }).startDate, '2026-11-03', 'a typed start date is read');
+  assert.deepEqual(C.LESSON_TYPES.map(t => t.label), ['Online regular', 'Physical regular', 'Masterclass']);
+  assert.equal(C.familyStatusLabel('inactive'), 'Not active');
+  assert.equal(C.familyStatusLabel('active'), 'Active');
+});
+
+test('slots: the picker lists the schedule, marks what suits the child, and ticks more than one', () => {
+  const groups = C.slotPickerGroups(REC_SCHEDULE, { selected: ['FRI-2'], level: 'P5', lessonType: 'online', roster: new Map([['FRI-2', [1, 2, 3]]]) });
+  assert.deepEqual(groups.map(g => g.code), ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']);
+  const opt = id => groups.flatMap(g => g.options).find(o => o.id === id);
+  assert.equal(opt('FRI-2').chosen, true);
+  assert.equal(opt('FRI-2').count, 3);
+  assert.equal(opt('FRI-2').levelMatch, true);
+  assert.equal(opt('TUE-3').fits, false, 'physical-only does not suit online');
+  assert.equal(opt('WED-1').fits, true);
+  assert.equal(opt('SAT-2').fits, false, 'a Master Class does not suit online regular');
+  assert.equal(opt('MON-1').has, false);
+  assert.equal(opt('MON-1').disabled, true, 'an empty slot cannot be ticked');
+  // Ticking Math AND Science: two classes, in the lesson type's mode.
+  let kid = C.normalizeStudent({ id: 's', name: 'Jun', level: 'P5', lessonType: 'online', classes: [] });
+  kid = C.toggleStudentSlot(kid, 'FRI-2', REC_SCHEDULE);
+  kid = C.toggleStudentSlot(kid, 'SAT-1', REC_SCHEDULE);
+  assert.deepEqual(kid.classes.map(c => c.slotId + ':' + c.mode), ['FRI-2:Online', 'SAT-1:Online']);
+  assert.deepEqual(C.studentSlotIds(kid), ['FRI-2', 'SAT-1']);
+  kid = C.toggleStudentSlot(kid, 'FRI-2', REC_SCHEDULE);
+  assert.deepEqual(C.studentSlotIds(kid), ['SAT-1'], 'ticking again takes it off');
+  assert.deepEqual(C.studentSlotIds(C.toggleStudentSlot(kid, 'MON-1', REC_SCHEDULE)), ['SAT-1'], 'a slot with no class is not added');
+  // A blank row from "Add a class" is filled rather than left behind.
+  const withBlank = C.toggleStudentSlot({ name: 'A', lessonType: 'physical', classes: [{ slotId: '', mode: 'Online', rate: '200' }] }, 'TUE-3', REC_SCHEDULE);
+  assert.deepEqual(withBlank.classes, [{ slotId: 'TUE-3', mode: 'Physical', rate: '200', custom: false, label: '' }]);
+  // The original is never changed.
+  const before = JSON.stringify(kid);
+  C.toggleStudentSlot(kid, 'WED-1', REC_SCHEDULE);
+  assert.equal(JSON.stringify(kid), before);
+  assert.equal(C.slotChoiceLabel(REC_SCHEDULE, 'SAT-2'), 'Sat 11:00am · Master Class · P6 Science');
+});
+
+test('type of lesson: changing it moves classes to its mode, and mismatches are pointed out', () => {
+  const kid = { name: 'Jun', lessonType: '', classes: [{ slotId: 'FRI-2', mode: 'Online' }, { slotId: 'WED-1', mode: 'Online' }, { custom: true, label: '1-to-1', mode: 'Online' }] };
+  const phys = C.applyLessonType(kid, 'physical', REC_SCHEDULE);
+  assert.deepEqual(phys.classes.map(c => c.mode), ['Physical', 'Online', 'Physical'], 'WED-1 runs online only, so it stays');
+  assert.deepEqual(C.lessonTypeIssues(phys, REC_SCHEDULE), ['Wed 3:00pm runs online only, but the type of lesson is Physical regular.']);
+  assert.equal(kid.classes[0].mode, 'Online', 'the original is untouched');
+  const master = C.applyLessonType({ name: 'M', classes: [{ slotId: 'FRI-2', mode: 'Online' }] }, 'master', REC_SCHEDULE);
+  assert.deepEqual(C.lessonTypeIssues(master, REC_SCHEDULE), ['Fri 5:00pm is a regular class, but the type of lesson is Masterclass.']);
+  const online = C.applyLessonType({ name: 'O', classes: [{ slotId: 'SAT-2', mode: 'Physical' }] }, 'online', REC_SCHEDULE);
+  assert.deepEqual(C.lessonTypeIssues(online, REC_SCHEDULE), ['Sat 11:00am is a Master Class, but the type of lesson is Online regular.']);
+  assert.deepEqual(C.lessonTypeIssues(C.applyLessonType(kid, '', REC_SCHEDULE), REC_SCHEDULE), [], 'no type, no complaint');
+  assert.equal(C.modeForLessonType(REC_SCHEDULE.slots['TUE-3'], 'online'), 'Physical', 'a slot that only runs physical stays physical');
+  assert.equal(C.slotFitsLessonType(C.scheduleSlot(REC_SCHEDULE, 'SAT-2'), 'master'), true);
+  assert.equal(C.slotFitsLessonType(C.scheduleSlot(REC_SCHEDULE, 'SAT-2'), 'physical'), false);
+  assert.equal(C.slotFitsLessonType(C.scheduleSlot(REC_SCHEDULE, 'MON-1'), ''), false, 'no class, no fit');
+});
+
+test('the email is the account ID: one email, one family', () => {
+  const fams = [
+    { id: 'a', parentName: 'Tan', email: 'tan@example.com', students: [{ name: 'Jun' }] },
+    { id: 'b', parentName: 'Lim', email: 'lim@example.com', email2: 'TAN@example.com', students: [{ name: 'Kai' }] },
+    { id: 'c', parentName: 'Wong', email: '', students: [{ name: 'Mei' }] }
+  ];
+  assert.equal(C.emailOwner(fams, ' TAN@example.com ', 'z').id, 'a');
+  assert.equal(C.emailOwner(fams, 'tan@example.com', 'a').id, 'b', 'its own family is skipped, the second email counts');
+  assert.equal(C.emailOwner(fams, 'nobody@example.com'), null);
+  assert.equal(C.emailOwner(fams, 'not an email'), null);
+  const shared = C.sharedEmails(fams);
+  assert.deepEqual([...shared.keys()], ['tan@example.com']);
+  assert.deepEqual(shared.get('tan@example.com').map(f => f.id), ['a', 'b']);
+  const dup = C.familyRecordProblems({ id: '', parentName: 'Tan again', email: 'tan@example.com', students: [{ name: 'Ah Boy' }] }, fams);
+  assert.equal(dup[0].level, 'block');
+  assert.equal(dup[0].familyId, 'a');
+  assert.match(dup[0].text, /already the account email of Tan/);
+  const none = C.familyRecordProblems({ parentName: 'X', students: [] }, fams);
+  assert.deepEqual(none.map(p => p.level + ':' + p.field), ['warn:email', 'warn:whatsapp', 'warn:students']);
+  assert.deepEqual(C.familyRecordProblems({ parentName: '', email: 'bad' }, []).filter(p => p.level === 'block').map(p => p.field), ['parentName', 'email']);
+  const twins = C.familyRecordProblems({ parentName: 'P', email: 'p@example.com', whatsapp: '91234567', students: [{ name: 'Ann' }, { name: 'ann ' }] }, []);
+  assert.deepEqual(twins.map(p => p.text), ['Two children have the same name.']);
+  assert.deepEqual(C.familyRecordProblems({ parentName: 'P', email: 'p@example.com', whatsapp: '91234567', students: [{ name: 'Ann' }] }, fams), [], 'a clean record has no problems');
+});
+
+test('payment record: months paid, last payment and last screenshot', () => {
+  const fam = { id: 'f', parentName: 'Tan', students: [{ name: 'Jun' }],
+    paidMonths: [{ period: '2026-07', date: '2026-07-04', amount: 220 }, '2026-06', { period: 'bad' }, { period: '2026-07', date: '2026-07-05', amount: 220 }],
+    screenshots: [{ date: '2026-11-02', period: '2026-11' }, '2026-10-03', { date: 'nope' }, { date: '2026-11-02', period: '2026-11', at: 5, note: 'second' }] };
+  const n = C.normalizeFamily(fam);
+  assert.deepEqual(n.paidMonths.map(p => p.period + '@' + p.date), ['2026-06@', '2026-07@2026-07-05'], 'one entry per month, last wins');
+  assert.deepEqual(n.screenshots.map(x => x.date + (x.note ? ':' + x.note : '')), ['2026-11-02:second', '2026-11-02', '2026-10-03']);
+  const invoices = [
+    { id: 'f_2026-08', familyId: 'f', period: '2026-08', total: 220, paid: 220, sentAt: 1, payments: [{ paymentId: 'p1', amount: 220, date: '2026-08-06', how: 'reference', at: 1 }] },
+    { id: 'f_2026-09', familyId: 'f', period: '2026-09', total: 220, paid: 220, sentAt: 1, payments: [{ paymentId: 'p2', amount: 120, date: '2026-09-20', how: 'reference', at: 2 }] },
+    { id: 'f_2026-10', familyId: 'f', period: '2026-10', total: 220, paid: 100, sentAt: 1, dueDate: '2026-10-08', payments: [{ paymentId: 'p2', amount: 100, date: '2026-09-20', how: 'reference', at: 2 }] },
+    { id: 'f_2026-11', familyId: 'f', period: '2026-11', total: 220, paid: 0, sentAt: 1, dueDate: '2026-11-20' },
+    { id: 'custom_ABCDE', familyId: 'f', period: '2026-11', custom: true, total: 150, paid: 150, payments: [{ paymentId: 'direct-9', amount: 150, date: '2026-11-04', how: 'manual', at: 9 }] },
+    { id: 'g_2026-11', familyId: 'g', period: '2026-11', total: 220, paid: 220 },
+    { id: 'f_2026-05', familyId: 'f', period: '2026-05', total: 220, paid: 0, status: 'void' }
+  ];
+  const payments = [{ id: 'p2', familyId: 'f', date: '2026-09-20', amount: 220 }, { id: 'p3', familyId: 'f', date: '2026-08-30', amount: 50, how: 'manual' }, { id: 'px', familyId: 'g', date: '2026-11-11', amount: 5 }];
+  const rec = C.familyPaymentRecord(fam, invoices, payments, { today: '2026-11-12', months: 6 });
+  assert.deepEqual(rec.paidPeriods, ['2026-06', '2026-07', '2026-08', '2026-09'], 'a custom invoice never pays a month');
+  assert.equal(rec.paidText, 'Jun, Jul, Aug, Sep 2026');
+  assert.equal(rec.thisMonthPaid, false);
+  assert.deepEqual(rec.months.map(m => m.label + ':' + m.key), ['Jun:hand', 'Jul:hand', 'Aug:paid', 'Sep:paid', 'Oct:overdue', 'Nov:waiting']);
+  assert.equal(rec.months.at(-1).current, true);
+  assert.equal(rec.months.find(m => m.period === '2026-10').outstanding, 120);
+  assert.equal(rec.lastPayment.date, '2026-11-04', 'the custom invoice payment is still the last payment');
+  assert.equal(rec.lastPayment.amount, 150);
+  const p2 = rec.payments.find(p => p.paymentId === 'p2');
+  assert.equal(p2.amount, 220, 'one payment over two invoices is one payment');
+  assert.deepEqual(p2.periods.sort(), ['2026-09', '2026-10']);
+  assert.ok(rec.payments.some(p => p.paymentId === 'p3' && p.source === 'payment'), 'a payment kept as credit still counts');
+  assert.ok(!rec.payments.some(p => p.paymentId === 'px'), 'another family\'s payment never counts');
+  assert.equal(rec.lastScreenshot.date, '2026-11-02');
+  assert.equal(rec.screenshotDaysAgo, 10);
+  assert.equal(rec.paymentDaysAgo, 8);
+  // Paid ahead: the window stretches to a later month.
+  const ahead = C.familyPaymentRecord(Object.assign({}, fam, { paidMonths: ['2027-01'] }), [], [], { today: '2026-11-12', months: 2 });
+  assert.deepEqual(ahead.months.map(m => m.period), ['2026-10', '2026-11', '2026-12', '2027-01']);
+  assert.equal(ahead.paidText, 'Jan 2027');
+  // An unpaid invoice month marked by hand counts as paid.
+  const handOver = C.familyPaymentRecord(Object.assign({}, fam, { paidMonths: ['2026-11'] }), invoices, [], { today: '2026-11-12', months: 1 });
+  assert.equal(handOver.months[0].key, 'hand');
+  assert.equal(handOver.thisMonthPaid, true);
+  // An empty record.
+  const empty = C.familyPaymentRecord({ id: 'z' }, invoices, payments, { today: '2026-11-12' });
+  assert.equal(empty.months.length, 12);
+  assert.ok(empty.months.every(m => m.key === 'none'));
+  assert.equal(empty.lastPayment, null);
+  assert.equal(empty.lastScreenshot, null);
+  assert.equal(empty.paidText, '');
+});
+
+test('marking months by hand and logging screenshots', () => {
+  let f = { id: 'f', paidMonths: [] };
+  f = C.togglePaidMonth(f, '2026-10', { date: '2026-11-01', by: 'admin@polymathlc.com.sg' });
+  f = C.togglePaidMonth(f, '2026-09');
+  assert.deepEqual(f.paidMonths.map(p => p.period), ['2026-09', '2026-10']);
+  assert.equal(f.paidMonths[1].date, '2026-11-01');
+  f = C.togglePaidMonth(f, '2026-10');
+  assert.deepEqual(f.paidMonths.map(p => p.period), ['2026-09'], 'a second tap takes it off');
+  assert.deepEqual(C.togglePaidMonth(f, 'bad').paidMonths.map(p => p.period), ['2026-09']);
+  const shot = C.newScreenshot({ now: new Date('2026-11-12T20:00:00Z'), by: 'x', at: 7 });
+  assert.deepEqual(shot, { date: '2026-11-13', period: '2026-11', note: '', by: 'x', at: 7 }, 'the Singapore day, not the UTC one');
+  assert.equal(C.newScreenshot({ date: '2026-10-31', period: '2026-11' }).period, '2026-11');
+  const many = C.normalizeScreenshots(Array.from({ length: 200 }, (_, i) => C.addDays('2026-01-01', i)));
+  assert.equal(many.length, C.SCREENSHOT_LIMIT);
+  assert.equal(many[0].date, C.addDays('2026-01-01', 199), 'newest first');
+  assert.equal(C.monthsText(['2027-01', '2026-11', '2026-12', '2026-11', 'x']), 'Nov, Dec 2026 · Jan 2027');
+  assert.deepEqual([0, 1, 5, 20].map(d => C.daysAgoText(d, '2026-10-01')), ['today', 'yesterday', '5 days ago', '1 Oct 2026']);
+});
+
+test('the records table and its CSV: one row per child, every field Zhi Kai listed', () => {
+  const fams = [
+    { id: 'a', code: 'K7M2QX', status: 'active', parentName: 'Lim Wei Ming', email: 'lim@example.com', whatsapp: '91110004', signUpDate: '2026-01-05', notes: 'Prefers WhatsApp',
+      paidMonths: ['2026-11'], screenshots: ['2026-11-03'],
+      students: [
+        { id: 's1', name: 'Lim Kai', level: 'P6', school: 'Nanyang Primary', startDate: '2026-02-01', lessonType: 'physical', classes: [{ slotId: 'TUE-3', mode: 'Physical' }, { slotId: 'SAT-2', mode: 'Physical' }], notes: 'Weak in fractions' },
+        { id: 's2', name: 'Lim Xin', level: 'P4', school: 'Rosyth', classes: [{ slotId: 'WED-1', mode: 'Online' }] },
+        { id: 's3', name: 'Gone', status: 'left', classes: [] }
+      ] },
+    { id: 'b', code: 'ABCDEF', status: 'inactive', parentName: 'Chen', email: '', students: [] }
+  ];
+  const rows = C.familyRecordRows(fams, { schedule: REC_SCHEDULE, invoices: [], payments: [], today: '2026-11-12' });
+  assert.deepEqual(rows.map(r => r.studentName), ['Lim Kai', 'Lim Xin', ''], 'a child who left is not listed; a family with no child still is');
+  const kai = rows[0];
+  assert.equal(kai.statusLabel, 'Active');
+  assert.equal(kai.since, '2026-02-01');
+  assert.equal(rows[1].since, '2026-01-05', 'no start date: the family\'s sign-up date');
+  assert.equal(kai.lessonTypeLabel, 'Physical regular');
+  assert.equal(rows[1].lessonTypeLabel, 'Online regular');
+  assert.equal(rows[1].lessonTypeChosen, false);
+  assert.deepEqual(kai.slots.map(s => s.id), ['TUE-3', 'SAT-2']);
+  assert.equal(kai.notes, 'Prefers WhatsApp · Weak in fractions');
+  assert.equal(kai.paidText, 'Nov 2026');
+  assert.equal(rows[2].statusLabel, 'Not active');
+  const csv = C.familyRecordCsv(rows);
+  const lines = csv.split(/\r?\n/);
+  assert.equal(lines[0], C.FAMILY_RECORD_HEADERS.join(','));
+  for (const h of ['Status', 'Email (account ID)', 'Student name', 'Parent name', 'WhatsApp', 'Primary school', 'With us since', 'Type of lesson', 'Slots', 'Months paid', 'Last payment', 'Last screenshot', 'Notes'])
+    assert.ok(C.FAMILY_RECORD_HEADERS.includes(h), h);
+  assert.ok(lines[1].includes('Nanyang Primary') && lines[1].includes('Physical regular') && lines[1].includes('Tue 7:00pm · P6 Math (Physical); Sat 11:00am · Master Class · P6 Science (Physical)'));
+  assert.ok(lines[1].includes('2026-11-03') && lines[1].includes('PLC K7M2QX'));
+  const all = C.familyRecordRows(fams, { schedule: REC_SCHEDULE, includeLeft: true, today: '2026-11-12' });
+  assert.ok(all.some(r => r.studentName === 'Gone'));
+});

@@ -33,9 +33,14 @@
      7. Words — the invoice, reminder and receipt emails, the WhatsApp texts,
         and the `mail` documents the Trigger Email extension sends.
      8. Importing a spreadsheet of families and students.
+     9. Family records — the confirmed sign-ups as one record each: status, the
+        family's ONE email (its account ID), each child's primary school, start
+        date, type of lesson (online regular / physical regular / masterclass)
+        and slots on the schedule, and the payment record (months paid, last
+        payment, last PayNow screenshot the parent sent).
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export const OFFICE_CORE_VERSION = '1.1.0';
+export const OFFICE_CORE_VERSION = '1.2.0';
 
 /* ─────────────────────────── The centre ─────────────────────────── */
 export const SITE = 'https://polymathlc.com.sg';
@@ -478,8 +483,13 @@ export function qrFileName(reference) { return 'PayNow-' + cleanRef(reference).r
 
 /* ─────────────────────────── 4. Families, students, invoices ─────────────────────────── */
 export function normalizeStudent(raw) {
-  const s = Object.assign({ id: '', name: '', level: '', school: '', status: 'active', startDate: '', classes: [], monthlyFee: '', notes: '' }, raw || {});
+  const s = Object.assign({ id: '', name: '', level: '', school: '', status: 'active', startDate: '', classes: [], monthlyFee: '', notes: '', lessonType: '' }, raw || {});
   s.name = String(s.name || '').trim();
+  s.school = String(s.school || '').trim();
+  s.notes = String(s.notes || '');
+  // '' = not chosen yet: the type is then read from the classes (studentLessonType).
+  if (!LESSON_TYPE_KEYS.includes(s.lessonType)) s.lessonType = '';
+  if (s.startDate && !isDayKey(s.startDate)) s.startDate = parseDateLoose(s.startDate) || '';
   s.level = normalizeLevel(s.level);
   if (!STUDENT_STATUSES.includes(s.status)) s.status = 'active';
   s.classes = (Array.isArray(s.classes) ? s.classes : []).map(c => Object.assign({ slotId: '', mode: 'Physical', rate: '', custom: false, label: '' }, c || {}))
@@ -490,7 +500,8 @@ export function normalizeStudent(raw) {
 export function normalizeFamily(raw) {
   const f = Object.assign({
     id: '', code: '', parentName: '', email: '', email2: '', whatsapp: '', address: '', signUpDate: '', notes: '',
-    status: 'active', payerNames: [], credit: 0, discount: null, students: [], preferWhatsapp: false
+    status: 'active', payerNames: [], credit: 0, discount: null, students: [], preferWhatsapp: false,
+    paidMonths: [], screenshots: []
   }, raw || {});
   f.parentName = String(f.parentName || '').trim();
   f.email = cleanEmail(f.email);
@@ -501,6 +512,8 @@ export function normalizeFamily(raw) {
   f.credit = Math.max(0, round2(f.credit));
   f.students = (Array.isArray(f.students) ? f.students : []).map(normalizeStudent);
   if (f.discount && !(feeNum(f.discount.value) > 0)) f.discount = null;
+  f.paidMonths = normalizePaidMonths(f.paidMonths);
+  f.screenshots = normalizeScreenshots(f.screenshots);
   return f;
 }
 export function familyEmails(f) { return [f.email, f.email2].filter(isEmail).filter((e, i, a) => a.indexOf(e) === i); }
@@ -1745,4 +1758,392 @@ export function slotRoster(families, schedule) {
     });
   });
   return map;
+}
+
+/* ─────────────────────────── 9. Family records ───────────────────────────
+   A confirmed sign-up is one family record. What the centre keeps on it:
+
+     Status            active / not active (the family's `status`, 'inactive' in the data)
+     Email             ONE email per family — the family's account ID with the centre,
+                       the same for every child. No two families may share it.
+     Student name      each child (a family can have several)
+     Parent name
+     WhatsApp number
+     Primary school    the child's `school`
+     With us since     the child's `startDate` (the family's own `signUpDate` too)
+     Type of lesson    online regular / physical regular / masterclass (`lessonType`)
+     Slots             one or more slots of the live schedule (schedule_config/main),
+                       e.g. Math on Tuesday AND Science on Saturday
+     Payment record    which months are paid, the last payment, and the last time the
+                       parent sent a PayNow screenshot
+     Notes             anything
+
+   Nothing here needs a migration: an older record simply has no `lessonType`
+   (it is read from the child's classes until somebody picks one), no months
+   marked paid by hand and no screenshots logged yet. */
+
+export const LESSON_TYPES = Object.freeze([
+  Object.freeze({ key: 'online', label: 'Online regular', short: 'Online', icon: '💻', mode: 'Online' }),
+  Object.freeze({ key: 'physical', label: 'Physical regular', short: 'Physical', icon: '🏫', mode: 'Physical' }),
+  Object.freeze({ key: 'master', label: 'Masterclass', short: 'Masterclass', icon: '⭐', mode: 'Physical' })
+]);
+export const LESSON_TYPE_KEYS = Object.freeze(LESSON_TYPES.map(t => t.key));
+export function lessonTypeMeta(key) { return LESSON_TYPES.find(t => t.key === key) || null; }
+export function lessonTypeLabel(key) { const t = lessonTypeMeta(key); return t ? t.label : ''; }
+export const FAMILY_STATUS_LABEL = Object.freeze({ active: 'Active', inactive: 'Not active' });
+export function familyStatusLabel(status) { return status === 'inactive' ? FAMILY_STATUS_LABEL.inactive : FAMILY_STATUS_LABEL.active; }
+
+// The type of lesson a child's classes add up to, when nobody has chosen one:
+// any Master Class slot → masterclass; every class online → online regular;
+// otherwise physical regular. No classes at all → '' (not known yet).
+export function derivedLessonType(student, schedule) {
+  const cls = ((student && student.classes) || []).filter(c => c && (c.custom || isValidSlotId(c.slotId)));
+  if (!cls.length) return '';
+  if (cls.some(c => !c.custom && isMaster(scheduleSlot(schedule, c.slotId)))) return 'master';
+  if (cls.every(c => c.mode === 'Online')) return 'online';
+  return 'physical';
+}
+export function studentLessonType(student, schedule) {
+  return student && LESSON_TYPE_KEYS.includes(student.lessonType) ? student.lessonType : derivedLessonType(student, schedule);
+}
+// Whether a schedule slot is one a child of this lesson type can be put in.
+export function slotFitsLessonType(slot, type) {
+  if (!slotHasClass(slot)) return false;
+  if (!type) return true;
+  if (type === 'master') return isMaster(slot);
+  if (isMaster(slot)) return false;
+  return slotModes(slot).includes(type === 'online' ? 'Online' : 'Physical');
+}
+// The mode a class should be taken in: the lesson type's, when the slot runs it.
+export function modeForLessonType(slot, type, current) {
+  const modes = slotModes(slot);
+  const want = type === 'online' ? 'Online' : (type === 'physical' || type === 'master') ? 'Physical' : (current || modes[0]);
+  return modes.includes(want) ? want : modes[0];
+}
+// "Tue 7:00pm · Primary 6 Math" — how a slot reads in the picker and the table.
+export function slotChoiceLabel(schedule, id) {
+  const slot = scheduleSlot(schedule, id);
+  return slotShortLabel(id) + ' · ' + (slotHasClass(slot) ? slotTitle(slot) : 'no class');
+}
+export function studentSlotIds(student) {
+  return ((student && student.classes) || []).filter(c => c && !c.custom && isValidSlotId(c.slotId)).map(c => c.slotId)
+    .filter((v, i, a) => a.indexOf(v) === i);
+}
+
+// The slot drop-down: every slot of the timetable, by day, with what the
+// schedule has in it, whether it suits the child (lesson type, level), and
+// how many students already sit in it. A slot with no class cannot be ticked,
+// unless the child is already in it (so it can be unticked).
+export function slotPickerGroups(schedule, opts) {
+  const o = opts || {};
+  const chosen = new Set(o.selected || []);
+  const level = normalizeLevel(o.level);
+  const type = LESSON_TYPE_KEYS.includes(o.lessonType) ? o.lessonType : '';
+  return DAYS.map(day => ({
+    code: day.code, name: day.name,
+    options: day.times.map(t => {
+      const id = slotId(day.code, t.n);
+      const slot = scheduleSlot(schedule, id);
+      const has = slotHasClass(slot);
+      const isChosen = chosen.has(id);
+      return {
+        id, when: t.label, start: t.label.split(/\s*[–—-]\s*/)[0], has, chosen: isChosen,
+        title: has ? slotTitle(slot) : 'No class',
+        subject: has ? slot.subject : '', master: isMaster(slot),
+        modes: has ? slotModes(slot) : [],
+        fits: has && slotFitsLessonType(slot, type),
+        levelMatch: has && !!level && normalizeLevel(slot.level) === level,
+        status: slot.status || 'open',
+        count: o.roster && o.roster.get ? (o.roster.get(id) || []).length : 0,
+        disabled: !has && !isChosen
+      };
+    })
+  }));
+}
+
+// Tick or untick one slot for a child. Ticking adds the class in the mode the
+// lesson type asks for; unticking removes it. Never touches other classes.
+export function toggleStudentSlot(student, id, schedule) {
+  const s = Object.assign({}, student, { classes: ((student && student.classes) || []).map(c => Object.assign({}, c)) });
+  const at = s.classes.findIndex(c => !c.custom && c.slotId === id);
+  if (at >= 0) { s.classes.splice(at, 1); return s; }
+  if (!isValidSlotId(id)) return s;
+  const slot = scheduleSlot(schedule, id);
+  if (!slotHasClass(slot)) return s;
+  // A blank row left by "Add a class" is filled first, so nothing is left dangling.
+  const blank = s.classes.findIndex(c => !c.custom && !c.slotId);
+  const cls = { slotId: id, mode: modeForLessonType(slot, s.lessonType, ''), rate: '', custom: false, label: '' };
+  if (blank >= 0) s.classes[blank] = Object.assign(s.classes[blank], cls, { rate: s.classes[blank].rate || '' });
+  else s.classes.push(cls);
+  return s;
+}
+// Set the type of lesson. Online / physical moves every class the slot allows
+// into that mode; a masterclass is physical. '' goes back to "read from the classes".
+export function applyLessonType(student, type, schedule) {
+  const s = Object.assign({}, student, { classes: ((student && student.classes) || []).map(c => Object.assign({}, c)) });
+  s.lessonType = LESSON_TYPE_KEYS.includes(type) ? type : '';
+  if (!s.lessonType) return s;
+  const mode = lessonTypeMeta(s.lessonType).mode;
+  s.classes.forEach(c => {
+    if (c.custom || !c.slotId) { c.mode = mode; return; }
+    const slot = scheduleSlot(schedule, c.slotId);
+    if (slotModes(slot).includes(mode)) c.mode = mode;
+  });
+  return s;
+}
+// What does not add up between the type of lesson and the slots chosen.
+export function lessonTypeIssues(student, schedule) {
+  const type = student && LESSON_TYPE_KEYS.includes(student.lessonType) ? student.lessonType : '';
+  const out = [];
+  if (!type) return out;
+  ((student && student.classes) || []).forEach(c => {
+    if (!c || c.custom || !isValidSlotId(c.slotId)) return;
+    const slot = scheduleSlot(schedule, c.slotId);
+    if (!slotHasClass(slot)) return;   // buildInvoiceLines already says so
+    const when = slotShortLabel(c.slotId);
+    if (type === 'master' && !isMaster(slot)) out.push(when + ' is a regular class, but the type of lesson is Masterclass.');
+    else if (type !== 'master' && isMaster(slot)) out.push(when + ' is a Master Class, but the type of lesson is ' + lessonTypeLabel(type) + '.');
+    else if (type === 'online' && c.mode !== 'Online') out.push(when + (slotModes(slot).includes('Online') ? ' is set to physical' : ' runs physical only') + ', but the type of lesson is Online regular.');
+    else if (type === 'physical' && c.mode !== 'Physical') out.push(when + (slotModes(slot).includes('Physical') ? ' is set to online' : ' runs online only') + ', but the type of lesson is Physical regular.');
+  });
+  return out;
+}
+
+/* ── The family's email: its account ID ──
+   One email per family, whatever number of children. A second family may not
+   be saved with an email another family already uses — the child belongs in
+   that family instead. */
+export function emailOwner(families, email, exceptId) {
+  const e = cleanEmail(email);
+  if (!isEmail(e)) return null;
+  return (families || []).find(f => f && f.id !== exceptId && familyEmails(normalizeFamily(f)).includes(e)) || null;
+}
+// Families saved before the rule that share an email: email → [families].
+export function sharedEmails(families) {
+  const by = new Map();
+  (families || []).forEach(f0 => {
+    const f = normalizeFamily(f0);
+    familyEmails(f).forEach(e => { const a = by.get(e) || []; if (!a.some(x => x.id === f.id)) a.push(f); by.set(e, a); });
+  });
+  return new Map([...by.entries()].filter(([, a]) => a.length > 1));
+}
+// Everything wrong with a family before it is saved, worst first.
+// `families` is everybody else (for the account-ID check).
+export function familyRecordProblems(family, families) {
+  const f = normalizeFamily(family);
+  const out = [];
+  if (!f.parentName) out.push({ level: 'block', field: 'parentName', text: 'Type the parent\'s name.' });
+  if (f.email && !isEmail(f.email)) out.push({ level: 'block', field: 'email', text: 'The email address does not look right.' });
+  if (f.email2 && !isEmail(f.email2)) out.push({ level: 'block', field: 'email2', text: 'The second email does not look right.' });
+  [f.email, f.email2].filter(isEmail).forEach(e => {
+    const other = emailOwner(families, e, f.id);
+    if (other) out.push({ level: 'block', field: 'email', text: e + ' is already the account email of ' + (normalizeFamily(other).parentName || 'another family') + '. One email is one family — add the child to that family instead.', familyId: other.id });
+  });
+  if (!f.email) out.push({ level: 'warn', field: 'email', text: 'No email yet. The email is the family\'s account ID with the centre — every child uses the same one.' });
+  if (!f.whatsapp) out.push({ level: 'warn', field: 'whatsapp', text: 'No WhatsApp number yet.' });
+  const kids = f.students.filter(s => s.name);
+  if (!kids.length) out.push({ level: 'warn', field: 'students', text: 'No child yet.' });
+  const names = kids.map(s => normText(s.name));
+  if (names.some((n, i) => names.indexOf(n) !== i)) out.push({ level: 'warn', field: 'students', text: 'Two children have the same name.' });
+  return out;
+}
+
+/* ── Payment record ──
+   Months come from the family's MONTHLY invoices (a custom invoice — a holiday
+   programme, a book — never pays a month's fees), plus months the admin marks
+   paid by hand for payments from before the office existed, or paid in cash
+   without an invoice. The last payment is the latest of: a payment applied to
+   any of the family's invoices, a payment recorded for the family, a month
+   marked paid by hand. Screenshots are the PayNow screenshots parents send on
+   WhatsApp, logged with the day they came in. */
+export const SCREENSHOT_LIMIT = 120;
+export function normalizePaidMonths(list) {
+  const seen = new Map();
+  (Array.isArray(list) ? list : []).forEach(x => {
+    const e = typeof x === 'string' ? { period: x } : Object.assign({}, x || {});
+    if (!isPeriod(e.period)) return;
+    seen.set(e.period, {
+      period: e.period, date: isDayKey(e.date) ? e.date : '', amount: feeNum(e.amount) || '',
+      note: String(e.note || '').trim().slice(0, 200), by: String(e.by || '').slice(0, 120)
+    });
+  });
+  return [...seen.values()].sort((a, b) => a.period.localeCompare(b.period));
+}
+export function normalizeScreenshots(list) {
+  return (Array.isArray(list) ? list : []).map(x => {
+    const e = typeof x === 'string' ? { date: x } : Object.assign({}, x || {});
+    if (!isDayKey(e.date)) return null;
+    return {
+      date: e.date, period: isPeriod(e.period) ? e.period : '', note: String(e.note || '').trim().slice(0, 200),
+      by: String(e.by || '').slice(0, 120), at: Number(e.at) || 0
+    };
+  }).filter(Boolean).sort((a, b) => b.date.localeCompare(a.date) || b.at - a.at).slice(0, SCREENSHOT_LIMIT);
+}
+// A screenshot just received: today, for this month unless told otherwise.
+export function newScreenshot(opts) {
+  const o = opts || {};
+  const date = isDayKey(o.date) ? o.date : sgDayKey(o.now);
+  return { date, period: isPeriod(o.period) ? o.period : date.slice(0, 7), note: String(o.note || '').trim().slice(0, 200), by: String(o.by || ''), at: Number(o.at) || Date.now() };
+}
+// Mark a month paid by hand, or take the mark off again.
+export function togglePaidMonth(family, period, entry) {
+  const f = Object.assign({}, family);
+  const list = normalizePaidMonths(f.paidMonths);
+  if (!isPeriod(period)) { f.paidMonths = list; return f; }
+  const at = list.findIndex(p => p.period === period);
+  if (at >= 0) list.splice(at, 1);
+  else list.push(Object.assign({ period, date: '', amount: '', note: '', by: '' }, entry || {}, { period }));
+  f.paidMonths = normalizePaidMonths(list);
+  return f;
+}
+export const MONTH_STATE_META = Object.freeze({
+  paid: { label: 'Paid', tone: 'green', icon: '✅' },
+  hand: { label: 'Paid (marked by hand)', tone: 'green', icon: '✔︎' },
+  part: { label: 'Part paid', tone: 'amber', icon: '◐' },
+  waiting: { label: 'Waiting for payment', tone: 'amber', icon: '⏳' },
+  overdue: { label: 'Overdue', tone: 'red', icon: '⚠️' },
+  draft: { label: 'Invoice not sent', tone: 'grey', icon: '📝' },
+  none: { label: 'No invoice', tone: 'grey', icon: '·' }
+});
+export function monthShort(period) {
+  if (!isPeriod(period)) return String(period || '');
+  return MONTHS[Number(period.slice(5, 7)) - 1].slice(0, 3);
+}
+// "Sep, Oct, Nov 2026 · Jan 2027" — paid months, oldest first, grouped by year.
+export function monthsText(periods) {
+  const list = [...new Set((periods || []).filter(isPeriod))].sort();
+  if (!list.length) return '';
+  const years = new Map();
+  list.forEach(p => { const y = p.slice(0, 4); const a = years.get(y) || []; a.push(monthShort(p)); years.set(y, a); });
+  return [...years.entries()].map(([y, ms]) => ms.join(', ') + ' ' + y).join(' · ');
+}
+export function familyPaymentRecord(family, invoices, payments, opts) {
+  const o = opts || {};
+  const today = isDayKey(o.today) ? o.today : sgDayKey();
+  const span = Math.max(1, Math.min(36, Number(o.months) || 12));
+  const f = normalizeFamily(family);
+  const invs = (invoices || []).filter(i => i && i.familyId === f.id && i.status !== 'void');
+  const monthly = new Map();
+  invs.filter(i => !i.custom && isPeriod(i.period)).forEach(i => { if (!monthly.has(i.period)) monthly.set(i.period, i); });
+  const hand = new Map(f.paidMonths.map(p => [p.period, p]));
+  const stateFor = period => {
+    const inv = monthly.get(period);
+    const h = hand.get(period);
+    if (inv) {
+      const st = invoiceState(inv, today).key;
+      if (st === 'paid' || st === 'free') return { key: 'paid', inv, hand: h || null };
+      if (h) return { key: 'hand', inv, hand: h };
+      return { key: ['part', 'waiting', 'overdue', 'draft'].includes(st) ? st : 'draft', inv, hand: null };
+    }
+    if (h) return { key: 'hand', inv: null, hand: h };
+    return { key: 'none', inv: null, hand: null };
+  };
+  // The window: the last `span` months up to this one, stretched forward to any
+  // later month already invoiced or paid (fees paid in advance).
+  const thisMonth = today.slice(0, 7);
+  let end = thisMonth;
+  [...monthly.keys(), ...hand.keys()].forEach(p => { if (p > end) end = p; });
+  const months = [];
+  for (let p = addMonths(thisMonth, -(span - 1)); p <= end; p = addMonths(p, 1)) {
+    const s = stateFor(p);
+    const meta = MONTH_STATE_META[s.key];
+    months.push({
+      period: p, label: monthShort(p), year: p.slice(0, 4), key: s.key,
+      stateLabel: meta.label, tone: meta.tone, icon: meta.icon,
+      invoiceId: s.inv ? s.inv.id : '', total: s.inv ? round2(s.inv.total) : 0, paid: s.inv ? round2(s.inv.paid) : 0,
+      outstanding: s.inv ? invoiceOutstanding(s.inv) : 0, handDate: s.hand ? s.hand.date : '', handAmount: s.hand ? s.hand.amount : '',
+      current: p === thisMonth
+    });
+  }
+  const paidPeriods = [...new Set([...monthly.keys(), ...hand.keys()])].filter(p => ['paid', 'hand'].includes(stateFor(p).key)).sort();
+  // Every payment we know of, newest first.
+  const seen = new Set();
+  const all = [];
+  invs.forEach(inv => (inv.payments || []).forEach(p => {
+    if (!p || !isDayKey(p.date)) return;
+    const key = (p.paymentId || '') + '|' + inv.id;
+    if (seen.has(key)) return;
+    seen.add(key);
+    all.push({ date: p.date, amount: round2(p.amount), how: p.how || '', paymentId: p.paymentId || '', at: Number(p.at) || 0, period: inv.period || '', source: 'invoice' });
+  }));
+  const paymentIds = new Set(all.map(p => p.paymentId).filter(Boolean));
+  (payments || []).filter(p => p && p.familyId === f.id && isDayKey(p.date)).forEach(p => {
+    if (paymentIds.has(p.id)) {
+      // Already counted per invoice; a payment kept whole as credit has no invoice entry.
+      return;
+    }
+    all.push({ date: p.date, amount: round2(p.amount), how: p.how || p.method || '', paymentId: p.id || '', at: 0, period: '', source: 'payment' });
+  });
+  f.paidMonths.filter(p => p.date).forEach(p => all.push({ date: p.date, amount: feeNum(p.amount) || 0, how: 'hand', paymentId: '', at: 0, period: p.period, source: 'hand' }));
+  all.sort((a, b) => b.date.localeCompare(a.date) || b.at - a.at);
+  // One payment spread over several invoices is still one payment.
+  const merged = [];
+  all.forEach(p => {
+    const same = p.paymentId && merged.find(m => m.paymentId === p.paymentId);
+    if (same) { same.amount = round2(same.amount + p.amount); if (p.period && !same.periods.includes(p.period)) same.periods.push(p.period); return; }
+    merged.push(Object.assign({}, p, { periods: p.period ? [p.period] : [] }));
+  });
+  const lastPayment = merged[0] || null;
+  const lastScreenshot = f.screenshots[0] || null;
+  return {
+    months, paidPeriods, paidText: monthsText(paidPeriods), paidCount: paidPeriods.length,
+    thisMonthPaid: paidPeriods.includes(thisMonth),
+    lastPayment, payments: merged.slice(0, 20),
+    lastScreenshot, screenshots: f.screenshots,
+    screenshotDaysAgo: lastScreenshot ? daysBetween(lastScreenshot.date, today) : null,
+    paymentDaysAgo: lastPayment ? daysBetween(lastPayment.date, today) : null
+  };
+}
+// "today", "yesterday", "5 days ago", "3 Nov"
+export function daysAgoText(n, dayKey) {
+  if (n == null || !isFinite(n)) return '';
+  if (n <= 0) return 'today';
+  if (n === 1) return 'yesterday';
+  if (n < 14) return n + ' days ago';
+  return dayKey ? prettyDate(dayKey) : n + ' days ago';
+}
+
+/* ── The records, one row per child, for the Families table and its CSV ── */
+export function familyRecordRows(families, ctx) {
+  const c = ctx || {};
+  const out = [];
+  (families || []).forEach(f0 => {
+    const f = normalizeFamily(f0);
+    const rec = familyPaymentRecord(f, c.invoices || [], c.payments || [], { today: c.today, months: c.months });
+    const kids = f.students.filter(s => s.name && (c.includeLeft || s.status !== 'left'));
+    (kids.length ? kids : [null]).forEach(st => {
+      const type = st ? studentLessonType(st, c.schedule) : '';
+      const slots = st ? studentSlotIds(st) : [];
+      out.push({
+        familyId: f.id, studentId: st ? st.id : '', code: f.code,
+        status: f.status, statusLabel: familyStatusLabel(f.status),
+        studentStatus: st ? st.status : '',
+        email: f.email, email2: f.email2,
+        studentName: st ? st.name : '', parentName: f.parentName, whatsapp: f.whatsapp,
+        school: st ? st.school : '', level: st ? st.level : '',
+        since: (st && st.startDate) || f.signUpDate || '',
+        lessonType: type, lessonTypeLabel: lessonTypeLabel(type), lessonTypeChosen: !!(st && st.lessonType),
+        slots: slots.map(id => ({ id, label: slotChoiceLabel(c.schedule, id), subject: scheduleSlot(c.schedule, id).subject || '', master: isMaster(scheduleSlot(c.schedule, id)), mode: ((st.classes || []).find(x => x.slotId === id) || {}).mode || '' })),
+        otherClasses: st ? st.classes.filter(x => x.custom).map(x => x.label || 'Other arrangement') : [],
+        paidPeriods: rec.paidPeriods, paidText: rec.paidText, months: rec.months,
+        thisMonthPaid: rec.thisMonthPaid,
+        lastPayment: rec.lastPayment, lastScreenshot: rec.lastScreenshot,
+        screenshotDaysAgo: rec.screenshotDaysAgo, paymentDaysAgo: rec.paymentDaysAgo,
+        notes: [f.notes, st && st.notes].map(x => String(x || '').trim()).filter(Boolean).join(' · ')
+      });
+    });
+  });
+  return out;
+}
+export const FAMILY_RECORD_HEADERS = Object.freeze([
+  'Status', 'Email (account ID)', 'Student name', 'Parent name', 'WhatsApp', 'Primary school', 'Level', 'With us since',
+  'Type of lesson', 'Slots', 'Months paid', 'Last payment', 'Last payment amount', 'Last screenshot', 'Reference', 'Notes'
+]);
+export function familyRecordCsv(rows) {
+  return toCsv([FAMILY_RECORD_HEADERS.slice(), ...(rows || []).map(r => [
+    r.statusLabel, r.email, r.studentName, r.parentName, displayPhone(r.whatsapp), r.school, levelLabel(r.level), r.since,
+    r.lessonTypeLabel, [...r.slots.map(s => s.label + (s.mode ? ' (' + s.mode + ')' : '')), ...r.otherClasses].join('; '), r.paidText,
+    r.lastPayment ? r.lastPayment.date : '', r.lastPayment && r.lastPayment.amount ? moneyPlain(r.lastPayment.amount) : '',
+    r.lastScreenshot ? r.lastScreenshot.date : '', r.code ? familyReference(r.code) : '', r.notes
+  ])]);
 }
