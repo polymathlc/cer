@@ -52,7 +52,7 @@ export const SENDER_EMAIL = 'admin@polymathlc.com.sg';
 export const SENDER_NAME = 'Polymath Learning Centre';
 // The same three accounts that administer Polymath Online. tools/office-rules.mjs
 // installs exactly this list into the shared Firestore rules; keep them equal.
-export const OFFICE_ADMINS = ['chungzhikai@gmail.com', 'admin@polymathlc.com.sg', 'elsielcr@gmail.com'];
+export const OFFICE_ADMINS = ['chungzhikai@gmail.com', 'admin@polymathlc.com.sg', 'elsielcr@gmail.com', 'support@polymathlc.com.sg'];
 
 export const COLLECTIONS = Object.freeze({
   families: 'officeFamilies',

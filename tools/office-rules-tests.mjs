@@ -6,7 +6,7 @@
 // anything is published.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { addOfficeRules, OFFICE_RULE, officeRuleTests, officePreservedTests, publishOfficeRules, OFFICE_ADMINS, OFFICE_COLLECTIONS } from './office-rules.mjs';
+import { addOfficeRules, officeRuleFor, OFFICE_PREVIOUS_ADMINS, OFFICE_RULE, officeRuleTests, officePreservedTests, publishOfficeRules, OFFICE_ADMINS, OFFICE_COLLECTIONS } from './office-rules.mjs';
 import { addEnquiryRules } from './enquiry-rules.mjs';
 import { addOnlineRules } from './online-rules.mjs';
 import { addCsRules } from './cs-rules.mjs';
@@ -58,6 +58,21 @@ test('installing twice changes nothing', () => {
   }
 });
 
+test('a block installed with the older admin list is upgraded in place, and only that', () => {
+  for (const source of [original, withEnquiry, live]) {
+    const current = addOfficeRules(source);
+    const old = current.replace(OFFICE_RULE, () => officeRuleFor(OFFICE_PREVIOUS_ADMINS[0]));
+    assert.notEqual(old, current);
+    assert.ok(!officeRuleFor(OFFICE_PREVIOUS_ADMINS[0]).includes("'support@polymathlc.com.sg'"));
+    assert.equal(addOfficeRules(old), current, 'the old block becomes today\'s block');
+    assert.equal(addOfficeRules(addOfficeRules(old)), current, 'and stays put');
+  }
+  // A block that differs in anything else is still refused.
+  const current = addOfficeRules(live);
+  const tampered = current.replace(OFFICE_RULE, () => officeRuleFor(['someone@example.com']));
+  assert.throws(() => addOfficeRules(tampered), /Ambiguous/);
+});
+
 test('unrecognised, partial and duplicate rules fail closed', () => {
   const installed = addOfficeRules(original);
   for (const value of [null, '', 'service cloud.storage {}',
@@ -72,8 +87,8 @@ test('unrecognised, partial and duplicate rules fail closed', () => {
     assert.throws(() => addOfficeRules(value), String(value).slice(0, 80));
 });
 
-test('the rule names exactly the three admins, the six collections and the mail prefix', () => {
-  assert.deepEqual(OFFICE_ADMINS, ['chungzhikai@gmail.com', 'admin@polymathlc.com.sg', 'elsielcr@gmail.com']);
+test('the rule names exactly the four admins, the six collections and the mail prefix', () => {
+  assert.deepEqual(OFFICE_ADMINS, ['chungzhikai@gmail.com', 'admin@polymathlc.com.sg', 'elsielcr@gmail.com', 'support@polymathlc.com.sg']);
   for (const email of OFFICE_ADMINS) assert.ok(OFFICE_RULE.includes(`'${email}'`));
   for (const name of OFFICE_COLLECTIONS) assert.ok(OFFICE_RULE.includes(`'${name}'`), name);
   for (const name of ['officeFamilies', 'officeInvoices', 'officePayments', 'officeStatements', 'officeSettings'])
@@ -98,7 +113,7 @@ test('permission cases: nobody but the admins reaches a family, an invoice or a 
     if (['create', 'update'].includes(c.request.method)) assert.ok(c.request.resource.data);
   }
   const privateRoots = ['officeFamilies/', 'officeInvoices/', 'officePayments/', 'officeStatements/', 'officeSettings/'];
-  const admins = ['office-test-admin', 'office-test-admin-caps', 'office-test-admin-three'];
+  const admins = ['office-test-admin', 'office-test-admin-caps', 'office-test-admin-three', 'office-test-admin-four'];
   for (const root of privateRoots) {
     const forRoot = cases.filter(c => c.request.path.includes('/documents/' + root));
     assert.ok(forRoot.length > 20, root);
