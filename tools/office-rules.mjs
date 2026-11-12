@@ -39,13 +39,20 @@ import { csRuleTests } from './cs-rules.mjs';
 
 export const PROJECT = 'mathgen--app';
 // Keep equal to OFFICE_ADMINS in office/office-core.mjs (a test checks).
-export const OFFICE_ADMINS = ['chungzhikai@gmail.com', 'admin@polymathlc.com.sg', 'elsielcr@gmail.com'];
+export const OFFICE_ADMINS = ['chungzhikai@gmail.com', 'admin@polymathlc.com.sg', 'elsielcr@gmail.com', 'support@polymathlc.com.sg'];
+// Admin lists an installed block may still carry. A block written for one of
+// these (and otherwise identical) is upgraded in place to OFFICE_ADMINS; any
+// other difference is still refused as ambiguous.
+export const OFFICE_PREVIOUS_ADMINS = [
+  ['chungzhikai@gmail.com', 'admin@polymathlc.com.sg', 'elsielcr@gmail.com']
+];
 export const OFFICE_PRIVATE = ['officeFamilies', 'officeInvoices', 'officePayments', 'officeStatements', 'officeSettings'];
 export const OFFICE_COLLECTIONS = [...OFFICE_PRIVATE, 'officeLinks'];
 export const OFFICE_MAIL_PREFIX = 'polymath-office-';
 const list = a => JSON.stringify(a).replace(/"/g, "'").replace(/,/g, ', ');
 
-export const OFFICE_RULE = `    // BEGIN polymath-office-v1
+export function officeRuleFor(admins) {
+  return `    // BEGIN polymath-office-v1
     // Polymath Office (polymathlc.com.sg/office and /pay): families, invoices,
     // payments, bank statements, settings, parents' invoice links and the
     // office's emails. The catch-all below skips these paths.
@@ -58,7 +65,7 @@ export const OFFICE_RULE = `    // BEGIN polymath-office-v1
     function isOfficeAdmin() {
       return request.auth != null
         && request.auth.token.get('email_verified', false) == true
-        && request.auth.token.get('email', '').lower() in ${list(OFFICE_ADMINS)};
+        && request.auth.token.get('email', '').lower() in ${list(admins)};
     }
 ${OFFICE_PRIVATE.map(c => `    match /${c}/{docId} {
       allow read, write: if isOfficeAdmin();
@@ -75,6 +82,8 @@ ${OFFICE_PRIVATE.map(c => `    match /${c}/{docId} {
     // END polymath-office-v1
 
 `;
+}
+export const OFFICE_RULE = officeRuleFor(OFFICE_ADMINS);
 
 // The shared catch-all is one `allow read, write: if !A() && !B() …;` line.
 // Other apps append their own `&& !isXPath()` predicates, so any number of them
@@ -96,6 +105,16 @@ export function addOfficeRules(source) {
   if (lines.length !== 1)
     throw new Error('Expected one shared catch-all line; review changed rules first.');
   const installed = lines[0].includes(PREDICATE + ';') || lines[0].includes(PREDICATE + ' &&');
+  if (installed && !source.includes(OFFICE_RULE)) {
+    // An older admin list: swap the one block, nothing else.
+    const prev = OFFICE_PREVIOUS_ADMINS.map(officeRuleFor).find(rule => source.includes(rule));
+    if (prev && count(source, /BEGIN polymath-office-v1/g) === 1 && count(source, /function isPolymathOfficePath/g) === 1
+        && count(source, /isPolymathOfficePath\(\)/g) === 2) {
+      const upgraded = source.replace(prev, () => OFFICE_RULE);
+      if (upgraded.replace(OFFICE_RULE, () => prev) !== source) throw new Error('Unrelated rules would change.');
+      return upgraded;
+    }
+  }
   if (installed) {
     if (!source.includes(OFFICE_RULE) || count(source, /BEGIN polymath-office-v1/g) !== 1
         || count(source, /function isPolymathOfficePath/g) !== 1 || count(source, /isPolymathOfficePath\(\)/g) !== 2)
@@ -120,10 +139,11 @@ const TOKENS = {
   [ADMIN]: { email: 'chungzhikai@gmail.com', email_verified: true },
   'office-test-admin-caps': { email: 'Admin@PolymathLC.com.sg', email_verified: true },
   'office-test-admin-three': { email: 'elsielcr@gmail.com', email_verified: true },
+  'office-test-admin-four': { email: 'support@polymathlc.com.sg', email_verified: true },
   'office-test-unverified': { email: 'chungzhikai@gmail.com', email_verified: false },
   'office-test-anon-provider': {}
 };
-const ADMINS = [ADMIN, 'office-test-admin-caps', 'office-test-admin-three'];
+const ADMINS = [ADMIN, 'office-test-admin-caps', 'office-test-admin-three', 'office-test-admin-four'];
 const NOT_ADMINS = [null, PARENT, STRANGER, 'office-test-unverified', 'office-test-anon-provider'];
 const TOKEN = 'Ab3dEf7hJk9mNp2qRs4tUv6w';   // 24 characters, like a real link
 

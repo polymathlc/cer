@@ -5,7 +5,7 @@
 // .github/workflows/online-rules.yml before anything is published.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { addOnlineRules, describeRules, ONLINE_RULE, onlineRuleTests, onlinePreservedTests, publishOnlineRules, setupCredentials } from './online-rules.mjs';
+import { addOnlineRules, onlineRuleFor, ONLINE_PREVIOUS_ADMINS, describeRules, ONLINE_RULE, onlineRuleTests, onlinePreservedTests, publishOnlineRules, setupCredentials } from './online-rules.mjs';
 import { addEnquiryRules } from './enquiry-rules.mjs';
 
 const original = `rules_version = '2';
@@ -55,6 +55,18 @@ test('a refused rules file is outlined for the log without its string values', (
   assert.ok(!JSON.stringify(outline).includes('secret@example.com'));
 });
 
+test('a block installed with the older admin list is upgraded in place, and only that', () => {
+  for (const source of [original, withEnquiry]) {
+    const current = addOnlineRules(source);
+    const old = current.replace(ONLINE_RULE, () => onlineRuleFor(ONLINE_PREVIOUS_ADMINS[0]));
+    assert.notEqual(old, current);
+    assert.equal(addOnlineRules(old), current);
+    assert.equal(addOnlineRules(addOnlineRules(old)), current);
+    const tampered = current.replace(ONLINE_RULE, () => onlineRuleFor(['someone@example.com']));
+    assert.throws(() => addOnlineRules(tampered), /Ambiguous/);
+  }
+});
+
 test('installing twice changes nothing', () => {
   for (const source of [original, withEnquiry]) {
     const once = addOnlineRules(source);
@@ -82,8 +94,8 @@ test('unrecognised, partial and duplicate rules fail closed', () => {
     assert.throws(() => addOnlineRules(value), String(value).slice(0, 80));
 });
 
-test('the rule names exactly the three admins, the four collections and the mail prefix', () => {
-  for (const email of ['chungzhikai@gmail.com', 'elsielcr@gmail.com', 'admin@polymathlc.com.sg']) assert.ok(ONLINE_RULE.includes(`'${email}'`));
+test('the rule names exactly the four admins, the four collections and the mail prefix', () => {
+  for (const email of ['chungzhikai@gmail.com', 'elsielcr@gmail.com', 'admin@polymathlc.com.sg', 'support@polymathlc.com.sg']) assert.ok(ONLINE_RULE.includes(`'${email}'`));
   for (const name of ['onlineCourses', 'onlineInvites', 'onlineMembers', 'onlineSettings']) assert.ok(ONLINE_RULE.includes(`'${name}'`));
   assert.ok(ONLINE_RULE.includes("'^polymath-online-.*$'"));
   assert.ok(ONLINE_RULE.includes("email_verified', false) == true"));

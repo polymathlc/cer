@@ -30,10 +30,16 @@ import { preservedRuleTests, liveRuleTests } from './cer-live-server-rules.mjs';
 import { enquiryRuleTests } from './enquiry-rules.mjs';
 
 export const PROJECT = 'mathgen--app';
-export const ONLINE_ADMINS = ['chungzhikai@gmail.com', 'elsielcr@gmail.com', 'admin@polymathlc.com.sg'];
+export const ONLINE_ADMINS = ['chungzhikai@gmail.com', 'elsielcr@gmail.com', 'admin@polymathlc.com.sg', 'support@polymathlc.com.sg'];
+// Admin lists an installed block may still carry; such a block (otherwise
+// identical) is upgraded in place to ONLINE_ADMINS.
+export const ONLINE_PREVIOUS_ADMINS = [
+  ['chungzhikai@gmail.com', 'elsielcr@gmail.com', 'admin@polymathlc.com.sg']
+];
 export const ONLINE_COLLECTIONS = ['onlineCourses', 'onlineInvites', 'onlineMembers', 'onlineSettings'];
 
-export const ONLINE_RULE = `    // BEGIN polymath-online-v1
+export function onlineRuleFor(admins) {
+  return `    // BEGIN polymath-online-v1
     // Polymath Online (polymathlc.com.sg/online): classes, invitations, members
     // and invitation emails. The catch-all below skips these paths.
     function isPolymathOnlinePath() {
@@ -48,7 +54,7 @@ export const ONLINE_RULE = `    // BEGIN polymath-online-v1
     function isOnlineAdmin() {
       return request.auth != null
         && request.auth.token.get('email_verified', false) == true
-        && onlineEmail() in ${JSON.stringify(ONLINE_ADMINS).replace(/"/g, "'").replace(/,/g, ', ')};
+        && onlineEmail() in ${JSON.stringify(admins).replace(/"/g, "'").replace(/,/g, ', ')};
     }
     // An invitee accepting their own invitation: only the joining fields change,
     // to themselves, from a pending invitation or one they already accepted.
@@ -108,6 +114,8 @@ export const ONLINE_RULE = `    // BEGIN polymath-online-v1
     // END polymath-online-v1
 
 `;
+}
+export const ONLINE_RULE = onlineRuleFor(ONLINE_ADMINS);
 
 // The shared catch-all is one `allow read, write: if !A() && !B() …;` line.
 // Other apps append their own `&& !isXPath()` predicates, so any number of
@@ -152,6 +160,16 @@ export function addOnlineRules(source) {
   if (lines.length !== 1)
     throw new Error('Expected one shared catch-all line; review changed rules first.');
   const installed = lines[0].includes(PREDICATE + ';') || lines[0].includes(PREDICATE + ' &&');
+  if (installed && !source.includes(ONLINE_RULE)) {
+    // An older admin list: swap the one block, nothing else.
+    const prev = ONLINE_PREVIOUS_ADMINS.map(onlineRuleFor).find(rule => source.includes(rule));
+    if (prev && count(source, /BEGIN polymath-online-v1/g) === 1 && count(source, /function isPolymathOnlinePath/g) === 1
+        && count(source, /isPolymathOnlinePath\(\)/g) === 2) {
+      const upgraded = source.replace(prev, () => ONLINE_RULE);
+      if (upgraded.replace(ONLINE_RULE, () => prev) !== source) throw new Error('Unrelated rules would change.');
+      return upgraded;
+    }
+  }
   if (installed) {
     if (!source.includes(ONLINE_RULE) || count(source, /BEGIN polymath-online-v1/g) !== 1
         || count(source, /function isPolymathOnlinePath/g) !== 1 || count(source, /isPolymathOnlinePath\(\)/g) !== 2)

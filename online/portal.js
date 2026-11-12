@@ -8,7 +8,7 @@
   var Core = window.PolymathOnlineCore;
 
   // Who runs the portal. Anyone else signs in as a student or a parent.
-  var ONLINE_ADMINS = ['chungzhikai@gmail.com', 'elsielcr@gmail.com', 'admin@polymathlc.com.sg'];
+  var ONLINE_ADMINS = ['chungzhikai@gmail.com', 'elsielcr@gmail.com', 'admin@polymathlc.com.sg', 'support@polymathlc.com.sg'];
   // The teacher whose Ans Key notebook a worksheet's AI features read.
   var TEACHER_EMAIL = 'chungzhikai@gmail.com';
   // Invitations always point at the public address, wherever they are sent from.
