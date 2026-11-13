@@ -670,6 +670,35 @@ try {
   // ── Sorted by level (the default), with a heading per level, and filters that add up ──
   const activeFams = () => store(page).then(st => docsIn(st, 'officeFamilies').filter(f => (f.status || 'active') === 'active').map(f => C.normalizeFamily(f)));
   const cardNames = () => page.locator('.fam-grid .fam .fam-name').allInnerTexts();
+  // ── 📊 Key statistics on top: students and fees by subject and type of lesson ──
+  await page.waitForSelector('#fam-stats .kpi-row');
+  const liveStats = async () => { const st = await store(page); return { fams: docsIn(st, 'officeFamilies').map(f => Object.assign({ id: f._id }, f)), sch: st['schedule_config/main'] || SCHEDULE, inv: docsIn(st, 'officeInvoices') }; };
+  const statsNow = await liveStats();
+  const expect = C.familyStats(statsNow.fams, { schedule: statsNow.sch, invoices: statsNow.inv, period: '2026-11', today: '2026-11-03' });
+  assert.equal(await page.locator('#fam-stats .k-students .kpi-value').innerText(), String(expect.students), 'the student count');
+  for (const k of ['math', 'science', 'online', 'physical', 'master']) {
+    const t = await page.locator('#fam-stats .kpi.cat[data-cat="' + k + '"]').innerText();
+    assert.ok(t.includes(expect.categories[k].students + ' student'), k + ' count: ' + t);
+    assert.ok(t.includes(C.money(expect.categories[k].fees)), k + ' fees: ' + t);
+    assert.ok(t.includes(C.money(expect.categories[k].collected)), k + ' collected: ' + t);
+  }
+  assert.ok((await page.locator('#fam-stats .k-fees').innerText()).includes(C.money(expect.net)));
+  assert.ok((await page.locator('#fam-stats .k-collected').innerText()).includes(C.money(expect.collected)));
+  assert.ok(expect.students > 0 && expect.fees > 0, 'the sample has fees to count');
+  assert.match(await page.locator('#fam-stats .kpi-note').innerText(), /Monthly fees.*Collected/s, 'the basis is written under the tiles');
+  assert.match(await page.locator('#fam-stats .kpi-title').innerText(), /All active families/);
+  await shot(page, '04h-families-statistics');
+  // Another month; then folded away (remembered) and back.
+  await page.selectOption('#stat-month', '2026-12');
+  await settle(page);
+  assert.ok((await page.locator('#fam-stats .k-collected .kpi-label').innerText()).toLowerCase().includes('dec'));
+  await page.selectOption('#stat-month', '2026-11');
+  await page.click('[data-act="toggleStats"]');
+  await page.waitForSelector('#fam-stats.folded');
+  assert.match(await page.locator('#fam-stats .kpi-mini').innerText(), new RegExp(expect.students + ' students'));
+  assert.equal(await page.evaluate(() => localStorage.getItem('polymath-office-stats')), 'closed');
+  await page.click('[data-act="toggleStats"]');
+  await page.waitForSelector('#fam-stats .kpi-row');
   assert.equal(await page.inputValue('#fam-sort'), 'level');
   assert.deepEqual(await cardNames(), C.sortFamilies(await activeFams(), 'level').map(f => f.parentName || 'Unnamed parent'), 'cards run by the youngest child\'s level');
   assert.ok(await page.locator('.lvgroup .lvhead').count() >= 2, 'a heading per level');
@@ -702,6 +731,10 @@ try {
   assert.deepEqual(await page.locator('.lvgroup').evaluateAll(gs => gs.map(g => g.dataset.level)), ['P6'], 'every family sits under P6, even one with a younger child too');
   assert.match(await page.locator('.fftoggle').innerText(), /Filters\s*1/);
   assert.match(await page.locator('#fam-count').innerText(), new RegExp('^' + p6.length + ' of '));
+  // The statistics follow the filters: only the P6 children count.
+  assert.match(await page.locator('#fam-stats .kpi-title').innerText(), /filters on/);
+  const p6kids = p6.reduce((n, f) => n + f.students.filter(s => s.status === 'active' && C.normalizeLevel(s.level) === 'P6').length, 0);
+  assert.equal(await page.locator('#fam-stats .k-students .kpi-value').innerText(), String(p6kids), 'the statistics count the P6 children only');
   // Brothers and sisters at other levels are dimmed on the card; the table lists P6 children only.
   const dimmed = p6.some(f => f.students.some(s => s.status !== 'left' && C.normalizeLevel(s.level) !== 'P6'));
   if (dimmed) assert.ok(await page.locator('.fam-kid.dim').count() >= 1, 'other children dimmed');

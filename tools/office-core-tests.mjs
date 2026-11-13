@@ -990,3 +990,69 @@ test('family filters combine: child filters, family fields and paid / not paid f
   assert.deepEqual(o.slots.map(x => x.id), ['TUE-3', 'WED-1', 'FRI-2', 'SAT-1', 'SAT-2']);
   assert.ok(o.slots.every(x => x.label));
 });
+
+/* ---- Families: key statistics (v1.6.0) ---- */
+test('family statistics: students and fees by subject and type of lesson, collected for a month', () => {
+  const sched = REC_SCHEDULE;   // fees: physical 220, online 180, master 320
+  const fams = [
+    // Ang: P6 Math physical (220) + P6 Science master (320) — one child, both subjects.
+    SF_FAMS[0],
+    // Bala: P4 Math online (180) + P6 Math physical (220), $20 sibling discount.
+    Object.assign({}, SF_FAMS[1], { discount: { kind: 'amount', value: 20, label: 'Sibling discount' } }),
+    // Chua: P5 Math online (180) + P5 Science physical (220); withdrawn after Dec 2026.
+    SF_FAMS[2],
+    // Dee: no children. Eng: not active. Fong: own monthly fee, no class; a paused child.
+    SF_FAMS[3],
+    { id: 'e', parentName: 'Eng', status: 'inactive', students: [{ id: 'e1', name: 'E', level: 'P5', status: 'active', classes: [{ slotId: 'FRI-2', mode: 'Physical' }] }] },
+    { id: 'g', parentName: 'Fong', status: 'active', students: [{ id: 'g1', name: 'Gus', level: 'P3', status: 'active', monthlyFee: 150, classes: [] }, { id: 'g2', name: 'Pau', status: 'paused', classes: [{ slotId: 'TUE-3', mode: 'Physical' }] }] }
+  ];
+  const st = C.familyStats(fams, { schedule: sched, period: '2026-11', invoices: [] });
+  assert.equal(st.families, 4, 'Ang, Bala, Chua, Fong');
+  assert.equal(st.students, 5);
+  assert.equal(st.paused, 1);
+  assert.equal(st.noClass, 1);
+  assert.equal(st.both, 2, 'Zoe and Cal take both subjects');
+  const k = st.categories;
+  assert.deepEqual(['math', 'science', 'online', 'physical', 'master'].map(x => k[x].students), [4, 2, 2, 3, 1]);
+  assert.deepEqual(['math', 'science', 'online', 'physical', 'master'].map(x => k[x].families), [3, 2, 2, 3, 1]);
+  assert.deepEqual(['math', 'science', 'online', 'physical', 'master'].map(x => k[x].fees), [800, 540, 360, 660, 320]);
+  assert.equal(st.fees, 1490, '220+320 + 180+220 + 180+220 + 150');
+  assert.equal(st.unsortedFees, 150, 'an own fee with no class is not sorted');
+  assert.equal(st.discounts, 20);
+  assert.equal(st.net, 1470);
+  // Chua has left after December.
+  const jan = C.familyStats(fams, { schedule: sched, period: '2027-01' });
+  assert.equal(jan.families, 3);
+  assert.equal(jan.students, 4, 'Zoe, Ben, Bea, Gus');
+  // An own monthly fee is shared over the child's classes by the schedule fees.
+  const own = C.familyFeeParts({ id: 'h', status: 'active', students: [{ id: 'h1', status: 'active', monthlyFee: 300, classes: [{ slotId: 'WED-1', mode: 'Online' }, { slotId: 'SAT-2', mode: 'Physical' }] }] }, sched);
+  assert.deepEqual(own.parts.map(p => p.subject + '/' + p.type + ':' + p.amount), ['math/online:108', 'science/master:192'], '300 split 180 : 320');
+  // Collected: that month's invoices, split over their lines.
+  const inv = { familyId: 'b', period: '2026-11', status: 'sent', total: 380, paid: 190, lines: [
+    { studentId: 'b1', slotId: 'WED-1', mode: 'Online', kind: 'class', amount: 180 },
+    { studentId: 'b2', slotId: 'TUE-3', mode: 'Physical', kind: 'class', amount: 220 },
+    { amount: -20, kind: 'discount' }] };
+  const other = { familyId: 'a', period: '2026-10', status: 'sent', total: 540, paid: 540, lines: [] };
+  const voided = { familyId: 'a', period: '2026-11', status: 'void', total: 540, paid: 540, lines: [] };
+  const hand = { familyId: 'g', period: '2026-11', status: 'sent', total: 150, paid: 150, lines: [{ studentId: 'g1', desc: 'Monthly tuition fees', detail: '', kind: 'student-fee', amount: 150 }] };
+  const c2 = C.familyStats(fams, { schedule: sched, period: '2026-11', invoices: [inv, other, voided, hand] });
+  assert.equal(c2.invoices, 2);
+  assert.equal(c2.billed, 530);
+  assert.equal(c2.collected, 340);
+  assert.equal(c2.outstanding, 190);
+  assert.equal(c2.percent, 64);
+  assert.equal(c2.categories.math.collected, 190);
+  assert.equal(c2.categories.online.collected, 85.5);
+  assert.equal(c2.categories.physical.collected, 104.5);
+  assert.equal(c2.unsortedCollected, 150);
+  // Filtered to P6 children: only they count, in fees and in money collected.
+  const p6 = C.familyStats(fams, { schedule: sched, period: '2026-11', invoices: [inv], kidFilter: s => C.normalizeLevel(s.level) === 'P6' });
+  assert.equal(p6.students, 2);
+  assert.equal(p6.categories.math.fees, 440);
+  assert.equal(p6.categories.online.students, 0);
+  assert.equal(p6.collected, 104.5, 'only Bea\'s share of the Bala invoice');
+  // Categories of a class.
+  assert.deepEqual(C.classCategories({ slotId: 'SAT-2', mode: 'Physical' }, sched), { subject: 'science', type: 'master' });
+  assert.deepEqual(C.classCategories({ custom: true, label: 'Math holiday class', mode: 'Online' }, sched), { subject: 'math', type: 'online' });
+  assert.equal(C.STAT_CATEGORIES.length, 5);
+});
