@@ -894,8 +894,8 @@ try {
   let wongRec = docsIn(await store(page), 'officeFamilies').find(f => f.parentName === 'Wong Ah Hock');
   assert.deepEqual([wongRec.status, wongRec.pauseFrom, wongRec.pauseUntil, wongRec.withdrawn], ['paused', '2026-12', '2027-01', false]);
   assert.ok(C.familyIsBillable(wongRec, '2026-11') && !C.familyIsBillable(wongRec, '2026-12') && !C.familyIsBillable(wongRec, '2027-01') && C.familyIsBillable(wongRec, '2027-02'), 'billed before and after the pause only');
-  const wongCard = page.locator('.fam', { hasText: 'Wong Ah Hock' });
-  assert.match(await wongCard.innerText(), /Paused Dec 2026 – Jan 2027/);
+  // The card re-draws when the saved record comes back from the database.
+  await page.waitForSelector('.fam:has-text("Wong Ah Hock") .pill:has-text("Paused Dec 2026 – Jan 2027")', { timeout: 10000 });
   await page.click('[data-act="famFilter"][data-k="paused"]');
   await settle(page);
   assert.deepEqual(await page.locator('.fam-grid .fam .fam-name').allInnerTexts(), ['Wong Ah Hock'], 'the Paused chip');
