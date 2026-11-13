@@ -40,7 +40,7 @@
         payment, last PayNow screenshot the parent sent).
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export const OFFICE_CORE_VERSION = '1.7.0';
+export const OFFICE_CORE_VERSION = '1.8.0';
 
 /* ─────────────────────────── The centre ─────────────────────────── */
 export const SITE = 'https://polymathlc.com.sg';
@@ -502,13 +502,13 @@ export function normalizeFamily(raw) {
     id: '', code: '', parentName: '', email: '', email2: '', whatsapp: '', address: '', signUpDate: '', notes: '',
     status: 'active', payerNames: [], credit: 0, discount: null, students: [], preferWhatsapp: false,
     paidMonths: [], screenshots: [],
-    hardcopy: false, paymentType: 'monthly', packageStart: '', packageEnd: '', withdrawn: false, lastMonth: ''
+    hardcopy: false, paymentType: 'monthly', packageStart: '', packageEnd: '', withdrawn: false, lastMonth: '',
+    pauseFrom: '', pauseUntil: ''
   }, raw || {});
   f.parentName = String(f.parentName || '').trim();
   f.email = cleanEmail(f.email);
   f.email2 = cleanEmail(f.email2);
   f.whatsapp = normalizeWhatsapp(f.whatsapp);
-  f.status = f.status === 'inactive' ? 'inactive' : 'active';
   f.payerNames = (Array.isArray(f.payerNames) ? f.payerNames : []).map(normText).filter(Boolean).filter((v, i, a) => a.indexOf(v) === i);
   f.credit = Math.max(0, round2(f.credit));
   f.students = (Array.isArray(f.students) ? f.students : []).map(normalizeStudent);
@@ -521,8 +521,19 @@ export function normalizeFamily(raw) {
   f.paymentType = PAYMENT_TYPE_KEYS.includes(f.paymentType) ? f.paymentType : 'monthly';
   f.packageStart = isDayKey(f.packageStart) ? f.packageStart : (parseDateLoose(f.packageStart) || '');
   f.packageEnd = isDayKey(f.packageEnd) ? f.packageEnd : (parseDateLoose(f.packageEnd) || '');
-  f.withdrawn = f.withdrawn === true || f.withdrawn === 'yes';
-  f.lastMonth = isPeriod(f.lastMonth) ? f.lastMonth : (isDayKey(f.lastMonth) ? f.lastMonth.slice(0, 7) : '');
+  const monthOf = v => isPeriod(v) ? v : (isDayKey(v) ? v.slice(0, 7) : '');
+  f.lastMonth = monthOf(f.lastMonth);
+  f.pauseFrom = monthOf(f.pauseFrom);
+  f.pauseUntil = monthOf(f.pauseUntil);
+  // Status: active / paused / withdrawn (v1.8.0). The older "Not active"
+  // ('inactive') reads as withdrawn, and so does the older Withdrawal = Yes;
+  // `withdrawn` is kept in step with the status for anything that reads it.
+  const was = String(f.status || '').toLowerCase();
+  const wd = f.withdrawn === true || f.withdrawn === 'yes';
+  f.status = FAMILY_STATUS_KEYS.includes(was) ? was : (was === 'inactive' ? 'withdrawn' : 'active');
+  if (wd && f.status === 'active') f.status = 'withdrawn';
+  f.withdrawn = f.status === 'withdrawn';
+  if (f.status !== 'paused') { f.pauseFrom = ''; f.pauseUntil = ''; }
   return f;
 }
 export function familyEmails(f) { return [f.email, f.email2].filter(isEmail).filter((e, i, a) => a.indexOf(e) === i); }
@@ -530,13 +541,54 @@ export function activeStudents(f) { return (f.students || []).filter(s => s.stat
 // Billable at all; and, given a month, billable for THAT month: not after the
 // last month of a family that has withdrawn, and not inside a paid package.
 export function familyIsBillable(f, period) {
-  if (!(f && f.status === 'active' && activeStudents(f).length > 0)) return false;
-  if (isPeriod(period)) {
-    const n = normalizeFamily(f);
-    if (n.withdrawn && n.lastMonth && period > n.lastMonth) return false;
-    if (packageCovers(n, period)) return false;
-  }
+  if (!(f && activeStudents(f).length > 0)) return false;
+  const n = normalizeFamily(f);
+  if (familyStateIn(n, isPeriod(period) ? period : sgMonthKey()) !== 'active') return false;
+  if (isPeriod(period) && packageCovers(n, period)) return false;
   return true;
+}
+/* ── Family status: active / paused / withdrawn ──
+   Active: billed every month. Paused: tuition stopped for some months —
+   from `pauseFrom` up to and including `pauseUntil` (no end month: paused
+   until somebody changes it); those months are not invoiced, and the family
+   is active again before and after them. Withdrawn: left the centre; with a
+   `lastMonth` it is billed up to and including that month, without one it is
+   not billed at all. familyStateIn() says which applies in a given month. */
+export const FAMILY_STATUSES = Object.freeze([
+  Object.freeze({ key: 'active', label: 'Active', icon: '✅', tone: 'green', help: 'Billed every month' }),
+  Object.freeze({ key: 'paused', label: 'Paused', icon: '⏸', tone: 'amber', help: 'Not billed for the paused months' }),
+  Object.freeze({ key: 'withdrawn', label: 'Withdrawn', icon: '👋', tone: 'grey', help: 'Not billed after the last month' })
+]);
+export const FAMILY_STATUS_KEYS = Object.freeze(FAMILY_STATUSES.map(x => x.key));
+export function familyStatusMeta(key) { return FAMILY_STATUSES.find(x => x.key === key) || FAMILY_STATUSES[0]; }
+export function familyStateIn(family, period) {
+  const f = normalizeFamily(family);
+  const p = isPeriod(period) ? period : sgMonthKey();
+  if (f.status === 'withdrawn') return f.lastMonth && p <= f.lastMonth ? 'active' : 'withdrawn';
+  if (f.status === 'paused') {
+    if (f.pauseFrom && p < f.pauseFrom) return 'active';
+    if (f.pauseUntil && p > f.pauseUntil) return 'active';
+    return 'paused';
+  }
+  return 'active';
+}
+// A family still with the centre (active or paused) this month — not one that has left.
+export function familyIsCurrent(family, period) { return familyStateIn(family, period) !== 'withdrawn'; }
+export function pauseText(f) {
+  if (!f || f.status !== 'paused') return '';
+  const from = f.pauseFrom ? monthShort(f.pauseFrom) + ' ' + f.pauseFrom.slice(0, 4) : '';
+  const to = f.pauseUntil ? monthShort(f.pauseUntil) + ' ' + f.pauseUntil.slice(0, 4) : '';
+  if (from && to) return 'Paused ' + (from === to ? from : from + ' – ' + to);
+  if (from) return 'Paused from ' + from;
+  if (to) return 'Paused until ' + to;
+  return 'Paused';
+}
+// "Active", "Paused Dec 2026 – Jan 2027", "Withdrawn · last month March 2027".
+export function familyStatusText(f) {
+  if (!f) return 'Active';
+  if (f.status === 'paused') return pauseText(f);
+  if (f.status === 'withdrawn') return withdrawalText(f);
+  return 'Active';
 }
 export function familyDisplayName(f) {
   // Full names: in Chinese and Malay names the first word is not the given name.
@@ -1752,8 +1804,10 @@ export function studentRows(families, schedule) {
         const slot = scheduleSlot(schedule, c.slotId);
         return { slotId: c.slotId, title: slotTitle(slot), subject: slot.subject || '', level: slot.level || '', mode: c.mode, when: slotShortLabel(c.slotId), fee: feeNum(c.rate) || monthlyFeeFor(slot, c.mode, schedule) };
       });
+      const famNow = familyStateIn(f, sgMonthKey());
       out.push({
-        familyId: f.id, family: f, studentId: st.id, name: st.name, level: st.level, school: st.school, status: f.status === 'inactive' ? 'left' : st.status,
+        familyId: f.id, family: f, studentId: st.id, name: st.name, level: st.level, school: st.school,
+        status: famNow === 'withdrawn' ? 'left' : (famNow === 'paused' && st.status === 'active' ? 'paused' : st.status),
         parentName: f.parentName, whatsapp: f.whatsapp, email: f.email, code: f.code, classes,
         subjects: [...new Set(classes.map(c => c.subject).filter(Boolean))],
         modes: [...new Set(classes.map(c => c.mode))],
@@ -1782,7 +1836,7 @@ export function slotRoster(families, schedule) {
 /* ─────────────────────────── 9. Family records ───────────────────────────
    A confirmed sign-up is one family record. What the centre keeps on it:
 
-     Status            active / not active (the family's `status`, 'inactive' in the data)
+     Status            active / paused (with the paused months) / withdrawn (with the last month)
      Email             ONE email per family — the family's account ID with the centre,
                        the same for every child. No two families may share it.
      Student name      each child (a family can have several)
@@ -1809,8 +1863,8 @@ export const LESSON_TYPES = Object.freeze([
 export const LESSON_TYPE_KEYS = Object.freeze(LESSON_TYPES.map(t => t.key));
 export function lessonTypeMeta(key) { return LESSON_TYPES.find(t => t.key === key) || null; }
 export function lessonTypeLabel(key) { const t = lessonTypeMeta(key); return t ? t.label : ''; }
-export const FAMILY_STATUS_LABEL = Object.freeze({ active: 'Active', inactive: 'Not active' });
-export function familyStatusLabel(status) { return status === 'inactive' ? FAMILY_STATUS_LABEL.inactive : FAMILY_STATUS_LABEL.active; }
+export const FAMILY_STATUS_LABEL = Object.freeze({ active: 'Active', paused: 'Paused', withdrawn: 'Withdrawn', inactive: 'Withdrawn' });
+export function familyStatusLabel(status) { return FAMILY_STATUS_LABEL[status] || 'Active'; }
 
 // The type of lesson a child's classes add up to, when nobody has chosen one:
 // any Master Class slot → masterclass; every class online → online regular;
@@ -2025,6 +2079,7 @@ export const MONTH_STATE_META = Object.freeze({
   hand: { label: 'Paid (marked by hand)', tone: 'green', icon: '✔︎' },
   package: { label: 'Covered by the package', tone: 'green', icon: '📦' },
   gone: { label: 'After the last month (withdrawn)', tone: 'grey', icon: '👋' },
+  paused: { label: 'Paused (not billed)', tone: 'grey', icon: '⏸' },
   part: { label: 'Part paid', tone: 'amber', icon: '◐' },
   waiting: { label: 'Waiting for payment', tone: 'amber', icon: '⏳' },
   overdue: { label: 'Overdue', tone: 'red', icon: '⚠️' },
@@ -2063,7 +2118,9 @@ export function familyPaymentRecord(family, invoices, payments, opts) {
     }
     if (h) return { key: 'hand', inv: null, hand: h };
     if (packageCovers(f, period)) return { key: 'package', inv: null, hand: null };
-    if (f.withdrawn && f.lastMonth && period > f.lastMonth) return { key: 'gone', inv: null, hand: null };
+    const state = familyStateIn(f, period);
+    if (state === 'withdrawn' && f.lastMonth) return { key: 'gone', inv: null, hand: null };
+    if (state === 'paused') return { key: 'paused', inv: null, hand: null };
     return { key: 'none', inv: null, hand: null };
   };
   // The window: from the record's start (September 2026, or the last `span`
@@ -2169,7 +2226,8 @@ export function familyRecordRows(families, ctx) {
         notes: [f.notes, st && st.notes].map(x => String(x || '').trim()).filter(Boolean).join(' · '),
         hardcopy: f.hardcopy, address: f.address,
         paymentType: f.paymentType, paymentTypeLabel: paymentTypeLabel(f.paymentType), packageStart: f.packageStart, packageEnd: f.packageEnd,
-        withdrawn: f.withdrawn, lastMonth: f.lastMonth
+        withdrawn: f.withdrawn, lastMonth: f.lastMonth, pauseFrom: f.pauseFrom, pauseUntil: f.pauseUntil,
+        statusText: familyStatusText(f)
       });
     });
   });
@@ -2178,7 +2236,7 @@ export function familyRecordRows(families, ctx) {
 export const FAMILY_RECORD_HEADERS = Object.freeze([
   'Status', 'Email (account ID)', 'Student name', 'Parent name', 'WhatsApp', 'Primary school', 'Level', 'With us since',
   'Type of lesson', 'Slots', 'Payment type', 'Package start', 'Package end', 'Months paid', 'Last payment', 'Last payment amount', 'Last screenshot',
-  'Hardcopy subscription', 'Postal address', 'Withdrawal', 'Last month with us', 'Reference', 'Notes'
+  'Hardcopy subscription', 'Postal address', 'Withdrawal', 'Last month with us', 'Paused from', 'Paused until', 'Reference', 'Notes'
 ]);
 export function familyRecordCsv(rows) {
   return toCsv([FAMILY_RECORD_HEADERS.slice(), ...(rows || []).map(r => [
@@ -2188,6 +2246,7 @@ export function familyRecordCsv(rows) {
     r.lastPayment ? r.lastPayment.date : '', r.lastPayment && r.lastPayment.amount ? moneyPlain(r.lastPayment.amount) : '',
     r.lastScreenshot ? r.lastScreenshot.date : '',
     r.hardcopy ? 'Yes' : 'No', r.hardcopy ? r.address : '', r.withdrawn ? 'Yes' : 'No', r.withdrawn && r.lastMonth ? periodLabel(r.lastMonth) : '',
+    r.pauseFrom ? periodLabel(r.pauseFrom) : '', r.pauseUntil ? periodLabel(r.pauseUntil) : '',
     r.code ? familyReference(r.code) : '', r.notes
   ])]);
 }
@@ -2230,7 +2289,11 @@ export function extraFieldProblems(family) {
     if (!f.packageStart || !f.packageEnd) out.push({ level: 'block', field: 'package', text: 'Package: fill in the start date and the end date.' });
     else if (f.packageEnd < f.packageStart) out.push({ level: 'block', field: 'package', text: 'Package: the end date is before the start date.' });
   }
-  if (f.withdrawn && !f.lastMonth) out.push({ level: 'block', field: 'withdrawal', text: 'Withdrawal is Yes: choose the last month with us.' });
+  if (f.withdrawn && !f.lastMonth) out.push({ level: 'warn', field: 'withdrawal', text: 'Withdrawn with no last month: not billed from now on. Choose the last month with us if they still have lessons to pay for.' });
+  if (f.status === 'paused') {
+    if (!f.pauseFrom) out.push({ level: 'block', field: 'pause', text: 'Paused: choose the first paused month.' });
+    else if (f.pauseUntil && f.pauseUntil < f.pauseFrom) out.push({ level: 'block', field: 'pause', text: 'Paused: the last paused month is before the first.' });
+  }
   return out;
 }
 
@@ -2461,10 +2524,7 @@ export function invoiceCollectedParts(inv, schedule, kidOk) {
 }
 // A family counts in a month when it is active and has not left before it.
 export function familyCurrentIn(f, period) {
-  const n = normalizeFamily(f);
-  if (n.status !== 'active') return false;
-  if (isPeriod(period) && n.withdrawn && n.lastMonth && period > n.lastMonth) return false;
-  return true;
+  return familyStateIn(f, period) === 'active';
 }
 // ctx: { schedule, invoices, period, today, kidFilter(student) }
 export function familyStats(families, ctx) {
@@ -2474,7 +2534,7 @@ export function familyStats(families, ctx) {
   const cats = {};
   STAT_CATEGORIES.forEach(k => { cats[k.key] = { key: k.key, label: k.label, icon: k.icon, group: k.group, students: 0, families: 0, fees: 0, collected: 0 }; });
   const out = {
-    period, families: 0, students: 0, paused: 0, noClass: 0, both: 0,
+    period, families: 0, students: 0, paused: 0, pausedFamilies: 0, noClass: 0, both: 0,
     fees: 0, discounts: 0, net: 0, unsortedFees: 0,
     collected: 0, billed: 0, outstanding: 0, invoices: 0, unsortedCollected: 0,
     categories: cats
@@ -2482,8 +2542,11 @@ export function familyStats(families, ctx) {
   const famIds = new Set();
   (families || []).forEach(raw => {
     const f = normalizeFamily(raw);
-    if (!familyCurrentIn(f, period)) return;
+    const state = familyStateIn(f, period);
+    if (state === 'withdrawn') return;
     const kids = (f.students || []).filter(st => st.status !== 'left' && (!c.kidFilter || c.kidFilter(st)));
+    // A paused family: its children are counted as paused, not in the totals.
+    if (state === 'paused') { out.paused += kids.length; if (kids.length) out.pausedFamilies++; return; }
     const active = kids.filter(st => st.status === 'active');
     out.paused += kids.filter(st => st.status === 'paused').length;
     if (!active.length) return;
@@ -2545,7 +2608,8 @@ export const ANNOUNCE_TOKENS = Object.freeze([
 export const ANNOUNCE_LIMITS = Object.freeze({ subject: 150, body: 10000, log: 400 });
 export const ANNOUNCE_STATUSES = Object.freeze([
   Object.freeze({ key: 'active', label: 'Active families' }),
-  Object.freeze({ key: 'inactive', label: 'Not active' }),
+  Object.freeze({ key: 'paused', label: 'Paused' }),
+  Object.freeze({ key: 'withdrawn', label: 'Withdrawn' }),
   Object.freeze({ key: 'all', label: 'Everyone' })
 ]);
 export function emptyAnnouncement() {
@@ -2630,8 +2694,10 @@ export function announceAudience(families, sel, ctx) {
   const rows = [];
   const taken = new Map();   // email → parent who already gets it
   sortFamilies((families || []).map(normalizeFamily), 'parent').forEach(f => {
-    if (s.status === 'active' && f.status !== 'active') return;
-    if (s.status === 'inactive' && f.status !== 'inactive') return;
+    // This month's state: a family that has withdrawn but still has a month to
+    // go counts as active; a pause that has not started yet too.
+    const want = s.status === 'inactive' ? 'withdrawn' : s.status;
+    if (want !== 'all' && familyStateIn(f, c.today ? String(c.today).slice(0, 7) : sgMonthKey()) !== want) return;
     if (s.type && !(f.students || []).some(st => st.status !== 'left' && studentLessonType(st, c.schedule) === s.type)) return;
     if (!familyMatchesFilters(f, F, { schedule: c.schedule, invoices: c.invoices, payments: c.payments, today: c.today, record: c.record ? c.record(f) : undefined })) return;
     if (words.length) {
@@ -2668,7 +2734,7 @@ export function announceAudience(families, sel, ctx) {
 export function audienceSummary(sel, schedule) {
   const s = Object.assign({ status: 'active', type: '', search: '', filters: {} }, sel || {});
   const F = cleanFamilyFilters(s.filters);
-  const parts = [(ANNOUNCE_STATUSES.find(x => x.key === s.status) || ANNOUNCE_STATUSES[0]).label];
+  const parts = [(ANNOUNCE_STATUSES.find(x => x.key === (s.status === 'inactive' ? 'withdrawn' : s.status)) || ANNOUNCE_STATUSES[0]).label];
   if (s.type) parts.push(lessonTypeLabel(s.type));
   if (F.level) parts.push(levelLabel(F.level));
   if (F.subject) parts.push(F.subject);

@@ -679,7 +679,7 @@ test('older records need no migration: new fields default, lesson type is read f
   assert.equal(C.normalizeStudent({ lessonType: 'weekend' }).lessonType, '', 'an unknown type is dropped');
   assert.equal(C.normalizeStudent({ startDate: '3 Nov 2026' }).startDate, '2026-11-03', 'a typed start date is read');
   assert.deepEqual(C.LESSON_TYPES.map(t => t.label), ['Online regular', 'Physical regular', 'Masterclass']);
-  assert.equal(C.familyStatusLabel('inactive'), 'Not active');
+  assert.equal(C.familyStatusLabel('inactive'), 'Withdrawn', 'the older "Not active" reads as Withdrawn');
   assert.equal(C.familyStatusLabel('active'), 'Active');
 });
 
@@ -856,7 +856,7 @@ test('the records table and its CSV: one row per child, every field Zhi Kai list
   assert.deepEqual(kai.slots.map(s => s.id), ['TUE-3', 'SAT-2']);
   assert.equal(kai.notes, 'Prefers WhatsApp · Weak in fractions');
   assert.equal(kai.paidText, 'Nov 2026');
-  assert.equal(rows[2].statusLabel, 'Not active');
+  assert.equal(rows[2].statusLabel, 'Withdrawn');
   const csv = C.familyRecordCsv(rows);
   const lines = csv.split(/\r?\n/);
   assert.equal(lines[0], C.FAMILY_RECORD_HEADERS.join(','));
@@ -881,7 +881,7 @@ test('hardcopy, payment type (monthly / package) and withdrawal', () => {
   assert.deepEqual(texts({ paymentType: 'package', packageStart: '2026-09-01' }), ['package']);
   assert.deepEqual(texts({ paymentType: 'package', packageStart: '2026-12-01', packageEnd: '2026-09-01' }), ['package']);
   assert.deepEqual(texts({ paymentType: 'package', packageStart: '2026-09-01', packageEnd: '2026-12-31' }), []);
-  assert.deepEqual(texts({ withdrawn: true }), ['withdrawal']);
+  assert.deepEqual(texts({ withdrawn: true }), [], 'no last month: a warning, not a block (not billed from now)');
   assert.deepEqual(texts({ withdrawn: true, lastMonth: '2026-12' }), []);
   // Billing: a package's months and the months after withdrawal are not invoiced.
   const pkg = Object.assign({}, base, { paymentType: 'package', packageStart: '2026-09-15', packageEnd: '2026-12-10' });
@@ -1130,4 +1130,58 @@ test('announcements: who gets it — filters, ticks, no email, a shared email se
   assert.equal(log.failed.length, 1);
   assert.equal(C.announcementLogId(7), 'announcement-7');
   assert.ok(C.mailDocId('announce', 'a', 1).startsWith(C.MAIL_PREFIX), 'mail ids the rules allow');
+});
+
+/* ---- Family status: Active / Paused / Withdrawn (v1.8.0) ---- */
+test('family status: active, paused for some months, withdrawn; older records read correctly', () => {
+  const kid = [{ id: 'k', name: 'Kai', level: 'P5', status: 'active', classes: [{ slotId: 'FRI-2', mode: 'Physical' }] }];
+  const fam = x => Object.assign({ id: 'f', parentName: 'P', email: 'p@x.com', students: kid }, x);
+  // Older records.
+  assert.equal(C.normalizeFamily(fam({ status: 'inactive' })).status, 'withdrawn', '"Not active" is withdrawn');
+  assert.equal(C.normalizeFamily(fam({ status: 'active', withdrawn: true, lastMonth: '2026-12' })).status, 'withdrawn', 'Withdrawal = Yes is withdrawn');
+  assert.equal(C.normalizeFamily(fam({})).status, 'active');
+  assert.equal(C.normalizeFamily(fam({ status: 'weird' })).status, 'active');
+  assert.equal(C.normalizeFamily(fam({ status: 'withdrawn' })).withdrawn, true, 'kept in step');
+  assert.equal(C.normalizeFamily(fam({ status: 'paused' })).withdrawn, false);
+  assert.deepEqual([C.normalizeFamily(fam({ status: 'active', pauseFrom: '2026-12' })).pauseFrom], [''], 'pause months only on a paused family');
+  // Month by month.
+  const paused = fam({ status: 'paused', pauseFrom: '2026-12', pauseUntil: '2027-01' });
+  assert.deepEqual(['2026-11', '2026-12', '2027-01', '2027-02'].map(p => C.familyStateIn(paused, p)), ['active', 'paused', 'paused', 'active']);
+  assert.deepEqual(['2026-11', '2026-12', '2027-02'].map(p => C.familyIsBillable(paused, p)), [true, false, true]);
+  const open = fam({ status: 'paused', pauseFrom: '2026-12' });
+  assert.deepEqual(['2026-11', '2027-06'].map(p => C.familyStateIn(open, p)), ['active', 'paused'], 'no end month: paused until changed');
+  const leaving = fam({ status: 'withdrawn', lastMonth: '2026-12' });
+  assert.deepEqual(['2026-12', '2027-01'].map(p => C.familyStateIn(leaving, p)), ['active', 'withdrawn']);
+  assert.deepEqual(['2026-12', '2027-01'].map(p => C.familyIsBillable(leaving, p)), [true, false]);
+  assert.equal(C.familyStateIn(fam({ status: 'inactive' }), '2026-01'), 'withdrawn', 'withdrawn with no last month: never billed');
+  assert.equal(C.familyIsCurrent(paused, '2026-12'), true);
+  assert.equal(C.familyIsCurrent(leaving, '2027-01'), false);
+  // Words.
+  assert.equal(C.pauseText(paused), 'Paused Dec 2026 – Jan 2027');
+  assert.equal(C.pauseText(open), 'Paused from Dec 2026');
+  assert.equal(C.familyStatusText(C.normalizeFamily(leaving)), 'Withdrawn · last month December 2026');
+  assert.equal(C.familyStatusText(C.normalizeFamily(fam({}))), 'Active');
+  assert.deepEqual(C.FAMILY_STATUS_KEYS, ['active', 'paused', 'withdrawn']);
+  assert.equal(C.familyStatusLabel('paused'), 'Paused');
+  // Problems.
+  const probs = x => C.extraFieldProblems(fam(x)).map(p => p.level + ':' + p.field);
+  assert.deepEqual(probs({ status: 'paused' }), ['block:pause']);
+  assert.deepEqual(probs({ status: 'paused', pauseFrom: '2027-02', pauseUntil: '2027-01' }), ['block:pause']);
+  assert.deepEqual(probs({ status: 'paused', pauseFrom: '2027-01' }), []);
+  assert.deepEqual(probs({ status: 'withdrawn' }), ['warn:withdrawal']);
+  // The payment record shows paused months; the table, CSV, statistics and announcements follow.
+  const rec = C.familyPaymentRecord(paused, [], [], { today: '2026-11-12', until: '2027-02' });
+  assert.deepEqual(rec.months.map(m => m.label + ':' + m.key), ['Sep:none', 'Oct:none', 'Nov:none', 'Dec:paused', 'Jan:paused', 'Feb:none']);
+  const rows = C.familyRecordRows([paused], { schedule: REC_SCHEDULE, today: '2026-11-12' });
+  assert.equal(rows[0].statusLabel, 'Paused');
+  assert.equal(rows[0].statusText, 'Paused Dec 2026 – Jan 2027');
+  const csv = C.familyRecordCsv(rows).split(/\r?\n/);
+  assert.ok(csv[0].includes('Paused from,Paused until') && csv[1].startsWith('Paused,') && csv[1].includes('December 2026,January 2027'));
+  const st = C.familyStats([paused, fam({ id: 'g', status: 'active' }), fam({ id: 'h', status: 'withdrawn' })], { schedule: REC_SCHEDULE, period: '2026-12' });
+  assert.deepEqual([st.families, st.students, st.paused, st.pausedFamilies], [1, 1, 1, 1], 'paused children counted apart, withdrawn not at all');
+  const aud = s => C.announceAudience([paused, fam({ id: 'g', parentName: 'G', email: 'g@x.com', status: 'active' }), fam({ id: 'h', parentName: 'H', email: 'h@x.com', status: 'inactive' })], { status: s }, { schedule: REC_SCHEDULE, today: '2026-12-05' }).rows.map(r => r.familyId).join('');
+  assert.deepEqual([aud('active'), aud('paused'), aud('withdrawn'), aud('inactive'), aud('all')], ['g', 'f', 'h', 'h', 'ghf']);
+  // Students of a paused family show as paused, of a withdrawn one as left (this month).
+  const sr = C.studentRows([fam({ status: 'paused', pauseFrom: '2020-01' }), fam({ id: 'w', status: 'withdrawn' })], REC_SCHEDULE);
+  assert.deepEqual(sr.map(r => r.status), ['paused', 'left']);
 });

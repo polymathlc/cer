@@ -581,7 +581,8 @@ try {
   await page.locator('.modal input[data-k="packageStart"]').dispatchEvent('change');
   await page.fill('.modal input[data-k="packageEnd"]', '2027-02-28');
   await page.locator('.modal input[data-k="packageEnd"]').dispatchEvent('change');
-  await page.selectOption('.modal select[data-ch="famOpt"][data-k="withdrawn"]', 'yes');
+  assert.deepEqual(await page.locator('.modal #fam-status option').evaluateAll(os => os.map(o => o.value)), ['active', 'paused', 'withdrawn'], 'three statuses');
+  await page.selectOption('.modal #fam-status', 'withdrawn');
   await page.waitForSelector('.modal input[data-k="lastMonth"]');
   await page.fill('.modal input[data-k="lastMonth"]', '2027-03');
   await page.locator('.modal input[data-k="lastMonth"]').dispatchEvent('change');
@@ -599,6 +600,7 @@ try {
   assert.deepEqual(limSaved.screenshots.map(x => x.date + ':' + x.period), ['2026-11-03:2026-11']);
   assert.deepEqual([limSaved.hardcopy, limSaved.address, limSaved.paymentType, limSaved.packageStart, limSaved.packageEnd, limSaved.withdrawn, limSaved.lastMonth],
     [true, 'Blk 1 Clementi Ave 2, #05-01, Singapore 120001', 'package', '2026-12-01', '2027-02-28', true, '2027-03']);
+  assert.equal(limSaved.status, 'withdrawn', 'withdrawn, still billed up to March 2027');
 
   // One email, one family: a new family with Lim's email is refused, with a way to the right family.
   await page.click('[data-act="newFamily"]');
@@ -668,7 +670,7 @@ try {
   await page.waitForSelector('.fam-grid');
 
   // ── Sorted by level (the default), with a heading per level, and filters that add up ──
-  const activeFams = () => store(page).then(st => docsIn(st, 'officeFamilies').filter(f => (f.status || 'active') === 'active').map(f => C.normalizeFamily(f)));
+  const activeFams = () => store(page).then(st => docsIn(st, 'officeFamilies').map(f => C.normalizeFamily(f)).filter(f => C.familyStateIn(f, '2026-11') === 'active'));
   const cardNames = () => page.locator('.fam-grid .fam .fam-name').allInnerTexts();
   // ── 📊 Key statistics on top: students and fees by subject and type of lesson ──
   await page.waitForSelector('#fam-stats .kpi-row');
@@ -866,6 +868,52 @@ try {
   await page.click('[data-act="annClear"]');
   await page.click('[data-act="annFReset"]');
   await page.click('[data-act="annTickAll"]');
+  await page.click('#tabs [data-view="settings"]');
+
+  // ── Status: Active / Paused (for some months) / Withdrawn ──
+  await page.click('#tabs [data-view="families"]');
+  await page.click('text=Wong Ah Hock');
+  await page.waitForSelector('.modal #fam-status');
+  await page.selectOption('.modal #fam-status', 'paused');
+  await page.waitForSelector('.modal #fam-pause-from');
+  assert.equal(await page.inputValue('.modal #fam-pause-from'), '2026-11', 'paused from this month unless changed');
+  await page.fill('.modal #fam-pause-until', '2026-10');
+  await page.locator('.modal #fam-pause-until').dispatchEvent('change');
+  await settle(page);
+  assert.ok((await page.locator('.modal .fix.block').allInnerTexts()).some(t => /before the first/.test(t)), 'the end cannot be before the start');
+  await page.fill('.modal #fam-pause-from', '2026-12');
+  await page.locator('.modal #fam-pause-from').dispatchEvent('change');
+  await page.fill('.modal #fam-pause-until', '2027-01');
+  await page.locator('.modal #fam-pause-until').dispatchEvent('change');
+  await settle(page);
+  assert.equal(await page.locator('.modal .fix.block').count(), 0);
+  assert.equal(await page.locator('.modal .mo.paused').count(), 2, 'December and January show as paused in the payment record');
+  await shot(page, '04i-family-paused');
+  await page.click('.modal [data-act="saveFamily"]');
+  await page.waitForSelector('#modal.show', { state: 'detached' });
+  let wongRec = docsIn(await store(page), 'officeFamilies').find(f => f.parentName === 'Wong Ah Hock');
+  assert.deepEqual([wongRec.status, wongRec.pauseFrom, wongRec.pauseUntil, wongRec.withdrawn], ['paused', '2026-12', '2027-01', false]);
+  assert.ok(C.familyIsBillable(wongRec, '2026-11') && !C.familyIsBillable(wongRec, '2026-12') && !C.familyIsBillable(wongRec, '2027-01') && C.familyIsBillable(wongRec, '2027-02'), 'billed before and after the pause only');
+  const wongCard = page.locator('.fam', { hasText: 'Wong Ah Hock' });
+  assert.match(await wongCard.innerText(), /Paused Dec 2026 – Jan 2027/);
+  await page.click('[data-act="famFilter"][data-k="paused"]');
+  await settle(page);
+  assert.deepEqual(await page.locator('.fam-grid .fam .fam-name').allInnerTexts(), ['Wong Ah Hock'], 'the Paused chip');
+  await page.click('[data-act="famFilter"][data-k="withdrawn"]');
+  await settle(page);
+  assert.deepEqual(await page.locator('.fam-grid .fam .fam-name').allInnerTexts(), ['Lim Wei Ming'], 'the Withdrawn chip');
+  await page.click('[data-act="famFilter"][data-k="all"]');
+  await settle(page);
+  // Back to active: the pause months go.
+  await page.click('text=Wong Ah Hock');
+  await page.waitForSelector('.modal #fam-status');
+  await page.selectOption('.modal #fam-status', 'active');
+  await settle(page);
+  assert.equal(await page.locator('.modal #fam-pause-from').count(), 0);
+  await page.click('.modal [data-act="saveFamily"]');
+  await page.waitForSelector('#modal.show', { state: 'detached' });
+  wongRec = docsIn(await store(page), 'officeFamilies').find(f => f.parentName === 'Wong Ah Hock');
+  assert.deepEqual([wongRec.status, wongRec.pauseFrom, wongRec.pauseUntil], ['active', '', '']);
   await page.click('#tabs [data-view="settings"]');
 
   // An office whose rules are NOT published refuses to save.
