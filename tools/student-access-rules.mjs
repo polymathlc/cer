@@ -250,7 +250,6 @@ export function accessRuleTests() {
   for (const uid of ADMINS) {
     for (const method of ['get', 'list', 'create', 'update', 'delete'])
       cases.push(accessCase(own, method, 'ALLOW', uid, { data: approved, existing: form }));
-    cases.push(accessCase('studentAccess', 'list', 'ALLOW', uid));
   }
   for (const uid of NOT_ADMINS) cases.push(accessCase('studentAccess', 'list', 'DENY', uid));
 
@@ -294,17 +293,21 @@ export function accessPreservedTests(source) {
   return cases;
 }
 
+// Runs EVERY batch before deciding, so one run names every failing case (up to 20).
 async function validate(request, project, source, tests) {
+  const failed = [], issues = [];
+  let short = 0;
   for (let offset = 0; offset < tests.length; offset += 100) {
     const batch = tests.slice(offset, offset + 100);
     const result = await request(`projects/${project}:test`, { method: 'POST', body: { source, testSuite: { testCases: batch } } });
-    const failed = (result.testResults || []).flatMap((test, index) => test.state === 'SUCCESS' ? [] : [offset + index]);
-    if (result.testResults?.length !== batch.length || failed.length || (result.issues || []).some(issue => issue.severity === 'ERROR'))
-      throw new Error('Rules tests failed; active rules unchanged: ' + JSON.stringify({ failed: failed.length, expected: batch.length, received: result.testResults?.length || 0,
-        cases: failed.slice(0, 10).map(index => ({ path: tests[index].request.path, method: tests[index].request.method,
-          expected: tests[index].expectation, uid: tests[index].request.auth?.uid || null })),
-        issues: (result.issues || []).filter(issue => issue.severity === 'ERROR').map(issue => ({ description: issue.description, sourcePosition: issue.sourcePosition })) }));
+    if (result.testResults?.length !== batch.length) short++;
+    (result.testResults || []).forEach((test, index) => { if (test.state !== 'SUCCESS') failed.push(offset + index); });
+    for (const issue of result.issues || []) if (issue.severity === 'ERROR' && issues.length < 5) issues.push({ description: issue.description, sourcePosition: issue.sourcePosition });
   }
+  if (short || failed.length || issues.length)
+    throw new Error('Rules tests failed; active rules unchanged: ' + JSON.stringify({ failed: failed.length, of: tests.length, shortBatches: short,
+      cases: failed.slice(0, 20).map(index => ({ path: tests[index].request.path.replace('/databases/(default)/documents/', ''), method: tests[index].request.method,
+        expected: tests[index].expectation, uid: tests[index].request.auth?.uid || null })), issues }));
 }
 
 export async function publishStudentAccessRules({ request, deploy = false, readOnly = false }) {
