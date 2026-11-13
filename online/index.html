@@ -552,6 +552,25 @@
   .tl-day:hover { border-color: var(--text-tertiary); }
   .tl-day:focus-visible { outline: 2px solid #F2B705; outline-offset: 2px; }
   .tl-day-play { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: #1A1A1A; color: #fff; font-size: 10px; flex: none; }
+  /* 📅 v1.9.0: every class day, newest first — the lesson videos beside that day's answer key PDF. */
+  .tl-cdays { margin-top: var(--space-sm); display: flex; flex-direction: column; gap: 8px; }
+  .tl-cday-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .tl-cday { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding: 8px 12px; border: 1px solid var(--border-subtle); border-radius: 12px; background: #fff; }
+  .tl-cday.is-latest { border-color: #F2B705; background: #FFFBEB; }
+  .tl-cday-date { display: inline-flex; align-items: center; gap: 8px; min-width: 7.5em; }
+  .tl-cday-new { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: #F2B705; color: #1A1A1A; }
+  .tl-cday-acts { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .tl-cday-none { font-size: var(--font-size-sm); color: var(--text-tertiary); padding: 6px 4px; }
+  .tl-key { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 8px; border: 1px solid var(--border-subtle); border-radius: 999px; background: #fff; color: inherit; text-decoration: none; }
+  .tl-key:hover { border-color: var(--text-tertiary); }
+  .tl-key:focus-visible { outline: 2px solid #F2B705; outline-offset: 2px; }
+  .tl-key-icon { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: #F2B705; font-size: 12px; flex: none; }
+  .tl-key b { display: block; font-size: var(--font-size-xs); line-height: 1.25; }
+  .tl-key small { display: block; font-size: 0.7rem; color: var(--text-tertiary); line-height: 1.25; }
+  .tl-cday-more summary { cursor: pointer; font-size: var(--font-size-sm); color: var(--text-secondary); padding: 4px 2px; }
+  .tl-cday-more[open] summary { margin-bottom: 8px; }
+  .tl-key-wait { font-size: var(--font-size-sm); }
+  @media (max-width: 560px) { .tl-cday { flex-direction: column; align-items: flex-start; } }
   .tl-day b { display: block; font-size: var(--font-size-xs); line-height: 1.25; }
   .tl-day small { display: block; font-size: 0.7rem; color: var(--text-tertiary); line-height: 1.25; }
   .rec-list { display: flex; flex-direction: column; gap: 8px; }
@@ -717,8 +736,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
-<script src="portal-core.js?v=1.8.0"></script>
-<script src="portal.js?v=1.8.0"></script>
+<script src="portal-core.js?v=1.9.0"></script>
+<script src="portal.js?v=1.9.0"></script>
 <script defer src="pwa-install.js?v=2.0.0" data-app-name="Polymath Worksheets" data-app-key="online" data-app-icon="assets/app-icons/icon-192.png" data-accent="#00695C" data-sw="sw.js" data-floating="auto"></script>
 <!-- 🔐 Polymath student access (v1.0.0): the enrolment pop-up every Polymath app shares. A signed-in student is
      blocked here until an admin approves them at polymathlc.com.sg/student/#admin. Source: polymathlc/cer student/access-gate.js -->
