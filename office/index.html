@@ -456,6 +456,7 @@
   .md.hand { border-style:dashed; }
   .md.package { background:var(--green-bg); border-color:var(--green-line); color:var(--green); }
   .md.gone { opacity:.5; }
+  .md.paused { opacity:.6; background:var(--grey-bg); }
   .md.waiting, .md.part { background:var(--amber-bg); border-color:var(--amber-line); color:var(--amber); }
   .md.overdue { background:var(--red-bg); border-color:var(--red-line); color:var(--red); }
   .md.draft { color:var(--grey); }
@@ -477,6 +478,7 @@
   table.rec td.slots .subj { white-space:nowrap; }
   .fix { font-size:12.5px; padding:7px 10px; border-radius:9px; margin-top:6px; border:1px solid; }
   .fix.block { color:#7f1d1d; background:var(--red-bg); border-color:var(--red-line); }
+  .fix.warn { color:var(--amber); background:var(--amber-bg); border-color:var(--amber-line); }
   .fix.warn { color:#78350f; background:var(--amber-bg); border-color:var(--amber-line); }
   .lt-issues { margin-top:8px; font-size:12.5px; color:#78350f; background:var(--amber-bg); border:1px solid var(--amber-line); border-radius:9px; padding:7px 10px; }
   .cls-name { min-width:0; overflow:hidden; }
@@ -518,6 +520,7 @@
   .mo.hand { border-style:dashed; }
   .mo.package { background:var(--green-bg); border-color:var(--green-line); color:var(--green); }
   .mo.gone { opacity:.55; }
+  .mo.paused { opacity:.7; background:var(--grey-bg); }
   .help-cell { display:flex; align-items:flex-end; }
   table.rec .addr { max-width:180px; white-space:normal; }
   .mo.waiting, .mo.part { background:var(--amber-bg); border-color:var(--amber-line); color:var(--amber); }
@@ -692,6 +695,6 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="version hidden" id="version"></div>
 
-<script type="module" src="office-app.mjs?v=1.7.0"></script>
+<script type="module" src="office-app.mjs?v=1.8.0"></script>
 </body>
 </html>
