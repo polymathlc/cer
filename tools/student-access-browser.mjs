@@ -322,6 +322,7 @@ await step('two children filled in → "Waiting for approval", the record and th
   assert.equal(record.childCount, 2);
   assert.deepEqual(record.children, [{ name: 'Tan Wei Ming', level: 'P5', subjects: 'both' }, { name: 'Tan Wei Ling', level: 'P3', subjects: 'math' }]);
   assert.equal(record.app, 'tutor');
+  for (let i = 0; i < 50 && !db.mail.has('polymath-access-stu1-1'); i++) await studentPage.waitForTimeout(100);
   const mail = db.mail.get('polymath-access-stu1-1');
   assert.ok(mail, 'the centre is emailed');
   assert.match(mail.message.subject, /Mdm Tan Siew Ling \(2 children\)/);
@@ -406,6 +407,7 @@ await step('the admin pauses access → the student is blocked again and may ask
   await inGate(studentPage, 'button[type="submit"]').click();
   await waitGate(studentPage, 'Waiting for approval');
   assert.equal(db.studentAccess.get('stu1').submissions, 2);
+  for (let i = 0; i < 50 && !db.mail.has('polymath-access-stu1-2'); i++) await studentPage.waitForTimeout(100);   // the email is sent just after
   assert.ok(db.mail.has('polymath-access-stu1-2'));
 });
 
