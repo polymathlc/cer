@@ -33,9 +33,9 @@
      mail/polymath-office-*    emails for the Trigger Email extension
    Reads: schedule_config/main (the /schedule page's own document).
    ═══════════════════════════════════════════════════════════════════════════ */
-import * as C from './office-core.mjs?v=1.12.0';
+import * as C from './office-core.mjs?v=1.13.0';
 
-const OFFICE_VERSION = 'v1.12.0';
+const OFFICE_VERSION = 'v1.13.0';
 
 /* ═══════════════ Firebase — the CER project ═══════════════ */
 firebase.initializeApp({
@@ -1688,7 +1688,7 @@ MODALS.invoice = function (m) {
     : '<div class="banner amber" style="margin:0;padding:10px 12px;"><div>✉ No email for this family — <button class="linkbtn" data-act="openFamily" data-id="' + esc(inv.familyId) + '">add one</button>.</div></div>';
   return {
     size: 'wide', title: esc(inv.parentName) + ' · ' + esc(inv.custom || inv.title ? C.invoiceTitle(inv, S.settings) : C.invoicePeriodLabel(inv, S.settings)), sub: esc(inv.number) + ' · ' + pill(st) + (inv.custom ? ' <span class="tag-custom">Custom</span>' : '') + (isFinite(Date.parse(inv.dueDate)) ? ' · due ' + esc(C.prettyDate(inv.dueDate)) : ''),
-    body: '<div class="split" style="grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);"><div><div class="inv-paper"><div class="hd"><b>POLYMATH LEARNING CENTRE</b><span>Invoice ' + esc(inv.number) + '</span></div><div class="bar"></div><div class="bd">'
+    body: '<div class="split" style="grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);"><div><div class="inv-paper"><div class="hd"><img class="hd-logo" src="../assets/branding/polymath-logo-email.png" alt=""><b>POLYMATH LEARNING CENTRE</b><span>Invoice ' + esc(inv.number) + '</span></div><div class="bar"></div><div class="bd">'
       + '<div class="small muted" style="margin-bottom:6px;">For ' + esc(inv.parentName) + ' · issued ' + esc(C.prettyDate(inv.issueDate)) + '</div>'
       + (inv.custom || inv.title ? '<div style="font-weight:700;margin-bottom:6px;">' + esc(C.invoiceTitle(inv, S.settings)) + '</div>' : '')
       + linesHtml
@@ -1786,7 +1786,7 @@ MODALS.invEdit = function (m) {
     + '<div class="form" style="margin-top:12px;">' + field('note', 'Note at the end of the invoice', { textarea: true, full: true, ph: S.settings.invoiceNote || 'optional', hint: 'Left empty, the usual line from Settings is used.' }) + '</div>'
     + (base && base.paid > 0 ? '<div class="banner amber" style="margin-top:12px;"><div class="big">💰</div><div><b>' + money(base.paid) + ' has already been received on this invoice.</b>It stays recorded; what is still owed follows the new total.</div></div>' : '')
     + '</div>';
-  const right = '<div class="ed-preview"><div class="section-title">Preview</div><div class="inv-paper"><div class="hd"><b>POLYMATH LEARNING CENTRE</b><span>Invoice ' + esc(res.fields.number || '—') + '</span></div><div class="bar"></div><div class="bd">'
+  const right = '<div class="ed-preview"><div class="section-title">Preview</div><div class="inv-paper"><div class="hd"><img class="hd-logo" src="../assets/branding/polymath-logo-email.png" alt=""><b>POLYMATH LEARNING CENTRE</b><span>Invoice ' + esc(res.fields.number || '—') + '</span></div><div class="bar"></div><div class="bd">'
     + '<div class="small muted" style="margin-bottom:6px;">For ' + esc(res.fields.parentName || '…') + (C.isDayKey(res.fields.issueDate) ? ' · issued ' + esc(C.prettyDate(res.fields.issueDate)) : '') + '</div>'
     + '<div style="font-weight:700;margin-bottom:6px;">' + esc(C.invoiceTitle(preview, S.settings)) + '</div>'
     + '<table class="inv-lines"><tbody>' + res.fields.lines.map(l => '<tr><td>' + (l.studentName ? '<b>' + esc(l.studentName) + '</b><br>' : '') + esc(l.desc) + (l.detail ? '<div class="det">' + esc(l.detail) + '</div>' : '') + '</td><td class="r" style="' + (l.amount < 0 ? 'color:var(--green)' : '') + '">' + money(l.amount) + '</td></tr>').join('')
@@ -2023,7 +2023,14 @@ function fitText(ctx, text, max) {
 }
 // The picture pasted into WhatsApp and saved from the invoice: everything a
 // parent needs on one image, with the QR big enough to scan off a screen.
+// The logo for invoice pictures (same site, so the canvas can still be copied).
+let logoImg = null;
+function loadLogo() {
+  if (!logoImg) logoImg = new Promise(res => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = '../assets/branding/polymath-logo-email.png'; });
+  return logoImg;
+}
 async function invoiceImage(inv) {
+  const logo = await loadLogo();
   const owe = C.invoiceOutstanding(inv);
   const W = 760, P = 44, QR = 380;
   const lines = inv.lines || [];
@@ -2039,8 +2046,10 @@ async function invoiceImage(inv) {
   ctx.fillStyle = '#10303a'; ctx.fillRect(0, 0, W, 112);
   const g = ctx.createLinearGradient(0, 0, W, 0); g.addColorStop(0, '#2e9ca6'); g.addColorStop(.5, '#56c4d0'); g.addColorStop(1, '#ec008c');
   ctx.fillStyle = g; ctx.fillRect(0, 108, W, 6);
-  ctx.fillStyle = '#fff'; ctx.font = font('bold', 26); ctx.fillText('POLYMATH LEARNING CENTRE', P, 52);
-  ctx.fillStyle = '#b8e4e8'; ctx.font = font('500', 19); ctx.fillText(fitText(ctx, 'Invoice ' + inv.number + ' · ' + (titled ? C.prettyDate(inv.issueDate) : C.invoicePeriodLabel(inv, S.settings)), W - P * 2), P, 84);
+  const LX = logo ? P + 118 : P;   // the logo on the left of the header
+  if (logo) ctx.drawImage(logo, P - 8, 14, 112, Math.round(112 * logo.naturalHeight / logo.naturalWidth));
+  ctx.fillStyle = '#fff'; ctx.font = font('bold', 26); ctx.fillText('POLYMATH LEARNING CENTRE', LX, 52);
+  ctx.fillStyle = '#b8e4e8'; ctx.font = font('500', 19); ctx.fillText(fitText(ctx, 'Invoice ' + inv.number + ' · ' + (titled ? C.prettyDate(inv.issueDate) : C.invoicePeriodLabel(inv, S.settings)), W - LX - P), LX, 84);
   let y = 158;
   ctx.fillStyle = '#6b7f85'; ctx.font = font('500', 18); ctx.fillText('For ' + (inv.parentName || ''), P, y);
   y += 30;

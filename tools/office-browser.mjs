@@ -71,6 +71,8 @@ async function routeOutside(context) {
     const url = route.request().url();
     if (url.startsWith('https://www.gstatic.com/firebasejs/')) return route.fulfill({ contentType: 'text/javascript', body: url.includes('app-compat') ? FAKE_FB : '' });
     if (url.startsWith('https://fonts.googleapis.com/')) return route.fulfill({ contentType: 'text/css', body: '' });
+    // The logo in email previews is the centre's own site's copy: served from this checkout.
+    if (url === C.EMAIL_LOGO_URL) return route.fulfill({ contentType: 'image/png', body: readFileSync(new URL('../assets/branding/polymath-logo-email.png', import.meta.url)) });
     if (LIB[url]) return route.fulfill({ contentType: 'text/javascript', body: readFileSync(LIB[url]) });
     if (url.startsWith('https://web.whatsapp.com/') || url.startsWith('https://wa.me/')) return route.fulfill({ contentType: 'text/html', body: '<title>WhatsApp stand-in</title>' });
     if (url.startsWith('https://firestore.googleapis.com/')) {

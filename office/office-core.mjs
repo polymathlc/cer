@@ -40,7 +40,10 @@
         payment, last PayNow screenshot the parent sent).
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export const OFFICE_CORE_VERSION = '1.12.0';
+export const OFFICE_CORE_VERSION = '1.13.0';
+// The centre's logo for emails: a small copy of assets/branding/polymath-learning-centre.png,
+// served from the website so Gmail and other mail apps can show it (v1.13.0).
+export const EMAIL_LOGO_URL = 'https://polymathlc.com.sg/assets/branding/polymath-logo-email.png';
 
 /* ─────────────────────────── The centre ─────────────────────────── */
 export const SITE = 'https://polymathlc.com.sg';
@@ -1638,9 +1641,11 @@ function payLinkFrom(url, save) { return save ? url + (url.includes('?') ? '&' :
 function emailShell(title, inner, s) {
   return '<div style="margin:0;padding:0;background:#eef5f6;">'
     + '<div style="max-width:600px;margin:0 auto;padding:24px 12px;font-family:Arial,Helvetica,sans-serif;color:#10303a;">'
-    + '<div style="background:#10303a;border-radius:14px 14px 0 0;padding:18px 22px;">'
-    + '<div style="color:#ffffff;font-weight:700;font-size:17px;letter-spacing:.04em;">POLYMATH LEARNING CENTRE</div>'
-    + '<div style="color:#b8e4e8;font-size:13px;margin-top:2px;">' + escapeHtml(title) + '</div></div>'
+    + '<div style="background:#10303a;border-radius:14px 14px 0 0;padding:14px 22px;">'
+    + '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;"><tr>'
+    + '<td style="vertical-align:middle;padding:0 14px 0 0;width:84px;"><img src="' + EMAIL_LOGO_URL + '" width="84" height="60" alt="Polymath Learning Centre" style="display:block;width:84px;height:60px;border:0;outline:none;text-decoration:none;"></td>'
+    + '<td style="vertical-align:middle;"><div style="color:#ffffff;font-weight:700;font-size:17px;letter-spacing:.04em;">POLYMATH LEARNING CENTRE</div>'
+    + '<div style="color:#b8e4e8;font-size:13px;margin-top:2px;">' + escapeHtml(title) + '</div></td></tr></table></div>'
     + '<div style="height:5px;background:linear-gradient(90deg,#2e9ca6,#56c4d0,#ec008c);"></div>'
     + '<div style="background:#ffffff;border-radius:0 0 14px 14px;padding:22px;border:1px solid #d1eaee;border-top:none;">' + inner
     + '<p style="font-size:14px;line-height:1.6;margin:18px 0 0;color:#10303a;">' + escapeHtml(s.signature).replace(/\n/g, '<br>') + '</p>'

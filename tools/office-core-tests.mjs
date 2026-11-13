@@ -1465,3 +1465,17 @@ test('the records table sorts by any column, both ways, blanks last, a family ke
   assert.equal(C.RECORD_COLUMNS.length, 14);
   assert.ok(C.RECORD_COLUMN_KEYS.includes('unpaid') && !C.RECORD_COLUMNS.some(c => c.label === 'Last payment'), 'Months unpaid replaces Last payment');
 });
+
+test('every office email shows the Polymath logo and goes out from admin@polymathlc.com.sg (v1.13.0)', () => {
+  const inv = C.buildInvoice(SF_FAMS[1], '2027-01', { schedule: REC_SCHEDULE, settings: {}, today: '2027-01-01' });
+  const mails = [C.invoiceEmail(inv, {}, {}), C.reminderEmail(inv, {}, {})];
+  for (const m of mails) {
+    assert.ok(m.html.includes('<img src="' + C.EMAIL_LOGO_URL + '"'), 'the logo is in the header');
+    assert.ok(m.html.includes('alt="Polymath Learning Centre"'), 'with words for mail apps that block pictures');
+  }
+  assert.match(C.EMAIL_LOGO_URL, /^https:\/\/polymathlc\.com\.sg\/assets\/branding\/polymath-logo-email\.png$/);
+  assert.equal(C.SENDER_EMAIL, 'admin@polymathlc.com.sg');
+  const doc = C.officeMail(['p@x.com'], mails[0], { kind: 'invoice' }, {});
+  assert.equal(doc.from, 'Polymath Learning Centre <admin@polymathlc.com.sg>');
+  assert.equal(doc.replyTo, 'admin@polymathlc.com.sg');
+});
