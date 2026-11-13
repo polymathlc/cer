@@ -32,9 +32,9 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { preservedRuleTests, liveRuleTests } from './cer-live-server-rules.mjs';
 import { enquiryRuleTests } from './enquiry-rules.mjs';
-import { onlineRuleTests, describeRules, setupCredentials } from './online-rules.mjs';
+import { onlineRuleTests, describeRules, setupCredentials, ONLINE_RULE } from './online-rules.mjs';
 import { csRuleTests } from './cs-rules.mjs';
-import { officeRuleTests } from './office-rules.mjs';
+import { officeRuleTests, OFFICE_RULE } from './office-rules.mjs';
 
 export const PROJECT = 'mathgen--app';
 // Keep equal to ACCESS_ADMINS in student/access-gate.js (a test checks).
@@ -286,9 +286,11 @@ export function accessPreservedTests(source) {
   // Other apps' narrow protections, if they are installed, must still hold.
   if (source.includes('polymath-enquiry-server-only-v1')) cases.push(...enquiryRuleTests());
   else cases.push(accessCase('mail', 'list', 'ALLOW'));
-  if (source.includes('polymath-online-v1')) cases.push(...onlineRuleTests());
+  // Online's and Office's own cases expect THEIR current admin lists; a block still
+  // carrying an older list (its own workflow not re-run yet) is left to that workflow.
+  if (source.includes(ONLINE_RULE)) cases.push(...onlineRuleTests());
   if (source.includes('polymath-cs-server-only-v1')) cases.push(...csRuleTests());
-  if (source.includes('polymath-office-v1')) cases.push(...officeRuleTests());
+  if (source.includes(OFFICE_RULE)) cases.push(...officeRuleTests());
   return cases;
 }
 
