@@ -306,7 +306,10 @@ test('the 404 page works at any depth: self-contained, every link absolute, and 
 
 test('a tile is a plain link: the page works with no script at all', () => {
   assert.ok(!/onclick=/.test(page.replace(/<script[\s\S]*?<\/script>/g, '')), 'no inline handlers on the tiles');
-  assert.ok(!/firebase/i.test(page), 'no sign-in on the dashboard itself — every app signs the student in');
+  // v1.4.0: the dashboard signs in (student access approval), but the TILES still need no script and no
+  // sign-in — every app checks access itself, so a tile never lets anybody past the gate.
+  const tilesOnly = page.slice(page.indexOf('<ul class="tile-grid"'), page.indexOf('</ul>', page.indexOf('<ul class="tile-grid"')));
+  assert.ok(!/firebase|<script/i.test(tilesOnly), 'the tiles themselves are plain links, with no sign-in inside');
   assert.equal((page.match(/<li style="--order:\d+">/g) || []).length, EXPECTED.length, 'each tile staggers in by its order');
   assert.ok(/<link rel="preconnect" href="https:\/\/polymathlc\.github\.io">/.test(page), 'the apps\' origin is warmed up while the student picks a tile');
 });
@@ -365,9 +368,9 @@ test('the greeting reads Singapore time, and the version is on the page', () => 
   };
   vm.runInNewContext(script[1], sandbox);
   const api = sandbox.window.MyPolymath;
-  assert.equal(api.version, 'v1.3.0');
-  assert.equal(elements.versionBadge.textContent, 'v1.3.0', 'the badge shows the version');
-  assert.ok(page.includes('id="versionBadge" aria-hidden="true">v1.3.0<'), 'the badge is right before script runs too');
+  assert.equal(api.version, 'v1.4.0');
+  assert.equal(elements.versionBadge.textContent, 'v1.4.0', 'the badge shows the version');
+  assert.ok(page.includes('id="versionBadge" aria-hidden="true">v1.4.0<'), 'the badge is right before script runs too');
   assert.equal(api.singaporeHour(new Date(Date.UTC(2026, 9, 25, 0, 0))), 8, '00:00 UTC is 8 am in Singapore');
   assert.equal(api.greetingFor(8), 'Good morning');
   assert.equal(api.greetingFor(14), 'Good afternoon');

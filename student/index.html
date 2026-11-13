@@ -7,11 +7,22 @@
 <title>My Polymath — Student Dashboard | Polymath Learning Centre</title>
 <meta name="description" content="Every Polymath Learning Centre app in one place: Science, Science PSLE, Math, Answer Keys, Study Buddy, Rewards, Worksheets, Chinese and English.">
 <!--
-  MY POLYMATH — the student dashboard at polymathlc.com.sg/student  (v1.3.0)
+  MY POLYMATH — the student dashboard at polymathlc.com.sg/student  (v1.4.0)
   ------------------------------------------------------------------------
   One page of square tiles, one per student app. Each tile is a plain link to
-  the app's own published address, so the page needs no sign-in, no Firebase
-  and no scripts to work: every app signs the student in itself.
+  the app's own published address, so the tiles need no script to work.
+
+  STUDENT ACCESS APPROVAL (v1.4.0). A student / parent signs in here once
+  (Google, or a centre username and password). The first time any account
+  signs in — here OR in any app — the enrolment pop-up asks: still enrolled?
+  the parent's name and email, how many children, and each child's full name,
+  level and subjects (Math only / Science only / Both Math and Science). The
+  account is blocked in every app until an admin approves it at
+  polymathlc.com.sg/student/#admin (chungzhikai@gmail.com, admin@polymathlc.com.sg,
+  support@polymathlc.com.sg only). The pop-up is access-gate.js in this folder,
+  the SAME file every app loads from polymathlc.github.io/cer/student/; the
+  sign-in card and the admin dashboard are student-account.js. The record is
+  Firestore studentAccess/{uid}, protected by tools/student-access-rules.mjs.
 
   WHERE THE APPS ACTUALLY LIVE (v1.2.0 — this is the bug it fixes).
   polymathlc.com.sg is the custom domain of ONE repository, polymathlc/website,
@@ -449,6 +460,68 @@
     .app-tile, .app-tile::before, .tile-go { transition: none; }
   }
 
+  /* ───────── 🔐 Sign-in card and the access admin dashboard (v1.4.0) ───────── */
+  [hidden] { display: none !important; }
+  .account-card { margin-top: var(--space-md); background: var(--bg-primary); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: var(--space-md); box-shadow: var(--shadow-sm); text-align: left; }
+  .account-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-sm) var(--space-md); }
+  .account-who { font-size: var(--font-size-sm); word-break: break-word; }
+  .account-label { color: var(--text-secondary); }
+  .account-actions, .signin-actions, .record-actions { display: flex; flex-wrap: wrap; gap: var(--space-sm); }
+  .account-note { margin: 0; color: var(--text-secondary); font-size: var(--font-size-sm); }
+  .signin { display: grid; gap: var(--space-md); }
+  .signin-text b { display: block; font-size: var(--font-size-md); }
+  .signin-text span { color: var(--text-secondary); font-size: var(--font-size-sm); }
+  .signin-form { display: grid; gap: var(--space-sm); max-width: 420px; }
+  .signin-form label, .edit-form label { display: grid; gap: 4px; font-size: var(--font-size-sm); font-weight: 600; }
+  .signin-form input, .edit-form input, .edit-form select, #adminSearch {
+    font: inherit; font-weight: 400; padding: 10px 12px; border: 1.5px solid var(--border-medium); border-radius: var(--radius-md); background: #FFFFFF; min-height: 44px; width: 100%;
+  }
+  .signin-form input:focus, .edit-form input:focus, .edit-form select:focus, #adminSearch:focus { outline: none; border-color: var(--accent-base); box-shadow: 0 0 0 3px var(--accent-light); }
+  .signin-error { margin: 0; color: #B3261E; font-size: var(--font-size-sm); }
+  .status-chip { display: inline-block; border-radius: var(--radius-full); padding: 2px 10px; font-size: var(--font-size-xs); font-weight: 700; vertical-align: middle; white-space: nowrap; }
+  .status-chip.is-approved { background: var(--accent-light); color: var(--accent-dark); }
+  .status-chip.is-pending { background: #FFF4D6; color: #8A5A00; }
+  .status-chip.is-revoked { background: #FDECEA; color: #8C1D18; }
+  .status-chip.is-staff { background: #E3F2FD; color: #0D47A1; }
+  .count-badge { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: var(--radius-full); background: #FFFFFF; color: var(--accent-dark); font-size: var(--font-size-xs); font-weight: 700; }
+  .button-small { padding: 6px 12px; font-size: var(--font-size-sm); min-height: 36px; }
+  .button-danger { color: #B3261E; }
+  .button[disabled] { opacity: 0.6; cursor: progress; }
+  .admin-view { margin-top: var(--space-lg); text-align: left; }
+  .admin-card, .admin-empty { background: var(--bg-primary); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: var(--space-lg); box-shadow: var(--shadow-sm); }
+  .admin-empty { text-align: center; color: var(--text-secondary); }
+  .admin-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-md); margin-bottom: var(--space-md); }
+  .admin-head h2, .admin-card h2 { margin: 0 0 4px; font-size: var(--font-size-lg); }
+  .admin-head p { margin: 0; }
+  .muted { color: var(--text-secondary); font-size: var(--font-size-sm); }
+  .admin-banner { border-radius: var(--radius-md); padding: 12px 14px; margin-bottom: var(--space-md); font-size: var(--font-size-sm); }
+  .admin-banner.is-warning { background: #FFF4D6; color: #6B4500; }
+  .admin-banner.is-error { background: #FDECEA; color: #8C1D18; }
+  .admin-tools { display: flex; flex-wrap: wrap; gap: var(--space-sm) var(--space-md); align-items: center; justify-content: space-between; margin-bottom: var(--space-md); }
+  .admin-tools #adminSearch { max-width: 340px; }
+  .filter-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .filter-chip { font: inherit; font-size: var(--font-size-sm); border: 1.5px solid var(--border-medium); background: #FFFFFF; border-radius: var(--radius-full); padding: 6px 12px; cursor: pointer; }
+  .filter-chip span { color: var(--text-tertiary); font-weight: 700; margin-left: 2px; }
+  .filter-chip.is-active { background: var(--accent-dark); border-color: var(--accent-dark); color: #FFFFFF; }
+  .filter-chip.is-active span { color: #FFFFFF; }
+  .record-list { display: grid; gap: var(--space-md); }
+  .record { background: var(--bg-primary); border: 1px solid var(--border-subtle); border-left: 5px solid #E0B341; border-radius: var(--radius-lg); padding: var(--space-md); box-shadow: var(--shadow-xs); }
+  .record.is-approved { border-left-color: var(--accent-base); }
+  .record.is-revoked { border-left-color: #D9534F; }
+  .record-head { display: flex; justify-content: space-between; gap: var(--space-sm); align-items: flex-start; margin-bottom: var(--space-sm); }
+  .record-head h3 { margin: 0; font-size: var(--font-size-md); }
+  .record-meta { display: grid; gap: 2px; margin: var(--space-sm) 0; font-size: var(--font-size-sm); word-break: break-word; }
+  .child-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
+  .child-table th, .child-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border-subtle); }
+  .child-table th { color: var(--text-secondary); font-weight: 600; }
+  .edit-form { display: grid; gap: var(--space-md); }
+  .edit-grid { display: grid; gap: var(--space-sm); grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+  .edit-children { display: grid; gap: var(--space-sm); }
+  .edit-child { display: grid; gap: 6px; grid-template-columns: 2fr 1fr 1.4fr auto; align-items: center; }
+  @media (max-width: 640px) { .edit-child { grid-template-columns: 1fr 1fr; } .edit-child input { grid-column: 1 / -1; } }
+  .admin-foot { margin-top: var(--space-lg); }
+  @media print { .account-card, .admin-view, #adminButton { display: none !important; } }
+
   /* ───────── Print: a sheet of every app and its address, for the fridge ───────── */
   .print-address { display: none; }
   @page { size: A4; margin: 15mm 20mm; }
@@ -479,6 +552,9 @@
     </span>
   </a>
   <div class="header-actions">
+    <a class="button button-accent" id="adminButton" href="#admin" hidden title="Approve students and change their access">
+      <span class="count-badge" hidden>0</span><span>Approve students</span>
+    </a>
     <button type="button" class="button button-accent" data-pwa-install data-pwa-hidden title="Install My Polymath as an app on this computer, phone or tablet — its own icon and window, no app store needed">
       <span aria-hidden="true">📲</span><span>Install app</span>
     </button>
@@ -493,9 +569,12 @@
     <div class="greeting-eyebrow" id="greetingLine">Welcome back</div>
     <h1 class="page-title" id="pageTitle">Your Polymath apps</h1>
     <p class="page-subtitle">Tap a tile to open it. You only need to sign in once — every app knows you.</p>
+    <div class="account-card" id="accountCard" hidden aria-live="polite"></div>
   </section>
 
-  <nav aria-label="Polymath apps">
+  <section class="admin-view" id="adminView" hidden aria-labelledby="adminTitle"></section>
+
+  <nav aria-label="Polymath apps" data-apps-view>
     <ul class="tile-grid" id="tileGrid">
       <li style="--order:0">
         <a class="app-tile" data-app="science" href="https://polymathlc.github.io/cer/" style="--tile-wash:#BBDEFB;--tile-ink:#1565C0">
@@ -613,7 +692,7 @@
     </ul>
   </nav>
 
-  <section class="help-card reveal" aria-labelledby="installHelpTitle" style="animation-delay: 0.8s">
+  <section class="help-card reveal" aria-labelledby="installHelpTitle" style="animation-delay: 0.8s" data-apps-view>
     <div class="help-card-icon" aria-hidden="true">📲</div>
     <div>
       <h2 id="installHelpTitle">Put your apps on your phone, tablet or computer</h2>
@@ -629,14 +708,14 @@
   © Polymath Learning Centre · polymathlc.com.sg
 </footer>
 
-<div class="version-badge" id="versionBadge" aria-hidden="true">v1.3.0</div>
+<div class="version-badge" id="versionBadge" aria-hidden="true">v1.4.0</div>
 
 <script>
   /* My Polymath — the little the page does with script. Everything works without it. */
   (function () {
     'use strict';
 
-    var DASHBOARD_VERSION = 'v1.3.0';
+    var DASHBOARD_VERSION = 'v1.4.0';
     var LAST_OPENED_KEY = 'polymath-dashboard-last-opened';
 
     var versionBadge = document.getElementById('versionBadge');
@@ -703,6 +782,13 @@
     window.MyPolymath = { version: DASHBOARD_VERSION, greetingFor: greetingFor, singaporeHour: singaporeHour };
   })();
 </script>
+<!-- 🔐 Student access (v1.4.0): sign-in + admin dashboard, then the enrolment pop-up every app shares.
+     Without the sign-in library (offline) the tiles still work; each app asks for itself. -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="student-account.js?v=1.4.0"></script>
+<script defer src="access-gate.js?v=1.0.0" data-app="student"></script>
 <script defer src="pwa-install.js?v=2.0.0" data-app-name="My Polymath" data-app-key="hub" data-app-icon="assets/app-icons/icon-192.png" data-accent="#0B6B4F" data-sw="sw.js" data-floating="auto"></script>
 </body>
 </html>
