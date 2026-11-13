@@ -566,6 +566,8 @@
   /* ─── Invoice preview ─── */
   .inv-paper { border:1px solid var(--line); border-radius:16px; overflow:hidden; background:#fff; }
   .inv-paper .hd { background:#10303a; color:#fff; padding:16px 18px; }
+  .inv-paper .hd { overflow:hidden; }
+  .inv-paper .hd-logo { float:left; width:56px; height:auto; margin:-4px 12px -4px -4px; }
   .inv-paper .hd b { display:block; font-size:15px; letter-spacing:.05em; }
   .inv-paper .hd span { font-size:12.5px; color:#b8e4e8; }
   .inv-paper .bar { height:5px; background:linear-gradient(90deg,#2e9ca6,#56c4d0,#ec008c); }
@@ -741,6 +743,6 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="version hidden" id="version"></div>
 
-<script type="module" src="office-app.mjs?v=1.12.0"></script>
+<script type="module" src="office-app.mjs?v=1.13.0"></script>
 </body>
 </html>

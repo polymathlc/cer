@@ -216,8 +216,12 @@ async function cardImage(payload, owe) {
   ctx.fillStyle = '#10303a'; ctx.fillRect(0, 0, W, 110);
   const g = ctx.createLinearGradient(0, 0, W, 0); g.addColorStop(0, '#2e9ca6'); g.addColorStop(.5, '#56c4d0'); g.addColorStop(1, '#ec008c');
   ctx.fillStyle = g; ctx.fillRect(0, 104, W, 6);
-  ctx.fillStyle = '#fff'; ctx.font = font('bold', 26); ctx.fillText('POLYMATH LEARNING CENTRE', P, 50);
-  ctx.fillStyle = '#b8e4e8'; ctx.font = font('500', 20); ctx.fillText('PayNow · ' + (inv.title || ((inv.periodLabel || C.periodLabel(inv.period)) + ' fees')), P, 82);
+  // The centre's logo on the left of the header (same site, so the picture can still be saved).
+  const logo = await new Promise(res => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = '../assets/branding/polymath-logo-email.png'; });
+  const LX = logo ? P + 112 : P;
+  if (logo) ctx.drawImage(logo, P - 8, 16, 106, Math.round(106 * logo.naturalHeight / logo.naturalWidth));
+  ctx.fillStyle = '#fff'; ctx.font = font('bold', 26); ctx.fillText('POLYMATH LEARNING CENTRE', LX, 50);
+  ctx.fillStyle = '#b8e4e8'; ctx.font = font('500', 20); ctx.fillText('PayNow · ' + (inv.title || ((inv.periodLabel || C.periodLabel(inv.period)) + ' fees')), LX, 82);
   ctx.fillStyle = '#056c76'; ctx.font = font('bold', 58); ctx.fillText(C.money(owe), P, 196);
   let y = 230; const bx = (W - BOX) / 2;
   ctx.strokeStyle = '#d1eaee'; ctx.lineWidth = 3;
