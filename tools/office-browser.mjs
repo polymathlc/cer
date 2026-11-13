@@ -770,6 +770,104 @@ try {
   await page.waitForSelector('#fam-filter-panel', { state: 'detached' });
   await page.click('#tabs [data-view="settings"]');
 
+  // ── 📣 Announcements: write, choose with the filters, test to myself, confirm, send, log ──
+  await page.click('#tabs [data-view="families"]');
+  await page.click('[data-act="famType"][data-k="online"]');
+  await settle(page);
+  await page.click('[data-act="famAnnounce"]');
+  await page.waitForSelector('.ann-compose');
+  assert.equal(await page.locator('[data-act="annType"].on').getAttribute('data-k'), 'online', 'Email these families carries the filters over');
+  await page.click('[data-act="annType"][data-k=""]');
+  await page.click('#tabs [data-view="families"]');
+  await page.click('[data-act="famType"][data-k=""]');
+  await page.click('#tabs [data-view="announce"]');
+  await page.waitForSelector('.ann-compose');
+  assert.ok(await page.locator('#ann-send-btn').isDisabled(), 'nothing to send before a subject and a message');
+  assert.ok((await page.locator('#ann-problems').innerText()).includes('Write a subject'));
+  await page.fill('#ann-subject', 'Deepavali holiday for {children}');
+  await page.fill('#ann-body', 'There are **no lessons** on Monday 9 November.\n\nMake-up classes: https://polymathlc.com.sg/schedule\n\nThank you, {parent}!');
+  await settle(page);
+  const annFams = () => store(page).then(st => docsIn(st, 'officeFamilies').map(f => Object.assign({ id: f._id }, f)));
+  const allAud = C.announceAudience(await annFams(), {}, { schedule: SCHEDULE, today: '2026-11-03' });
+  assert.ok(allAud.families >= 3, 'the sample has families with email');
+  assert.equal(await page.locator('.ann-row').count(), allAud.rows.length, 'one row per active family');
+  assert.match(await page.locator('#ann-send-btn').innerText(), new RegExp('Send to ' + allAud.families + ' famil'));
+  const firstRow = allAud.sending[0];
+  assert.ok((await page.locator('#ann-prev-subject').innerText()).startsWith('Deepavali holiday for '), 'the subject is filled in');
+  const prevText = await page.locator('#ann-preview .ann-mail').innerText();
+  assert.ok(prevText.includes('Dear ' + firstRow.parentName + ',') && prevText.includes('Thank you, ' + firstRow.parentName + '!'), 'the preview is personalised');
+  assert.equal(await page.locator('#ann-preview .ann-mail b', { hasText: 'no lessons' }).count(), 1, '**bold**');
+  assert.equal(await page.locator('#ann-preview .ann-mail a[href="https://polymathlc.com.sg/schedule"]').count(), 1, 'the link');
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('polymath-office-announce')).subject), 'Deepavali holiday for {children}', 'the draft is kept');
+  // The filters choose who gets it; a family can be unticked.
+  await page.click('[data-act="annPanel"]');
+  await page.selectOption('#af-level', 'P6');
+  await settle(page);
+  const p6Aud = C.announceAudience(await annFams(), { filters: { level: 'P6' } }, { schedule: SCHEDULE, today: '2026-11-03' });
+  assert.equal(await page.locator('.ann-row').count(), p6Aud.rows.length, 'P6 families only');
+  assert.ok(p6Aud.families >= 2);
+  const dropped = p6Aud.sending[p6Aud.sending.length - 1];
+  await page.locator('.ann-row[data-fam="' + dropped.familyId + '"] input').uncheck();
+  await settle(page);
+  assert.match(await page.locator('#ann-sum').innerText(), new RegExp('^' + (p6Aud.families - 1) + ' famil'));
+  assert.match(await page.locator('#ann-sum').innerText(), /1 unticked/);
+  await shot(page, '27-announce-compose');
+  // A test goes to the signed-in admin only.
+  await page.click('[data-act="annTest"]');
+  await settle(page, 300);
+  const tests = docsIn(await store(page), 'mail').filter(m => m._id.startsWith('polymath-office-announce-test-'));
+  assert.equal(tests.length, 1);
+  assert.deepEqual(tests[0].to, ['chungzhikai@gmail.com'], 'the test goes to me only');
+  assert.ok(tests[0].message.subject.startsWith('[TEST] Deepavali holiday for '));
+  assert.ok(!tests[0].bcc);
+  // Send: a confirm step that needs a tick.
+  await page.click('#ann-send-btn');
+  await page.waitForSelector('.modal .ann-confirm');
+  assert.ok(await page.locator('.modal [data-act="annGo"]').isDisabled(), 'Send waits for the tick');
+  await page.mouse.click(5, 5);
+  await settle(page);
+  assert.ok(await page.locator('.modal .ann-confirm').count(), 'a click outside does not close it');
+  await shot(page, '27b-announce-confirm');
+  await page.locator('.modal [data-ch="annSure"]').check();
+  await page.click('.modal [data-act="annGo"]');
+  await page.waitForSelector('.modal h2:has-text("queued")');
+  const sentStore = await store(page);
+  const annMail = docsIn(sentStore, 'mail').filter(m => m._id.startsWith('polymath-office-announce-') && !m._id.startsWith('polymath-office-announce-test-'));
+  assert.equal(annMail.length, p6Aud.families - 1, 'one email per ticked family');
+  const famsNow = await annFams();
+  for (const m of annMail) {
+    const fam = famsNow.find(f => f._id === m.polymathOffice.familyId);
+    assert.ok(fam, 'each email belongs to a family');
+    assert.deepEqual(m.to, C.familyEmails(C.normalizeFamily(fam)), 'only that family\'s own address(es)');
+    assert.ok(!m.bcc && !m.cc, 'no copies to anyone else');
+    assert.ok(m.message.html.includes('Dear ' + fam.parentName + ','));
+    assert.equal(m.from, 'Polymath Learning Centre <admin@polymathlc.com.sg>');
+  }
+  assert.ok(!annMail.some(m => m.polymathOffice.familyId === dropped.familyId), 'the unticked family gets nothing');
+  const logs = docsIn(sentStore, 'officeSettings').filter(d => d.kind === 'announcement');
+  assert.equal(logs.length, 1, 'the send is logged');
+  assert.equal(logs[0].done, true);
+  assert.equal(logs[0].families, p6Aud.families - 1);
+  assert.deepEqual(logs[0].recipients.map(r => r.mailId).sort(), annMail.map(m => m._id).sort());
+  assert.equal(logs[0].audience, 'Active families · P6');
+  assert.equal(logs[0].sentBy, 'chungzhikai@gmail.com');
+  await page.click('#modal-box .modal-foot [data-act="closeModal"]');
+  await page.waitForSelector('#modal.show', { state: 'detached' });
+  assert.equal(await page.inputValue('#ann-subject'), '', 'the box is cleared after sending');
+  await page.waitForSelector('table.ann-log tbody tr');
+  assert.ok((await page.locator('table.ann-log').innerText()).includes('Deepavali holiday for {children}'));
+  await page.click('table.ann-log tbody tr');
+  await page.waitForSelector('.modal .ann-log-body');
+  assert.equal(await page.locator('.modal table tbody tr').count(), p6Aud.families - 1);
+  await shot(page, '27c-announce-log');
+  await page.click('.modal [data-act="annReuse"]');
+  await settle(page);
+  assert.equal(await page.inputValue('#ann-subject'), 'Deepavali holiday for {children}', 'an old one can be sent again as a new draft');
+  await page.click('[data-act="annClear"]');
+  await page.click('[data-act="annFReset"]');
+  await page.click('[data-act="annTickAll"]');
+  await page.click('#tabs [data-view="settings"]');
+
   // An office whose rules are NOT published refuses to save.
   lockStatus = 404;
   await page.click('[data-act="recheckLock"]');

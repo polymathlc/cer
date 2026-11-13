@@ -186,6 +186,38 @@
   .filterrow { display:flex; gap:10px 20px; flex-wrap:wrap; align-items:center; margin-bottom:16px; }
   .filterrow .lbl { font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-right:2px; }
   select.plain { padding:8px 10px; border:1px solid var(--line); border-radius:9px; background:var(--white); }
+  /* Announcements */
+  .ann-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:18px; align-items:start; margin-bottom:18px; }
+  .ann-grid > .card + .card { margin-top:0; }
+  .ann-h { font-size:16px; font-weight:800; margin:0 0 14px; }
+  .ann-compose textarea { min-height:240px; resize:vertical; font:inherit; line-height:1.55; }
+  .ann-tokens { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:8px; }
+  .ann-tokens .chip { font-family:var(--mono, ui-monospace, monospace); font-size:12px; }
+  .ann-prob { font-size:13px; padding:8px 12px; border-radius:9px; margin-top:8px; }
+  .ann-prob.block { background:var(--red-bg); color:var(--red); border:1px solid var(--red-line); }
+  .ann-prob.warn { background:var(--amber-bg); color:var(--amber); border:1px solid var(--amber-line); }
+  .ann-actions { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:16px; }
+  .ann-status { display:flex; width:100%; } .ann-status .seg { flex:1; }
+  .ann-search { display:flex; gap:8px; align-items:center; }
+  .ann-search .search { flex:1; }
+  .ann-ff { margin-top:12px; padding:12px; border:1px solid var(--line-2); border-radius:12px; background:var(--paper); }
+  .ann-sum { margin-top:14px; font-size:14px; }
+  .ann-tick { font-size:13px; margin:4px 0 8px; }
+  .ann-list { border:1px solid var(--line-2); border-radius:12px; max-height:420px; overflow:auto; background:var(--white); }
+  .ann-row { display:flex; gap:10px; align-items:flex-start; padding:9px 12px; border-bottom:1px solid var(--line-2); cursor:pointer; }
+  .ann-row:last-child { border-bottom:none; }
+  .ann-row input { margin-top:3px; flex:none; }
+  .ann-row.off .ann-who { opacity:.55; }
+  .ann-who { display:flex; flex-direction:column; min-width:0; font-size:14px; }
+  .ann-to { color:var(--ink-2); overflow-wrap:anywhere; }
+  .ann-prev-head { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:flex-start; margin-bottom:12px; font-size:13.5px; }
+  .ann-prev-meta { display:grid; gap:2px; min-width:0; overflow-wrap:anywhere; }
+  .ann-prev-meta .muted { display:inline-block; min-width:58px; }
+  .ann-mail { border:1px solid var(--line); border-radius:12px; overflow:hidden; max-width:100%; }
+  .ann-mail img { max-width:100%; }
+  .ann-confirm { display:grid; gap:12px; font-size:14px; }
+  .ann-log-body { border:1px solid var(--line-2); border-radius:12px; padding:12px 14px; background:var(--paper); max-height:30vh; overflow:auto; }
+  table.ann-log td { vertical-align:top; }
   /* Families: key statistics */
   .kpis { background:var(--white); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:16px 18px 14px; margin-bottom:16px; }
   .kpis.folded { padding:12px 18px; }
@@ -557,6 +589,7 @@
   /* ─── Phones ─── */
   @media (max-width:900px) {
     .kpi-groups { grid-template-columns:1fr; } .kpi-row.four { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .ann-grid { grid-template-columns:1fr; }
     .stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
     .grid.two, .grid.three, .split, .waq { grid-template-columns:1fr; }
     .ed-split { grid-template-columns:1fr !important; }
@@ -594,6 +627,7 @@
     .ms-meta { grid-column:3; white-space:normal; }
     .toolbar .segs { width:100%; } .toolbar .seg { flex:1; }
     .fam-grid { grid-template-columns:1fr; }
+    .ann-search { flex-wrap:wrap; } .ann-search .fftoggle { width:100%; }
     .kpi-row.four, .kpi-row.three { grid-template-columns:repeat(2,minmax(0,1fr)); } .kpi-groups { grid-template-columns:1fr; } .kpi-value { font-size:20px; }
     .ffsort { width:100%; } .ffsort select { flex:1; } .fftoggle { width:100%; }
     .ffgrid { grid-template-columns:1fr 1fr; }
@@ -640,6 +674,7 @@
         <button class="tab" data-view="students" type="button"><span class="ico">📋</span><span class="lbl">Students</span><span class="count calm hidden" data-count="students"></span></button>
         <button class="tab" data-view="invoices" type="button"><span class="ico">🧾</span><span class="lbl">Invoices</span><span class="count hidden" data-count="invoices"></span></button>
         <button class="tab" data-view="payments" type="button"><span class="ico">🏦</span><span class="lbl">Payments</span></button>
+        <button class="tab" data-view="announce" type="button"><span class="ico">📣</span><span class="lbl">Announce</span></button>
         <button class="tab" data-view="settings" type="button"><span class="ico">⚙️</span><span class="lbl">Settings</span></button>
       </nav>
     </div>
@@ -657,6 +692,6 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="version hidden" id="version"></div>
 
-<script type="module" src="office-app.mjs?v=1.6.0"></script>
+<script type="module" src="office-app.mjs?v=1.7.0"></script>
 </body>
 </html>
