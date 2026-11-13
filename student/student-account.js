@@ -564,6 +564,12 @@
   }
 
   function editHtml(record) {
+    // What the admin has typed so far wins over the record (the list redraws live).
+    var draft = (admin.editing && admin.editing.draft) || null;
+    var shown = {};
+    Object.keys(record).forEach(function (k) { shown[k] = record[k]; });
+    if (draft) { shown.parentName = draft.parentName; shown.parentEmail = draft.parentEmail; shown.status = draft.status; shown.adminNote = draft.adminNote; }
+    record = shown;
     var children = (admin.editing && admin.editing.children) || record.children || [];
     var rows = children.map(function (c, i) {
       return '<div class="edit-child" data-index="' + i + '">' +
@@ -635,6 +641,17 @@
     if (!isAdmin(user)) {
       adminView.innerHTML = '<div class="admin-card"><h2 id="adminTitle">Admins only</h2><p>This page is only for Polymath\'s admin accounts. You are signed in as <b>' + esc(accountLabel(user.email)) + '</b>.</p><p><a href="#">← Back to your apps</a></p></div>';
       return;
+    }
+    // Keep an open Edit form's unsaved answers across the live redraw.
+    if (admin.editing && admin.editing.fresh) {
+      delete admin.editing.fresh;   // the rows were just changed on purpose (add / remove a child)
+    } else if (admin.editing) {
+      var openForm = adminView.querySelector('[data-admin-form="' + admin.editing.id + '"]');
+      if (openForm) {
+        var typed = readEditForm(openForm);
+        admin.editing.children = typed.children;
+        admin.editing.draft = typed;
+      }
     }
     var c = counts(admin.records);
     var filters = [['pending', 'Waiting', c.pending], ['approved', 'Approved', c.approved], ['revoked', 'Paused', c.revoked], ['all', 'All', c.all]];
@@ -812,6 +829,8 @@
         admin.editing.children = values.children;
         if (action === 'add-child') admin.editing.children.push({ name: '', level: '', subjects: '' });
         else admin.editing.children.splice(parseInt(target.getAttribute('data-index'), 10), 1);
+        admin.editing.draft = values;
+        admin.editing.fresh = true;
         var rec = findRecord(admin.editing.id);
         if (rec) {
           // Keep what was typed in the other boxes while the rows change.

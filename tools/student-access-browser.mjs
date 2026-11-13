@@ -482,6 +482,8 @@ await step('the admin changes the child to Both Math and Science → the Math ti
   assert.match(await card.textContent(), /Science/);
   await card.locator('[data-admin="edit"]').click();
   await card.locator('select[name="childSubjects"]').selectOption('both');
+  await adminPage.waitForTimeout(900);   // the list redraws live (every 300 ms here): the choice must survive it
+  assert.equal(await card.locator('select[name="childSubjects"]').inputValue(), 'both', 'an unsaved edit survives the live redraw');
   await card.locator('button[type="submit"]').click();
   for (let i = 0; i < 50 && db.studentAccess.get('sci1').children[0].subjects !== 'both'; i++) await adminPage.waitForTimeout(100);
   assert.equal(db.studentAccess.get('sci1').children[0].subjects, 'both');
