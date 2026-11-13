@@ -33,9 +33,9 @@
      mail/polymath-office-*    emails for the Trigger Email extension
    Reads: schedule_config/main (the /schedule page's own document).
    ═══════════════════════════════════════════════════════════════════════════ */
-import * as C from './office-core.mjs?v=1.11.0';
+import * as C from './office-core.mjs?v=1.12.0';
 
-const OFFICE_VERSION = 'v1.11.0';
+const OFFICE_VERSION = 'v1.12.0';
 
 /* ═══════════════ Firebase — the CER project ═══════════════ */
 firebase.initializeApp({
@@ -78,7 +78,7 @@ const S = {
   ui: {
     famSearch: '', famFilter: 'all', famType: '', famView: savedFamView(),
     famSort: savedFamSort(), famF: C.cleanFamilyFilters({}), famPanel: false,
-    statMonth: '', statsOpen: savedStatsOpen(), famZoom: savedFamZoom(),
+    statMonth: '', statsOpen: savedStatsOpen(), famZoom: savedFamZoom(), recSort: savedRecSort(),
     ann: { draft: savedAnnDraft(), status: 'active', type: '', F: C.cleanFamilyFilters({}), search: '', excluded: [], panel: false, preview: '' },
     stuSearch: '', stu: { level: '', subject: '', mode: '', day: '', status: 'active', pay: '', cls: '' }, stuSort: { key: 'name', dir: 1 },
     tt: { level: '', subject: '', mode: '' },
@@ -514,6 +514,8 @@ const FAM_FILTERS = {
   hardcopy: f => famNow(f) !== 'withdrawn' && f.hardcopy,
   paused: f => f.status === 'paused',
   withdrawn: f => f.status === 'withdrawn' || f.withdrawn,
+  // Any month that is due and not paid (v1.12.0), withdrawn families included while they still owe.
+  owed: f => recordOf(f).unpaidCount > 0,
   // The older "Not active" chip (a link or a saved choice): the withdrawn families.
   inactive: f => f.status === 'withdrawn' || f.withdrawn
 };
@@ -557,8 +559,15 @@ function recordRows(list) {
   const kids = new Map();
   list.forEach(f => f.students.forEach(s => kids.set(f.id + '|' + s.id, s)));
   const shown = childFiltersOn() ? rows.filter(r => !r.studentId || kidShown(kids.get(r.familyId + '|' + r.studentId))) : rows;
+  // A clicked column heading sorts the whole table by that column (v1.12.0).
+  if (recSortOn()) return C.sortRecordRowsBy(shown, S.ui.recSort.key, S.ui.recSort.dir);
   return C.sortRecordRows(shown, S.ui.famSort);
 }
+function recSortOn() { return !!(S.ui.recSort && C.RECORD_COLUMN_KEYS.includes(S.ui.recSort.key)); }
+function savedRecSort() {
+  try { const v = JSON.parse(localStorage.getItem('polymath-office-recsort') || 'null'); return v && C.RECORD_COLUMN_KEYS.includes(v.key) ? { key: v.key, dir: v.dir === 'desc' ? 'desc' : 'asc' } : null; } catch (e) { return null; }
+}
+function rememberRecSort(v) { try { if (v) localStorage.setItem('polymath-office-recsort', JSON.stringify(v)); else localStorage.removeItem('polymath-office-recsort'); } catch (e) { /* private window */ } }
 // Sorted by level: the cards and rows fall under a heading per level.
 // A family with children at more than one level sits under its youngest
 // child's level (oldest when sorted S1 → P3); its card still shows every child.
@@ -735,19 +744,26 @@ VIEWS.families = function () {
     + '<button class="seg zoom-fit" data-act="famZoomFit" title="Zoom so the whole table fits the width — no scrolling sideways">↔ Fit</button></div></div>'
     + (S.ui.famPanel ? famFilterPanelHtml() : '')
     + '<div class="chips" style="margin-bottom:10px;">' + chip('all', 'Active') + chip('owing', '💰 Owing') + chip('unpaid', '⏳ ' + esc(C.monthShort(period)) + ' not paid')
-    + chip('noshot', '📸 No screenshot in ' + esc(C.monthShort(period))) + chip('noemail', '✉ No email') + chip('shared', '⚠ Shared email', true) + chip('noclass', '🧩 No class') + chip('package', '📦 Package', true) + chip('hardcopy', '📮 Hardcopy', true) + chip('paused', '⏸ Paused') + chip('withdrawn', '👋 Withdrawn') + '</div>'
+    + chip('noshot', '📸 No screenshot in ' + esc(C.monthShort(period))) + chip('noemail', '✉ No email') + chip('shared', '⚠ Shared email', true) + chip('noclass', '🧩 No class') + chip('package', '📦 Package', true) + chip('hardcopy', '📮 Hardcopy', true) + chip('paused', '⏸ Paused') + chip('withdrawn', '👋 Withdrawn') + chip('owed', '🧾 Unpaid') + '</div>'
     + (S.families.length ? famActiveFiltersHtml(list.length) : '')
     + '<div id="fam-body" class="fam-body" style="zoom:' + S.ui.famZoom + ';">' + body + '</div>';
 };
 function familyTableHtml(rows) {
   const cur = C.sgMonthKey();
-  return '<div class="table-wrap rec-wrap"><table class="t rec"><thead><tr>'
-    + '<th>Status</th><th>Email (account ID)</th><th>Student</th><th>Parent · WhatsApp</th><th>Primary school</th><th>With us since</th>'
-    + '<th>Slots</th><th>Payment type</th><th>Months paid</th><th>Last payment</th><th>Last screenshot</th><th>Hardcopy</th><th>Withdrawal</th><th>Notes</th><th></th></tr></thead><tbody>'
+  const rs = recSortOn() ? S.ui.recSort : null;
+  const th = c => {
+    const on = rs && rs.key === c.key;
+    const next = !on ? 'A to Z / smallest first' : rs.dir === 'asc' ? 'Z to A / largest first' : 'the usual order (by level)';
+    return '<th class="sortable' + (on ? ' on' : '') + '" data-act="recSort" data-k="' + c.key + '" aria-sort="' + (on ? (rs.dir === 'asc' ? 'ascending' : 'descending') : 'none') + '" title="Sort by ' + esc(c.label) + ': ' + next + '" tabindex="0" role="button">'
+      + esc(c.label) + '<span class="sort-ind">' + (on ? (rs.dir === 'asc' ? '▲' : '▼') : '↕') + '</span></th>';
+  };
+  const sortNote = rs ? '<div class="rec-sortnote small">Sorted by <b>' + esc((C.RECORD_COLUMNS.find(c => c.key === rs.key) || {}).label || '') + '</b> ' + (rs.dir === 'asc' ? '▲ A→Z, smallest first' : '▼ Z→A, largest first') + ' · <button class="linkbtn" data-act="recSortReset">Back to the level order</button></div>' : '';
+  return sortNote + '<div class="table-wrap rec-wrap"><table class="t rec"><thead><tr>'
+    + C.RECORD_COLUMNS.map(th).join('') + '<th></th></tr></thead><tbody>'
     + rows.map((r, i) => {
       const first = i === 0 || rows[i - 1].familyId !== r.familyId;
       const lv = C.normalizeLevel(r.level) || '';
-      const newLevel = levelSorted() && r.studentId && (i === 0 || (C.normalizeLevel(rows[i - 1].level) || '') !== lv);
+      const newLevel = levelSorted() && !rs && r.studentId && (i === 0 || (C.normalizeLevel(rows[i - 1].level) || '') !== lv);
       const groupRow = newLevel ? '<tr class="lvrow"><td colspan="15"><span class="lv">' + esc(lv || '—') + '</span>' + esc(levelHeading(lv, rows.filter(x => x.studentId && (C.normalizeLevel(x.level) || '') === lv).length, 'child', 'children')) + '</td></tr>' : '';
       const shotThisMonth = r.lastScreenshot && r.lastScreenshot.date.slice(0, 7) === cur;
       return groupRow + '<tr class="click ' + (first ? 'fam-first' : 'fam-more') + (r.status !== 'active' ? ' off' : '') + '" data-act="openFamily" data-id="' + esc(r.familyId) + '" data-level="' + esc(lv) + '">'
@@ -760,7 +776,7 @@ function familyTableHtml(rows) {
         + '<td class="slots">' + (r.slots.length || r.otherClasses.length ? r.slots.map(x => subjChip(x.subject, x.master, x.label.replace(/ · .*$/, '') + ' · ' + (x.subject || 'Class') + ' ' + modeIcon(x.mode))).join(' ') + r.otherClasses.map(x => ' <span class="subj other">📘 ' + esc(x) + '</span>').join('') : (r.studentId ? '<span class="warn-t">⚠ none</span>' : '')) + '</td>'
         + '<td class="nowrap">' + (first ? (r.paymentType === 'package' ? '<span class="pill green">📦 Package</span><div class="small muted">' + esc(C.prettyDateShort(r.packageStart) + ' – ' + C.prettyDate(r.packageEnd)) + '</div>' : '<span class="muted">Monthly</span>') : '') + '</td>'
         + '<td title="' + esc(r.paidText ? 'Paid: ' + r.paidText : 'No month paid yet') + '">' + (first ? monthDots(r.months, 4) : '') + '</td>'
-        + '<td class="nowrap">' + (first ? (r.lastPayment ? '<b>' + esc(C.prettyDateShort(r.lastPayment.date)) + '</b>' + (r.lastPayment.amount ? '<div class="small muted">' + money(r.lastPayment.amount) + '</div>' : '') : '<span class="muted">—</span>') : '') + '</td>'
+        + '<td class="unpaid-cell">' + (first ? (r.unpaidCount ? '<span class="pill amber" title="' + esc(r.unpaid.map(u => u.label + ': ' + C.MONTH_STATE_META[u.key].label + (u.outstanding ? ' (' + money(u.outstanding) + ')' : '')).join('\n')) + '">' + C.plural(r.unpaidCount, 'month', 'months') + '</span><div class="small unpaid-list">' + esc(r.unpaidText) + '</div>' + (r.unpaidOwed ? '<div class="small muted">' + money(r.unpaidOwed) + ' invoiced, not paid</div>' : '') : '<span class="ok-t">✓ None</span>') : '') + '</td>'
         + '<td class="nowrap">' + (first ? (r.lastScreenshot ? '<span class="' + (shotThisMonth ? '' : 'muted') + '">📸 ' + esc(C.prettyDateShort(r.lastScreenshot.date)) + '</span><div class="small muted">' + esc(whenText(r.lastScreenshot.date)) + '</div>' : '<span class="muted">—</span>') : '') + '</td>'
         + '<td>' + (first ? (r.hardcopy ? '<span class="pill deep">📮 Yes</span><div class="small muted addr" title="' + esc(r.address) + '">' + esc(r.address) + '</div>' : '<span class="muted">No</span>') : '') + '</td>'
         + '<td class="nowrap">' + (first ? (r.withdrawn ? '<span class="pill amber">👋 Yes</span><div class="small muted">last ' + esc(r.lastMonth ? C.periodLabel(r.lastMonth) : '?') + '</div>' : '<span class="muted">No</span>') : '') + '</td>'
@@ -2662,6 +2678,14 @@ const ACT = {
     S.ui.famZoom = fit; rememberFamZoom(fit); render();
     toast(fit < 1 ? 'Zoomed to ' + Math.round(fit * 100) + '% so the list fits the width.' : 'It already fits at 100%.', 'ok');
   },
+  // A column heading: A→Z, then Z→A, then back to the level order.
+  recSort(el) {
+    const k = el.dataset.k; if (!C.RECORD_COLUMN_KEYS.includes(k)) return;
+    const cur = recSortOn() ? S.ui.recSort : null;
+    S.ui.recSort = !cur || cur.key !== k ? { key: k, dir: 'asc' } : cur.dir === 'asc' ? { key: k, dir: 'desc' } : null;
+    rememberRecSort(S.ui.recSort); render();
+  },
+  recSortReset() { S.ui.recSort = null; rememberRecSort(null); render(); },
   openCategory(el) { openModal({ type: 'category', key: el.dataset.k }); },
   catOpenFamily(el) { ACT.openFamily(el); },
   catCsv(el) {
@@ -3372,6 +3396,8 @@ document.addEventListener('keydown', e => {
     else if (e.key.toLowerCase() === 's') { e.preventDefault(); ACT.waSkip(); }
   }
   if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('inv')) { e.preventDefault(); e.target.click(); }
+  // A sortable column heading, or a statistics tile, works from the keyboard too.
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.classList && (e.target.classList.contains('sortable') || e.target.classList.contains('open-cat'))) { e.preventDefault(); e.target.click(); }
 });
 $('file-statement').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; handleStatementFile(f); });
 $('file-import').addEventListener('change', async e => {

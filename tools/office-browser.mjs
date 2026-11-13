@@ -929,6 +929,53 @@ try {
   await page.click('[data-act="saveSettings"]');
   await page.waitForFunction(() => window.PolymathOffice.S.settings.hardcopyFee === 0);
 
+  // ── v1.12.0: an Unpaid chip, Months unpaid instead of Last payment, sort by any column ──
+  await page.click('#tabs [data-view="families"]');
+  await page.click('[data-act="famView"][data-k="table"]');
+  await page.waitForSelector('table.rec');
+  const heads = (await page.locator('table.rec thead th').allInnerTexts()).map(h => h.toLowerCase());
+  assert.ok(heads.some(h => h.startsWith('months unpaid')) && !heads.some(h => h.startsWith('last payment')), 'Months unpaid replaces Last payment: ' + heads.join(' | '));
+  const liveRows = async () => { const st = await store(page); return C.familyRecordRows(docsIn(st, 'officeFamilies').map(f => Object.assign({ id: f._id }, f)), { schedule: st['schedule_config/main'] || SCHEDULE, invoices: docsIn(st, 'officeInvoices').map(i => Object.assign({ id: i._id }, i)), payments: docsIn(st, 'officePayments'), today: '2026-11-03', settings: {} }); };
+  const owedFams = [...new Set((await liveRows()).filter(r => r.unpaidCount > 0).map(r => r.familyId))];
+  assert.ok(owedFams.length >= 1, 'the sample has a family with an unpaid month');
+  // The Unpaid chip, next to Withdrawn.
+  const chipOrder = await page.locator('.chips [data-act="famFilter"]').evaluateAll(cs => cs.map(c => c.dataset.k));
+  assert.equal(chipOrder[chipOrder.indexOf('withdrawn') + 1], 'owed', 'Unpaid sits next to Withdrawn');
+  assert.match(await page.locator('[data-act="famFilter"][data-k="owed"]').innerText(), new RegExp('Unpaid\\s*' + owedFams.length));
+  await page.click('[data-act="famFilter"][data-k="owed"]');
+  await page.waitForSelector('[data-act="famFilter"][data-k="owed"].on');
+  const shownFams = await page.locator('table.rec tbody tr.click').evaluateAll(trs => [...new Set(trs.map(t => t.dataset.id))]);
+  assert.deepEqual(shownFams.slice().sort(), owedFams.slice().sort(), 'only families with an unpaid month');
+  assert.ok((await page.locator('table.rec td.unpaid-cell .unpaid-list').allInnerTexts()).every(t => /\d{4}/.test(t)), 'each lists its months');
+  // Sort by Months unpaid, most first; again for fewest; a third click goes back to the level headings.
+  await page.click('[data-act="famFilter"][data-k="all"]');
+  await page.waitForSelector('table.rec');
+  await page.click('table.rec th[data-k="unpaid"]');
+  await page.waitForSelector('table.rec th[data-k="unpaid"].on');
+  assert.equal(await page.locator('table.rec tr.lvrow').count(), 0, 'a column sort replaces the level headings');
+  assert.match(await page.locator('.rec-sortnote').innerText(), /Sorted by Months unpaid/);
+  const unpaidCounts = async () => (await page.locator('table.rec tbody tr.click td.unpaid-cell').allInnerTexts()).map(t => /(\d+) month/.test(t) ? Number(RegExp.$1) : 0);
+  let uc = (await unpaidCounts()).filter((n, i, a) => true);
+  const nonzero = uc.filter(Boolean);
+  assert.ok(nonzero.every((n, i) => i === 0 || nonzero[i - 1] <= n), 'smallest first: ' + uc.join(','));
+  await page.click('table.rec th[data-k="unpaid"]');
+  await page.waitForSelector('table.rec th[data-k="unpaid"][aria-sort="descending"]');
+  uc = (await unpaidCounts()).filter(Boolean);
+  assert.ok(uc.every((n, i) => i === 0 || uc[i - 1] >= n), 'largest first: ' + uc.join(','));
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('polymath-office-recsort')).dir), 'desc', 'remembered');
+  await shot(page, '04m-families-sort-unpaid');
+  // Another column: student A→Z.
+  await page.click('table.rec th[data-k="student"]');
+  await page.waitForSelector('table.rec th[data-k="student"][aria-sort="ascending"]');
+  const studs = (await page.locator('table.rec tbody tr.click td:nth-child(3) b').allInnerTexts()).filter(t => t !== '—');
+  assert.deepEqual(studs, studs.slice().sort((a, b) => C.normText(a).localeCompare(C.normText(b))), 'students A→Z');
+  // Back to the level order.
+  await page.click('[data-act="recSortReset"]');
+  await page.waitForSelector('table.rec tr.lvrow');
+  assert.equal(await page.evaluate(() => localStorage.getItem('polymath-office-recsort')), null);
+  await page.click('[data-act="famView"][data-k="cards"]');
+  await page.waitForSelector('.fam-grid');
+
   // ── 📣 Announcements: write, choose with the filters, test to myself, confirm, send, log ──
   await page.click('#tabs [data-view="families"]');
   await page.click('[data-act="famPanel"]');

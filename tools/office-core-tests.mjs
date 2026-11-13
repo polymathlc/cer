@@ -1410,3 +1410,58 @@ test('unpaid earlier months (October 2026) can be added to an invoice and are pa
   const paused = Object.assign({}, fam, { status: 'paused', pauseFrom: '2026-10', pauseUntil: '2026-10' });
   assert.deepEqual(C.arrearsMonths(paused, [], [], ctx), []);
 });
+
+test('months unpaid: due months not paid, from the family\'s start to this month; Nov–Dec 2026 counts once (v1.12.0)', () => {
+  const S = REC_SCHEDULE;
+  const fam = { id: 'k', parentName: 'Kok', status: 'active', signUpDate: '2026-08-20', paidMonths: ['2026-09'],
+    students: [{ id: 'k1', name: 'Kai', status: 'active', startDate: '2026-08-20', classes: [{ slotId: 'FRI-2', mode: 'Physical' }] }] };
+  const nov = Object.assign(C.buildInvoice(fam, '2026-11', { schedule: S, settings: {}, today: '2026-11-01' }), { status: 'waiting', sentAt: 1 });
+  let r = C.familyPaymentRecord(fam, [nov], [], { today: '2026-11-14', settings: {} });
+  assert.deepEqual(r.unpaid.map(u => u.short), ['Oct 2026', 'Nov–Dec 2026'], 'October (no invoice) and November–December (not paid); nothing in the future');
+  assert.equal(r.unpaidText, 'Oct, Nov–Dec 2026');
+  assert.equal(r.unpaidCount, 2);
+  assert.equal(r.unpaidOwed, nov.total, 'what is invoiced and not paid');
+  // In December the pair is still one item.
+  r = C.familyPaymentRecord(fam, [nov], [], { today: '2026-12-05', settings: {} });
+  assert.deepEqual(r.unpaid.map(u => u.period), ['2026-10', '2026-11']);
+  // Paid: nothing left.
+  r = C.familyPaymentRecord(Object.assign({}, fam, { paidMonths: ['2026-09', '2026-10'] }), [Object.assign({}, nov, { paid: nov.total, status: 'paid' })], [], { today: '2026-12-05', settings: {} });
+  assert.deepEqual(r.unpaid, []);
+  assert.equal(r.unpaidText, '');
+  // A family that started in November owes nothing for October.
+  r = C.familyPaymentRecord(Object.assign({}, fam, { signUpDate: '2026-11-02', students: [Object.assign({}, fam.students[0], { startDate: '2026-11-02' })] }), [nov], [], { today: '2026-11-14', settings: {} });
+  assert.deepEqual(r.unpaid.map(u => u.period), ['2026-11']);
+  assert.equal(C.familyStartMonth({ signUpDate: '2026-11-02', students: [{ startDate: '2026-10-01' }] }), '2026-10', 'the earliest start counts');
+  // Paused months, months after withdrawal and package months are not due.
+  r = C.familyPaymentRecord(Object.assign({}, fam, { status: 'paused', pauseFrom: '2026-10', pauseUntil: '2026-10' }), [nov], [], { today: '2026-11-14', settings: {} });
+  assert.deepEqual(r.unpaid.map(u => u.period), ['2026-11']);
+  r = C.familyPaymentRecord(Object.assign({}, fam, { paymentType: 'package', packageStart: '2026-09-01', packageEnd: '2027-08-31' }), [], [], { today: '2026-11-14', settings: {} });
+  assert.deepEqual(r.unpaid, []);
+  // On the records rows and the CSV.
+  const rows = C.familyRecordRows([fam], { schedule: S, invoices: [nov], today: '2026-11-14', settings: {} });
+  assert.equal(rows[0].unpaidText, 'Oct, Nov–Dec 2026');
+  assert.ok(C.FAMILY_RECORD_HEADERS.includes('Months unpaid'));
+  assert.ok(C.familyRecordCsv(rows).includes('"Oct, Nov–Dec 2026"') || C.familyRecordCsv(rows).includes('Oct, Nov–Dec 2026'));
+  assert.equal(C.unpaidMonthsText([{ period: '2026-10' }, { period: '2027-01' }]), 'Oct 2026 · Jan 2027');
+});
+
+test('the records table sorts by any column, both ways, blanks last, a family kept together (v1.12.0)', () => {
+  const rows = [
+    { familyId: 'a', parentName: 'Ang', studentName: 'Zoe', level: 'P6', school: 'Nan Hua', status: 'active', unpaidCount: 0, paidCount: 3, since: '2026-03-01', email: 'a@x.com', slots: [], otherClasses: [] },
+    { familyId: 'b', parentName: 'Bala', studentName: 'Ben', level: 'P4', school: '', status: 'withdrawn', unpaidCount: 2, paidCount: 1, since: '2026-09-15', email: 'b@x.com', slots: [], otherClasses: [] },
+    { familyId: 'b', parentName: 'Bala', studentName: 'Bea', level: 'P6', school: 'Rosyth', status: 'withdrawn', unpaidCount: 2, paidCount: 1, since: '2026-09-15', email: 'b@x.com', slots: [], otherClasses: [] },
+    { familyId: 'c', parentName: 'Chua', studentName: 'Cal', level: 'P5', school: 'Ai Tong', status: 'paused', unpaidCount: 1, paidCount: 0, since: '', email: '', slots: [], otherClasses: [] }
+  ];
+  const names = list => list.map(r => r.studentName).join(',');
+  assert.equal(names(C.sortRecordRowsBy(rows, 'unpaid', 'desc')), 'Ben,Bea,Cal,Zoe', 'most months unpaid first; Bala\'s children together');
+  assert.equal(names(C.sortRecordRowsBy(rows, 'unpaid', 'asc')), 'Zoe,Cal,Ben,Bea');
+  assert.equal(names(C.sortRecordRowsBy(rows, 'school', 'asc')), 'Cal,Zoe,Bea,Ben', 'a blank school goes last');
+  assert.equal(names(C.sortRecordRowsBy(rows, 'school', 'desc')), 'Bea,Zoe,Cal,Ben', 'blanks last both ways');
+  assert.equal(names(C.sortRecordRowsBy(rows, 'student', 'asc')), 'Bea,Ben,Cal,Zoe');
+  assert.equal(names(C.sortRecordRowsBy(rows, 'status', 'asc')), 'Zoe,Cal,Ben,Bea', 'active, paused, withdrawn');
+  assert.equal(names(C.sortRecordRowsBy(rows, 'since', 'desc')), 'Ben,Bea,Zoe,Cal');
+  assert.equal(names(C.sortRecordRowsBy(rows, 'email', 'asc')), 'Zoe,Ben,Bea,Cal');
+  assert.equal(names(C.sortRecordRowsBy(rows, 'nonsense', 'asc')), names(C.sortRecordRows(rows, 'level')), 'an unknown column: the usual order');
+  assert.equal(C.RECORD_COLUMNS.length, 14);
+  assert.ok(C.RECORD_COLUMN_KEYS.includes('unpaid') && !C.RECORD_COLUMNS.some(c => c.label === 'Last payment'), 'Months unpaid replaces Last payment');
+});
