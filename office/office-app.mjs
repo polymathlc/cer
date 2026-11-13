@@ -35,7 +35,7 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 import * as C from './office-core.mjs?v=1.1.0';
 
-const OFFICE_VERSION = 'v1.3.0';
+const OFFICE_VERSION = 'v1.4.0';
 
 /* ═══════════════ Firebase — the CER project ═══════════════ */
 firebase.initializeApp({
@@ -183,7 +183,7 @@ function reindex() {
 function recordOf(f) {
   if (!f) return null;
   if (f.id && IX.rec.has(f.id) && IX.fam.get(f.id) === f) return IX.rec.get(f.id);
-  const r = C.familyPaymentRecord(f, S.invoices, S.payments, { today: today(), months: 12 });
+  const r = C.familyPaymentRecord(f, S.invoices, S.payments, { today: today() });
   if (f.id && IX.fam.get(f.id) === f) IX.rec.set(f.id, r);
   return r;
 }
@@ -193,7 +193,8 @@ function lessonTypeChip(type, chosen, full) {
   return '<span class="lt ' + t.key + (chosen ? '' : ' guess') + '" title="' + esc(t.label + (chosen ? '' : ' (read from the classes — open the family to choose)')) + '">' + t.icon + ' ' + esc(full ? t.label : t.short) + '</span>';
 }
 function monthDots(months, n) {
-  return '<span class="mdots">' + months.slice(-n).map(m => '<span class="md ' + m.key + (m.current ? ' cur' : '') + '" title="' + esc(C.periodLabel(m.period) + ': ' + C.MONTH_STATE_META[m.key].label) + '">' + esc(m.label) + '</span>').join('') + '</span>';
+  // The months around this one: two before, this month, and the rest ahead.
+  return '<span class="mdots">' + C.monthsAround(months, C.sgMonthKey(), 2, Math.max(0, n - 3)).map(m => '<span class="md ' + m.key + (m.current ? ' cur' : '') + '" title="' + esc(C.periodLabel(m.period) + ': ' + C.MONTH_STATE_META[m.key].label) + '">' + esc(m.label) + '</span>').join('') + '</span>';
 }
 function whenText(dayKey) {
   if (!C.isDayKey(dayKey)) return '';
@@ -508,7 +509,7 @@ function familyList() {
     .filter(f => familyMatchesSearch(f, q));
 }
 function recordRows(list) {
-  const rows = C.familyRecordRows(list, { schedule: S.schedule, invoices: S.invoices, payments: S.payments, today: today(), months: 12 });
+  const rows = C.familyRecordRows(list, { schedule: S.schedule, invoices: S.invoices, payments: S.payments, today: today() });
   // The table shows only the children of the type filtered to.
   return S.ui.famType ? rows.filter(r => !r.studentId || r.lessonType === S.ui.famType) : rows;
 }
@@ -902,6 +903,22 @@ function renderModal() {
   });
   hydrate(box);
 }
+// Dialogs that only show something (nothing typed into them can be lost).
+const VIEW_ONLY_MODALS = new Set(['qr', 'genericQr', 'result']);
+function modalIsViewOnly() {
+  const m = S.modal;
+  if (!m) return true;
+  if (m.type === 'invoice') return !m.edit;
+  return VIEW_ONLY_MODALS.has(m.type);
+}
+let nudgeTimer = null;
+function nudgeModal() {
+  const box = $('modal-box');
+  box.classList.remove('nudge'); void box.offsetWidth; box.classList.add('nudge');
+  clearTimeout(nudgeTimer);
+  nudgeTimer = setTimeout(() => box.classList.remove('nudge'), 400);
+  toast('To close, use ✕ or Cancel — your changes stay until you do.');
+}
 function closeModal() {
   // A small dialog opened from a bigger one (the QR from a family) goes back to it.
   if (S.modal && S.modal.back) { const back = S.modal.back; S.modal = back; renderModal(); return; }
@@ -982,9 +999,17 @@ function paymentRecordHtml(f) {
     + '<div><span class="lbl">Last payment</span><b>' + (lp ? esc(C.prettyDate(lp.date)) + (lp.amount ? ' · ' + money(lp.amount) : '') : '<span class="muted">None yet</span>') + '</b>' + (lp ? '<small>' + esc(whenText(lp.date)) + (howLbl ? ' · ' + esc(howLbl) : '') + '</small>' : '') + '</div>'
     + '<div><span class="lbl">Last screenshot</span><b>' + (rec.lastScreenshot ? esc(C.prettyDate(rec.lastScreenshot.date)) : '<span class="muted">None yet</span>') + '</b>' + (rec.lastScreenshot ? '<small>' + esc(whenText(rec.lastScreenshot.date)) + (rec.lastScreenshot.period ? ' · for ' + esc(C.periodLabel(rec.lastScreenshot.period)) : '') + '</small>' : '') + '</div>'
     + '</div>'
-    + '<div class="months" role="group" aria-label="Months">' + rec.months.map(mo => '<button type="button" class="mo ' + mo.key + (mo.current ? ' cur' : '') + '" data-act="markMonth" data-p="' + mo.period + '" title="' + esc(C.periodLabel(mo.period) + ': ' + C.MONTH_STATE_META[mo.key].label + (mo.handDate ? ' on ' + C.prettyDate(mo.handDate) : '') + (mo.outstanding ? ' · ' + money(mo.outstanding) + ' to pay' : '')) + '">'
-      + '<span class="mo-i">' + C.MONTH_STATE_META[mo.key].icon + '</span><b>' + esc(mo.label) + '</b><small>' + esc(mo.year.slice(2)) + '</small></button>').join('') + '</div>'
-    + '<div class="small muted" style="margin-top:6px;">Listed from September 2026. Months come from paid invoices (📦 = covered by a package). Tap a month to mark it paid by hand (cash, or paid before the office), tap again to undo; tap a paid invoice\'s month to open it.</div>'
+    + '<div class="years">' + [...new Set(rec.months.map(mo => mo.year))].map(y => {
+      const ms = rec.months.filter(mo => mo.year === y);
+      const open = ms.filter(mo => !['paid', 'hand', 'package', 'gone'].includes(mo.key));
+      const allHand = !open.length && ms.some(mo => mo.key === 'hand');
+      return '<div class="year-row"><div class="year-head"><b>' + y + '</b>'
+        + (open.length ? '<button type="button" class="btn xs ghost" data-act="markYear" data-y="' + y + '" title="For a family that paid the whole year">✔︎ Mark ' + (open.length === ms.length ? 'all of ' + y : 'the rest of ' + y) + ' paid</button>'
+          : allHand ? '<button type="button" class="btn xs ghost" data-act="unmarkYear" data-y="' + y + '">Undo ' + y + ' marks</button>' : '')
+        + '</div><div class="months" role="group" aria-label="' + y + '">' + ms.map(mo => '<button type="button" class="mo ' + mo.key + (mo.current ? ' cur' : '') + '" data-act="markMonth" data-p="' + mo.period + '" title="' + esc(C.periodLabel(mo.period) + ': ' + C.MONTH_STATE_META[mo.key].label + (mo.handDate ? ' on ' + C.prettyDate(mo.handDate) : '') + (mo.outstanding ? ' · ' + money(mo.outstanding) + ' to pay' : '')) + '">'
+      + '<span class="mo-i">' + C.MONTH_STATE_META[mo.key].icon + '</span><b>' + esc(mo.label) + '</b><small>' + esc(mo.year.slice(2)) + '</small></button>').join('') + '</div></div>';
+    }).join('') + '</div>'
+    + '<div class="small muted" style="margin-top:6px;">September 2026 to December 2027. Months come from paid invoices (📦 = covered by a package). Tap a month to mark it paid by hand (cash, a whole year paid in advance, or paid before the office), tap again to undo; tap a paid invoice\'s month to open it.</div>'
     + '<div class="shots-head"><b>📸 Payment screenshots received</b><button type="button" class="btn xs" data-act="addShot">📸 Received today</button></div>'
     + (shown.length ? '<div class="shots">' + shown.map((x, i) => '<div class="shot-row">'
       + '<input type="date" value="' + esc(x.date) + '" data-ch="shot" data-i="' + i + '" data-k="date" aria-label="Date received">'
@@ -2127,6 +2152,24 @@ const ACT = {
     f.paidMonths = next.paidMonths;
     renderModal();
   },
+  // A family that paid a whole year: mark every month of it not already paid.
+  markYear(el) {
+    const f = S.modal.draft, y = el.dataset.y;
+    const open = recordOf(f).months.filter(mo => mo.year === y && !['paid', 'hand', 'package', 'gone'].includes(mo.key));
+    const unpaidInv = open.filter(mo => mo.invoiceId);
+    if (unpaidInv.length && !confirm(C.plural(unpaidInv.length, 'month has', 'months have') + ' an unpaid invoice (' + unpaidInv.map(mo => mo.label).join(', ') + '). Mark them paid by hand too?')) return;
+    let next = f;
+    open.forEach(mo => { next = C.togglePaidMonth(next, mo.period, { date: today(), by: S.user.email, note: 'Paid for the whole of ' + y }); });
+    f.paidMonths = next.paidMonths;
+    renderModal();
+    toast(C.plural(open.length, 'month') + ' of ' + y + ' marked paid — press Save to keep it.', 'ok');
+  },
+  unmarkYear(el) {
+    const f = S.modal.draft, y = el.dataset.y;
+    if (!confirm('Take the paid-by-hand mark off every month of ' + y + '?')) return;
+    f.paidMonths = C.normalizePaidMonths(f.paidMonths).filter(p => p.period.slice(0, 4) !== y);
+    renderModal();
+  },
   addShot() {
     const f = S.modal.draft;
     f.screenshots = C.normalizeScreenshots([C.newScreenshot({ by: S.user.email }), ...(f.screenshots || [])]);
@@ -2601,7 +2644,9 @@ const CHG = {
 document.addEventListener('click', e => {
   const tab = e.target.closest('#tabs .tab');
   if (tab) { go(tab.dataset.view); return; }
-  if (e.target === $('modal')) { closeModal(); return; }
+  // A click outside a dialog never closes it — work typed into it would be lost.
+  // Only ✕, Close or Cancel close a dialog.
+  if (e.target === $('modal')) { nudgeModal(); return; }
   if (e.target === $('drawer')) { S.drawer = null; renderDrawer(); return; }
   const el = e.target.closest('[data-act]');
   if (!el) return;
@@ -2616,7 +2661,12 @@ document.addEventListener('click', e => { const a = e.target.closest('a[data-act
 document.addEventListener('input', e => { const el = e.target.closest('[data-in]'); if (el && INP[el.dataset.in]) INP[el.dataset.in](el, e); });
 document.addEventListener('change', e => { const el = e.target.closest('[data-ch]'); if (el && CHG[el.dataset.ch]) CHG[el.dataset.ch](el, e); });
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { if (S.modal) closeModal(); else if (S.drawer) { S.drawer = null; renderDrawer(); } return; }
+  if (e.key === 'Escape') {
+    // Esc closes only a dialog that just shows something; one you type into stays.
+    if (S.modal) { if (modalIsViewOnly()) closeModal(); else nudgeModal(); }
+    else if (S.drawer) { S.drawer = null; renderDrawer(); }
+    return;
+  }
   if (S.modal && S.modal.type === 'waq' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) {
     if (e.key === 'Enter') { e.preventDefault(); ACT.waSend(); }
     else if (e.key === 'ArrowRight') { e.preventDefault(); ACT.waNext(); }

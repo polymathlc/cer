@@ -773,11 +773,17 @@ test('payment record: months paid, last payment and last screenshot', () => {
     { id: 'f_2026-05', familyId: 'f', period: '2026-05', total: 220, paid: 0, status: 'void' }
   ];
   const payments = [{ id: 'p2', familyId: 'f', date: '2026-09-20', amount: 220 }, { id: 'p3', familyId: 'f', date: '2026-09-30', amount: 50, how: 'manual' }, { id: 'p0', familyId: 'f', date: '2026-08-30', amount: 70, how: 'manual' }, { id: 'px', familyId: 'g', date: '2026-11-11', amount: 5 }];
-  const rec = C.familyPaymentRecord(fam, invoices, payments, { today: '2026-11-12', months: 6 });
+  const rec = C.familyPaymentRecord(fam, invoices, payments, { today: '2026-11-12', months: 6, until: '2026-11' });
   assert.deepEqual(rec.paidPeriods, ['2026-09'], 'nothing before September 2026, and a custom invoice never pays a month');
   assert.equal(rec.paidText, 'Sep 2026');
   assert.equal(rec.thisMonthPaid, false);
   assert.deepEqual(rec.months.map(m => m.label + ':' + m.key), ['Sep:paid', 'Oct:overdue', 'Nov:waiting'], 'the record starts at Sep 2026');
+  const full = C.familyPaymentRecord(fam, invoices, payments, { today: '2026-11-12' });
+  assert.equal(full.months[0].period, '2026-09');
+  assert.equal(full.months.at(-1).period, '2027-12', 'the record runs to December 2027');
+  assert.equal(full.months.length, 16);
+  assert.deepEqual(C.monthsAround(full.months, '2026-11', 2, 1).map(m => m.period), ['2026-09', '2026-10', '2026-11', '2026-12']);
+  assert.equal(C.familyPaymentRecord(fam, [], [], { today: '2028-02-10' }).months.at(-1).period, '2028-02', 'it keeps going past 2027');
   assert.ok(!rec.payments.some(p => p.paymentId === 'p0'), 'a payment before September 2026 is not listed');
   assert.equal(rec.months.at(-1).current, true);
   assert.equal(rec.months.find(m => m.period === '2026-10').outstanding, 120);
@@ -792,7 +798,7 @@ test('payment record: months paid, last payment and last screenshot', () => {
   assert.equal(rec.screenshotDaysAgo, 10);
   assert.equal(rec.paymentDaysAgo, 8);
   // Paid ahead: the window stretches to a later month.
-  const ahead = C.familyPaymentRecord(Object.assign({}, fam, { paidMonths: ['2027-01'] }), [], [], { today: '2026-11-12', months: 2 });
+  const ahead = C.familyPaymentRecord(Object.assign({}, fam, { paidMonths: ['2027-01'] }), [], [], { today: '2026-11-12', months: 2, until: '2026-11' });
   assert.deepEqual(ahead.months.map(m => m.period), ['2026-10', '2026-11', '2026-12', '2027-01']);
   assert.equal(ahead.paidText, 'Jan 2027');
   // An unpaid invoice month marked by hand counts as paid.
@@ -800,7 +806,7 @@ test('payment record: months paid, last payment and last screenshot', () => {
   assert.equal(handOver.months[0].key, 'hand');
   assert.equal(handOver.thisMonthPaid, true);
   // An empty record.
-  const empty = C.familyPaymentRecord({ id: 'z' }, invoices, payments, { today: '2026-11-12' });
+  const empty = C.familyPaymentRecord({ id: 'z' }, invoices, payments, { today: '2026-11-12', until: '2026-11' });
   assert.deepEqual(empty.months.map(m => m.period), ['2026-09', '2026-10', '2026-11']);
   assert.ok(empty.months.every(m => m.key === 'none'));
   assert.equal(empty.lastPayment, null);
@@ -885,9 +891,9 @@ test('hardcopy, payment type (monthly / package) and withdrawal', () => {
   assert.equal(C.familyIsBillable(gone), true, 'without a month: as before');
   assert.equal([base].filter(C.familyIsBillable).length, 1, 'still works as a plain filter');
   // The record shows them.
-  const rec = C.familyPaymentRecord(Object.assign({}, pkg, { withdrawn: true, lastMonth: '2026-10' }), [], [], { today: '2026-11-12' });
+  const rec = C.familyPaymentRecord(Object.assign({}, pkg, { withdrawn: true, lastMonth: '2026-10' }), [], [], { today: '2026-11-12', until: '2026-11' });
   assert.deepEqual(rec.months.map(m => m.label + ':' + m.key), ['Sep:package', 'Oct:package', 'Nov:package']);
-  const rec2 = C.familyPaymentRecord(gone, [], [], { today: '2027-01-05' });
+  const rec2 = C.familyPaymentRecord(gone, [], [], { today: '2027-01-05', until: '2027-01' });
   assert.deepEqual(rec2.months.map(m => m.label + ':' + m.key), ['Sep:none', 'Oct:none', 'Nov:none', 'Dec:gone', 'Jan:gone']);
   assert.equal(C.packageText(pkg), 'Package 15 Sep 2026 – 10 Dec 2026');
   assert.equal(C.withdrawalText(gone), 'Withdrawn · last month November 2026');

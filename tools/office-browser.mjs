@@ -615,7 +615,23 @@ try {
   await page.click('.modal [data-act="openOwner"]');
   await page.waitForSelector('.modal-head h2:has-text("Lim Wei Ming")');
   assert.equal(await page.locator('.modal .student-card').count(), 2, 'the right family is open');
+  // A click outside the dialog, or Esc, does not close it (typed work is kept).
+  await page.fill('.modal input[data-k="parentName"]', 'Lim Wei Ming (typed)');
+  await page.mouse.click(8, 450);
   await page.keyboard.press('Escape');
+  await settle(page);
+  assert.ok(await page.locator('#modal.show').count(), 'the family stays open after a click outside and Esc');
+  assert.equal(await page.inputValue('.modal input[data-k="parentName"]'), 'Lim Wei Ming (typed)', 'and nothing typed is lost');
+  // A whole year paid in advance.
+  await page.click('.modal [data-act="markYear"][data-y="2027"]');
+  await page.waitForSelector('.modal .mo.hand[data-p="2027-03"]');
+  assert.equal(await page.locator('.modal .mo[data-p^="2027-"]').count(), 12, '2027 is listed to December');
+  // Lim's package covers Jan–Feb 2027 and the last month is Mar 2027: only March needed marking.
+  assert.equal(await page.locator('.modal .mo.hand[data-p^="2027-"]').count(), 1);
+  assert.ok(await page.locator('.modal .mo.package[data-p="2027-01"]').count() && await page.locator('.modal .mo.gone[data-p="2027-12"]').count());
+  await shot(page, '04e-year-and-safe-close');
+  await page.click('#modal-box .modal-head [data-act="closeModal"]');
+  await page.waitForSelector('#modal.show', { state: 'detached' });
 
   // The records table: one row per child, every field; 📸 logs a screenshot at once; CSV.
   await page.click('[data-act="famView"][data-k="table"]');
@@ -659,7 +675,8 @@ try {
   await settle(page, 300);
   assert.equal(docsIn(await store(page), 'officeFamilies').length, 6, 'nothing is written while parent data would be readable');
   await shot(page, '18-unlocked-refuses');
-  await page.keyboard.press('Escape');
+  await page.click('#modal-box .modal-head [data-act="closeModal"]');
+  await page.waitForSelector('#modal.show', { state: 'detached' });
   lockStatus = 403;
 
   /* ════════ The office on a phone ════════ */
@@ -673,7 +690,8 @@ try {
   await page.waitForSelector('.modal .ed-line');
   assert.ok(await page.evaluate(() => { const b = document.getElementById('modal-box'); return b.scrollWidth <= b.clientWidth + 1; }), 'the invoice editor fits a phone');
   await shot(page, '19b-phone-custom-editor');
-  await page.keyboard.press('Escape');
+  await page.click('#modal-box .modal-head [data-act="closeModal"]');
+  await page.waitForSelector('#modal.show', { state: 'detached' });
   await page.click('#tabs [data-view="families"]');
   await page.click('text=Lim Wei Ming');
   await page.waitForSelector('.modal .student-card');
@@ -681,7 +699,8 @@ try {
   await page.waitForSelector('.modal .ms-pop');
   assert.ok(await page.evaluate(() => { const b = document.getElementById('modal-box'); return b.scrollWidth <= b.clientWidth + 1; }), 'the family record fits a phone');
   await shot(page, '19c-phone-family');
-  await page.keyboard.press('Escape');
+  await page.click('#modal-box .modal-head [data-act="closeModal"]');
+  await page.waitForSelector('#modal.show', { state: 'detached' });
   await page.click('[data-act="famView"][data-k="table"]');
   await settle(page);
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'the records table scrolls inside itself on a phone');
