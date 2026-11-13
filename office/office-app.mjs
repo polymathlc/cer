@@ -35,7 +35,7 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 import * as C from './office-core.mjs?v=1.1.0';
 
-const OFFICE_VERSION = 'v1.2.0';
+const OFFICE_VERSION = 'v1.3.0';
 
 /* ═══════════════ Firebase — the CER project ═══════════════ */
 firebase.initializeApp({
@@ -212,13 +212,15 @@ function famStateFor(f, period) {
   if (inv) return Object.assign({ inv }, stateOf(inv));
   if (f.status === 'inactive') return { key: 'inactive', label: 'Inactive', tone: 'grey', icon: '💤' };
   if (!C.familyIsBillable(f)) return { key: 'none', label: 'No active students', tone: 'grey', icon: '·' };
+  if (C.packageCovers(f, period)) return { key: 'package', label: 'Package', tone: 'green', icon: '📦' };
+  if (f.withdrawn && f.lastMonth && period > f.lastMonth) return { key: 'withdrawn', label: 'Withdrawn', tone: 'grey', icon: '👋' };
   return { key: 'noinv', label: 'Not invoiced', tone: 'grey', icon: '📝' };
 }
 function studentsWithoutClass() {
   return IX.rows.filter(r => r.status === 'active' && !r.classes.length && !(C.feeNum((r.family.students.find(s => s.id === r.studentId) || {}).monthlyFee)));
 }
 function billableWithoutInvoice(period) {
-  return S.families.filter(f => C.familyIsBillable(f) && !invoiceFor(f.id, period));
+  return S.families.filter(f => C.familyIsBillable(f, period) && !invoiceFor(f.id, period));
 }
 function allOwing() { return C.stillOwing(S.invoices, today()); }
 function overdueInvoices() { return S.invoices.filter(i => stateOf(i).key === 'overdue'); }
@@ -479,11 +481,14 @@ function dropHtml() {
 const FAM_FILTERS = {
   all: f => f.status === 'active',
   owing: f => familyOwing(f.id) > 0,
-  unpaid: f => f.status === 'active' && C.familyIsBillable(f) && !recordOf(f).thisMonthPaid,
+  unpaid: f => f.status === 'active' && C.familyIsBillable(f, C.sgMonthKey()) && !recordOf(f).thisMonthPaid,
   noshot: f => f.status === 'active' && C.familyIsBillable(f) && !(recordOf(f).lastScreenshot && recordOf(f).lastScreenshot.date.slice(0, 7) === C.sgMonthKey()),
   noemail: f => f.status === 'active' && !C.familyEmails(f).length,
   shared: f => C.familyEmails(f).some(e => IX.shared.has(e)),
   noclass: f => studentsWithoutClass().some(r => r.familyId === f.id),
+  package: f => f.status === 'active' && f.paymentType === 'package',
+  hardcopy: f => f.status === 'active' && f.hardcopy,
+  withdrawn: f => f.withdrawn,
   inactive: f => f.status === 'inactive'
 };
 function familyMatchesType(f, type) {
@@ -530,7 +535,7 @@ VIEWS.families = function () {
     + '<div class="toolbar"><div class="search"><input type="search" placeholder="Search parent, student, school, phone, email or code" value="' + esc(S.ui.famSearch) + '" data-in="famSearch" data-keep="famSearch" aria-label="Search families"></div>'
     + '<div class="segs" role="group" aria-label="Show as">' + viewChip('cards', '▦ Cards') + viewChip('table', '☰ Table') + '</div></div>'
     + '<div class="chips" style="margin-bottom:10px;">' + chip('all', 'Active') + chip('owing', '💰 Owing') + chip('unpaid', '⏳ ' + esc(C.monthShort(period)) + ' not paid')
-    + chip('noshot', '📸 No screenshot in ' + esc(C.monthShort(period))) + chip('noemail', '✉ No email') + chip('shared', '⚠ Shared email', true) + chip('noclass', '🧩 No class') + chip('inactive', '💤 Not active') + '</div>'
+    + chip('noshot', '📸 No screenshot in ' + esc(C.monthShort(period))) + chip('noemail', '✉ No email') + chip('shared', '⚠ Shared email', true) + chip('noclass', '🧩 No class') + chip('package', '📦 Package', true) + chip('hardcopy', '📮 Hardcopy', true) + chip('withdrawn', '👋 Withdrawn', true) + chip('inactive', '💤 Not active') + '</div>'
     + '<div class="filterrow"><span class="lbl">Type of lesson</span><div class="chips">' + typeChip('', 'All') + C.LESSON_TYPES.map(t => typeChip(t.key, t.icon + ' ' + t.label)).join('') + '</div></div>'
     + body;
 };
@@ -538,7 +543,7 @@ function familyTableHtml(rows) {
   const cur = C.sgMonthKey();
   return '<div class="table-wrap rec-wrap"><table class="t rec"><thead><tr>'
     + '<th>Status</th><th>Email (account ID)</th><th>Student</th><th>Parent · WhatsApp</th><th>Primary school</th><th>With us since</th>'
-    + '<th>Type of lesson</th><th>Slots</th><th>Months paid</th><th>Last payment</th><th>Last screenshot</th><th>Notes</th><th></th></tr></thead><tbody>'
+    + '<th>Type of lesson</th><th>Slots</th><th>Payment type</th><th>Months paid</th><th>Last payment</th><th>Last screenshot</th><th>Hardcopy</th><th>Withdrawal</th><th>Notes</th><th></th></tr></thead><tbody>'
     + rows.map((r, i) => {
       const first = i === 0 || rows[i - 1].familyId !== r.familyId;
       const shotThisMonth = r.lastScreenshot && r.lastScreenshot.date.slice(0, 7) === cur;
@@ -551,9 +556,12 @@ function familyTableHtml(rows) {
         + '<td class="nowrap">' + (r.since ? esc(C.prettyDate(r.since)) : '<span class="muted">—</span>') + '</td>'
         + '<td>' + (r.studentId ? lessonTypeChip(r.lessonType, r.lessonTypeChosen, true) : '') + '</td>'
         + '<td class="slots">' + (r.slots.length || r.otherClasses.length ? r.slots.map(x => subjChip(x.subject, x.master, x.label.replace(/ · .*$/, '') + ' · ' + (x.subject || 'Class') + (x.mode === 'Online' ? ' 💻' : ''))).join(' ') + r.otherClasses.map(x => ' <span class="subj other">📘 ' + esc(x) + '</span>').join('') : (r.studentId ? '<span class="warn-t">⚠ none</span>' : '')) + '</td>'
+        + '<td class="nowrap">' + (first ? (r.paymentType === 'package' ? '<span class="pill green">📦 Package</span><div class="small muted">' + esc(C.prettyDateShort(r.packageStart) + ' – ' + C.prettyDate(r.packageEnd)) + '</div>' : '<span class="muted">Monthly</span>') : '') + '</td>'
         + '<td title="' + esc(r.paidText ? 'Paid: ' + r.paidText : 'No month paid yet') + '">' + (first ? monthDots(r.months, 4) : '') + '</td>'
         + '<td class="nowrap">' + (first ? (r.lastPayment ? '<b>' + esc(C.prettyDateShort(r.lastPayment.date)) + '</b>' + (r.lastPayment.amount ? '<div class="small muted">' + money(r.lastPayment.amount) + '</div>' : '') : '<span class="muted">—</span>') : '') + '</td>'
         + '<td class="nowrap">' + (first ? (r.lastScreenshot ? '<span class="' + (shotThisMonth ? '' : 'muted') + '">📸 ' + esc(C.prettyDateShort(r.lastScreenshot.date)) + '</span><div class="small muted">' + esc(whenText(r.lastScreenshot.date)) + '</div>' : '<span class="muted">—</span>') : '') + '</td>'
+        + '<td>' + (first ? (r.hardcopy ? '<span class="pill deep">📮 Yes</span><div class="small muted addr">' + esc(r.address) + '</div>' : '<span class="muted">No</span>') : '') + '</td>'
+        + '<td class="nowrap">' + (first ? (r.withdrawn ? '<span class="pill amber">👋 Yes</span><div class="small muted">last ' + esc(r.lastMonth ? C.periodLabel(r.lastMonth) : '?') + '</div>' : '<span class="muted">No</span>') : '') + '</td>'
         + '<td class="notes">' + (r.notes ? '<span title="' + esc(r.notes) + '">' + esc(r.notes.length > 70 ? r.notes.slice(0, 68) + '…' : r.notes) + '</span>' : '') + '</td>'
         + '<td class="r">' + (first ? '<button class="iconbtn" data-act="quickShot" data-id="' + esc(r.familyId) + '" title="Log a payment screenshot received today">📸</button>' : '') + '</td></tr>';
     }).join('') + '</tbody></table></div>'
@@ -567,7 +575,10 @@ function famCardHtml(f, period) {
   const rowsById = new Map(IX.rows.filter(r => r.familyId === f.id).map(r => [r.studentId, r]));
   return '<button type="button" class="fam ' + (f.status === 'inactive' ? 'inactive' : '') + '" data-act="openFamily" data-id="' + esc(f.id) + '">'
     + '<div class="fam-top"><div><div class="fam-name">' + esc(f.parentName || 'Unnamed parent') + '</div>'
-    + '<span class="code">' + esc(C.familyReference(f.code)) + '</span>' + (f.status === 'inactive' ? ' <span class="pill grey">Not active</span>' : '') + '</div>' + pill(st) + '</div>'
+    + '<span class="code">' + esc(C.familyReference(f.code)) + '</span>' + (f.status === 'inactive' ? ' <span class="pill grey">Not active</span>' : '')
+    + (f.paymentType === 'package' ? ' <span class="pill green" title="' + esc(C.packageText(f)) + '">📦 Package</span>' : '')
+    + (f.hardcopy ? ' <span class="pill deep" title="Hardcopy posted to: ' + esc(f.address) + '">📮 Hardcopy</span>' : '')
+    + (f.withdrawn ? ' <span class="pill amber">👋 ' + esc(f.lastMonth ? 'Last month ' + C.monthShort(f.lastMonth) + ' ' + f.lastMonth.slice(2, 4) : 'Withdrawn') + '</span>' : '') + '</div>' + pill(st) + '</div>'
     + '<div class="fam-kids">' + (kids.length ? kids.map(s => {
       const r = rowsById.get(s.id);
       return '<div class="fam-kid"><span class="kid"><span class="lv">' + esc(C.levelLabel(s.level) || '—') + '</span><b>' + esc(s.name) + '</b></span>'
@@ -973,7 +984,7 @@ function paymentRecordHtml(f) {
     + '</div>'
     + '<div class="months" role="group" aria-label="Months">' + rec.months.map(mo => '<button type="button" class="mo ' + mo.key + (mo.current ? ' cur' : '') + '" data-act="markMonth" data-p="' + mo.period + '" title="' + esc(C.periodLabel(mo.period) + ': ' + C.MONTH_STATE_META[mo.key].label + (mo.handDate ? ' on ' + C.prettyDate(mo.handDate) : '') + (mo.outstanding ? ' · ' + money(mo.outstanding) + ' to pay' : '')) + '">'
       + '<span class="mo-i">' + C.MONTH_STATE_META[mo.key].icon + '</span><b>' + esc(mo.label) + '</b><small>' + esc(mo.year.slice(2)) + '</small></button>').join('') + '</div>'
-    + '<div class="small muted" style="margin-top:6px;">Months come from paid invoices. Tap a month to mark it paid by hand (cash, or paid before the office), tap again to undo; tap a paid invoice\'s month to open it.</div>'
+    + '<div class="small muted" style="margin-top:6px;">Listed from September 2026. Months come from paid invoices (📦 = covered by a package). Tap a month to mark it paid by hand (cash, or paid before the office), tap again to undo; tap a paid invoice\'s month to open it.</div>'
     + '<div class="shots-head"><b>📸 Payment screenshots received</b><button type="button" class="btn xs" data-act="addShot">📸 Received today</button></div>'
     + (shown.length ? '<div class="shots">' + shown.map((x, i) => '<div class="shot-row">'
       + '<input type="date" value="' + esc(x.date) + '" data-ch="shot" data-i="' + i + '" data-k="date" aria-label="Date received">'
@@ -995,6 +1006,7 @@ MODALS.family = function (m) {
   const problems = C.familyRecordProblems(f, S.families);
   const emailProblems = problems.filter(p => p.field === 'email' || p.field === 'email2');
   m.emailKey = emailWarningsKey(f);
+  const extraProblems = C.extraFieldProblems(f);
   const stud = f.students.map((s, si) => {
     const classes = s.classes.map((c, ci) => {
       const slot = c.custom ? null : C.scheduleSlot(S.schedule, c.slotId);
@@ -1035,12 +1047,23 @@ MODALS.family = function (m) {
     + '<div class="section-title">Family</div><div class="form">'
     + '<div class="field"><label>Status</label><select data-ch="fam" data-k="status"><option value="active" ' + (f.status === 'active' ? 'selected' : '') + '>✅ Active</option><option value="inactive" ' + (f.status === 'inactive' ? 'selected' : '') + '>💤 Not active (not billed)</option></select></div>'
     + fld('signUpDate', 'Signed up on', 'date')
+    + '<div class="field"><label>Payment type</label><select data-ch="famOpt" data-k="paymentType">' + C.PAYMENT_TYPES.map(t => '<option value="' + t.key + '" ' + (f.paymentType === t.key ? 'selected' : '') + '>' + esc(t.label) + '</option>').join('') + '</select></div>'
+    + (f.paymentType === 'package'
+      ? '<div class="field help-cell"><div class="help">Months inside the package are not invoiced monthly and count as paid.</div></div>'
+        + '<div class="field"><label>Package start</label><input type="date" value="' + esc(f.packageStart) + '" data-in="fam" data-ch="famOpt" data-k="packageStart"></div>'
+        + '<div class="field"><label>Package end</label><input type="date" value="' + esc(f.packageEnd) + '" data-in="fam" data-ch="famOpt" data-k="packageEnd"></div>'
+      : '<div></div>')
+    + '<div class="field"><label>Hardcopy subscription</label><select data-ch="famOpt" data-k="hardcopy"><option value="no" ' + (f.hardcopy ? '' : 'selected') + '>No</option><option value="yes" ' + (f.hardcopy ? 'selected' : '') + '>📮 Yes</option></select></div>'
+    + '<div class="field"><label>Withdrawal</label><select data-ch="famOpt" data-k="withdrawn"><option value="no" ' + (f.withdrawn ? '' : 'selected') + '>No</option><option value="yes" ' + (f.withdrawn ? 'selected' : '') + '>👋 Yes</option></select></div>'
+    + (f.hardcopy ? '<div class="field full"><label>Postal address for the hardcopy</label><textarea data-in="fam" data-ch="famOpt" data-k="address" placeholder="Block, street, unit, postal code">' + esc(f.address) + '</textarea></div>' : '')
+    + (f.withdrawn ? '<div class="field"><label>Last month with us</label><input type="month" value="' + esc(f.lastMonth) + '" data-in="fam" data-ch="famOpt" data-k="lastMonth"></div><div class="field help-cell"><div class="help">Nothing after this month is invoiced.</div></div>' : '')
+    + extraProblems.map(p => '<div class="full fix block">⛔ ' + esc(p.text) + '</div>').join('')
     + fld('email', 'Email <span class="opt">— the family\'s account ID</span>', 'email', { full: true, ch: 'famEmail', ph: 'one email for every child', help: 'Use the same email for all the family\'s children. One email = one family.' })
     + (emailProblems.length ? '<div class="full">' + emailProblems.map(p => '<div class="fix ' + p.level + '">' + (p.level === 'block' ? '⛔ ' : '✉ ') + esc(p.text)
       + (p.familyId ? ' <button class="linkbtn" data-act="openOwner" data-id="' + esc(p.familyId) + '">Open that family</button>' : '') + '</div>').join('') + '</div>' : '')
     + fld('parentName', 'Parent name', 'text', { full: true })
     + fld('whatsapp', 'WhatsApp number', 'tel', { ph: '9123 4567' }) + fld('email2', 'Second email <span class="opt">(copied on invoices)</span>', 'email', { ch: 'famEmail' })
-    + fld('address', 'Address <span class="opt">(optional)</span>', 'textarea', { full: true })
+    + (f.hardcopy ? '' : fld('address', 'Address <span class="opt">(optional)</span>', 'textarea', { full: true }))
     + '<div class="field"><label>Standing discount <span class="opt">(optional)</span></label><div style="display:flex;gap:6px;"><select data-ch="disc" data-k="kind" style="flex:0 0 112px;width:112px;"><option value="">None</option><option value="amount" ' + (d.kind === 'amount' ? 'selected' : '') + '>$ off</option><option value="percent" ' + (d.kind === 'percent' ? 'selected' : '') + '>% off</option></select>'
     + '<input type="number" min="0" step="0.01" value="' + esc(d.value) + '" data-in="disc" data-k="value" data-keep="dv" ' + (d.kind ? '' : 'disabled') + '></div></div>'
     + (d.kind ? '<div class="field"><label>Discount name</label><input type="text" value="' + esc(d.label || 'Sibling discount') + '" data-in="disc" data-k="label" data-keep="dl"></div>' : '<div></div>')
@@ -2512,6 +2535,17 @@ const CHG = {
   famEmail(el) {
     S.modal.draft[el.dataset.k] = el.value;
     if (emailWarningsKey(S.modal.draft) !== S.modal.emailKey) renderModal();
+  },
+  // Payment type, package dates, hardcopy (and its address), withdrawal.
+  famOpt(el) {
+    const f = S.modal.draft, k = el.dataset.k;
+    if (k === 'hardcopy' || k === 'withdrawn') f[k] = el.value === 'yes';
+    else f[k] = el.value;
+    if (k === 'withdrawn' && f.withdrawn && !f.lastMonth) f.lastMonth = C.sgMonthKey();
+    // Typing the address never re-draws the dialog (a click elsewhere would be lost);
+    // Save checks it again anyway.
+    if (k === 'address') return;
+    renderModal();
   },
   stuType(el) { const st = S.modal.draft.students; st[+el.dataset.s] = C.applyLessonType(st[+el.dataset.s], el.value, S.schedule); renderModal(); },
   pickSlot(el) { const st = S.modal.draft.students; st[+el.dataset.s] = C.toggleStudentSlot(st[+el.dataset.s], el.value, S.schedule); renderModal(); },

@@ -564,6 +564,29 @@ try {
   await page.waitForSelector('.modal .mo.hand[data-p="2026-10"]');
   assert.match(await page.locator('.modal .rec-sum').innerText(), /Oct/);
   assert.match(await page.locator('.modal .rec-sum').innerText(), /3 Nov 2026/);
+  assert.ok(!(await page.locator('.modal .mo[data-p="2026-08"]').count()), 'the payment record starts at September 2026');
+  assert.equal(await page.locator('.modal .mo').first().getAttribute('data-p'), '2026-09');
+  // Hardcopy (needs an address), a package (needs dates), withdrawal (needs the last month).
+  await page.selectOption('.modal select[data-ch="famOpt"][data-k="hardcopy"]', 'yes');
+  await page.waitForSelector('.modal textarea[data-k="address"]');
+  await page.selectOption('.modal select[data-ch="famOpt"][data-k="paymentType"]', 'package');
+  await page.waitForSelector('.modal input[data-k="packageStart"]');
+  await page.click('.modal [data-act="saveFamily"]');
+  await settle(page, 300);
+  assert.ok(await page.locator('#modal.show').count(), 'not saved while the address and package dates are missing');
+  const blocks = await page.locator('.modal .fix.block').allInnerTexts();
+  assert.ok(blocks.some(t => /postal address/.test(t)) && blocks.some(t => /start date and the end date/.test(t)), blocks.join(' | '));
+  await page.fill('.modal textarea[data-k="address"]', 'Blk 1 Clementi Ave 2, #05-01, Singapore 120001');
+  await page.fill('.modal input[data-k="packageStart"]', '2026-12-01');
+  await page.locator('.modal input[data-k="packageStart"]').dispatchEvent('change');
+  await page.fill('.modal input[data-k="packageEnd"]', '2027-02-28');
+  await page.locator('.modal input[data-k="packageEnd"]').dispatchEvent('change');
+  await page.selectOption('.modal select[data-ch="famOpt"][data-k="withdrawn"]', 'yes');
+  await page.waitForSelector('.modal input[data-k="lastMonth"]');
+  await page.fill('.modal input[data-k="lastMonth"]', '2027-03');
+  await page.locator('.modal input[data-k="lastMonth"]').dispatchEvent('change');
+  await settle(page);
+  assert.equal(await page.locator('.modal .fix.block').count(), 0, 'every yes has its detail');
   await shot(page, '04b-family-record');
   await page.click('.modal [data-act="saveFamily"]');
   await page.waitForSelector('#modal.show', { state: 'detached' });
@@ -574,6 +597,8 @@ try {
   assert.equal(limSaved.students[0].notes, 'Weak in fractions');
   assert.deepEqual(limSaved.paidMonths.map(x => x.period + '@' + x.date), ['2026-10@2026-11-03']);
   assert.deepEqual(limSaved.screenshots.map(x => x.date + ':' + x.period), ['2026-11-03:2026-11']);
+  assert.deepEqual([limSaved.hardcopy, limSaved.address, limSaved.paymentType, limSaved.packageStart, limSaved.packageEnd, limSaved.withdrawn, limSaved.lastMonth],
+    [true, 'Blk 1 Clementi Ave 2, #05-01, Singapore 120001', 'package', '2026-12-01', '2027-02-28', true, '2027-03']);
 
   // One email, one family: a new family with Lim's email is refused, with a way to the right family.
   await page.click('[data-act="newFamily"]');
@@ -596,7 +621,7 @@ try {
   await page.click('[data-act="famView"][data-k="table"]');
   await page.waitForSelector('table.rec');
   const recText = await page.locator('table.rec').innerText();
-  for (const want of ['Email (account ID)', 'Primary school', 'Type of lesson', 'Months paid', 'Last screenshot', 'Nanyang Primary', 'Physical regular', 'lim@example.com'])
+  for (const want of ['Email (account ID)', 'Primary school', 'Type of lesson', 'Months paid', 'Last screenshot', 'Nanyang Primary', 'Physical regular', 'lim@example.com', 'Payment type', 'Hardcopy', 'Withdrawal', 'Package', 'March 2027'])
     assert.ok(recText.toLowerCase().includes(want.toLowerCase()), 'the table shows ' + want);
   assert.equal(await page.locator('table.rec tbody tr').count(), 7, 'seven children');
   await shot(page, '04d-family-table');
@@ -612,6 +637,7 @@ try {
   const csvText = readFileSync(recCsvPath, 'utf8');
   assert.ok(csvText.startsWith(C.FAMILY_RECORD_HEADERS.join(',')), 'the CSV has the record headings');
   assert.ok(csvText.includes('Nanyang Primary') && csvText.includes('Online regular'));
+  assert.ok(csvText.includes('Package,2026-12-01,2027-02-28') && csvText.includes('Singapore 120001') && csvText.includes('March 2027'), 'the CSV carries hardcopy, package and withdrawal');
   // Filter by type of lesson.
   await page.click('[data-act="famType"][data-k="online"]');
   await settle(page);

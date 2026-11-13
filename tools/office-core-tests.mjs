@@ -772,12 +772,13 @@ test('payment record: months paid, last payment and last screenshot', () => {
     { id: 'g_2026-11', familyId: 'g', period: '2026-11', total: 220, paid: 220 },
     { id: 'f_2026-05', familyId: 'f', period: '2026-05', total: 220, paid: 0, status: 'void' }
   ];
-  const payments = [{ id: 'p2', familyId: 'f', date: '2026-09-20', amount: 220 }, { id: 'p3', familyId: 'f', date: '2026-08-30', amount: 50, how: 'manual' }, { id: 'px', familyId: 'g', date: '2026-11-11', amount: 5 }];
+  const payments = [{ id: 'p2', familyId: 'f', date: '2026-09-20', amount: 220 }, { id: 'p3', familyId: 'f', date: '2026-09-30', amount: 50, how: 'manual' }, { id: 'p0', familyId: 'f', date: '2026-08-30', amount: 70, how: 'manual' }, { id: 'px', familyId: 'g', date: '2026-11-11', amount: 5 }];
   const rec = C.familyPaymentRecord(fam, invoices, payments, { today: '2026-11-12', months: 6 });
-  assert.deepEqual(rec.paidPeriods, ['2026-06', '2026-07', '2026-08', '2026-09'], 'a custom invoice never pays a month');
-  assert.equal(rec.paidText, 'Jun, Jul, Aug, Sep 2026');
+  assert.deepEqual(rec.paidPeriods, ['2026-09'], 'nothing before September 2026, and a custom invoice never pays a month');
+  assert.equal(rec.paidText, 'Sep 2026');
   assert.equal(rec.thisMonthPaid, false);
-  assert.deepEqual(rec.months.map(m => m.label + ':' + m.key), ['Jun:hand', 'Jul:hand', 'Aug:paid', 'Sep:paid', 'Oct:overdue', 'Nov:waiting']);
+  assert.deepEqual(rec.months.map(m => m.label + ':' + m.key), ['Sep:paid', 'Oct:overdue', 'Nov:waiting'], 'the record starts at Sep 2026');
+  assert.ok(!rec.payments.some(p => p.paymentId === 'p0'), 'a payment before September 2026 is not listed');
   assert.equal(rec.months.at(-1).current, true);
   assert.equal(rec.months.find(m => m.period === '2026-10').outstanding, 120);
   assert.equal(rec.lastPayment.date, '2026-11-04', 'the custom invoice payment is still the last payment');
@@ -800,7 +801,7 @@ test('payment record: months paid, last payment and last screenshot', () => {
   assert.equal(handOver.thisMonthPaid, true);
   // An empty record.
   const empty = C.familyPaymentRecord({ id: 'z' }, invoices, payments, { today: '2026-11-12' });
-  assert.equal(empty.months.length, 12);
+  assert.deepEqual(empty.months.map(m => m.period), ['2026-09', '2026-10', '2026-11']);
   assert.ok(empty.months.every(m => m.key === 'none'));
   assert.equal(empty.lastPayment, null);
   assert.equal(empty.lastScreenshot, null);
@@ -859,4 +860,41 @@ test('the records table and its CSV: one row per child, every field Zhi Kai list
   assert.ok(lines[1].includes('2026-11-03') && lines[1].includes('PLC K7M2QX'));
   const all = C.familyRecordRows(fams, { schedule: REC_SCHEDULE, includeLeft: true, today: '2026-11-12' });
   assert.ok(all.some(r => r.studentName === 'Gone'));
+});
+
+test('hardcopy, payment type (monthly / package) and withdrawal', () => {
+  const base = { id: 'f', parentName: 'Tan', email: 't@example.com', whatsapp: '91234567', status: 'active', students: [{ id: 's', name: 'Jun', status: 'active', classes: [{ slotId: 'FRI-2', mode: 'Physical' }] }] };
+  const n = C.normalizeFamily(base);
+  assert.deepEqual([n.hardcopy, n.paymentType, n.packageStart, n.packageEnd, n.withdrawn, n.lastMonth], [false, 'monthly', '', '', false, '']);
+  assert.equal(C.normalizeFamily({ paymentType: 'weird' }).paymentType, 'monthly');
+  assert.equal(C.normalizeFamily({ withdrawn: 'yes', lastMonth: '2026-12-15' }).lastMonth, '2026-12');
+  // Each "yes" needs its detail.
+  const texts = f => C.familyRecordProblems(Object.assign({}, base, f), []).filter(p => p.level === 'block').map(p => p.field);
+  assert.deepEqual(texts({ hardcopy: true }), ['address']);
+  assert.deepEqual(texts({ hardcopy: true, address: '1 Clementi Rd' }), []);
+  assert.deepEqual(texts({ paymentType: 'package', packageStart: '2026-09-01' }), ['package']);
+  assert.deepEqual(texts({ paymentType: 'package', packageStart: '2026-12-01', packageEnd: '2026-09-01' }), ['package']);
+  assert.deepEqual(texts({ paymentType: 'package', packageStart: '2026-09-01', packageEnd: '2026-12-31' }), []);
+  assert.deepEqual(texts({ withdrawn: true }), ['withdrawal']);
+  assert.deepEqual(texts({ withdrawn: true, lastMonth: '2026-12' }), []);
+  // Billing: a package's months and the months after withdrawal are not invoiced.
+  const pkg = Object.assign({}, base, { paymentType: 'package', packageStart: '2026-09-15', packageEnd: '2026-12-10' });
+  assert.deepEqual(['2026-08', '2026-09', '2026-12', '2027-01'].map(p => C.familyIsBillable(pkg, p)), [true, false, false, true]);
+  const gone = Object.assign({}, base, { withdrawn: true, lastMonth: '2026-11' });
+  assert.deepEqual(['2026-11', '2026-12'].map(p => C.familyIsBillable(gone, p)), [true, false]);
+  assert.equal(C.familyIsBillable(gone), true, 'without a month: as before');
+  assert.equal([base].filter(C.familyIsBillable).length, 1, 'still works as a plain filter');
+  // The record shows them.
+  const rec = C.familyPaymentRecord(Object.assign({}, pkg, { withdrawn: true, lastMonth: '2026-10' }), [], [], { today: '2026-11-12' });
+  assert.deepEqual(rec.months.map(m => m.label + ':' + m.key), ['Sep:package', 'Oct:package', 'Nov:package']);
+  const rec2 = C.familyPaymentRecord(gone, [], [], { today: '2027-01-05' });
+  assert.deepEqual(rec2.months.map(m => m.label + ':' + m.key), ['Sep:none', 'Oct:none', 'Nov:none', 'Dec:gone', 'Jan:gone']);
+  assert.equal(C.packageText(pkg), 'Package 15 Sep 2026 – 10 Dec 2026');
+  assert.equal(C.withdrawalText(gone), 'Withdrawn · last month November 2026');
+  // Table and CSV.
+  const rows = C.familyRecordRows([Object.assign({}, pkg, { hardcopy: true, address: '1 Clementi Rd', withdrawn: true, lastMonth: '2026-12' })], { schedule: {}, today: '2026-11-12' });
+  assert.equal(rows[0].paymentTypeLabel, 'Package');
+  const csv = C.familyRecordCsv(rows).split(/\r?\n/);
+  for (const h of ['Hardcopy subscription', 'Postal address', 'Payment type', 'Package start', 'Package end', 'Withdrawal', 'Last month with us']) assert.ok(csv[0].includes(h), h);
+  assert.ok(csv[1].includes('Package,2026-09-15,2026-12-10') && csv[1].includes('Yes,1 Clementi Rd,Yes,December 2026'));
 });
