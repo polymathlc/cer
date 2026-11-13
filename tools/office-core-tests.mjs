@@ -1056,3 +1056,78 @@ test('family statistics: students and fees by subject and type of lesson, collec
   assert.deepEqual(C.classCategories({ custom: true, label: 'Math holiday class', mode: 'Online' }, sched), { subject: 'math', type: 'online' });
   assert.equal(C.STAT_CATEGORIES.length, 5);
 });
+
+/* ---- 📣 Announcements to parents (v1.7.0) ---- */
+test('announcements: personalised message, safe HTML and the problems shown before sending', () => {
+  const fam = { id: 'b', parentName: 'Mrs Bala', email: 'b@x.com', status: 'active', students: [
+    { id: 'b1', name: 'Ben', level: 'P4', status: 'active' }, { id: 'b2', name: 'Bea', level: 'P6', status: 'active' }, { id: 'b3', name: 'Old', status: 'left' }] };
+  assert.equal(C.fillAnnouncement('Hi {parent}, {children} — { Parent }', fam), 'Hi Mrs Bala, Ben and Bea — Mrs Bala');
+  assert.equal(C.fillAnnouncement('{children}', fam, s => s.level === 'P6'), 'Bea', 'only the children the filter shows');
+  assert.equal(C.fillAnnouncement('{children}', fam, s => s.level === 'S1'), 'Ben and Bea', 'nobody shown: every child');
+  assert.equal(C.fillAnnouncement('{children}', { parentName: '' }), 'your child');
+  assert.deepEqual(C.unknownTokens('Hi {parent} {name} {name} {children}'), ['{name}']);
+  const clean = C.cleanAnnouncement({ subject: '  Holiday   notice ', body: 'Line one  \r\nline two\n\n\n', greet: 'no' });
+  assert.deepEqual(clean, { subject: 'Holiday notice', body: 'Line one\nline two', greet: false });
+  const msg = C.announcementEmail({ subject: 'Term 1 for {children}', body: 'No class on **Mon 9 Nov**.\n\nSee https://polymathlc.com.sg/schedule. Ask admin@polymathlc.com.sg\n<script>alert(1)</script>', greet: true }, fam, {});
+  assert.equal(msg.subject, 'Term 1 for Ben and Bea');
+  assert.ok(msg.html.includes('Dear Mrs Bala,'));
+  assert.ok(msg.html.includes('<b>Mon 9 Nov</b>'));
+  assert.ok(msg.html.includes('<a href="https://polymathlc.com.sg/schedule"'), 'the link is clickable, without the full stop');
+  assert.ok(msg.html.includes('mailto:admin@polymathlc.com.sg'));
+  assert.ok(!msg.html.includes('<script>') && msg.html.includes('&lt;script&gt;'), 'what parents type cannot run');
+  assert.equal((msg.html.match(/<p style="font-size:15px;line-height:1.65/g) || []).length, 2, 'a paragraph per blank line');
+  assert.ok(msg.text.startsWith('Dear Mrs Bala,\n\nNo class on Mon 9 Nov.'), 'plain text without the stars');
+  assert.ok(msg.text.includes('Mr Chung'), 'the signature');
+  assert.ok(!C.announcementEmail({ subject: 's', body: 'b', greet: false }, fam, {}).text.startsWith('Dear'));
+  // Problems.
+  const blocks = raw => C.announcementProblems(raw).filter(p => p.level === 'block').map(p => p.field);
+  assert.deepEqual(blocks({}), ['subject', 'body']);
+  assert.deepEqual(blocks({ subject: 'x', body: 'y' }), []);
+  assert.ok(C.announcementProblems({ subject: 'x', body: 'Dear all, hi', greet: true }).some(p => /own greeting/.test(p.text)));
+  assert.ok(!C.announcementProblems({ subject: 'x', body: 'Dear all, hi', greet: false }).some(p => /own greeting/.test(p.text)));
+  assert.ok(C.announcementProblems({ subject: 'x', body: '{nme}' }).some(p => p.text.includes('{nme}')));
+  assert.ok(C.announcementProblems({ subject: 'x'.repeat(200), body: 'y' }).some(p => p.level === 'warn' && p.field === 'subject'));
+});
+
+test('announcements: who gets it — filters, ticks, no email, a shared email sent once, and the log', () => {
+  const fams = [
+    ...SF_FAMS,
+    { id: 'e', parentName: 'Eng', email: 'e@x.com', status: 'inactive', students: [{ id: 'e1', name: 'Eve', level: 'P5', status: 'active', classes: [] }] },
+    { id: 'f', parentName: 'Foo', email: 'A@X.com', email2: 'f2@x.com', status: 'active', students: [{ id: 'f1', name: 'Fay', level: 'P5', status: 'active', classes: [{ slotId: 'FRI-2', mode: 'Physical' }] }] },
+    { id: 'g', parentName: 'Goh', email: '', status: 'active', students: [{ id: 'g1', name: 'Gus', level: 'P4', status: 'active', classes: [] }] }
+  ];
+  const ctx = { schedule: REC_SCHEDULE, invoices: [], payments: [], today: '2026-11-12' };
+  const aud = C.announceAudience(fams, {}, ctx);
+  assert.deepEqual(aud.rows.map(r => r.familyId), ['a', 'b', 'c', 'd', 'f', 'g'], 'active families, parent A–Z');
+  assert.equal(aud.noEmail, 1, 'Goh has no email');
+  const foo = aud.rows.find(r => r.familyId === 'f');
+  assert.deepEqual(foo.emails, ['a@x.com', 'f2@x.com']);
+  assert.deepEqual(foo.to, ['f2@x.com'], 'a@x.com already gets it through Ang');
+  assert.deepEqual(foo.dupOf, ['Ang']);
+  assert.equal(aud.families, 5);
+  assert.equal(aud.addresses, 5);
+  // Status, type, filters, search, unticked.
+  assert.deepEqual(C.announceAudience(fams, { status: 'inactive' }, ctx).rows.map(r => r.familyId), ['e']);
+  assert.equal(C.announceAudience(fams, { status: 'all' }, ctx).rows.length, 7);
+  assert.deepEqual(C.announceAudience(fams, { filters: { level: 'P6' } }, ctx).sending.map(r => r.familyId), ['a', 'b']);
+  assert.deepEqual(C.announceAudience(fams, { filters: { level: 'P6' } }, ctx).sending.find(r => r.familyId === 'b').children, ['Bea'], 'named children follow the filter');
+  assert.deepEqual(C.announceAudience(fams, { type: 'master' }, ctx).sending.map(r => r.familyId), ['a']);
+  assert.deepEqual(C.announceAudience(fams, { search: 'rosyth' }, ctx).sending.map(r => r.familyId), ['b']);
+  const ex = C.announceAudience(fams, { excluded: ['a', 'g'] }, ctx);
+  assert.equal(ex.unticked, 2);
+  assert.deepEqual(ex.rows.find(r => r.familyId === 'f').to, ['a@x.com', 'f2@x.com'], 'Ang unticked: Foo gets both addresses');
+  assert.equal(ex.shared, 0);
+  // Words for the log, and the log itself.
+  assert.equal(C.audienceSummary({ type: 'online', filters: { level: 'P5', paid: 'unpaid', month: '2026-12' }, search: 'nan' }, REC_SCHEDULE),
+    'Active families · Online regular · P5 · Not paid December 2026 · "nan"');
+  aud.sending.forEach((r, i) => { r.mailId = 'polymath-office-announce-' + r.familyId + '-' + i; });
+  const log = C.announcementLog({ subject: ' Hi ', body: 'Msg' }, aud, { audience: 'Active families', sentBy: 'admin@polymathlc.com.sg', at: 5, failed: [{ parentName: 'X', error: 'denied' }] });
+  assert.equal(log.kind, 'announcement');
+  assert.equal(log.subject, 'Hi');
+  assert.equal(log.families, 5);
+  assert.equal(log.sentAtMs, 5);
+  assert.deepEqual(log.recipients[0], { familyId: 'a', parentName: 'Ang', to: ['a@x.com'], mailId: 'polymath-office-announce-a-0' });
+  assert.equal(log.failed.length, 1);
+  assert.equal(C.announcementLogId(7), 'announcement-7');
+  assert.ok(C.mailDocId('announce', 'a', 1).startsWith(C.MAIL_PREFIX), 'mail ids the rules allow');
+});

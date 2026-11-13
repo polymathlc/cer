@@ -40,7 +40,7 @@
         payment, last PayNow screenshot the parent sent).
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export const OFFICE_CORE_VERSION = '1.6.0';
+export const OFFICE_CORE_VERSION = '1.7.0';
 
 /* ─────────────────────────── The centre ─────────────────────────── */
 export const SITE = 'https://polymathlc.com.sg';
@@ -2529,4 +2529,174 @@ export function familyStats(families, ctx) {
   });
   out.percent = out.billed > 0 ? Math.round(Math.min(out.collected, out.billed) / out.billed * 100) : 0;
   return out;
+}
+
+/* ═══════════════ 📣 Announcements to parents (v1.7.0) ═══════════════
+   One email per family, to the family's own address(es) only — never a list
+   of parents in To or Cc — from "Polymath Learning Centre <admin@…>".
+   The admin writes a subject and a message; {parent} and {children} are
+   filled in for each family. Who gets it: the same filters as Families, then
+   a tick per family. Each send is logged in officeSettings (kind
+   'announcement') with every family, address and mail id. */
+export const ANNOUNCE_TOKENS = Object.freeze([
+  Object.freeze({ token: '{parent}', label: 'Parent\'s name', example: 'Mrs Tan' }),
+  Object.freeze({ token: '{children}', label: 'Children\'s names', example: 'Jun Wei and Mei' })
+]);
+export const ANNOUNCE_LIMITS = Object.freeze({ subject: 150, body: 10000, log: 400 });
+export const ANNOUNCE_STATUSES = Object.freeze([
+  Object.freeze({ key: 'active', label: 'Active families' }),
+  Object.freeze({ key: 'inactive', label: 'Not active' }),
+  Object.freeze({ key: 'all', label: 'Everyone' })
+]);
+export function emptyAnnouncement() {
+  return { subject: '', body: '', greet: true };
+}
+export function cleanAnnouncement(raw) {
+  const a = Object.assign(emptyAnnouncement(), raw || {});
+  return {
+    subject: String(a.subject || '').replace(/\s+/g, ' ').trim().slice(0, ANNOUNCE_LIMITS.subject),
+    body: String(a.body || '').replace(/\r\n?/g, '\n').replace(/[ \t]+\n/g, '\n').trim().slice(0, ANNOUNCE_LIMITS.body),
+    greet: a.greet !== false && a.greet !== 'no'
+  };
+}
+// The children who count for a family's greeting: everyone still with us
+// (those who left are not named); when a filter is on, only those it shows.
+export function announceChildren(family, kidFilter) {
+  const kids = (family.students || []).filter(s => s.status !== 'left' && String(s.name || '').trim());
+  const shown = kidFilter ? kids.filter(kidFilter) : kids;
+  return (shown.length ? shown : kids).map(s => String(s.name).trim());
+}
+export function fillAnnouncement(text, family, kidFilter) {
+  const f = family || {};
+  const parent = String(f.parentName || '').trim() || 'Parent';
+  const kids = listJoin(announceChildren(f, kidFilter)) || 'your child';
+  return String(text || '').replace(/\{\s*parent\s*\}/gi, parent).replace(/\{\s*children\s*\}/gi, kids);
+}
+// {anything} the admin typed that is not one we fill in.
+export function unknownTokens(text) {
+  const known = ANNOUNCE_TOKENS.map(t => t.token.slice(1, -1));
+  return [...new Set((String(text || '').match(/\{[^{}\n]{1,30}\}/g) || [])
+    .filter(t => !known.includes(t.slice(1, -1).trim().toLowerCase())))];
+}
+export function announcementProblems(raw) {
+  const a = cleanAnnouncement(raw);
+  const out = [];
+  if (!a.subject) out.push({ level: 'block', field: 'subject', text: 'Write a subject.' });
+  if (!a.body) out.push({ level: 'block', field: 'body', text: 'Write the message.' });
+  if (String((raw || {}).subject || '').trim().length > ANNOUNCE_LIMITS.subject) out.push({ level: 'warn', field: 'subject', text: 'The subject is cut to ' + ANNOUNCE_LIMITS.subject + ' characters.' });
+  if (String((raw || {}).body || '').trim().length > ANNOUNCE_LIMITS.body) out.push({ level: 'warn', field: 'body', text: 'The message is cut to ' + ANNOUNCE_LIMITS.body + ' characters.' });
+  const unk = unknownTokens(a.subject + '\n' + a.body);
+  if (unk.length) out.push({ level: 'warn', field: 'body', text: unk.join(', ') + (unk.length === 1 ? ' is' : ' are') + ' not filled in — use {parent} or {children}, or it is sent as typed.' });
+  if (a.greet && /^\s*(dear|hi|hello)\b/i.test(a.body)) out.push({ level: 'warn', field: 'body', text: 'The message starts with its own greeting and "Dear …," is added too. Untick "Start with Dear …" or remove one.' });
+  return out;
+}
+// Text → safe HTML: paragraphs on blank lines, line breaks kept, web links
+// and email addresses made clickable, **bold** kept as bold.
+export function announcementBodyHtml(text) {
+  const paras = String(text || '').split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
+  const inline = s => escapeHtml(s)
+    .replace(/\*\*([^*\n]{1,200})\*\*/g, '<b>$1</b>')
+    .replace(/\b(https?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)])/g, '<a href="$1" style="color:#056c76;">$1</a>')
+    .replace(/(^|[\s(])((?:www\.)[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:\/[^\s<>"']*[^\s<>"'.,;:!?)])?)/gi, '$1<a href="https://$2" style="color:#056c76;">$2</a>')
+    .replace(/(^|[\s(])([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})/g, '$1<a href="mailto:$2" style="color:#056c76;">$2</a>')
+    .replace(/\n/g, '<br>');
+  return paras.map(p => '<p style="font-size:15px;line-height:1.65;margin:0 0 14px;">' + inline(p) + '</p>').join('');
+}
+export function announcementEmail(raw, family, settings, opts) {
+  const s = normalizeSettings(settings);
+  const o = opts || {};
+  const a = cleanAnnouncement(raw);
+  const subject = fillAnnouncement(a.subject, family, o.kidFilter) || 'Polymath announcement';
+  const body = fillAnnouncement(a.body, family, o.kidFilter);
+  const parent = String((family || {}).parentName || '').trim() || 'Parent';
+  const greet = a.greet ? 'Dear ' + parent + ',' : '';
+  const html = emailShell(subject,
+    (greet ? '<p style="font-size:15px;line-height:1.6;margin:0 0 14px;">' + escapeHtml(greet) + '</p>' : '')
+    + announcementBodyHtml(body), s);
+  const text = [greet, greet ? '' : null, body.replace(/\*\*([^*\n]{1,200})\*\*/g, '$1'), '', s.signature, '',
+    'Questions? WhatsApp us on ' + displayPhone(s.centreWhatsapp) + ' · ' + SITE].filter(x => x !== null).join('\n');
+  return { subject, html, text };
+}
+// Who gets it. sel: { status, type, search, filters, excluded:[familyId] }
+// ctx: { schedule, invoices, payments, today, record(f), kidFilter(f) → (student → bool) }
+// Every family that passes the filters gets a row; a row is SENT only when it
+// is ticked and has an email that an earlier row has not already taken.
+export function announceAudience(families, sel, ctx) {
+  const s = Object.assign({ status: 'active', type: '', search: '', filters: {}, excluded: [] }, sel || {});
+  const c = ctx || {};
+  const F = cleanFamilyFilters(s.filters);
+  const excluded = new Set(s.excluded || []);
+  const words = normText(s.search).split(' ').filter(Boolean);
+  const rows = [];
+  const taken = new Map();   // email → parent who already gets it
+  sortFamilies((families || []).map(normalizeFamily), 'parent').forEach(f => {
+    if (s.status === 'active' && f.status !== 'active') return;
+    if (s.status === 'inactive' && f.status !== 'inactive') return;
+    if (s.type && !(f.students || []).some(st => st.status !== 'left' && studentLessonType(st, c.schedule) === s.type)) return;
+    if (!familyMatchesFilters(f, F, { schedule: c.schedule, invoices: c.invoices, payments: c.payments, today: c.today, record: c.record ? c.record(f) : undefined })) return;
+    if (words.length) {
+      const hay = normText([f.parentName, f.email, f.email2, f.code, ...(f.students || []).map(st => st.name + ' ' + st.school)].join(' '));
+      if (!words.every(w => hay.includes(w))) return;
+    }
+    const childOk = (hasChildFilters(F) || s.type)
+      ? st => (!s.type || studentLessonType(st, c.schedule) === s.type) && (!hasChildFilters(F) || studentMatchesFilters(st, F, c.schedule))
+      : null;
+    const emails = familyEmails(f);
+    const ticked = !excluded.has(f.id);
+    const fresh = emails.filter(e => !taken.has(e));
+    const dupOf = emails.filter(e => taken.has(e)).map(e => taken.get(e));
+    const row = {
+      familyId: f.id, parentName: f.parentName || '', code: f.code || '',
+      children: announceChildren(f, childOk), emails, to: ticked ? fresh : [],
+      ticked, noEmail: !emails.length, dupOf: [...new Set(dupOf)], childOk
+    };
+    row.send = ticked && row.to.length > 0;
+    if (row.send) row.to.forEach(e => taken.set(e, f.parentName || 'another family'));
+    rows.push(row);
+  });
+  const sending = rows.filter(r => r.send);
+  return {
+    rows, sending,
+    families: sending.length,
+    addresses: sending.reduce((n, r) => n + r.to.length, 0),
+    noEmail: rows.filter(r => r.noEmail).length,
+    unticked: rows.filter(r => !r.ticked).length,
+    shared: rows.filter(r => r.ticked && !r.noEmail && !r.send).length
+  };
+}
+// Words for the log: what the filters were when it was sent.
+export function audienceSummary(sel, schedule) {
+  const s = Object.assign({ status: 'active', type: '', search: '', filters: {} }, sel || {});
+  const F = cleanFamilyFilters(s.filters);
+  const parts = [(ANNOUNCE_STATUSES.find(x => x.key === s.status) || ANNOUNCE_STATUSES[0]).label];
+  if (s.type) parts.push(lessonTypeLabel(s.type));
+  if (F.level) parts.push(levelLabel(F.level));
+  if (F.subject) parts.push(F.subject);
+  if (F.mode) parts.push(F.mode);
+  if (F.day) parts.push((DAYS.find(d => d.code === F.day) || { name: F.day }).name);
+  if (F.slot) parts.push(slotChoiceLabel(schedule || {}, F.slot));
+  if (F.school) parts.push(F.school);
+  if (F.payment) parts.push(F.payment === 'package' ? 'Package' : 'Monthly');
+  if (F.hardcopy) parts.push(F.hardcopy === 'yes' ? 'Hardcopy' : 'No hardcopy');
+  if (F.withdrawn) parts.push(F.withdrawn === 'yes' ? 'Withdrawn' : 'Not withdrawn');
+  if (F.paid) parts.push((F.paid === 'paid' ? 'Paid ' : 'Not paid ') + periodLabel(isPeriod(F.month) ? F.month : sgMonthKey()));
+  if (String(s.search || '').trim()) parts.push('"' + String(s.search).trim() + '"');
+  return parts.join(' · ');
+}
+export function announcementLogId(now) { return 'announcement-' + (now == null ? Date.now() : Number(now)); }
+// The log document (officeSettings/<announcementLogId>).
+export function announcementLog(raw, audience, meta) {
+  const a = cleanAnnouncement(raw);
+  const m = meta || {};
+  return {
+    kind: 'announcement',
+    subject: a.subject, body: a.body, greet: a.greet,
+    audience: String(m.audience || ''),
+    sentBy: String(m.sentBy || ''), sentAtMs: Number(m.at) || Date.now(),
+    families: (audience.sending || []).length,
+    addresses: (audience.sending || []).reduce((n, r) => n + r.to.length, 0),
+    recipients: (audience.sending || []).slice(0, ANNOUNCE_LIMITS.log).map(r => ({ familyId: r.familyId, parentName: r.parentName, to: r.to, mailId: r.mailId || '' })),
+    failed: (m.failed || []).slice(0, 100).map(x => ({ parentName: String(x.parentName || ''), error: String(x.error || '').slice(0, 200) })),
+    test: !!m.test
+  };
 }

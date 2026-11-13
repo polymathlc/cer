@@ -33,9 +33,9 @@
      mail/polymath-office-*    emails for the Trigger Email extension
    Reads: schedule_config/main (the /schedule page's own document).
    ═══════════════════════════════════════════════════════════════════════════ */
-import * as C from './office-core.mjs?v=1.6.0';
+import * as C from './office-core.mjs?v=1.7.0';
 
-const OFFICE_VERSION = 'v1.6.0';
+const OFFICE_VERSION = 'v1.7.0';
 
 /* ═══════════════ Firebase — the CER project ═══════════════ */
 firebase.initializeApp({
@@ -71,6 +71,7 @@ const S = {
   invoices: [], invoicesLoaded: false,
   payments: [], paymentsLoaded: false,
   statements: [],
+  announcements: [],                  // the log of announcements sent
   listenErrors: {},
   view: 'home',
   period: C.sgMonthKey(),
@@ -78,6 +79,7 @@ const S = {
     famSearch: '', famFilter: 'all', famType: '', famView: savedFamView(),
     famSort: savedFamSort(), famF: C.cleanFamilyFilters({}), famPanel: false,
     statMonth: '', statsOpen: savedStatsOpen(),
+    ann: { draft: savedAnnDraft(), status: 'active', type: '', F: C.cleanFamilyFilters({}), search: '', excluded: [], panel: false, preview: '' },
     stuSearch: '', stu: { level: '', subject: '', mode: '', day: '', status: 'active', pay: '', cls: '' }, stuSort: { key: 'name', dir: 1 },
     tt: { level: '', subject: '', mode: '' },
     invFilter: 'all', invSearch: ''
@@ -95,6 +97,9 @@ function savedFamSort() { try { const v = localStorage.getItem('polymath-office-
 // …and whether the statistics on top of Families are shown or folded away.
 function savedStatsOpen() { try { return localStorage.getItem('polymath-office-stats') !== 'closed'; } catch (e) { return true; } }
 function rememberStatsOpen(v) { try { localStorage.setItem('polymath-office-stats', v ? 'open' : 'closed'); } catch (e) { /* private window */ } }
+// The announcement being written is kept on this computer until it is sent.
+function savedAnnDraft() { try { const d = JSON.parse(localStorage.getItem('polymath-office-announce') || 'null'); return Object.assign(C.emptyAnnouncement(), d || {}); } catch (e) { return C.emptyAnnouncement(); } }
+function rememberAnnDraft(d) { try { localStorage.setItem('polymath-office-announce', JSON.stringify(d)); } catch (e) { /* private window */ } }
 function rememberFamSort(v) { try { localStorage.setItem('polymath-office-famsort', v); } catch (e) { /* private window */ } }
 let IX = { fam: new Map(), invByFam: new Map(), invById: new Map(), payByKey: new Map(), roster: new Map(), rows: [] };
 const unsubs = [];
@@ -304,6 +309,9 @@ function start() {
   listen('payments', db.collection(COL.payments).orderBy('appliedAt', 'desc').limit(500), snap => {
     S.payments = snap.docs.map(d => Object.assign({}, d.data(), { id: d.id }));
     S.paymentsLoaded = true;
+  });
+  listen('announcements', db.collection(COL.settings).where('kind', '==', 'announcement'), snap => {
+    S.announcements = snap.docs.map(d => Object.assign({ id: d.id }, d.data())).sort((a, b) => (b.sentAtMs || 0) - (a.sentAtMs || 0));
   });
   listen('statements', db.collection(COL.statements).orderBy('uploadedAt', 'desc').limit(12), snap => {
     S.statements = snap.docs.map(d => { const x = d.data(); return { id: d.id, fileName: x.fileName, uploadedAt: x.uploadedAt, summary: x.summary || {}, appliedAt: x.appliedAt, from: x.from, to: x.to, aiUsed: x.aiUsed }; });
@@ -695,7 +703,7 @@ VIEWS.families = function () {
   }
   else body = '<div class="fam-grid">' + list.map(f => famCardHtml(f, period)).join('') + '</div>';
   return '<div class="page-head"><div><h1>Families</h1><p>One record per confirmed sign-up. The email is the family\'s account ID, the same for every child.</p></div>'
-    + '<div class="actions"><button class="btn ghost" data-act="exportRecords" title="Every field of the families shown, one row per child">⬇ CSV</button><button class="btn ghost" data-act="openImport">⬆ Import spreadsheet</button><button class="btn" data-act="newFamily">＋ Add a family</button></div></div>'
+    + '<div class="actions"><button class="btn ghost" data-act="famAnnounce" title="Write an email to the families shown, with the same filters">📣 Email these families</button><button class="btn ghost" data-act="exportRecords" title="Every field of the families shown, one row per child">⬇ CSV</button><button class="btn ghost" data-act="openImport">⬆ Import spreadsheet</button><button class="btn" data-act="newFamily">＋ Add a family</button></div></div>'
     + sharedBanner
     + (S.familiesLoaded && S.families.length ? famStatsHtml(list) : '')
     + '<div class="toolbar"><div class="search"><input type="search" placeholder="Search parent, student, school, phone, email or code" value="' + esc(S.ui.famSearch) + '" data-in="famSearch" data-keep="famSearch" aria-label="Search families"></div>'
@@ -770,6 +778,203 @@ function famCardHtml(f, period) {
     + (f.whatsapp ? '<span>💬 ' + esc(C.displayPhone(f.whatsapp)) + '</span>' : '<span class="warn-t">💬 no WhatsApp</span>') + '</div>'
     + (owe > 0 ? '<span class="owe ' + (st.key === 'overdue' ? 'red' : '') + '">Owes ' + money(owe) + '</span>' : (f.credit > 0 ? '<span class="pill green">Credit ' + money(f.credit) + '</span>' : '')) + '</div>'
     + '</button>';
+}
+
+/* ═══════════════ 📣 Announcements ═══════════════
+   Write one message, choose the families with the Families filters (and a
+   tick per family), check the preview, send a test to yourself, then send:
+   one email per family to that family's own address(es) only. Every send is
+   logged in officeSettings with each family, address and mail id. */
+function annCtx() {
+  return { schedule: S.schedule, invoices: S.invoices, payments: S.payments, today: today(), record: f => recordOf(famById(f.id) || f) };
+}
+function annAudience() {
+  const a = S.ui.ann;
+  return C.announceAudience(S.families, { status: a.status, type: a.type, search: a.search, filters: a.F, excluded: a.excluded }, annCtx());
+}
+function annSelection() { const a = S.ui.ann; return { status: a.status, type: a.type, search: a.search, filters: a.F }; }
+// The family the preview shows: chosen, else the first who gets it, else a sample.
+function annPreviewFamily(aud) {
+  const pick = S.ui.ann.preview && aud.rows.find(r => r.familyId === S.ui.ann.preview);
+  const row = pick || aud.sending[0] || aud.rows[0];
+  if (row) return { row, family: famById(row.familyId) || { parentName: row.parentName, students: [] } };
+  return { row: null, family: { parentName: 'Mrs Tan', students: [{ name: 'Jun Wei', status: 'active' }, { name: 'Mei', status: 'active' }] } };
+}
+function annPreviewHtml(aud) {
+  const { row, family } = annPreviewFamily(aud);
+  const msg = C.announcementEmail(S.ui.ann.draft, family, S.settings, { kidFilter: row ? row.childOk : null });
+  const opts = aud.rows.filter(r => r.send);
+  return '<div class="ann-prev-head">'
+    + '<div class="ann-prev-meta"><div><span class="muted">From</span> ' + esc(S.settings.fromName + ' <' + C.SENDER_EMAIL + '>') + '</div>'
+    + '<div><span class="muted">To</span> ' + (row ? (row.to.length ? esc(row.to.join(', ')) : '<span class="warn-t">' + (row.noEmail ? 'no email' : 'not sent') + '</span>') : '<span class="muted">(a sample family)</span>') + '</div>'
+    + '<div><span class="muted">Subject</span> <b id="ann-prev-subject">' + esc(msg.subject) + '</b></div></div>'
+    + (opts.length > 1 ? '<select class="plain" data-ch="annPreview" aria-label="Preview for">' + opts.map(r => '<option value="' + esc(r.familyId) + '" ' + (row && r.familyId === row.familyId ? 'selected' : '') + '>' + esc(r.parentName || 'Unnamed') + '</option>').join('') + '</select>' : '')
+    + '</div><div class="ann-mail">' + msg.html + '</div>';
+}
+function annProblemsHtml() {
+  const probs = C.announcementProblems(S.ui.ann.draft);
+  return probs.map(p => '<div class="ann-prob ' + p.level + '">' + (p.level === 'block' ? '✋ ' : '⚠ ') + esc(p.text) + '</div>').join('');
+}
+function annSendLabel(aud) {
+  return aud.families ? '📣 Send to ' + C.plural(aud.families, 'family', 'families') : '📣 Send';
+}
+function annCanSend(aud) {
+  return aud.families > 0 && !C.announcementProblems(S.ui.ann.draft).some(p => p.level === 'block');
+}
+// Typing re-draws only the preview, the notes and the button (the text box keeps its place).
+function annRefreshLive() {
+  const aud = annAudience();
+  const prev = $('ann-preview'); if (prev) prev.innerHTML = annPreviewHtml(aud);
+  const pr = $('ann-problems'); if (pr) pr.innerHTML = annProblemsHtml();
+  const b = $('ann-send-btn'); if (b) { b.disabled = !annCanSend(aud); b.textContent = annSendLabel(aud); }
+  const n = $('ann-count-subject'); if (n) n.textContent = String(S.ui.ann.draft.subject || '').length + ' / ' + C.ANNOUNCE_LIMITS.subject;
+}
+function annFilterPanelHtml() {
+  const F = S.ui.ann.F;
+  const opts = C.familyFilterOptions(S.families, S.schedule);
+  const sel = (k, label, choices, any) => '<div class="ff"><label for="af-' + k + '">' + label + '</label><select id="af-' + k + '" class="plain' + (F[k] ? ' on' : '') + '" data-ch="annF" data-k="' + k + '">'
+    + '<option value="">' + (any || 'Any') + '</option>'
+    + choices.map(([v, l]) => '<option value="' + esc(v) + '" ' + (F[k] === v ? 'selected' : '') + '>' + esc(l) + '</option>').join('') + '</select></div>';
+  const cur = C.sgMonthKey();
+  return '<div class="ffgrid ann-ff">'
+    + sel('level', 'Level', C.LEVELS.map(l => [l, C.levelLabel(l)]))
+    + sel('subject', 'Subject', C.SUBJECTS.map(x => [x, x]))
+    + sel('mode', 'Physical or online', C.MODES.map(x => [x, x === 'Online' ? '💻 Online' : '🏫 Physical']))
+    + sel('day', 'Day', C.DAYS.map(d => [d.code, d.name]))
+    + sel('slot', 'Slot', opts.slots.map(o => [o.id, o.label]))
+    + sel('school', 'Primary school', opts.schools.map(x => [x, x]))
+    + sel('payment', 'Payment type', C.PAYMENT_TYPES.map(t => [t.key, t.label]))
+    + sel('hardcopy', 'Hardcopy', [['yes', 'Yes'], ['no', 'No']])
+    + sel('withdrawn', 'Withdrawal', [['yes', 'Yes'], ['no', 'No']])
+    + sel('paid', 'Payment for', [['paid', '✅ Paid'], ['unpaid', '⏳ Not paid']], 'Paid or not')
+    + '<div class="ff"><label for="af-month">Month</label><select id="af-month" class="plain" data-ch="annF" data-k="month"' + (F.paid ? '' : ' disabled') + '><option value="">This month (' + esc(C.monthShort(cur)) + ')</option>'
+    + statMonths().map(p => '<option value="' + p + '" ' + (F.month === p ? 'selected' : '') + '>' + esc(C.periodLabel(p)) + '</option>').join('') + '</select></div>'
+    + '</div>';
+}
+function annRowHtml(r) {
+  const note = r.noEmail ? '<span class="warn-t">✉ no email — skipped</span>'
+    : (!r.ticked ? '<span class="muted">not ticked</span>'
+      : (!r.send ? '<span class="muted">already gets it (same email as ' + esc(r.dupOf.join(', ')) + ')</span>'
+        : esc(r.to.join(', ')) + (r.dupOf.length ? ' <span class="muted small">(one address shared with ' + esc(r.dupOf.join(', ')) + ')</span>' : '')));
+  return '<label class="ann-row' + (r.send ? '' : ' off') + '" data-fam="' + esc(r.familyId) + '">'
+    + '<input type="checkbox" data-ch="annPick" data-id="' + esc(r.familyId) + '" ' + (r.ticked ? 'checked' : '') + (r.noEmail ? ' disabled' : '') + ' aria-label="Send to ' + esc(r.parentName) + '">'
+    + '<span class="ann-who"><span><b>' + esc(r.parentName || 'Unnamed') + '</b>' + (r.children.length ? ' <span class="muted">· ' + esc(C.listJoin(r.children)) + '</span>' : '') + '</span>'
+    + '<span class="ann-to small">' + note + '</span></span></label>';
+}
+VIEWS.announce = function () {
+  const a = S.ui.ann;
+  const aud = annAudience();
+  const d = a.draft;
+  const nOn = C.activeFamilyFilters(a.F).filter(k => k !== 'month').length;
+  const statusSeg = C.ANNOUNCE_STATUSES.map(t => '<button class="seg ' + (a.status === t.key ? 'on' : '') + '" data-act="annStatus" data-k="' + t.key + '" aria-pressed="' + (a.status === t.key) + '">' + esc(t.label) + '</button>').join('');
+  const typeChip = (k, label) => '<button class="chip ' + (a.type === k ? 'on' : '') + '" data-act="annType" data-k="' + k + '">' + label + '</button>';
+  const compose = '<div class="card ann-compose"><h2 class="ann-h">1 · Write the message</h2>'
+    + '<div class="form"><div class="field full"><label for="ann-subject">Subject <span class="opt" id="ann-count-subject">' + String(d.subject || '').length + ' / ' + C.ANNOUNCE_LIMITS.subject + '</span></label>'
+    + '<input id="ann-subject" type="text" maxlength="' + C.ANNOUNCE_LIMITS.subject + '" value="' + esc(d.subject) + '" data-in="annText" data-k="subject" data-keep="ann-subject" placeholder="e.g. No lessons on Deepavali (Mon 9 Nov)"></div>'
+    + '<div class="field full"><label for="ann-body">Message</label>'
+    + '<textarea id="ann-body" rows="12" maxlength="' + C.ANNOUNCE_LIMITS.body + '" data-in="annText" data-k="body" data-keep="ann-body" placeholder="Write your announcement. A blank line starts a new paragraph. **Two stars** make words bold; links and email addresses become clickable.">' + esc(d.body) + '</textarea>'
+    + '<div class="ann-tokens"><span class="small muted">Fill in for each family:</span>' + C.ANNOUNCE_TOKENS.map(t => '<button type="button" class="chip" data-act="annToken" data-t="' + esc(t.token) + '" title="' + esc(t.label + ', e.g. ' + t.example) + '">' + esc(t.token) + '</button>').join('') + '</div></div>'
+    + '<div class="field full"><label class="check"><input type="checkbox" data-ch="annGreet" ' + (d.greet ? 'checked' : '') + '> Start with "Dear <i>parent\'s name</i>,"</label>'
+    + '<div class="small muted">Your signature from Settings and the centre\'s WhatsApp number are added at the end.</div></div></div>'
+    + '<div id="ann-problems">' + annProblemsHtml() + '</div>'
+    + '<div class="ann-actions"><button class="btn ghost" data-act="annTest" title="Only to ' + esc(S.user.email) + '">✉ Send a test to me</button>'
+    + '<button class="btn" id="ann-send-btn" data-act="annSend" ' + (annCanSend(aud) ? '' : 'disabled') + '>' + annSendLabel(aud) + '</button>'
+    + '<button class="linkbtn" data-act="annClear">Clear the message</button></div></div>';
+  const who = '<div class="card ann-who-card"><h2 class="ann-h">2 · Choose who gets it</h2>'
+    + '<div class="segs ann-status" role="group" aria-label="Which families">' + statusSeg + '</div>'
+    + '<div class="filterrow" style="margin:12px 0 8px;"><span class="lbl">Type of lesson</span><div class="chips">' + typeChip('', 'All') + C.LESSON_TYPES.map(t => typeChip(t.key, t.icon + ' ' + t.label)).join('') + '</div></div>'
+    + '<div class="ann-search"><div class="search"><input type="search" placeholder="Search parent, student or school" value="' + esc(a.search) + '" data-in="annSearch" data-keep="ann-search" aria-label="Search families"></div>'
+    + '<button class="btn ghost fftoggle' + (a.panel ? ' open' : '') + '" data-act="annPanel" aria-expanded="' + !!a.panel + '">⚲ Filters' + (nOn ? ' <span class="n">' + nOn + '</span>' : '') + '</button></div>'
+    + (a.panel ? annFilterPanelHtml() : '')
+    + (nOn ? '<div class="ffbar" style="margin:8px 0 0;"><span class="ffcount">' + esc(C.audienceSummary(annSelection(), S.schedule)) + '</span><button class="linkbtn" data-act="annFReset">Clear filters</button></div>' : '')
+    + '<div class="ann-sum" id="ann-sum"><b>' + C.plural(aud.families, 'family', 'families') + '</b> · ' + C.plural(aud.addresses, 'email address', 'email addresses')
+    + (aud.noEmail ? ' · <span class="warn-t">' + aud.noEmail + ' without email</span>' : '') + (aud.unticked ? ' · ' + aud.unticked + ' unticked' : '') + (aud.shared ? ' · ' + aud.shared + ' share an email (sent once)' : '') + '</div>'
+    + '<div class="ann-tick"><button class="linkbtn" data-act="annTickAll">Tick all</button> · <button class="linkbtn" data-act="annTickNone">Untick all</button></div>'
+    + '<div class="ann-list">' + (aud.rows.length ? aud.rows.map(annRowHtml).join('') : '<div class="muted small" style="padding:14px;">No family matches. Change the filters above.</div>') + '</div></div>';
+  const preview = '<div class="card ann-preview-card"><h2 class="ann-h">3 · Check the email</h2><div id="ann-preview">' + annPreviewHtml(aud) + '</div></div>';
+  const hist = S.announcements;
+  const log = '<div class="card"><h2 class="ann-h">Sent announcements</h2>'
+    + (hist.length ? '<div class="table-wrap" style="box-shadow:none;"><table class="t ann-log"><thead><tr><th>Sent</th><th>Subject</th><th>To</th><th class="r">Families</th><th>By</th></tr></thead><tbody>'
+      + hist.map(h => '<tr class="click" data-act="openAnnLog" data-id="' + esc(h.id) + '"><td class="nowrap">' + esc(annWhen(h.sentAtMs)) + '</td><td><b>' + esc(h.subject) + '</b>' + (h.failed && h.failed.length ? ' <span class="pill red">' + h.failed.length + ' not sent</span>' : '') + (h.done === false ? ' <span class="pill amber">stopped part way</span>' : '') + '</td><td class="small">' + esc(h.audience || '') + '</td><td class="r">' + (h.families || 0) + '</td><td class="small muted">' + esc(h.sentBy || '') + '</td></tr>').join('')
+      + '</tbody></table></div>' : '<p class="muted small">Nothing sent yet. Each announcement you send is listed here, with who got it.</p>')
+    + '</div>';
+  return '<div class="page-head"><div><h1>Announcements</h1><p>Email parents a message. Each family gets its own email from ' + esc(C.SENDER_EMAIL) + ', so no parent sees another\'s address. Replies come back to ' + esc(S.settings.replyTo) + '.</p></div></div>'
+    + (S.familiesLoaded ? '' : emptyHtml('⏳', 'Loading…', ''))
+    + '<div class="ann-grid">' + compose + who + '</div>' + preview + log;
+};
+function annWhen(ms) {
+  if (!ms) return '—';
+  const d = new Date(ms);
+  const day = C.sgDayKey(d);
+  const t = d.toLocaleTimeString('en-SG', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Singapore' });
+  return C.prettyDateShort(day) + ' ' + day.slice(0, 4) + ', ' + t;
+}
+async function annSendAll() {
+  if (!requireProtected()) return;
+  const aud = annAudience();
+  const draft = C.cleanAnnouncement(S.ui.ann.draft);
+  if (!aud.families || C.announcementProblems(draft).some(p => p.level === 'block')) { toast('Nothing to send yet.', 'err'); return; }
+  const at = Date.now();
+  const logId = C.announcementLogId(at);
+  aud.sending.forEach((r, i) => { r.mailId = C.mailDocId('announce', r.familyId, at + i); });
+  const audience = C.audienceSummary(annSelection(), S.schedule);
+  const logRef = db.collection(COL.settings).doc(logId);
+  // The log first, so a send that stops part way is still on record.
+  await logRef.set(Object.assign(C.announcementLog(draft, aud, { audience, sentBy: S.user.email, at }), { done: false, sentAt: ts() }));
+  openModal({ type: 'progress', title: 'Emailing ' + C.plural(aud.families, 'family', 'families') + '…', sub: 'Keep this page open until it finishes.', done: 0, total: aud.sending.length });
+  const ok = [], failed = [];
+  for (let i = 0; i < aud.sending.length; i++) {
+    const r = aud.sending[i];
+    try {
+      const fam = famById(r.familyId);
+      const msg = C.announcementEmail(draft, fam, S.settings, { kidFilter: r.childOk });
+      const doc = C.officeMail(r.to, msg, { kind: 'announcement', logId, familyId: r.familyId, sentBy: S.user.email }, S.settings);
+      delete doc.bcc;   // one copy per family only; "Send a test to me" is the admin's copy
+      await db.collection('mail').doc(r.mailId).set(doc);
+      ok.push(r.mailId);
+    } catch (e) { console.error(e); failed.push({ parentName: r.parentName, error: friendlyError(e) }); }
+    S.modal.done = i + 1; S.modal.note = r.parentName; renderModal();
+  }
+  await logRef.update({ done: true, failed, sentCount: ok.length }).catch(e => console.error(e));
+  // Sent: the message is in the log now, so the box is cleared for the next one.
+  S.ui.ann.draft = C.emptyAnnouncement(); S.ui.ann.excluded = []; S.ui.ann.preview = '';
+  rememberAnnDraft(S.ui.ann.draft);
+  openModal({ type: 'result', title: '📣 ' + C.plural(ok.length, 'email') + ' queued',
+    body: '<p>On their way from ' + esc(C.SENDER_EMAIL) + ', one per family. It is listed under Sent announcements.</p>'
+      + (failed.length ? '<div class="banner red" style="margin-top:12px;"><div class="big">⚠️</div><div><b>' + failed.length + ' not sent</b>' + failed.map(f => esc(f.parentName + ': ' + f.error)).join('<br>') + '</div></div>' : '')
+      + '<div id="delivery-note" class="small muted" style="margin-top:12px;">Checking delivery…</div>' });
+  render();
+  checkDelivery(ok);
+}
+async function annSendTest() {
+  if (!requireProtected()) return;
+  const draft = C.cleanAnnouncement(S.ui.ann.draft);
+  if (C.announcementProblems(draft).some(p => p.level === 'block')) { toast('Write a subject and a message first.', 'err'); return; }
+  const aud = annAudience();
+  const { row, family } = annPreviewFamily(aud);
+  const msg = C.announcementEmail(draft, family, S.settings, { kidFilter: row ? row.childOk : null });
+  msg.subject = '[TEST] ' + msg.subject;
+  const to = S.user.email;
+  const doc = C.officeMail([to], msg, { kind: 'announcement-test', sentBy: to }, S.settings);
+  delete doc.bcc;
+  const id = C.mailDocId('announce-test', to);
+  try { await db.collection('mail').doc(id).set(doc); toast('Test sent to ' + to + ' — as ' + (family.parentName || 'a family') + ' would see it.', 'ok'); }
+  catch (e) { toast('The test was not sent: ' + friendlyError(e), 'err'); }
+}
+async function annCheckDelivery(h) {
+  const ids = (h.recipients || []).map(r => r.mailId).filter(Boolean).slice(0, 60);
+  const note = $('delivery-note'); if (note) note.textContent = 'Checking…';
+  let okN = 0, errN = 0, pend = 0;
+  for (const id of ids) {
+    try {
+      const d = await db.collection('mail').doc(id).get();
+      const st = d.exists && d.data().delivery ? d.data().delivery.state : 'PENDING';
+      S.mailState[id] = st === 'SUCCESS' ? 'delivered ✓' : st === 'ERROR' ? 'failed: ' + ((d.data().delivery || {}).error || '') : 'on the way';
+      if (st === 'SUCCESS') okN++; else if (st === 'ERROR') errN++; else pend++;
+    } catch (e) { pend++; }
+  }
+  if (S.modal && S.modal.type === 'annLog') renderModal();
+  const n2 = $('delivery-note'); if (n2) n2.textContent = okN + ' delivered' + (pend ? ', ' + pend + ' still on the way' : '') + (errN ? ', ' + errN + ' failed' : '') + (ids.length < (h.recipients || []).length ? ' (first ' + ids.length + ' checked)' : '') + '.';
 }
 
 /* ═══════════════ 🗓️ Timetable ═══════════════ */
@@ -1624,6 +1829,37 @@ MODALS.progress = function (m) {
 MODALS.result = function (m) {
   return { size: 'narrow', title: m.title, body: m.body, foot: '<button class="btn" data-act="closeModal">OK</button>' };
 };
+// 📣 Announcements: the confirm step and a sent announcement's log.
+MODALS.annConfirm = function (m) {
+  const aud = annAudience();
+  const d = C.cleanAnnouncement(S.ui.ann.draft);
+  const names = aud.sending.map(r => r.parentName || 'Unnamed');
+  return {
+    size: 'narrow', title: '📣 Send this announcement?', sub: 'It goes out at once and cannot be called back.',
+    body: '<div class="ann-confirm"><div><span class="muted">Subject</span><br><b>' + esc(d.subject) + '</b></div>'
+      + '<div><span class="muted">To</span><br><b>' + C.plural(aud.families, 'family', 'families') + '</b> (' + C.plural(aud.addresses, 'email address', 'email addresses') + ') · ' + esc(C.audienceSummary(annSelection(), S.schedule)) + '</div>'
+      + '<div class="small">' + esc(names.slice(0, 20).join(', ')) + (names.length > 20 ? ' and ' + (names.length - 20) + ' more' : '') + '</div>'
+      + (aud.noEmail ? '<div class="small warn-t">' + C.plural(aud.noEmail, 'family has', 'families have') + ' no email and will not get it.</div>' : '')
+      + '<label class="check"><input type="checkbox" data-ch="annSure" ' + (m.sure ? 'checked' : '') + '> I have checked the preview and want to email these ' + C.plural(aud.families, 'family', 'families') + '</label></div>',
+    foot: '<button class="btn ghost" data-act="closeModal">Cancel</button><button class="btn" data-act="annGo" ' + (m.sure && aud.families ? '' : 'disabled') + '>Email ' + C.plural(aud.families, 'family', 'families') + ' now</button>'
+  };
+};
+MODALS.annLog = function (m) {
+  const h = S.announcements.find(x => x.id === m.id);
+  if (!h) return { size: 'narrow', title: 'Announcement', body: '<p class="muted">Not found.</p>', foot: '<button class="btn" data-act="closeModal">Close</button>' };
+  const sample = { parentName: '{parent}', students: [] };
+  return {
+    title: '📣 ' + esc(h.subject), sub: 'Sent ' + esc(annWhen(h.sentAtMs)) + ' by ' + esc(h.sentBy || '?') + ' · ' + esc(h.audience || ''),
+    body: '<div class="ann-log-body">' + (h.greet ? '<p class="muted">Dear {parent},</p>' : '') + C.announcementBodyHtml(h.body || '') + '</div>'
+      + '<h3 class="ann-h" style="margin-top:16px;">' + C.plural(h.families || 0, 'family', 'families') + ' · ' + C.plural(h.addresses || 0, 'address', 'addresses') + '</h3>'
+      + '<div class="table-wrap" style="box-shadow:none;max-height:40vh;"><table class="t"><thead><tr><th>Family</th><th>Sent to</th><th>Delivery</th></tr></thead><tbody>'
+      + (h.recipients || []).map(r => '<tr><td><b>' + esc(r.parentName || '') + '</b></td><td class="small">' + esc((r.to || []).join(', ')) + '</td><td class="small">' + esc(S.mailState[r.mailId] || '—') + '</td></tr>').join('')
+      + '</tbody></table></div>'
+      + (h.failed && h.failed.length ? '<div class="banner red" style="margin-top:12px;"><div class="big">⚠️</div><div><b>' + h.failed.length + ' not sent</b>' + h.failed.map(f => esc(f.parentName + ': ' + f.error)).join('<br>') + '</div></div>' : '')
+      + '<div id="delivery-note" class="small muted" style="margin-top:10px;"></div>',
+    foot: '<button class="btn ghost" data-act="annReuse" data-id="' + esc(h.id) + '">Write a new one from this</button><button class="btn ghost" data-act="annCheck" data-id="' + esc(h.id) + '">Check delivery</button><button class="btn" data-act="closeModal">Close</button>'
+  };
+};
 
 /* ═══════════════ QR codes and invoice pictures ═══════════════ */
 function renderQr(el, payload, size) {
@@ -2302,6 +2538,50 @@ const ACT = {
   famFilter(el) { S.ui.famFilter = el.dataset.k; render(); },
   famType(el) { S.ui.famType = el.dataset.k; render(); },
   famPanel() { S.ui.famPanel = !S.ui.famPanel; render(); },
+  // Families → Announcements with the same families chosen.
+  famAnnounce() {
+    const a = S.ui.ann;
+    a.F = C.cleanFamilyFilters(S.ui.famF); a.type = S.ui.famType; a.search = S.ui.famSearch;
+    a.status = S.ui.famFilter === 'inactive' ? 'inactive' : 'active';
+    a.panel = C.activeFamilyFilters(a.F).length > 0; a.excluded = [];
+    if (!['all', 'inactive'].includes(S.ui.famFilter)) {
+      // A quick chip (owing, no screenshot…) has no filter of its own here: untick the others.
+      const shown = new Set(familyList().map(f => f.id));
+      a.excluded = S.families.filter(f => !shown.has(f.id)).map(f => f.id);
+    }
+    go('announce');
+  },
+  annStatus(el) { S.ui.ann.status = el.dataset.k; render(); },
+  annType(el) { S.ui.ann.type = el.dataset.k; render(); },
+  annPanel() { S.ui.ann.panel = !S.ui.ann.panel; render(); },
+  annFReset() { S.ui.ann.F = C.cleanFamilyFilters({}); render(); },
+  annTickAll() { S.ui.ann.excluded = []; render(); },
+  annTickNone() { S.ui.ann.excluded = annAudience().rows.map(r => r.familyId); render(); },
+  annToken(el) {
+    const box = $('ann-body'); if (!box) return;
+    const t = el.dataset.t, st = box.selectionStart || box.value.length, en = box.selectionEnd || st;
+    box.value = box.value.slice(0, st) + t + box.value.slice(en);
+    S.ui.ann.draft.body = box.value; rememberAnnDraft(S.ui.ann.draft);
+    box.focus(); box.setSelectionRange(st + t.length, st + t.length);
+    annRefreshLive();
+  },
+  annClear() { S.ui.ann.draft = C.emptyAnnouncement(); rememberAnnDraft(S.ui.ann.draft); render(); },
+  annTest() { annSendTest(); },
+  annSend() {
+    const aud = annAudience();
+    if (!annCanSend(aud)) { toast(aud.families ? 'Write a subject and a message first.' : 'Nobody is chosen yet.', 'err'); return; }
+    openModal({ type: 'annConfirm', sure: false });
+  },
+  annGo() { if (!S.modal || !S.modal.sure) return; annSendAll().catch(e => { console.error(e); openModal({ type: 'result', title: 'Not sent', body: '<p>' + esc(friendlyError(e)) + '</p>' }); }); },
+  openAnnLog(el) { openModal({ type: 'annLog', id: el.dataset.id }); },
+  annCheck(el) { const h = S.announcements.find(x => x.id === el.dataset.id); if (h) annCheckDelivery(h); },
+  annReuse(el) {
+    const h = S.announcements.find(x => x.id === el.dataset.id); if (!h) return;
+    S.ui.ann.draft = C.cleanAnnouncement({ subject: h.subject, body: h.body, greet: h.greet });
+    rememberAnnDraft(S.ui.ann.draft);
+    S.modal = null; $('modal').classList.remove('show'); document.body.style.overflow = '';
+    render(); window.scrollTo({ top: 0 });
+  },
   toggleStats() { S.ui.statsOpen = !S.ui.statsOpen; rememberStatsOpen(S.ui.statsOpen); render(); },
   famFClear(el) { const k = el.dataset.k; S.ui.famF[k] = ''; if (k === 'paid') S.ui.famF.month = ''; render(); },
   famFReset() { S.ui.famF = C.cleanFamilyFilters({}); render(); },
@@ -2730,6 +3010,8 @@ async function refreshMailState(invId, ids) {
 /* ═══════════════ Inputs (typing never re-renders the whole screen) ═══════════════ */
 const INP = {
   famSearch(el) { S.ui.famSearch = el.value; render(); },
+  annText(el) { S.ui.ann.draft[el.dataset.k] = el.value; rememberAnnDraft(S.ui.ann.draft); annRefreshLive(); },
+  annSearch(el) { S.ui.ann.search = el.value; render(); },
   stuSearch(el) { S.ui.stuSearch = el.value; render(); },
   invSearch(el) { S.ui.invSearch = el.value; render(); },
   fam(el) { S.modal.draft[el.dataset.k] = el.value; },
@@ -2749,6 +3031,21 @@ const INP = {
 };
 const CHG = {
   stuDay(el) { S.ui.stu.day = el.value; render(); },
+  annF(el) {
+    const k = el.dataset.k;
+    if (!(k in C.EMPTY_FAMILY_FILTERS)) return;
+    S.ui.ann.F[k] = el.value;
+    if (k === 'paid' && !el.value) S.ui.ann.F.month = '';
+    render();
+  },
+  annPick(el) {
+    const ex = new Set(S.ui.ann.excluded);
+    if (el.checked) ex.delete(el.dataset.id); else ex.add(el.dataset.id);
+    S.ui.ann.excluded = [...ex]; render();
+  },
+  annGreet(el) { S.ui.ann.draft.greet = el.checked; rememberAnnDraft(S.ui.ann.draft); annRefreshLive(); },
+  annPreview(el) { S.ui.ann.preview = el.value; annRefreshLive(); },
+  annSure(el) { S.modal.sure = el.checked; renderModal(); },
   statMonth(el) { S.ui.statMonth = C.isPeriod(el.value) ? el.value : ''; render(); },
   famSort(el) { S.ui.famSort = C.FAMILY_SORT_KEYS.includes(el.value) ? el.value : 'level'; rememberFamSort(S.ui.famSort); render(); },
   famF(el) {
