@@ -203,3 +203,35 @@ test('the workflow runs at 12 AM Singapore time and keeps data out of artifacts'
   assert.doesNotMatch(yml, /upload-artifact/);
   assert.match(yml, /rm -f "\$RUNNER_TEMP\/firebase-sa\.json"/);
 });
+
+test('the walk finds every subcollection, including under missing parents, without mixing scopes', async () => {
+  const data = new Map(); // path -> data
+  const add = (p, d) => data.set(p, d);
+  add('awards/a1', {x:1});
+  for (let i=0;i<10;i++){ add(`users/u${i}`, {n:i}); add(`users/u${i}/settings/s`, {t:i}); add(`users/u${i}/hist/h${i}`, {h:i}); add(`users/u${i}/hist/h${i}/deep/d`, {d:i}); }
+  add('ghost/g1/sub/s1', {only:'sub'});
+  add('csLeads/L1', {a:1}); add('csLeads/L1/unlocks/u', {b:1});
+  add('other/o1/settings/s', {not:'users'});
+  add('mail/m1', {});
+  const seg = p => p.split('/').length;
+  const FieldPath = { documentId: () => '__id' };
+  function docsIn(colPath){ return [...data.keys()].filter(k=>k.startsWith(colPath+'/') && seg(k)===seg(colPath)+1).sort(); }
+  function subcolsOf(docPath){ const s=new Set(); for(const k of data.keys()) if(k.startsWith(docPath+'/')) s.add(docPath+'/'+k.slice(docPath.length+1).split('/')[0]); return [...s].sort(); }
+  function snapOf(path){ return { id: path.split('/').pop(), data: () => data.get(path), ref: docRef(path) }; }
+  function query(listFn, lim, after){ return { orderBy(){ return this; }, limit(n){ return query(listFn, n, after); }, startAfter(d){ return query(listFn, lim, d.ref.path); },
+    async get(){ let l=listFn(); if(after) l=l.filter(p=>p>after); l=l.slice(0, lim||1e9); return { docs: l.map(snapOf), size: l.length, empty: !l.length }; } }; }
+  function colRef(path){ const q = query(() => docsIn(path)); return Object.assign(q, { path, id: path.split('/').pop(), doc: id => docRef(path+'/'+id),
+    listDocuments: async () => { const s=new Set(); for(const k of data.keys()) if(k.startsWith(path+'/')) s.add(path+'/'+k.slice(path.length+1).split('/')[0]); return [...s].sort().map(docRef); } }); }
+  function docRef(path){ return { path, id: path.split('/').pop(), get parent(){ return colRef(path.split('/').slice(0,-1).join('/')); }, listCollections: async () => subcolsOf(path).map(colRef) }; }
+  const db = { listCollections: async () => [...new Set([...data.keys()].map(k=>k.split('/')[0]))].map(colRef), collection: colRef,
+    collectionGroup: id => query(() => [...data.keys()].filter(k=>{const s=k.split('/'); return s.length%2===0 && s[s.length-2]===id;}).sort()) };
+  const ctx = { db, FieldPath, types: {} };
+  const { readEverything } = await import('./firebase-backup.mjs');
+  const r = await readEverything(db, ctx);
+  const paths = r.found.map(f => f.path);
+  for (const p of ['awards', 'csLeads', 'csLeads/L1/unlocks', 'ghost/g1/sub', 'other/o1/settings', 'users', 'users/u3/settings', 'users/u9/hist', 'users/u7/hist/h7/deep'])
+    assert.ok(paths.includes(p), p);
+  assert.equal(paths.length, 36);
+  assert.ok(!paths.includes('mail'));
+  assert.equal(r.found.find(f => f.path === 'other/o1/settings').docs[0].data.not, 'users');
+});

@@ -32,7 +32,7 @@ import * as B from './firebase-backup-core.mjs';
 export const PAGE_SIZE = 1000;
 export const SUBCOLLECTION_SCAN_MAX = 3000;   // list every document's subcollections up to this many docs
 export const SUBCOLLECTION_SAMPLE = 50;       // above it, look at a sample
-export const MAX_DEPTH = 6;
+export const MAX_DEPTH = 5;
 export const DELIVERY_WAIT_MS = 8 * 60 * 1000;
 
 const log = (...a) => console.log(...a);
@@ -54,22 +54,78 @@ export async function readCollection(col, FieldPath, types) {
 
 // Walks a collection and all its subcollections. `found` gets one item per
 // collection path that has documents; `notes` collects anything worth saying.
+//
+// Looking for subcollections costs one call per document, so: every document
+// of a top-level collection up to SUBCOLLECTION_SCAN_MAX documents (a sample
+// above that), and below the top level an evenly spread sample of
+// NESTED_SCAN_SAMPLE parents. A subcollection name found under several parents
+// (users/<uid>/settings …) is then read in one collection-group query, which
+// reaches every parent that has it, sampled or not.
 export async function walkCollection(col, ctx, depth, found, notes) {
   const docs = await readCollection(col, ctx.FieldPath, ctx.types);
   if (docs.length) found.push({ path: col.path, docs });
-  if (depth >= MAX_DEPTH) return;
   let refs;
   if (docs.length <= SUBCOLLECTION_SCAN_MAX) {
     // listDocuments also returns "missing" parents that only hold subcollections.
     refs = await col.listDocuments();
   } else {
-    refs = (await col.limit(SUBCOLLECTION_SAMPLE).get()).docs.map(d => d.ref);
-    notes.push(col.path + ': ' + docs.length + ' documents, subcollections checked on a sample of ' + SUBCOLLECTION_SAMPLE);
+    refs = spread(docs, SUBCOLLECTION_SAMPLE).map(d => col.doc(d.id));
+    notes.push(col.path + ': ' + docs.length + ' documents, subcollections looked for on a sample of ' + SUBCOLLECTION_SAMPLE);
   }
-  const subLists = await B.mapLimit(refs, 16, ref => ref.listCollections());
-  for (let i = 0; i < refs.length; i++) {
-    for (const sub of subLists[i]) await walkCollection(sub, ctx, depth + 1, found, notes);
+  await walkUnder(refs, col.path, ctx, depth + 1, found, notes);
+}
+
+export const NESTED_SCAN_SAMPLE = 200;
+export const GROUP_READ_FROM = 4; // parents sharing a subcollection name before a group query is used
+
+function spread(list, n) {
+  if (list.length <= n) return list.slice();
+  const out = [];
+  for (let i = 0; i < n; i++) out.push(list[Math.floor(i * list.length / n)]);
+  return out;
+}
+
+async function walkUnder(parentRefs, scopePath, ctx, depth, found, notes) {
+  if (depth > MAX_DEPTH || !parentRefs.length) return;
+  const sample = depth > 1 ? spread(parentRefs, NESTED_SCAN_SAMPLE) : parentRefs;
+  const lists = await B.mapLimit(sample, 32, ref => ref.listCollections());
+  const byName = new Map();
+  sample.forEach((ref, i) => lists[i].forEach(c => { if (!byName.has(c.id)) byName.set(c.id, []); byName.get(c.id).push(c); }));
+  for (const [name, cols] of [...byName.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    const sampled = sample.length < parentRefs.length;
+    if (!sampled && cols.length < GROUP_READ_FROM) {
+      for (const c of cols) await walkCollection(c, ctx, depth, found, notes);
+      continue;
+    }
+    // One collection-group query for every <scopePath>/…/<name> at this depth.
+    const segments = sample[0].path.split('/').length + 1; // path segments of such a collection
+    const groups = await readGroup(ctx.db.collectionGroup(name), scopePath + '/', segments, ctx);
+    const childRefs = [];
+    for (const [path, docs] of [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+      found.push({ path, docs });
+      for (const d of docs) childRefs.push(ctx.db.collection(path).doc(d.id));
+    }
+    if (depth < MAX_DEPTH) await walkUnder(childRefs, scopePath, ctx, depth + 1, found, notes);
   }
+}
+
+async function readGroup(query, prefix, segments, ctx) {
+  const groups = new Map();
+  let last = null;
+  for (;;) {
+    let q = query.orderBy(ctx.FieldPath.documentId()).limit(PAGE_SIZE);
+    if (last) q = q.startAfter(last);
+    const snap = await q.get();
+    for (const d of snap.docs) {
+      const parentPath = d.ref.parent.path;
+      if (!parentPath.startsWith(prefix) || parentPath.split('/').length !== segments) continue;
+      if (!groups.has(parentPath)) groups.set(parentPath, []);
+      groups.get(parentPath).push({ id: d.id, data: B.encodeValue(d.data(), ctx.types) });
+    }
+    if (snap.size < PAGE_SIZE) break;
+    last = snap.docs[snap.docs.length - 1];
+  }
+  return groups;
 }
 
 export async function readEverything(db, ctx) {
@@ -216,7 +272,7 @@ async function waitForDelivery(db, ids, timeoutMs) {
 
 export async function runBackup({ admin, dryRun, nowMs = Date.now() }) {
   const db = admin.firestore();
-  const ctx = { FieldPath: admin.firestore.FieldPath, types: { Timestamp: admin.firestore.Timestamp, GeoPoint: admin.firestore.GeoPoint, DocumentReference: admin.firestore.DocumentReference } };
+  const ctx = { db, FieldPath: admin.firestore.FieldPath, types: { Timestamp: admin.firestore.Timestamp, GeoPoint: admin.firestore.GeoPoint, DocumentReference: admin.firestore.DocumentReference } };
   const problems = [];
   const report = [];
 
