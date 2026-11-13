@@ -1201,3 +1201,49 @@ test('family status: active, paused for some months, withdrawn; older records re
   const sr = C.studentRows([fam({ status: 'paused', pauseFrom: '2020-01' }), fam({ id: 'w', status: 'withdrawn' })], REC_SCHEDULE);
   assert.deepEqual(sr.map(r => r.status), ['paused', 'left']);
 });
+
+test('clicking a statistics category lists its children, matches the tile, and hands over filters (v1.10.0)', () => {
+  const S = REC_SCHEDULE;
+  const fams = [
+    SF_FAMS[0], SF_FAMS[1], SF_FAMS[2], SF_FAMS[3],
+    { id: 'e', parentName: 'Eng', status: 'withdrawn', students: [{ id: 'e1', name: 'E', level: 'P5', status: 'active', classes: [{ slotId: 'FRI-2', mode: 'Physical' }] }] },
+    { id: 'k', parentName: 'Kok', email: 'kok@example.com', whatsapp: '91234567', status: 'active', students: [
+      { id: 'k1', name: 'Kai', level: 'P5', school: 'Rosyth', status: 'active', classes: [{ slotId: 'FRI-2', mode: 'Online' }, { slotId: 'SAT-1', mode: 'Master' }] },
+      { id: 'k2', name: 'Pau', level: 'P3', status: 'paused', classes: [{ slotId: 'SAT-1', mode: 'Master' }] }] }
+  ];
+  const st = C.familyStats(fams, { schedule: S, period: '2026-11', invoices: [] });
+  for (const key of ['math', 'science', 'online', 'physical', 'master']) {
+    const rows = C.categoryStudents(fams, key, { schedule: S, period: '2026-11' });
+    assert.equal(rows.length, st.categories[key].students, key + ': same count as the tile');
+    assert.equal(rows.reduce((n, r) => n + r.fees, 0), st.categories[key].fees, key + ': same fees as the tile');
+    assert.ok(rows.every(r => r.classes.length), key + ': every row shows the classes that put it there');
+    assert.ok(!rows.some(r => r.familyId === 'e'), 'a withdrawn family is left out');
+    assert.ok(!rows.some(r => r.name === 'Pau'), 'a paused child is left out');
+  }
+  const master = C.categoryStudents(fams, 'master', { schedule: S, period: '2026-11' });
+  const kai = master.find(r => r.name === 'Kai');
+  assert.ok(kai, 'a regular slot taken as a Master class counts as Master');
+  assert.deepEqual(kai.classes.map(x => x.mode), ['Master'], 'only the Master class is shown under Master');
+  assert.equal(kai.allClasses.length, 2);
+  assert.equal(kai.fees, 320);
+  assert.deepEqual(kai.emails, ['kok@example.com']);
+  // Sorted youngest level first, then name.
+  const all = C.categoryStudents(fams, 'all', { schedule: S, period: '2026-11' });
+  const ranks = all.map(r => C.levelRank(r.level));
+  assert.deepEqual(ranks, ranks.slice().sort((a, b) => a - b));
+  assert.equal(all.length, st.students);
+  // A level filter narrows the list the same way it narrows the tiles.
+  const p5 = C.categoryStudents(fams, 'all', { schedule: S, period: '2026-11', kidFilter: s => C.normalizeLevel(s.level) === 'P5' });
+  assert.ok(p5.length && p5.every(r => C.normalizeLevel(r.level) === 'P5'));
+  // Filters for "Show in Families" and the Announce tab.
+  assert.equal(C.categoryFilters('master', { level: 'P5' }).mode, 'Master');
+  assert.equal(C.categoryFilters('master', { level: 'P5' }).level, 'P5');
+  assert.equal(C.categoryFilters('science', {}).subject, 'Science');
+  assert.equal(C.categoryFilters('online', {}).mode, 'Online');
+  assert.equal(C.statCategoryLabel('all'), 'All students');
+  // CSV: one line per child, the classes that matched, the parent's contact.
+  const csv = C.categoryCsv(master).split(/\r?\n/).filter(Boolean);
+  assert.equal(csv.length, master.length + 1);
+  assert.match(csv[0], /^Student,Level,Primary school,Classes,Fees a month,Parent,Email,WhatsApp/);
+  assert.ok(csv.some(l => l.startsWith('Kai,') && l.includes('kok@example.com') && l.includes('Master')));
+});

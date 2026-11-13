@@ -40,7 +40,7 @@
         payment, last PayNow screenshot the parent sent).
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export const OFFICE_CORE_VERSION = '1.9.0';
+export const OFFICE_CORE_VERSION = '1.10.0';
 
 /* ─────────────────────────── The centre ─────────────────────────── */
 export const SITE = 'https://polymathlc.com.sg';
@@ -2782,4 +2782,66 @@ export function announcementLog(raw, audience, meta) {
     failed: (m.failed || []).slice(0, 100).map(x => ({ parentName: String(x.parentName || ''), error: String(x.error || '').slice(0, 200) })),
     test: !!m.test
   };
+}
+
+/* ═══════════════ 📊 A statistics category, opened (v1.10.0) ═══════════════
+   Clicking Math, Science, Online regular, Physical regular or Master class
+   (or Students) on the statistics panel lists the children counted there —
+   the same children familyStats counts, with the classes that put them in it.
+   STAT_CATEGORY_FILTER says which Families filter picks the same families, so
+   the list can be shown on the Families tab or handed to Announce. */
+export const STAT_CATEGORY_FILTER = Object.freeze({
+  math: Object.freeze({ subject: 'Math' }),
+  science: Object.freeze({ subject: 'Science' }),
+  online: Object.freeze({ mode: 'Online' }),
+  physical: Object.freeze({ mode: 'Physical' }),
+  master: Object.freeze({ mode: 'Master' }),
+  all: Object.freeze({})
+});
+export function statCategoryLabel(key) {
+  if (key === 'all') return 'All students';
+  const k = STAT_CATEGORIES.find(x => x.key === key);
+  return k ? k.label : '';
+}
+// ctx: { schedule, period, today, kidFilter(student) }
+export function categoryStudents(families, key, ctx) {
+  const c = ctx || {};
+  const schedule = c.schedule || {};
+  const period = isPeriod(c.period) ? c.period : (c.today ? String(c.today).slice(0, 7) : sgMonthKey());
+  const rows = [];
+  (families || []).forEach(raw => {
+    const f = normalizeFamily(raw);
+    if (familyStateIn(f, period) !== 'active') return;
+    activeStudents(f).filter(st => !c.kidFilter || c.kidFilter(st)).forEach(st => {
+      const cls = statClasses(st).map(cl => {
+        const cat = classCategories(cl, schedule);
+        const slot = cl.custom ? null : scheduleSlot(schedule, cl.slotId);
+        const mode = cl.custom ? (CLASS_MODES.includes(cl.mode) ? cl.mode : 'Physical') : classMode(cl, schedule);
+        return {
+          slotId: cl.slotId || '', custom: !!cl.custom,
+          label: cl.custom ? (cl.label || 'Other arrangement') : slotShortLabel(cl.slotId) + ' · ' + (slotHasClass(slot) ? levelLabel(slot.level) + ' ' + slot.subject : 'no class'),
+          subject: cat.subject, type: cat.type, mode, modeLabel: CLASS_MODE_META[mode].label,
+          fee: cl.custom ? feeNum(cl.rate) : (feeNum(cl.rate) || monthlyFeeFor(slot, mode, schedule))
+        };
+      });
+      const hits = key === 'all' ? cls : cls.filter(x => x.subject === key || x.type === key);
+      if (key !== 'all' && !hits.length) return;
+      rows.push({
+        familyId: f.id, parentName: f.parentName, code: f.code, emails: familyEmails(f), whatsapp: f.whatsapp,
+        studentId: st.id, name: st.name, level: st.level, school: st.school,
+        classes: hits, allClasses: cls,
+        fees: round2(hits.reduce((n, x) => n + x.fee, 0))
+      });
+    });
+  });
+  return rows.sort((a, b) => levelRank(a.level) - levelRank(b.level) || byText(a.name, b.name) || byText(a.parentName, b.parentName));
+}
+// The Families filters that pick the same families as a category.
+export function categoryFilters(key, base) {
+  return cleanFamilyFilters(Object.assign({}, base || {}, STAT_CATEGORY_FILTER[key] || {}));
+}
+// One CSV of a category's children.
+export function categoryCsv(rows) {
+  return toCsv([['Student', 'Level', 'Primary school', 'Classes', 'Fees a month', 'Parent', 'Email', 'WhatsApp'],
+    ...(rows || []).map(r => [r.name, levelLabel(r.level), r.school, r.classes.map(x => x.label + ' (' + x.modeLabel + ')').join('; '), moneyPlain(r.fees), r.parentName, r.emails.join('; '), displayPhone(r.whatsapp)])]);
 }

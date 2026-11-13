@@ -33,9 +33,9 @@
      mail/polymath-office-*    emails for the Trigger Email extension
    Reads: schedule_config/main (the /schedule page's own document).
    ═══════════════════════════════════════════════════════════════════════════ */
-import * as C from './office-core.mjs?v=1.9.0';
+import * as C from './office-core.mjs?v=1.10.0';
 
-const OFFICE_VERSION = 'v1.9.0';
+const OFFICE_VERSION = 'v1.10.0';
 
 /* ═══════════════ Firebase — the CER project ═══════════════ */
 firebase.initializeApp({
@@ -78,7 +78,7 @@ const S = {
   ui: {
     famSearch: '', famFilter: 'all', famType: '', famView: savedFamView(),
     famSort: savedFamSort(), famF: C.cleanFamilyFilters({}), famPanel: false,
-    statMonth: '', statsOpen: savedStatsOpen(),
+    statMonth: '', statsOpen: savedStatsOpen(), famZoom: savedFamZoom(),
     ann: { draft: savedAnnDraft(), status: 'active', type: '', F: C.cleanFamilyFilters({}), search: '', excluded: [], panel: false, preview: '' },
     stuSearch: '', stu: { level: '', subject: '', mode: '', day: '', status: 'active', pay: '', cls: '' }, stuSort: { key: 'name', dir: 1 },
     tt: { level: '', subject: '', mode: '' },
@@ -100,6 +100,10 @@ function rememberStatsOpen(v) { try { localStorage.setItem('polymath-office-stat
 // The announcement being written is kept on this computer until it is sent.
 function savedAnnDraft() { try { const d = JSON.parse(localStorage.getItem('polymath-office-announce') || 'null'); return Object.assign(C.emptyAnnouncement(), d || {}); } catch (e) { return C.emptyAnnouncement(); } }
 function rememberAnnDraft(d) { try { localStorage.setItem('polymath-office-announce', JSON.stringify(d)); } catch (e) { /* private window */ } }
+// …and how far the Families list is zoomed out (− / +), so more fits on screen.
+const FAM_ZOOMS = [0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.25];
+function savedFamZoom() { try { const v = Number(localStorage.getItem('polymath-office-famzoom')); return v >= 0.5 && v <= 1.25 ? v : 1; } catch (e) { return 1; } }
+function rememberFamZoom(v) { try { localStorage.setItem('polymath-office-famzoom', String(v)); } catch (e) { /* private window */ } }
 function rememberFamSort(v) { try { localStorage.setItem('polymath-office-famsort', v); } catch (e) { /* private window */ } }
 let IX = { fam: new Map(), invByFam: new Map(), invById: new Map(), payByKey: new Map(), roster: new Map(), rows: [] };
 const unsubs = [];
@@ -592,12 +596,22 @@ function statMonths() {
   if (!months.includes(cur)) months.push(cur);
   return months.sort();
 }
-function famStatsHtml(list) {
-  const period = C.isPeriod(S.ui.statMonth) ? S.ui.statMonth : C.sgMonthKey();
+// What the statistics count: every family, or the ones the filters show.
+function statScope() {
   const filtered = famFiltered();
+  return {
+    filtered, period: C.isPeriod(S.ui.statMonth) ? S.ui.statMonth : C.sgMonthKey(),
+    families: filtered ? familyList() : S.families,
+    kidFilter: filtered && childFiltersOn() ? kidShown : null
+  };
+}
+function famStatsHtml(list) {
+  const sc = statScope();
+  const period = sc.period;
+  const filtered = sc.filtered;
   const st = C.familyStats(filtered ? list : S.families, {
     schedule: S.schedule, invoices: S.invoices, period, today: today(),
-    kidFilter: filtered && childFiltersOn() ? kidShown : null
+    kidFilter: sc.kidFilter
   });
   const mo = C.monthShort(period);
   const scope = filtered ? '<span class="pill amber" title="The figures follow the search and filters below">Families shown · filters on</span>' : '<span class="pill green">All active families</span>';
@@ -611,7 +625,7 @@ function famStatsHtml(list) {
   }
   const tile = (cls, label, value, hint, extra) => '<div class="kpi ' + cls + '"><div class="kpi-label">' + label + '</div><div class="kpi-value">' + value + '</div>' + (hint ? '<div class="kpi-hint">' + hint + '</div>' : '') + (extra || '') + '</div>';
   const overview = '<div class="kpi-row four">'
-    + tile('k-students', '👦 Students', String(st.students),
+    + tile('k-students open-cat" data-act="openCategory" data-k="all" role="button" tabindex="0" title="See every student', '👦 Students', String(st.students),
       'in ' + C.plural(st.families, 'family', 'families') + (st.paused ? ' · ' + st.paused + ' paused' : '') + (st.noClass ? ' · <span class="warn-t">' + st.noClass + ' without a class</span>' : '') + (st.both ? ' · ' + st.both + ' take both subjects' : ''))
     + tile('k-fees', '💵 Monthly fees', money(st.net), money(st.fees) + ' at schedule fees' + (st.discounts ? ' − ' + money(st.discounts) + ' discounts' : '') + ' · ' + money(st.net * 12) + ' a year')
     + tile('k-collected', '✅ Collected for ' + esc(mo), money(st.collected), st.invoices ? 'of ' + money(st.billed) + ' invoiced · ' + st.percent + '%' : 'no ' + esc(mo) + ' invoices yet',
@@ -624,7 +638,7 @@ function famStatsHtml(list) {
     return '<div class="kpi-group"><div class="kpi-sub">' + title + '</div><div class="kpi-row ' + (cats.length === 2 ? 'two' : 'three') + '">'
       + cats.map(c => {
         const share = total > 0 ? Math.round(c.fees / total * 100) : 0;
-        return '<div class="kpi cat cat-' + c.key + '" data-cat="' + c.key + '"><div class="kpi-label">' + c.icon + ' ' + esc(c.label) + '</div>'
+        return '<div class="kpi cat open-cat cat-' + c.key + '" data-cat="' + c.key + '" data-act="openCategory" data-k="' + c.key + '" role="button" tabindex="0" title="See the ' + esc(c.label) + ' students"><div class="kpi-label">' + c.icon + ' ' + esc(c.label) + ' <span class="kpi-open">›</span></div>'
           + '<div class="kpi-value">' + c.students + ' <span class="kpi-unit">' + (c.students === 1 ? 'student' : 'students') + '</span></div>'
           + '<div class="kpi-hint">' + C.plural(c.families, 'family', 'families') + '</div>'
           + '<dl class="kpi-money"><div><dt>Fees a month</dt><dd>' + money(c.fees) + '</dd></div><div><dt>Collected ' + esc(mo) + '</dt><dd>' + money(c.collected) + '</dd></div></dl>'
@@ -710,12 +724,16 @@ VIEWS.families = function () {
     + '<div class="toolbar"><div class="search"><input type="search" placeholder="Search parent, student, school, phone, email or code" value="' + esc(S.ui.famSearch) + '" data-in="famSearch" data-keep="famSearch" aria-label="Search families"></div>'
     + '<div class="ffsort"><label for="fam-sort">Sort</label><select id="fam-sort" class="plain" data-ch="famSort">' + C.FAMILY_SORTS.map(o => '<option value="' + o.key + '" ' + (S.ui.famSort === o.key ? 'selected' : '') + '>' + esc(o.label) + '</option>').join('') + '</select></div>'
     + '<button class="btn ghost fftoggle' + (S.ui.famPanel ? ' open' : '') + '" data-act="famPanel" aria-expanded="' + !!S.ui.famPanel + '" aria-controls="fam-filter-panel">⚲ Filters' + (nOn ? ' <span class="n">' + nOn + '</span>' : '') + '</button>'
-    + '<div class="segs" role="group" aria-label="Show as">' + viewChip('cards', '▦ Cards') + viewChip('table', '☰ Table') + '</div></div>'
+    + '<div class="segs" role="group" aria-label="Show as">' + viewChip('cards', '▦ Cards') + viewChip('table', '☰ Table') + '</div>'
+    + '<div class="zoom" role="group" aria-label="Zoom the list"><button class="seg" data-act="famZoom" data-d="-1" title="Zoom out: more rows and columns fit" aria-label="Zoom out"' + (S.ui.famZoom <= FAM_ZOOMS[0] ? ' disabled' : '') + '>−</button>'
+    + '<button class="seg zoom-val" data-act="famZoomReset" title="Back to 100%" id="fam-zoom">' + Math.round(S.ui.famZoom * 100) + '%</button>'
+    + '<button class="seg" data-act="famZoom" data-d="1" title="Zoom in" aria-label="Zoom in"' + (S.ui.famZoom >= FAM_ZOOMS[FAM_ZOOMS.length - 1] ? ' disabled' : '') + '>+</button>'
+    + '<button class="seg zoom-fit" data-act="famZoomFit" title="Zoom so the whole table fits the width — no scrolling sideways">↔ Fit</button></div></div>'
     + (S.ui.famPanel ? famFilterPanelHtml() : '')
     + '<div class="chips" style="margin-bottom:10px;">' + chip('all', 'Active') + chip('owing', '💰 Owing') + chip('unpaid', '⏳ ' + esc(C.monthShort(period)) + ' not paid')
     + chip('noshot', '📸 No screenshot in ' + esc(C.monthShort(period))) + chip('noemail', '✉ No email') + chip('shared', '⚠ Shared email', true) + chip('noclass', '🧩 No class') + chip('package', '📦 Package', true) + chip('hardcopy', '📮 Hardcopy', true) + chip('paused', '⏸ Paused') + chip('withdrawn', '👋 Withdrawn') + '</div>'
     + (S.families.length ? famActiveFiltersHtml(list.length) : '')
-    + body;
+    + '<div id="fam-body" class="fam-body" style="zoom:' + S.ui.famZoom + ';">' + body + '</div>';
 };
 function familyTableHtml(rows) {
   const cur = C.sgMonthKey();
@@ -740,9 +758,9 @@ function familyTableHtml(rows) {
         + '<td title="' + esc(r.paidText ? 'Paid: ' + r.paidText : 'No month paid yet') + '">' + (first ? monthDots(r.months, 4) : '') + '</td>'
         + '<td class="nowrap">' + (first ? (r.lastPayment ? '<b>' + esc(C.prettyDateShort(r.lastPayment.date)) + '</b>' + (r.lastPayment.amount ? '<div class="small muted">' + money(r.lastPayment.amount) + '</div>' : '') : '<span class="muted">—</span>') : '') + '</td>'
         + '<td class="nowrap">' + (first ? (r.lastScreenshot ? '<span class="' + (shotThisMonth ? '' : 'muted') + '">📸 ' + esc(C.prettyDateShort(r.lastScreenshot.date)) + '</span><div class="small muted">' + esc(whenText(r.lastScreenshot.date)) + '</div>' : '<span class="muted">—</span>') : '') + '</td>'
-        + '<td>' + (first ? (r.hardcopy ? '<span class="pill deep">📮 Yes</span><div class="small muted addr">' + esc(r.address) + '</div>' : '<span class="muted">No</span>') : '') + '</td>'
+        + '<td>' + (first ? (r.hardcopy ? '<span class="pill deep">📮 Yes</span><div class="small muted addr" title="' + esc(r.address) + '">' + esc(r.address) + '</div>' : '<span class="muted">No</span>') : '') + '</td>'
         + '<td class="nowrap">' + (first ? (r.withdrawn ? '<span class="pill amber">👋 Yes</span><div class="small muted">last ' + esc(r.lastMonth ? C.periodLabel(r.lastMonth) : '?') + '</div>' : '<span class="muted">No</span>') : '') + '</td>'
-        + '<td class="notes">' + (r.notes ? '<span title="' + esc(r.notes) + '">' + esc(r.notes.length > 70 ? r.notes.slice(0, 68) + '…' : r.notes) + '</span>' : '') + '</td>'
+        + '<td class="notes">' + (r.notes ? '<span class="clamp" title="' + esc(r.notes) + '">' + esc(r.notes.length > 70 ? r.notes.slice(0, 68) + '…' : r.notes) + '</span>' : '') + '</td>'
         + '<td class="r">' + (first ? '<button class="iconbtn" data-act="quickShot" data-id="' + esc(r.familyId) + '" title="Log a payment screenshot received today">📸</button>' : '') + '</td></tr>';
     }).join('') + '</tbody></table></div>'
     + '<div class="small muted" style="margin-top:8px;">Months: ✅ paid · ✔︎ marked paid by hand · ⏳ waiting · ⚠️ overdue · 📝 not sent · · no invoice. 📸 logs a PayNow screenshot received today.</div>';
@@ -1825,6 +1843,34 @@ MODALS.progress = function (m) {
 MODALS.result = function (m) {
   return { size: 'narrow', title: m.title, body: m.body, foot: '<button class="btn" data-act="closeModal">OK</button>' };
 };
+// 📊 A statistics category opened: its students, and ways to act on them.
+function categoryRows(key) {
+  const sc = statScope();
+  return C.categoryStudents(sc.families, key, { schedule: S.schedule, period: sc.period, kidFilter: sc.kidFilter });
+}
+MODALS.category = function (m) {
+  const rows = categoryRows(m.key);
+  const sc = statScope();
+  const fams = new Set(rows.map(r => r.familyId)).size;
+  const fees = rows.reduce((n, r) => n + r.fees, 0);
+  const label = C.statCategoryLabel(m.key);
+  const ico = m.key === 'all' ? '👦' : (C.STAT_CATEGORIES.find(x => x.key === m.key) || {}).icon;
+  return {
+    size: 'wide', title: ico + ' ' + esc(label) + ' · ' + C.plural(rows.length, 'student'),
+    sub: C.plural(fams, 'family', 'families') + ' · ' + money(fees) + ' a month in fees · ' + esc(C.periodLabel(sc.period)) + (sc.filtered ? ' · within the families shown' : ''),
+    body: rows.length ? '<div class="table-wrap cat-wrap" style="box-shadow:none;max-height:60vh;"><table class="t cat-list"><thead><tr><th>Student</th><th>' + (m.key === 'all' ? 'Classes' : esc(label) + ' classes') + '</th><th class="r">Fees</th><th>Parent</th><th>Email</th></tr></thead><tbody>'
+      + rows.map(r => '<tr class="click" data-act="catOpenFamily" data-id="' + esc(r.familyId) + '"><td><b>' + esc(r.name) + '</b> <span class="muted small">' + esc(C.levelLabel(r.level) || '') + '</span>' + (r.school ? '<div class="small muted">' + esc(r.school) + '</div>' : '') + '</td>'
+        + '<td>' + r.classes.map(x => subjChip(x.subject === 'math' ? 'Math' : x.subject === 'science' ? 'Science' : '', x.mode === 'Master', x.label + ' ' + modeIcon(x.mode))).join(' ') + '</td>'
+        + '<td class="r nowrap">' + money(r.fees) + '</td>'
+        + '<td>' + esc(r.parentName) + (r.whatsapp ? '<div class="small muted nowrap">💬 ' + esc(C.displayPhone(r.whatsapp)) + '</div>' : '') + '</td>'
+        + '<td class="small em">' + (r.emails.length ? esc(r.emails.join(', ')) : '<span class="warn-t">no email</span>') + '</td></tr>').join('')
+      + '</tbody></table></div>' : emptyHtml('🔍', 'Nobody here', 'No active student is in this category' + (sc.filtered ? ' among the families shown.' : '.')),
+    foot: '<button class="btn ghost" data-act="catCsv" data-k="' + esc(m.key) + '"' + (rows.length ? '' : ' disabled') + '>⬇ CSV</button>'
+      + (m.key === 'all' ? '' : '<button class="btn ghost" data-act="catShow" data-k="' + esc(m.key) + '">Show these families</button>')
+      + '<button class="btn" data-act="catEmail" data-k="' + esc(m.key) + '"' + (rows.length ? '' : ' disabled') + '>📣 Email their families</button>'
+  };
+};
+VIEW_ONLY_MODALS.add('category');
 // 📣 Announcements: the confirm step and a sent announcement's log.
 MODALS.annConfirm = function (m) {
   const aud = annAudience();
@@ -2534,6 +2580,54 @@ const ACT = {
   famFilter(el) { S.ui.famFilter = el.dataset.k; render(); },
   famType(el) { S.ui.famType = el.dataset.k; render(); },
   famPanel() { S.ui.famPanel = !S.ui.famPanel; render(); },
+  famZoom(el) {
+    const d = Number(el.dataset.d) || 0;
+    const at = FAM_ZOOMS.reduce((best, z, i) => Math.abs(z - S.ui.famZoom) < Math.abs(FAM_ZOOMS[best] - S.ui.famZoom) ? i : best, 0);
+    S.ui.famZoom = FAM_ZOOMS[Math.min(FAM_ZOOMS.length - 1, Math.max(0, at + d))];
+    rememberFamZoom(S.ui.famZoom); render();
+  },
+  famZoomReset() { S.ui.famZoom = 1; rememberFamZoom(1); render(); },
+  // Fit: zoom so the widest thing in the list (the table) fits the page width.
+  famZoomFit() {
+    const box = $('fam-body'); if (!box) return;
+    const inner = box.querySelector('table.rec') || box.querySelector('.fam-grid') || box.firstElementChild;
+    const avail = box.parentElement.clientWidth;
+    const z = S.ui.famZoom || 1;
+    const need = inner ? inner.scrollWidth * z : avail;   // its width at 100%… times the zoom it is drawn at
+    const raw = need > 0 ? avail / (need / z) : 1;
+    const fit = Math.max(0.5, Math.min(1, Math.floor(raw * 100) / 100));
+    S.ui.famZoom = fit; rememberFamZoom(fit); render();
+    toast(fit < 1 ? 'Zoomed to ' + Math.round(fit * 100) + '% so the list fits the width.' : 'It already fits at 100%.', 'ok');
+  },
+  openCategory(el) { openModal({ type: 'category', key: el.dataset.k }); },
+  catOpenFamily(el) { ACT.openFamily(el); },
+  catCsv(el) {
+    const rows = categoryRows(el.dataset.k);
+    downloadText(C.categoryCsv(rows), 'polymath-' + C.statCategoryLabel(el.dataset.k).toLowerCase().replace(/[^a-z]+/g, '-') + '-' + today() + '.csv', 'text/csv');
+  },
+  // Show the category's families on the Families list (the same filter, on top of any already set).
+  catShow(el) {
+    S.ui.famF = C.categoryFilters(el.dataset.k, famFiltered() ? S.ui.famF : {});
+    if (!famFiltered()) S.ui.famFilter = 'all';
+    S.ui.famPanel = true;
+    closeModal(); render();
+  },
+  // Hand the category to Announce: the same families, its children named in {children}.
+  catEmail(el) {
+    const key = el.dataset.k;
+    const sc = statScope();
+    const a = S.ui.ann;
+    a.F = C.categoryFilters(key, sc.filtered ? S.ui.famF : {});
+    a.type = sc.filtered ? S.ui.famType : '';
+    a.search = sc.filtered ? S.ui.famSearch : '';
+    a.status = 'active';
+    a.panel = C.activeFamilyFilters(a.F).length > 0;
+    const keep = new Set(categoryRows(key).map(r => r.familyId));
+    a.excluded = S.families.filter(f => !keep.has(f.id)).map(f => f.id);
+    a.preview = '';
+    closeModal(); go('announce');
+    toast('Write the message — ' + C.plural(keep.size, 'family is', 'families are') + ' chosen.', 'ok');
+  },
   // Families → Announcements with the same families chosen.
   famAnnounce() {
     const a = S.ui.ann;

@@ -474,6 +474,27 @@
   table.rec td.slots .subj { margin:0 3px 3px 0; }
   table.rec td.em { max-width:220px; word-break:break-all; }
   table.rec td.notes { max-width:220px; color:var(--ink-2); }
+  /* Long notes and addresses stay two lines so one family never makes a very tall row; the full text is in the tooltip and the family card. */
+  table.rec td.notes .clamp, table.rec .addr { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; line-clamp:2; overflow:hidden; }
+  /* Zoom: minus and plus beside the Cards / Table switch. */
+  .zoom { display:inline-flex; align-items:stretch; border:1px solid var(--line); border-radius:10px; overflow:hidden; background:var(--white); }
+  .zoom .seg { padding:9px 12px; font-size:15px; line-height:1; color:var(--ink-2); }
+  .zoom .seg:hover:not([disabled]) { background:var(--paper); }
+  .zoom .seg[disabled] { opacity:.35; cursor:default; }
+  .zoom .zoom-val { min-width:58px; font-variant-numeric:tabular-nums; font-size:13px; color:var(--ink); }
+  .zoom .zoom-fit { font-size:13px; }
+  .fam-body { transform-origin:top left; }
+  /* Statistics tiles open their student list. */
+  .open-cat { cursor:pointer; transition:border-color .12s, box-shadow .12s, transform .12s; }
+  .open-cat:hover, .open-cat:focus-visible { border-color:var(--teal); box-shadow:0 0 0 3px rgba(46,156,166,.14); outline:none; }
+  .open-cat:active { transform:translateY(1px); }
+  .kpi-open { color:var(--teal); font-weight:800; margin-left:2px; }
+  table.cat-list { font-size:13px; }
+  table.cat-list td { vertical-align:top; }
+  table.cat-list tr.click { cursor:pointer; }
+  table.cat-list tr.click:hover td { background:#f2fafb; }
+  table.cat-list td.em { max-width:220px; word-break:break-all; }
+  table.cat-list .subj { margin:0 3px 3px 0; white-space:nowrap; }
   table.rec .mdots { flex-wrap:nowrap; }
   table.rec td.slots .subj { white-space:nowrap; }
   .fix { font-size:12.5px; padding:7px 10px; border-radius:9px; margin-top:6px; border:1px solid; }
@@ -695,6 +716,6 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="version hidden" id="version"></div>
 
-<script type="module" src="office-app.mjs?v=1.9.0"></script>
+<script type="module" src="office-app.mjs?v=1.10.0"></script>
 </body>
 </html>

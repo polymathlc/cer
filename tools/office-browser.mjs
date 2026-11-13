@@ -783,6 +783,91 @@ try {
   await page.waitForSelector('#fam-filter-panel', { state: 'detached' });
   await page.click('#tabs [data-view="settings"]');
 
+  // ── v1.10.0: − / + zoom (remembered), Fit, and each statistics tile opens its students ──
+  await page.click('#tabs [data-view="families"]');
+  await page.waitForSelector('#fam-stats .kpi-row');
+  await page.click('[data-act="famView"][data-k="table"]');
+  await page.waitForSelector('table.rec');
+  assert.equal(await page.locator('#fam-zoom').innerText(), '100%');
+  await page.click('.zoom [data-act="famZoom"][data-d="-1"]');
+  await page.waitForFunction(() => document.getElementById('fam-zoom').innerText === '90%');
+  await page.click('.zoom [data-act="famZoom"][data-d="-1"]');
+  await page.waitForFunction(() => document.getElementById('fam-zoom').innerText === '80%');
+  assert.equal(await page.evaluate(() => localStorage.getItem('polymath-office-famzoom')), '0.8', 'the zoom is remembered on this computer');
+  assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('fam-body')).zoom), '0.8');
+  await page.click('.zoom [data-act="famZoom"][data-d="1"]');
+  await page.waitForFunction(() => document.getElementById('fam-zoom').innerText === '90%');
+  await page.click('[data-act="famZoomReset"]');
+  await page.waitForFunction(() => document.getElementById('fam-zoom').innerText === '100%');
+  // Fit: the whole table fits the width at a smaller zoom, no sideways scroll.
+  await page.click('[data-act="famZoomFit"]');
+  await settle(page, 300);
+  const fitZoom = await page.evaluate(() => Number(localStorage.getItem('polymath-office-famzoom')));
+  assert.ok(fitZoom >= 0.5 && fitZoom <= 1, 'Fit picks a zoom: ' + fitZoom);
+  const fitsNow = await page.evaluate(() => { const b = document.getElementById('fam-body'); const t = b.querySelector('table.rec'); return t.getBoundingClientRect().width <= b.parentElement.getBoundingClientRect().width + 2 || Number(localStorage.getItem('polymath-office-famzoom')) === 0.5; });
+  assert.ok(fitsNow, 'after Fit the table fits the page width');
+  await shot(page, '04j-families-zoom-fit');
+  // Long notes and addresses stay two lines.
+  assert.equal(await page.evaluate(() => { const n = document.querySelector('table.rec .addr'); return n ? getComputedStyle(n).webkitLineClamp : '2'; }), '2');
+  await page.click('[data-act="famZoomReset"]');
+  await page.waitForFunction(() => document.getElementById('fam-zoom').innerText === '100%');
+  await page.click('[data-act="famView"][data-k="cards"]');
+  await page.waitForSelector('.fam-grid');
+  // The Master class tile lists exactly the Master class children, the same count and fees as the tile.
+  const catNow = await liveStats();
+  const masterRows = C.categoryStudents(catNow.fams, 'master', { schedule: catNow.sch, period: '2026-11', today: '2026-11-03' });
+  assert.ok(masterRows.length >= 1 && masterRows.some(r => r.name === 'Lim Kai'), 'the sample has Master class children');
+  await page.click('#fam-stats .kpi.cat[data-cat="master"]');
+  await page.waitForSelector('.modal table.cat-list');
+  assert.match(await page.locator('#modal .modal-head h2').innerText(), /Master class/);
+  assert.equal(await page.locator('.modal table.cat-list tbody tr.click').count(), masterRows.length, 'one row per Master class child');
+  const catText = await page.locator('.modal table.cat-list').innerText();
+  assert.ok(catText.includes('Lim Kai') && catText.includes(C.money(masterRows.find(r => r.name === 'Lim Kai').fees)), 'Lim Kai and the Master class fee');
+  await shot(page, '04k-category-master');
+  // CSV of the list.
+  const [catDl] = await Promise.all([page.waitForEvent('download'), page.click('.modal [data-act="catCsv"]')]);
+  const catCsvPath = join(OUT, 'master.csv');
+  await catDl.saveAs(catCsvPath);
+  assert.ok(readFileSync(catCsvPath, 'utf8').startsWith('Student,Level,Primary school,Classes'), 'the category CSV');
+  // A row opens that family; closing it returns to the Families page.
+  await page.locator('.modal table.cat-list tbody tr.click', { hasText: 'Lim Kai' }).click();
+  await page.waitForSelector('.modal .student-card');
+  await page.click('#modal .modal-head [data-act="closeModal"]');
+  await page.waitForFunction(() => !document.getElementById('modal').classList.contains('show'));
+  await settle(page, 300);
+  // Show these families: the Families filter is set to Master class.
+  await page.click('#fam-stats .kpi.cat[data-cat="master"]');
+  await page.waitForSelector('.modal table.cat-list');
+  await page.click('.modal [data-act="catShow"]');
+  await page.waitForSelector('#ff-mode');
+  assert.equal(await page.inputValue('#ff-mode'), 'Master', 'Show these families sets the filter');
+  await page.click('.ffbar [data-act="famFReset"]');
+  await page.click('[data-act="famPanel"]');
+  await page.waitForSelector('#fam-filter-panel', { state: 'detached' });
+  // The Students tile lists everyone.
+  await page.click('#fam-stats .kpi.open-cat[data-k="all"]');
+  await page.waitForSelector('.modal table.cat-list');
+  assert.equal(await page.locator('.modal table.cat-list tbody tr.click').count(), C.familyStats(catNow.fams, { schedule: catNow.sch, period: '2026-11', today: '2026-11-03' }).students);
+  await page.click('#modal .modal-head [data-act="closeModal"]');
+  await settle(page, 300);
+  // Email their families: Announce opens with the Master class filter and only those families ticked. Nothing is sent.
+  await page.click('#fam-stats .kpi.cat[data-cat="master"]');
+  await page.waitForSelector('.modal table.cat-list');
+  const mailsBefore = Object.keys(await store(page)).filter(k => k.startsWith('mail/')).length;
+  await page.click('.modal [data-act="catEmail"]');
+  await page.waitForSelector('.ann-compose');
+  await page.waitForSelector('#af-mode');
+  assert.equal(await page.inputValue('#af-mode'), 'Master', 'Announce carries the Master class filter');
+  const masterFamIds = [...new Set(masterRows.map(r => r.familyId))];
+  const ticked = await page.locator('.ann-row').evaluateAll(rs => rs.filter(r => r.querySelector('input') && r.querySelector('input').checked).map(r => r.dataset.fam));
+  assert.deepEqual(ticked.slice().sort(), masterFamIds.slice().sort(), 'only the Master class families are ticked');
+  await shot(page, '04l-category-email');
+  assert.equal(Object.keys(await store(page)).filter(k => k.startsWith('mail/')).length, mailsBefore, 'nothing was sent');
+  await page.click('[data-act="annTickAll"]');
+  await page.click('[data-act="annFReset"]');
+  await settle(page);
+  await page.click('#tabs [data-view="settings"]');
+
   // ── 📣 Announcements: write, choose with the filters, test to myself, confirm, send, log ──
   await page.click('#tabs [data-view="families"]');
   await page.click('[data-act="famPanel"]');
