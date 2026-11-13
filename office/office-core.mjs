@@ -40,7 +40,7 @@
         payment, last PayNow screenshot the parent sent).
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export const OFFICE_CORE_VERSION = '1.8.0';
+export const OFFICE_CORE_VERSION = '1.9.0';
 
 /* ─────────────────────────── The centre ─────────────────────────── */
 export const SITE = 'https://polymathlc.com.sg';
@@ -98,6 +98,16 @@ export const DAYS = [
 export const LEVELS = ['P3', 'P4', 'P5', 'P6', 'S1'];
 export const SUBJECTS = ['Math', 'Science'];
 export const MODES = ['Physical', 'Online'];
+// How a child takes ONE class (v1.9.0): physical, online, or as a Master class.
+// A child can mix them across classes, so there is no type per child any more.
+// A Master Class slot of the schedule is always taken as a Master class.
+export const CLASS_MODES = ['Physical', 'Online', 'Master'];
+export const CLASS_MODE_META = Object.freeze({
+  Physical: Object.freeze({ key: 'physical', label: 'Physical', long: 'Physical regular', icon: '🏫' }),
+  Online: Object.freeze({ key: 'online', label: 'Online', long: 'Online regular', icon: '💻' }),
+  Master: Object.freeze({ key: 'master', label: 'Master class', long: 'Master class', icon: '⭐' })
+});
+export function classModeLabel(mode) { const m = CLASS_MODE_META[mode]; return m ? m.icon + ' ' + m.label : String(mode || ''); }
 export const STUDENT_STATUSES = ['active', 'paused', 'left'];
 
 export function slotId(dayCode, n) { return dayCode + '-' + n; }
@@ -158,6 +168,8 @@ export function monthlyFeeFor(slot, mode, config) {
   const own = k => (slot ? feeNum(slot[k]) : 0);
   if (isMaster(slot)) return own('fee') || feeNum(cfg.masterMonthlyFee);
   const phys = own('fee') || feeNum(cfg.monthlyFee);
+  // A regular slot taken as a Master class: the schedule's Master Class fee.
+  if (mode === 'Master') return feeNum(cfg.masterMonthlyFee) || phys;
   if ((mode || slotModes(slot)[0]) === 'Online') return own('feeOnline') || feeNum(cfg.monthlyFeeOnline) || phys;
   return phys;
 }
@@ -168,6 +180,16 @@ export function scheduleSlot(schedule, id) {
   return Object.assign({ level: '', subject: '', mode: 'Both', status: 'closed', note: '', type: 'regular', fee: '', feeOnline: '' }, src[id] || {});
 }
 export function slotHasClass(slot) { return !!slot && !!slot.level && !!slot.subject; }
+// The options a child has for one slot: a Master Class slot only as a Master
+// class; a regular slot in the modes it runs, or as a Master class.
+export function slotClassModes(slot) { return isMaster(slot) ? ['Master'] : [...slotModes(slot), 'Master']; }
+// How a child takes a class, as the office reads it.
+export function classMode(cls, schedule) {
+  const c = cls || {};
+  if (!c.custom && c.slotId && isMaster(scheduleSlot(schedule, c.slotId))) return 'Master';
+  return CLASS_MODES.includes(c.mode) ? c.mode : 'Physical';
+}
+export function classModeKey(cls, schedule) { return CLASS_MODE_META[classMode(cls, schedule)].key; }
 export function slotTitle(slot) {
   if (!slotHasClass(slot)) return 'No class';
   return (isMaster(slot) ? 'Master Class · ' : '') + levelLabel(slot.level) + ' ' + slot.subject;
@@ -483,18 +505,21 @@ export function qrFileName(reference) { return 'PayNow-' + cleanRef(reference).r
 
 /* ─────────────────────────── 4. Families, students, invoices ─────────────────────────── */
 export function normalizeStudent(raw) {
-  const s = Object.assign({ id: '', name: '', level: '', school: '', status: 'active', startDate: '', classes: [], monthlyFee: '', notes: '', lessonType: '' }, raw || {});
+  const s = Object.assign({ id: '', name: '', level: '', school: '', status: 'active', startDate: '', classes: [], monthlyFee: '', notes: '' }, raw || {});
   s.name = String(s.name || '').trim();
   s.school = String(s.school || '').trim();
   s.notes = String(s.notes || '');
-  // '' = not chosen yet: the type is then read from the classes (studentLessonType).
-  if (!LESSON_TYPE_KEYS.includes(s.lessonType)) s.lessonType = '';
+  // v1.9.0: no "type of lesson" per child — each class says physical, online
+  // or Master class, and a Master Class slot always reads as a Master class.
+  // An older stored choice is dropped: online / physical had already been set
+  // on the classes, so nothing it said is lost, and billing does not change.
+  delete s.lessonType;
   if (s.startDate && !isDayKey(s.startDate)) s.startDate = parseDateLoose(s.startDate) || '';
   s.level = normalizeLevel(s.level);
   if (!STUDENT_STATUSES.includes(s.status)) s.status = 'active';
   s.classes = (Array.isArray(s.classes) ? s.classes : []).map(c => Object.assign({ slotId: '', mode: 'Physical', rate: '', custom: false, label: '' }, c || {}))
     .filter(c => (c.custom ? (c.label || feeNum(c.rate)) : isValidSlotId(c.slotId)));
-  s.classes.forEach(c => { if (!MODES.includes(c.mode)) c.mode = 'Physical'; });
+  s.classes.forEach(c => { if (!CLASS_MODES.includes(c.mode)) c.mode = 'Physical'; });
   return s;
 }
 export function normalizeFamily(raw) {
@@ -623,11 +648,11 @@ export function buildInvoiceLines(family, schedule) {
       const amount = override || monthlyFeeFor(slot, c.mode, schedule);
       const desc = slotHasClass(slot) ? slotTitle(slot) : 'Class';
       lines.push({
-        studentId: st.id, studentName: st.name, desc, detail: slotShortLabel(c.slotId) + ' · ' + c.mode,
-        amount, slotId: c.slotId, mode: c.mode, kind: 'class', custom: !!override
+        studentId: st.id, studentName: st.name, desc, detail: slotShortLabel(c.slotId) + ' · ' + CLASS_MODE_META[classMode(c, schedule)].label,
+        amount, slotId: c.slotId, mode: classMode(c, schedule), kind: 'class', custom: !!override
       });
       if (!slotHasClass(slot)) issues.push(st.name + ': ' + slotLabel(c.slotId) + ' has no class in the schedule any more.');
-      if (!amount) issues.push(st.name + ': no monthly fee is set for ' + slotTitle(slot) + ' (' + c.mode + ') in the schedule.');
+      if (!amount) issues.push(st.name + ': no monthly fee is set for ' + slotTitle(slot) + ' (' + CLASS_MODE_META[classMode(c, schedule)].label + ') in the schedule.');
     });
   });
   return { lines, issues };
@@ -1802,7 +1827,7 @@ export function studentRows(families, schedule) {
       const classes = st.classes.map(c => {
         if (c.custom) return { slotId: '', title: c.label || 'Lessons', subject: '', level: st.level, mode: c.mode, custom: true, fee: feeNum(c.rate) };
         const slot = scheduleSlot(schedule, c.slotId);
-        return { slotId: c.slotId, title: slotTitle(slot), subject: slot.subject || '', level: slot.level || '', mode: c.mode, when: slotShortLabel(c.slotId), fee: feeNum(c.rate) || monthlyFeeFor(slot, c.mode, schedule) };
+        return { slotId: c.slotId, title: slotTitle(slot), subject: slot.subject || '', level: slot.level || '', mode: classMode(c, schedule), when: slotShortLabel(c.slotId), fee: feeNum(c.rate) || monthlyFeeFor(slot, c.mode, schedule) };
       });
       const famNow = familyStateIn(f, sgMonthKey());
       out.push({
@@ -1826,7 +1851,7 @@ export function slotRoster(families, schedule) {
     r.classes.forEach(c => {
       if (!c.slotId) return;
       const list = map.get(c.slotId) || [];
-      list.push(Object.assign({}, r, { mode: c.mode }));
+      list.push(Object.assign({}, r, { mode: c.mode || 'Physical' }));
       map.set(c.slotId, list);
     });
   });
@@ -1870,15 +1895,20 @@ export function familyStatusLabel(status) { return FAMILY_STATUS_LABEL[status] |
 // any Master Class slot → masterclass; every class online → online regular;
 // otherwise physical regular. No classes at all → '' (not known yet).
 export function derivedLessonType(student, schedule) {
+  const types = studentLessonTypes(student, schedule);
+  if (!types.length) return '';
+  if (types.includes('master')) return 'master';
+  return types.length === 1 ? types[0] : 'physical';
+}
+// Every kind of class a child takes (v1.9.0: a child can mix them).
+export function studentLessonTypes(student, schedule) {
   const cls = ((student && student.classes) || []).filter(c => c && (c.custom || isValidSlotId(c.slotId)));
-  if (!cls.length) return '';
-  if (cls.some(c => !c.custom && isMaster(scheduleSlot(schedule, c.slotId)))) return 'master';
-  if (cls.every(c => c.mode === 'Online')) return 'online';
-  return 'physical';
+  const keys = new Set(cls.map(c => classModeKey(c, schedule)));
+  return LESSON_TYPE_KEYS.filter(k => keys.has(k));
 }
-export function studentLessonType(student, schedule) {
-  return student && LESSON_TYPE_KEYS.includes(student.lessonType) ? student.lessonType : derivedLessonType(student, schedule);
-}
+export function studentHasLessonType(student, type, schedule) { return !type || studentLessonTypes(student, schedule).includes(type); }
+// Kept for older callers: the kinds read from the classes (never a stored choice).
+export function studentLessonType(student, schedule) { return derivedLessonType(student, schedule); }
 // Whether a schedule slot is one a child of this lesson type can be put in.
 export function slotFitsLessonType(slot, type) {
   if (!slotHasClass(slot)) return false;
@@ -1889,8 +1919,9 @@ export function slotFitsLessonType(slot, type) {
 }
 // The mode a class should be taken in: the lesson type's, when the slot runs it.
 export function modeForLessonType(slot, type, current) {
-  const modes = slotModes(slot);
-  const want = type === 'online' ? 'Online' : (type === 'physical' || type === 'master') ? 'Physical' : (current || modes[0]);
+  if (isMaster(slot)) return 'Master';
+  const modes = slotClassModes(slot);
+  const want = type === 'online' ? 'Online' : type === 'physical' ? 'Physical' : type === 'master' ? 'Master' : (current || modes[0]);
   return modes.includes(want) ? want : modes[0];
 }
 // "Tue 7:00pm · Primary 6 Math" — how a slot reads in the picker and the table.
@@ -1945,42 +1976,27 @@ export function toggleStudentSlot(student, id, schedule) {
   if (!slotHasClass(slot)) return s;
   // A blank row left by "Add a class" is filled first, so nothing is left dangling.
   const blank = s.classes.findIndex(c => !c.custom && !c.slotId);
-  const cls = { slotId: id, mode: modeForLessonType(slot, s.lessonType, ''), rate: '', custom: false, label: '' };
+  const cls = { slotId: id, mode: modeForLessonType(slot, '', ''), rate: '', custom: false, label: '' };
   if (blank >= 0) s.classes[blank] = Object.assign(s.classes[blank], cls, { rate: s.classes[blank].rate || '' });
   else s.classes.push(cls);
   return s;
 }
-// Set the type of lesson. Online / physical moves every class the slot allows
-// into that mode; a masterclass is physical. '' goes back to "read from the classes".
+// Put every class of a child into one option at once (physical, online or
+// Master class) where the slot allows it. Nothing is stored on the child.
 export function applyLessonType(student, type, schedule) {
   const s = Object.assign({}, student, { classes: ((student && student.classes) || []).map(c => Object.assign({}, c)) });
-  s.lessonType = LESSON_TYPE_KEYS.includes(type) ? type : '';
-  if (!s.lessonType) return s;
-  const mode = lessonTypeMeta(s.lessonType).mode;
+  delete s.lessonType;
+  if (!LESSON_TYPE_KEYS.includes(type)) return s;
+  const mode = type === 'master' ? 'Master' : lessonTypeMeta(type).mode;
   s.classes.forEach(c => {
     if (c.custom || !c.slotId) { c.mode = mode; return; }
     const slot = scheduleSlot(schedule, c.slotId);
-    if (slotModes(slot).includes(mode)) c.mode = mode;
+    if (slotClassModes(slot).includes(mode)) c.mode = mode;
   });
   return s;
 }
-// What does not add up between the type of lesson and the slots chosen.
-export function lessonTypeIssues(student, schedule) {
-  const type = student && LESSON_TYPE_KEYS.includes(student.lessonType) ? student.lessonType : '';
-  const out = [];
-  if (!type) return out;
-  ((student && student.classes) || []).forEach(c => {
-    if (!c || c.custom || !isValidSlotId(c.slotId)) return;
-    const slot = scheduleSlot(schedule, c.slotId);
-    if (!slotHasClass(slot)) return;   // buildInvoiceLines already says so
-    const when = slotShortLabel(c.slotId);
-    if (type === 'master' && !isMaster(slot)) out.push(when + ' is a regular class, but the type of lesson is Masterclass.');
-    else if (type !== 'master' && isMaster(slot)) out.push(when + ' is a Master Class, but the type of lesson is ' + lessonTypeLabel(type) + '.');
-    else if (type === 'online' && c.mode !== 'Online') out.push(when + (slotModes(slot).includes('Online') ? ' is set to physical' : ' runs physical only') + ', but the type of lesson is Online regular.');
-    else if (type === 'physical' && c.mode !== 'Physical') out.push(when + (slotModes(slot).includes('Physical') ? ' is set to online' : ' runs online only') + ', but the type of lesson is Physical regular.');
-  });
-  return out;
-}
+// Older callers: with no type stored on a child there is nothing to disagree with.
+export function lessonTypeIssues() { return []; }
 
 /* ── The family's email: its account ID ──
    One email per family, whatever number of children. A second family may not
@@ -2206,7 +2222,8 @@ export function familyRecordRows(families, ctx) {
     const rec = familyPaymentRecord(f, c.invoices || [], c.payments || [], { today: c.today, months: c.months });
     const kids = f.students.filter(s => s.name && (c.includeLeft || s.status !== 'left'));
     (kids.length ? kids : [null]).forEach(st => {
-      const type = st ? studentLessonType(st, c.schedule) : '';
+      const types = st ? studentLessonTypes(st, c.schedule) : [];
+      const type = types.length === 1 ? types[0] : '';
       const slots = st ? studentSlotIds(st) : [];
       out.push({
         familyId: f.id, studentId: st ? st.id : '', code: f.code,
@@ -2216,8 +2233,8 @@ export function familyRecordRows(families, ctx) {
         studentName: st ? st.name : '', parentName: f.parentName, whatsapp: f.whatsapp,
         school: st ? st.school : '', level: st ? st.level : '',
         since: (st && st.startDate) || f.signUpDate || '',
-        lessonType: type, lessonTypeLabel: lessonTypeLabel(type), lessonTypeChosen: !!(st && st.lessonType),
-        slots: slots.map(id => ({ id, label: slotChoiceLabel(c.schedule, id), subject: scheduleSlot(c.schedule, id).subject || '', master: isMaster(scheduleSlot(c.schedule, id)), mode: ((st.classes || []).find(x => x.slotId === id) || {}).mode || '' })),
+        lessonType: type, lessonTypes: types, lessonTypeLabel: types.map(lessonTypeLabel).join(' + '),
+        slots: slots.map(id => { const cl = (st.classes || []).find(x => x.slotId === id) || {}; const md = classMode(cl, c.schedule); return { id, label: slotChoiceLabel(c.schedule, id), subject: scheduleSlot(c.schedule, id).subject || '', master: md === 'Master', mode: md, modeLabel: CLASS_MODE_META[md].label }; }),
         otherClasses: st ? st.classes.filter(x => x.custom).map(x => x.label || 'Other arrangement') : [],
         paidPeriods: rec.paidPeriods, paidText: rec.paidText, months: rec.months,
         thisMonthPaid: rec.thisMonthPaid,
@@ -2235,13 +2252,13 @@ export function familyRecordRows(families, ctx) {
 }
 export const FAMILY_RECORD_HEADERS = Object.freeze([
   'Status', 'Email (account ID)', 'Student name', 'Parent name', 'WhatsApp', 'Primary school', 'Level', 'With us since',
-  'Type of lesson', 'Slots', 'Payment type', 'Package start', 'Package end', 'Months paid', 'Last payment', 'Last payment amount', 'Last screenshot',
+  'Slots (physical / online / master class)', 'Payment type', 'Package start', 'Package end', 'Months paid', 'Last payment', 'Last payment amount', 'Last screenshot',
   'Hardcopy subscription', 'Postal address', 'Withdrawal', 'Last month with us', 'Paused from', 'Paused until', 'Reference', 'Notes'
 ]);
 export function familyRecordCsv(rows) {
   return toCsv([FAMILY_RECORD_HEADERS.slice(), ...(rows || []).map(r => [
     r.statusLabel, r.email, r.studentName, r.parentName, displayPhone(r.whatsapp), r.school, levelLabel(r.level), r.since,
-    r.lessonTypeLabel, [...r.slots.map(s => s.label + (s.mode ? ' (' + s.mode + ')' : '')), ...r.otherClasses].join('; '),
+    [...r.slots.map(s => s.label + ' (' + s.modeLabel + ')'), ...r.otherClasses].join('; '),
     r.paymentTypeLabel, r.paymentType === 'package' ? r.packageStart : '', r.paymentType === 'package' ? r.packageEnd : '', r.paidText,
     r.lastPayment ? r.lastPayment.date : '', r.lastPayment && r.lastPayment.amount ? moneyPlain(r.lastPayment.amount) : '',
     r.lastScreenshot ? r.lastScreenshot.date : '',
@@ -2390,11 +2407,11 @@ export function studentMatchesFilters(st, F, schedule) {
   if (!st || st.status === 'left') return false;
   if (f.level && normalizeLevel(st.level) !== f.level) return false;
   if (f.school && normText(st.school) !== normText(f.school)) return false;
-  if (f.lessonType && studentLessonType(st, schedule) !== f.lessonType) return false;
+  if (f.lessonType && !studentHasLessonType(st, f.lessonType, schedule)) return false;
   const cls = (st.classes || []).filter(c => c && (c.custom || isValidSlotId(c.slotId)));
   if (f.slot && !cls.some(c => !c.custom && c.slotId === f.slot)) return false;
   if (f.day && !cls.some(c => !c.custom && String(c.slotId).split('-')[0] === f.day)) return false;
-  if (f.mode && !cls.some(c => c.mode === f.mode)) return false;
+  if (f.mode && !cls.some(c => classMode(c, schedule) === f.mode)) return false;
   if (f.subject && !cls.some(c => !c.custom && subjectKey(scheduleSlot(schedule, c.slotId).subject) === subjectKey(f.subject))) return false;
   return true;
 }
@@ -2462,14 +2479,14 @@ export function classCategories(cls, schedule) {
   if (c.custom || (!c.slotId && c.label)) {
     const text = String(c.label || c.desc || '');
     const subject = /sci/i.test(text) ? 'science' : (/math/i.test(text) ? 'math' : '');
-    const type = /master/i.test(text) ? 'master' : (c.mode === 'Online' ? 'online' : 'physical');
+    const type = /master/i.test(text) || c.mode === 'Master' ? 'master' : (c.mode === 'Online' ? 'online' : 'physical');
     return { subject, type };
   }
   const slot = scheduleSlot(schedule, c.slotId);
   const sk = subjectKey(slot.subject);
   return {
     subject: sk === 'math' || sk === 'science' ? sk : '',
-    type: isMaster(slot) ? 'master' : (c.mode === 'Online' ? 'online' : 'physical')
+    type: classModeKey(c, schedule)
   };
 }
 // The child's classes that the statistics read (valid slots and custom classes).
@@ -2698,14 +2715,14 @@ export function announceAudience(families, sel, ctx) {
     // go counts as active; a pause that has not started yet too.
     const want = s.status === 'inactive' ? 'withdrawn' : s.status;
     if (want !== 'all' && familyStateIn(f, c.today ? String(c.today).slice(0, 7) : sgMonthKey()) !== want) return;
-    if (s.type && !(f.students || []).some(st => st.status !== 'left' && studentLessonType(st, c.schedule) === s.type)) return;
+    if (s.type && !(f.students || []).some(st => st.status !== 'left' && studentHasLessonType(st, s.type, c.schedule))) return;
     if (!familyMatchesFilters(f, F, { schedule: c.schedule, invoices: c.invoices, payments: c.payments, today: c.today, record: c.record ? c.record(f) : undefined })) return;
     if (words.length) {
       const hay = normText([f.parentName, f.email, f.email2, f.code, ...(f.students || []).map(st => st.name + ' ' + st.school)].join(' '));
       if (!words.every(w => hay.includes(w))) return;
     }
     const childOk = (hasChildFilters(F) || s.type)
-      ? st => (!s.type || studentLessonType(st, c.schedule) === s.type) && (!hasChildFilters(F) || studentMatchesFilters(st, F, c.schedule))
+      ? st => studentHasLessonType(st, s.type, c.schedule) && (!hasChildFilters(F) || studentMatchesFilters(st, F, c.schedule))
       : null;
     const emails = familyEmails(f);
     const ticked = !excluded.has(f.id);
@@ -2738,7 +2755,7 @@ export function audienceSummary(sel, schedule) {
   if (s.type) parts.push(lessonTypeLabel(s.type));
   if (F.level) parts.push(levelLabel(F.level));
   if (F.subject) parts.push(F.subject);
-  if (F.mode) parts.push(F.mode);
+  if (F.mode) parts.push(CLASS_MODE_META[F.mode] ? CLASS_MODE_META[F.mode].label : F.mode);
   if (F.day) parts.push((DAYS.find(d => d.code === F.day) || { name: F.day }).name);
   if (F.slot) parts.push(slotChoiceLabel(schedule || {}, F.slot));
   if (F.school) parts.push(F.school);
