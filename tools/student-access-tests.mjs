@@ -414,3 +414,9 @@ test('an Office block still on its older admin list is not re-tested here (its o
   assert.ok(accessPreservedTests(live).some(c => c.request.path.includes('officeFamilies')));
   assert.equal(addStudentAccessRules(olderOffice).replace(ACCESS_RULE, '').replace(PREDICATE + ';', ';'), olderOffice);
 });
+
+test('regression: the protection probe reads a document id Firestore accepts (__x__ ids are reserved → HTTP 400)', () => {
+  const ids = [...GATE_SOURCE.matchAll(/docUrl\('studentAccess\/([^'"]+)'\)/g)].map(m => m[1]);
+  assert.deepEqual(ids, ['protection-probe']);
+  assert.ok(!/__\w+__/.test(ids[0]));
+});

@@ -94,6 +94,7 @@ function firestoreAnswer(request) {
   const who = byUid[auth] || null;
   const isAdmin = !!(who && who.emailVerified && ADMINS.includes(who.email));
   const [collection, id] = rest.split('/');
+  if (id && /^__.*__$/.test(id)) return json(400, { error: { status: 'INVALID_ARGUMENT', message: 'Resource id is reserved' } });   // like real Firestore
   if (collection === 'studentAccess') {
     if (!db.protectedRules) {   // the open catch-all: anybody reads anything
       return db.studentAccess.has(id) ? json(200, { fields: encode(db.studentAccess.get(id)).mapValue.fields }) : json(404, { error: { status: 'NOT_FOUND' } });
