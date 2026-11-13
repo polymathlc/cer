@@ -545,6 +545,15 @@
   .tl-group-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-tertiary); margin-right: 2px; }
   .btn-video { background: #1A1A1A; color: #fff; border-color: #1A1A1A; }
   .btn-video:hover { background: #333; color: #fff; }
+  /* 🎬 v1.7.0: the recorded lessons beside each worksheet, by the day of the class. Each opens Ans Key's video page
+     (the same page as the printed QR code) at that day. */
+  .tl-days { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: var(--space-sm); }
+  .tl-day { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 8px; border: 1px solid var(--border-subtle); border-radius: 999px; background: #fff; color: inherit; font: inherit; cursor: pointer; text-align: left; }
+  .tl-day:hover { border-color: var(--text-tertiary); }
+  .tl-day:focus-visible { outline: 2px solid #F2B705; outline-offset: 2px; }
+  .tl-day-play { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: #1A1A1A; color: #fff; font-size: 10px; flex: none; }
+  .tl-day b { display: block; font-size: var(--font-size-xs); line-height: 1.25; }
+  .tl-day small { display: block; font-size: 0.7rem; color: var(--text-tertiary); line-height: 1.25; }
   .rec-list { display: flex; flex-direction: column; gap: 8px; }
   .rec-row { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 12px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle); background: #fff; cursor: pointer; font: inherit; color: inherit; transition: box-shadow 0.25s ease, transform 0.25s ease; }
   .rec-row:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
@@ -708,8 +717,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
-<script src="portal-core.js?v=1.6.0"></script>
-<script src="portal.js?v=1.6.0"></script>
+<script src="portal-core.js?v=1.7.0"></script>
+<script src="portal.js?v=1.7.0"></script>
 <script defer src="pwa-install.js?v=2.0.0" data-app-name="Polymath Worksheets" data-app-key="online" data-app-icon="assets/app-icons/icon-192.png" data-accent="#00695C" data-sw="sw.js" data-floating="auto"></script>
 <!-- 🔐 Polymath student access (v1.0.0): the enrolment pop-up every Polymath app shares. A signed-in student is
      blocked here until an admin approves them at polymathlc.com.sg/student/#admin. Source: polymathlc/cer student/access-gate.js -->
