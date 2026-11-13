@@ -40,7 +40,7 @@
         payment, last PayNow screenshot the parent sent).
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export const OFFICE_CORE_VERSION = '1.2.0';
+export const OFFICE_CORE_VERSION = '1.3.0';
 
 /* ─────────────────────────── The centre ─────────────────────────── */
 export const SITE = 'https://polymathlc.com.sg';
@@ -501,7 +501,8 @@ export function normalizeFamily(raw) {
   const f = Object.assign({
     id: '', code: '', parentName: '', email: '', email2: '', whatsapp: '', address: '', signUpDate: '', notes: '',
     status: 'active', payerNames: [], credit: 0, discount: null, students: [], preferWhatsapp: false,
-    paidMonths: [], screenshots: []
+    paidMonths: [], screenshots: [],
+    hardcopy: false, paymentType: 'monthly', packageStart: '', packageEnd: '', withdrawn: false, lastMonth: ''
   }, raw || {});
   f.parentName = String(f.parentName || '').trim();
   f.email = cleanEmail(f.email);
@@ -514,11 +515,29 @@ export function normalizeFamily(raw) {
   if (f.discount && !(feeNum(f.discount.value) > 0)) f.discount = null;
   f.paidMonths = normalizePaidMonths(f.paidMonths);
   f.screenshots = normalizeScreenshots(f.screenshots);
+  // Hardcopy subscription (posted to `address`), how the family pays, and withdrawal.
+  f.hardcopy = f.hardcopy === true || f.hardcopy === 'yes';
+  f.address = String(f.address || '').trim();
+  f.paymentType = PAYMENT_TYPE_KEYS.includes(f.paymentType) ? f.paymentType : 'monthly';
+  f.packageStart = isDayKey(f.packageStart) ? f.packageStart : (parseDateLoose(f.packageStart) || '');
+  f.packageEnd = isDayKey(f.packageEnd) ? f.packageEnd : (parseDateLoose(f.packageEnd) || '');
+  f.withdrawn = f.withdrawn === true || f.withdrawn === 'yes';
+  f.lastMonth = isPeriod(f.lastMonth) ? f.lastMonth : (isDayKey(f.lastMonth) ? f.lastMonth.slice(0, 7) : '');
   return f;
 }
 export function familyEmails(f) { return [f.email, f.email2].filter(isEmail).filter((e, i, a) => a.indexOf(e) === i); }
 export function activeStudents(f) { return (f.students || []).filter(s => s.status === 'active'); }
-export function familyIsBillable(f) { return f.status === 'active' && activeStudents(f).length > 0; }
+// Billable at all; and, given a month, billable for THAT month: not after the
+// last month of a family that has withdrawn, and not inside a paid package.
+export function familyIsBillable(f, period) {
+  if (!(f && f.status === 'active' && activeStudents(f).length > 0)) return false;
+  if (isPeriod(period)) {
+    const n = normalizeFamily(f);
+    if (n.withdrawn && n.lastMonth && period > n.lastMonth) return false;
+    if (packageCovers(n, period)) return false;
+  }
+  return true;
+}
 export function familyDisplayName(f) {
   // Full names: in Chinese and Malay names the first word is not the given name.
   const kids = activeStudents(f).map(s => s.name).filter(Boolean);
@@ -1933,6 +1952,7 @@ export function familyRecordProblems(family, families) {
   const f = normalizeFamily(family);
   const out = [];
   if (!f.parentName) out.push({ level: 'block', field: 'parentName', text: 'Type the parent\'s name.' });
+  out.push(...extraFieldProblems(f));
   if (f.email && !isEmail(f.email)) out.push({ level: 'block', field: 'email', text: 'The email address does not look right.' });
   if (f.email2 && !isEmail(f.email2)) out.push({ level: 'block', field: 'email2', text: 'The second email does not look right.' });
   [f.email, f.email2].filter(isEmail).forEach(e => {
@@ -1957,6 +1977,8 @@ export function familyRecordProblems(family, families) {
    marked paid by hand. Screenshots are the PayNow screenshots parents send on
    WhatsApp, logged with the day they came in. */
 export const SCREENSHOT_LIMIT = 120;
+// The payment record starts here: nothing before September 2026 is listed.
+export const RECORD_START = '2026-09';
 export function normalizePaidMonths(list) {
   const seen = new Map();
   (Array.isArray(list) ? list : []).forEach(x => {
@@ -1999,6 +2021,8 @@ export function togglePaidMonth(family, period, entry) {
 export const MONTH_STATE_META = Object.freeze({
   paid: { label: 'Paid', tone: 'green', icon: '✅' },
   hand: { label: 'Paid (marked by hand)', tone: 'green', icon: '✔︎' },
+  package: { label: 'Covered by the package', tone: 'green', icon: '📦' },
+  gone: { label: 'After the last month (withdrawn)', tone: 'grey', icon: '👋' },
   part: { label: 'Part paid', tone: 'amber', icon: '◐' },
   waiting: { label: 'Waiting for payment', tone: 'amber', icon: '⏳' },
   overdue: { label: 'Overdue', tone: 'red', icon: '⚠️' },
@@ -2036,6 +2060,8 @@ export function familyPaymentRecord(family, invoices, payments, opts) {
       return { key: ['part', 'waiting', 'overdue', 'draft'].includes(st) ? st : 'draft', inv, hand: null };
     }
     if (h) return { key: 'hand', inv: null, hand: h };
+    if (packageCovers(f, period)) return { key: 'package', inv: null, hand: null };
+    if (f.withdrawn && f.lastMonth && period > f.lastMonth) return { key: 'gone', inv: null, hand: null };
     return { key: 'none', inv: null, hand: null };
   };
   // The window: the last `span` months up to this one, stretched forward to any
@@ -2044,7 +2070,10 @@ export function familyPaymentRecord(family, invoices, payments, opts) {
   let end = thisMonth;
   [...monthly.keys(), ...hand.keys()].forEach(p => { if (p > end) end = p; });
   const months = [];
-  for (let p = addMonths(thisMonth, -(span - 1)); p <= end; p = addMonths(p, 1)) {
+  const from = isPeriod(o.from) ? o.from : RECORD_START;
+  let first = addMonths(thisMonth, -(span - 1));
+  if (first < from) first = from;
+  for (let p = first; p <= end; p = addMonths(p, 1)) {
     const s = stateFor(p);
     const meta = MONTH_STATE_META[s.key];
     months.push({
@@ -2055,7 +2084,9 @@ export function familyPaymentRecord(family, invoices, payments, opts) {
       current: p === thisMonth
     });
   }
-  const paidPeriods = [...new Set([...monthly.keys(), ...hand.keys()])].filter(p => ['paid', 'hand'].includes(stateFor(p).key)).sort();
+  const fromDay = from + '-01';
+  const paidPeriods = [...new Set([...monthly.keys(), ...hand.keys(), ...months.filter(m => m.key === 'package').map(m => m.period)])]
+    .filter(p => p >= from && ['paid', 'hand', 'package'].includes(stateFor(p).key)).sort();
   // Every payment we know of, newest first.
   const seen = new Set();
   const all = [];
@@ -2075,6 +2106,8 @@ export function familyPaymentRecord(family, invoices, payments, opts) {
     all.push({ date: p.date, amount: round2(p.amount), how: p.how || p.method || '', paymentId: p.id || '', at: 0, period: '', source: 'payment' });
   });
   f.paidMonths.filter(p => p.date).forEach(p => all.push({ date: p.date, amount: feeNum(p.amount) || 0, how: 'hand', paymentId: '', at: 0, period: p.period, source: 'hand' }));
+  // Nothing before the record starts.
+  for (let i = all.length - 1; i >= 0; i--) if (all[i].date < fromDay) all.splice(i, 1);
   all.sort((a, b) => b.date.localeCompare(a.date) || b.at - a.at);
   // One payment spread over several invoices is still one payment.
   const merged = [];
@@ -2129,7 +2162,10 @@ export function familyRecordRows(families, ctx) {
         thisMonthPaid: rec.thisMonthPaid,
         lastPayment: rec.lastPayment, lastScreenshot: rec.lastScreenshot,
         screenshotDaysAgo: rec.screenshotDaysAgo, paymentDaysAgo: rec.paymentDaysAgo,
-        notes: [f.notes, st && st.notes].map(x => String(x || '').trim()).filter(Boolean).join(' · ')
+        notes: [f.notes, st && st.notes].map(x => String(x || '').trim()).filter(Boolean).join(' · '),
+        hardcopy: f.hardcopy, address: f.address,
+        paymentType: f.paymentType, paymentTypeLabel: paymentTypeLabel(f.paymentType), packageStart: f.packageStart, packageEnd: f.packageEnd,
+        withdrawn: f.withdrawn, lastMonth: f.lastMonth
       });
     });
   });
@@ -2137,13 +2173,59 @@ export function familyRecordRows(families, ctx) {
 }
 export const FAMILY_RECORD_HEADERS = Object.freeze([
   'Status', 'Email (account ID)', 'Student name', 'Parent name', 'WhatsApp', 'Primary school', 'Level', 'With us since',
-  'Type of lesson', 'Slots', 'Months paid', 'Last payment', 'Last payment amount', 'Last screenshot', 'Reference', 'Notes'
+  'Type of lesson', 'Slots', 'Payment type', 'Package start', 'Package end', 'Months paid', 'Last payment', 'Last payment amount', 'Last screenshot',
+  'Hardcopy subscription', 'Postal address', 'Withdrawal', 'Last month with us', 'Reference', 'Notes'
 ]);
 export function familyRecordCsv(rows) {
   return toCsv([FAMILY_RECORD_HEADERS.slice(), ...(rows || []).map(r => [
     r.statusLabel, r.email, r.studentName, r.parentName, displayPhone(r.whatsapp), r.school, levelLabel(r.level), r.since,
-    r.lessonTypeLabel, [...r.slots.map(s => s.label + (s.mode ? ' (' + s.mode + ')' : '')), ...r.otherClasses].join('; '), r.paidText,
+    r.lessonTypeLabel, [...r.slots.map(s => s.label + (s.mode ? ' (' + s.mode + ')' : '')), ...r.otherClasses].join('; '),
+    r.paymentTypeLabel, r.paymentType === 'package' ? r.packageStart : '', r.paymentType === 'package' ? r.packageEnd : '', r.paidText,
     r.lastPayment ? r.lastPayment.date : '', r.lastPayment && r.lastPayment.amount ? moneyPlain(r.lastPayment.amount) : '',
-    r.lastScreenshot ? r.lastScreenshot.date : '', r.code ? familyReference(r.code) : '', r.notes
+    r.lastScreenshot ? r.lastScreenshot.date : '',
+    r.hardcopy ? 'Yes' : 'No', r.hardcopy ? r.address : '', r.withdrawn ? 'Yes' : 'No', r.withdrawn && r.lastMonth ? periodLabel(r.lastMonth) : '',
+    r.code ? familyReference(r.code) : '', r.notes
   ])]);
+}
+
+/* ── Hardcopy, payment type, withdrawal ──
+   Hardcopy subscription: yes / no; yes needs a postal address (the family's
+   `address`). Payment type: monthly payment, or a package with a start and an
+   end date — the months a package covers are not invoiced monthly and count
+   as paid. Withdrawal: yes / no; yes needs the last month with the centre,
+   and nothing after it is invoiced. */
+export const PAYMENT_TYPES = Object.freeze([
+  Object.freeze({ key: 'monthly', label: 'Monthly payment' }),
+  Object.freeze({ key: 'package', label: 'Package' })
+]);
+export const PAYMENT_TYPE_KEYS = Object.freeze(PAYMENT_TYPES.map(t => t.key));
+export function paymentTypeLabel(key) { const t = PAYMENT_TYPES.find(x => x.key === key); return t ? t.label : 'Monthly payment'; }
+// Whether a month falls inside the family's package (any day of it).
+export function packageCovers(f, period) {
+  if (!f || f.paymentType !== 'package' || !isPeriod(period)) return false;
+  const start = isDayKey(f.packageStart) ? f.packageStart.slice(0, 7) : '';
+  const end = isDayKey(f.packageEnd) ? f.packageEnd.slice(0, 7) : '';
+  if (!start || !end) return false;
+  return period >= start && period <= end;
+}
+export function packageText(f) {
+  if (!f || f.paymentType !== 'package') return '';
+  if (!f.packageStart && !f.packageEnd) return 'Package (dates not set)';
+  return 'Package ' + (f.packageStart ? prettyDate(f.packageStart) : '?') + ' – ' + (f.packageEnd ? prettyDate(f.packageEnd) : '?');
+}
+export function withdrawalText(f) {
+  if (!f || !f.withdrawn) return '';
+  return 'Withdrawn' + (f.lastMonth ? ' · last month ' + periodLabel(f.lastMonth) : '');
+}
+// What these fields still need before the family can be saved.
+export function extraFieldProblems(family) {
+  const f = normalizeFamily(family);
+  const out = [];
+  if (f.hardcopy && !f.address) out.push({ level: 'block', field: 'address', text: 'Hardcopy subscription is Yes: type the postal address.' });
+  if (f.paymentType === 'package') {
+    if (!f.packageStart || !f.packageEnd) out.push({ level: 'block', field: 'package', text: 'Package: fill in the start date and the end date.' });
+    else if (f.packageEnd < f.packageStart) out.push({ level: 'block', field: 'package', text: 'Package: the end date is before the start date.' });
+  }
+  if (f.withdrawn && !f.lastMonth) out.push({ level: 'block', field: 'withdrawal', text: 'Withdrawal is Yes: choose the last month with us.' });
+  return out;
 }
