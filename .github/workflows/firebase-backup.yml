@@ -1,0 +1,86 @@
+name: Polymath daily backup
+
+# Every night at about 12 AM Singapore time (16:03 UTC) — tools/firebase-backup.mjs.
+# Reads all the Firestore data of mathgen--app plus the sign-in accounts and
+# emails two backups to admin@polymathlc.com.sg and chungzhikai@gmail.com from
+# admin@polymathlc.com.sg: "office & bookings" (business records, JSON + CSV)
+# and "full data" (everything else). Restore with tools/firebase-restore.mjs.
+#
+# GitHub may start scheduled runs a few minutes late. If an email is not
+# confirmed delivered the run fails, and GitHub emails the repository owner.
+#
+# Run workflow by hand to send a backup now; tick "dry run" to only build it
+# and report the sizes. Needs the FIREBASE_SERVICE_ACCOUNT repository secret
+# (the same key the office autopilot uses). This repository is public: the
+# backup is never uploaded as an artifact and the logs show only collection
+# names, counts and sizes.
+
+on:
+  schedule:
+    - cron: '3 16 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run — build the backup and report sizes, send nothing'
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - 'tools/firebase-backup*.mjs'
+      - 'tools/firebase-restore.mjs'
+      - '.github/workflows/firebase-backup.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: polymath-daily-backup
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check the backup code
+        run: node --test tools/firebase-backup-tests.mjs
+
+  backup:
+    needs: test
+    if: github.repository == 'polymathlc/cer' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install the Admin SDK
+        run: npm install --prefix "$RUNNER_TEMP/backup-deps" --no-save --no-audit --no-fund firebase-admin@12
+
+      - name: Prepare the service-account key
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node tools/office-rules.mjs --setup
+
+      - name: Back up and email
+        env:
+          BACKUP_DEPS: ${{ runner.temp }}/backup-deps
+          NODE_OPTIONS: --max-old-space-size=6144
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then node tools/firebase-backup.mjs --dry-run; else node tools/firebase-backup.mjs; fi
+
+      - name: Remove the key from the runner
+        if: always()
+        run: rm -f "$RUNNER_TEMP/firebase-sa.json"
