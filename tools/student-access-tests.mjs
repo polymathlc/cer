@@ -405,3 +405,12 @@ test('every student page here loads the gate, once, at the end of the page', () 
     assert.ok(/^\s*<\/(body|head)>/.test(page.slice(at + tags[0].length)), file + ': right before </body> (or </head>)');
   }
 });
+
+test('an Office block still on its older admin list is not re-tested here (its own workflow upgrades it)', async () => {
+  const { officeRuleFor, OFFICE_RULE, OFFICE_PREVIOUS_ADMINS } = await import('./office-rules.mjs');
+  const olderOffice = live.replace(OFFICE_RULE, () => officeRuleFor(OFFICE_PREVIOUS_ADMINS[0]));
+  assert.notEqual(olderOffice, live);
+  assert.ok(!accessPreservedTests(olderOffice).some(c => c.request.path.includes('officeFamilies')));
+  assert.ok(accessPreservedTests(live).some(c => c.request.path.includes('officeFamilies')));
+  assert.equal(addStudentAccessRules(olderOffice).replace(ACCESS_RULE, '').replace(PREDICATE + ';', ';'), olderOffice);
+});
