@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = 'v1.8.0';
+  var APP_VERSION = 'v1.9.0';
   var Core = window.PolymathOnlineCore;
 
   // Who runs the portal. Anyone else signs in as a student or a parent.
@@ -671,7 +671,11 @@
         '<div><div class="class-title">' + h(Core.courseTitle(course)) + '</div>' +
           '<div class="class-meta">' + levelChip(course.level) + subjectChip(course.subject) + dayChip(course) + '</div>' +
           '<div class="class-summary">' + h(summary) + '</div></div>' +
-        '<div class="class-cta">' + (cur >= 0 ? '<a class="btn btn-sm" href="' + h(answerKeyUrl(ids[cur])) + '" target="_blank" rel="noopener" data-tooltip="Open this lesson\'s worksheet in the Ans Key app">This lesson\'s answer key</a>' : '') + '</div>' +
+        '<div class="class-cta">' + (function () {
+          // 📄 The newest answer key PDF Ans Key filed for this lesson's worksheet.
+          var k = cur >= 0 ? Core.answerKeysOf(state.docs[ids[cur]])[0] : null;
+          return k ? '<a class="btn btn-sm" href="' + h(k.url) + '" target="_blank" rel="noopener" data-tooltip="The answer key after the ' + h(k.label) + ' lesson, as a PDF">This lesson\'s answer key</a>' : '';
+        })() + '</div>' +
       '</div>';
     if (next.length) {
       html += '<section class="up-next" aria-label="The next two worksheets">' +
@@ -726,17 +730,40 @@
       var videoBtn = videoCount
         ? '<button class="btn btn-sm btn-video" type="button" data-action="video" data-id="' + h(it.id) + '" data-tooltip="' + (page ? 'Every video for this worksheet, by lesson day' : 'Watch the lesson recorded in Ans Key') + '">▶ ' + (videoCount === 1 ? 'Video' : videoCount + ' videos') + '</button>'
         : '';
-      var daysRow = it.days.length
-        ? '<div class="tl-days" role="group" aria-label="Lesson videos by the day of the class">' +
-            '<span class="tl-group-label">Lesson videos</span>' +
-            it.days.map(function (d) {
-              return '<button class="tl-day" type="button" data-action="video-day" data-id="' + h(it.id) + '" data-day="' + h(d.key) + '"' +
-                ' data-tooltip="Play the ' + h(d.label) + ' lesson">' +
-                '<span class="tl-day-play" aria-hidden="true">▶</span><span><b>' + h(d.label) + '</b>' +
-                '<small>' + d.count + (d.count === 1 ? ' recording' : ' recordings') + (d.seconds ? ' · ' + h(Core.formatDuration(d.seconds)) : '') + '</small></span></button>';
-            }).join('') +
+      // 📅 Every class day, newest first: that day's lesson videos beside the
+      // answer key exactly as it stood after that lesson (a PDF Ans Key filed
+      // with the video QR code on it). The newest three show; older days fold.
+      var dayRow = function (d, i) {
+        var v = d.video, k = d.answerKey;
+        return '<li class="tl-cday' + (i === 0 ? ' is-latest' : '') + '">' +
+          '<span class="tl-cday-date"><b>' + h(d.label) + '</b>' + (i === 0 ? '<span class="tl-cday-new">Latest</span>' : '') + '</span>' +
+          '<span class="tl-cday-acts">' +
+            (v ? '<button class="tl-day" type="button" data-action="video-day" data-id="' + h(it.id) + '" data-day="' + h(d.key) + '" data-tooltip="Play the ' + h(d.label) + ' lesson">' +
+                '<span class="tl-day-play" aria-hidden="true">▶</span><span><b>' + (v.count === 1 ? 'Video' : v.count + ' videos') + '</b>' +
+                (v.seconds ? '<small>' + h(Core.formatDuration(v.seconds)) + '</small>' : '') + '</span></button>'
+              : '<span class="tl-cday-none">No video</span>') +
+            (k ? '<a class="tl-key" href="' + h(k.url) + '" target="_blank" rel="noopener" data-tooltip="The answer key after the ' + h(d.label) + ' lesson, with the QR code to its videos">' +
+                '<span class="tl-key-icon" aria-hidden="true">📄</span><span><b>Answer key</b><small>PDF' + (k.pages ? ' · ' + k.pages + (k.pages === 1 ? ' page' : ' pages') : '') + '</small></span></a>'
+              : '<span class="tl-cday-none">Answer key after the lesson</span>') +
+          '</span></li>';
+      };
+      var cdays = it.classDays || [];
+      var daysRow = cdays.length
+        ? '<div class="tl-cdays" role="group" aria-label="Lesson videos and answer keys by the day of the class">' +
+            '<span class="tl-group-label">By class day</span>' +
+            '<ol class="tl-cday-list">' + cdays.slice(0, 3).map(dayRow).join('') + '</ol>' +
+            (cdays.length > 3
+              ? '<details class="tl-cday-more"><summary>' + (cdays.length - 3) + ' earlier ' + (cdays.length - 3 === 1 ? 'day' : 'days') + '</summary>' +
+                  '<ol class="tl-cday-list">' + cdays.slice(3).map(function (d, j) { return dayRow(d, j + 3); }).join('') + '</ol></details>'
+              : '') +
           '</div>'
         : '';
+      // The answer key button opens the newest filed PDF — never the Ans Key app.
+      var latestKey = (it.answerKeys || [])[0] || null;
+      var keyGroup = latestKey
+        ? '<span class="tl-group"><span class="tl-group-label">Answer key</span>' +
+            '<a class="btn btn-sm btn-primary" href="' + h(latestKey.url) + '" target="_blank" rel="noopener" data-tooltip="The newest answer key (' + h(latestKey.label) + '), as a PDF with the QR code to every video">View · ' + h(latestKey.label) + '</a></span>'
+        : '<span class="tl-group"><span class="tl-group-label">Answer key</span><span class="tl-muted tl-key-wait">Appears after the lesson</span></span>';
       html += '<li class="tl-item ' + cls + '"' + (it.state === 'current' ? ' aria-current="step"' : '') + '>' +
         '<div class="tl-rail" aria-hidden="true"><span class="tl-node">' + (it.seq + 1) + '</span></div>' +
         '<div class="tl-card">' +
@@ -751,9 +778,7 @@
             '<span class="tl-group"><span class="tl-group-label">Worksheet</span>' +
               '<button class="btn btn-sm btn-ghost" type="button" data-action="view" data-id="' + h(it.id) + '">View</button>' +
               '<button class="btn btn-sm btn-ghost" type="button" data-action="print" data-id="' + h(it.id) + '">Print</button></span>' +
-            '<span class="tl-group"><span class="tl-group-label">Answer key</span>' +
-              '<button class="btn btn-sm btn-primary" type="button" data-action="answer-key" data-id="' + h(it.id) + '">View</button>' +
-              '<button class="btn btn-sm" type="button" data-action="print-key" data-id="' + h(it.id) + '">Print</button></span>' +
+            keyGroup +
           '</div>' +
         '</div></li>';
     });

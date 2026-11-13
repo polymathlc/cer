@@ -495,6 +495,7 @@ Run `node --test tools/consult-bridge-tests.mjs` after touching any of it.
 
 ## 🎓 Polymath Online: the student portal (`online/`, v1.0.0)
 
+- **📄 Answer keys by class day (v1.9.0): the answer key is a PDF Ans Key files after every lesson, never the Ans Key app.** Ans Key (v1.197.0, `answer-key-online.js`) writes `pdfAnnotator/{id}.answerKeys = {'YYYY-MM-DD': {url, path, at, pages, videos, fp}}` (the annotated key with its video QR code, at `pdf-annotator/lesson-key-<id>-<day>.pdf`). `Core.answerKeysOf` is the one reader (a real day, Firebase Storage's own `lesson-key-` link with `alt=media` and a token, newest first); `Core.classDays` puts each day's videos (`recordingDays`) beside its key, newest day first. The timeline shows them under *By class day* (three, then *n earlier days* folded), the Answer key button and the class card open the newest PDF, and a worksheet with none says *Appears after the lesson*. Never put `data-action="answer-key"` / `print-key` back on the timeline (the tests fail). Run `node --test tools/online-portal-tests.mjs` and `PW=… node tools/online-portal-browser-check.mjs`.
 - **🎬📅 Lesson videos (v1.7.0): the worksheet's video page IS Ans Key's `videos.html`, the page its printed QR code opens.**
   Ans Key (v1.196.0) files every worksheet's video list after each save and each lesson recorded, as
   `pdfAnnotator.videoPlaylist = {hash, token, n, at}`. `Core.videoPlaylistOf` reads it, `Core.videoPageLink(ANSKEY_URL, vp, day)`

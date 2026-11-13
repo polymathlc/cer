@@ -3,6 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import fs from 'node:fs';
 
 const require = createRequire(import.meta.url);
 const Core = require('../online/portal-core.js');
@@ -422,4 +423,63 @@ test('/student approval: no Online level → no classes; statuses read like the 
   assert.deepEqual(plainList(Core.studentAccessLevels({ children: [{ level: 'P5' }, { level: 'S1' }, { level: 'P5' }] })), ['P5', 'S1']);
   // An older member row (no `access`) still sees its one level and subjects.
   assert.deepEqual(plainList(Core.accessPairs({ level: 'P5', subjects: 'both' })), [{ level: 'P5', subjects: ['math', 'science'] }]);
+});
+
+/* ---------------------------------------------------------------------
+   📄 v1.9.0 — the answer key of every class day, filed by Ans Key as a PDF.
+   --------------------------------------------------------------------- */
+test('answer keys: only real Storage key links, newest class day first', () => {
+  const T1 = '11111111-2222-4333-8444-555555555555';
+  const url = (day, token = T1, name = 'pdf-annotator/lesson-key-ws1-' + day + '.pdf') =>
+    'https://firebasestorage.googleapis.com/v0/b/mathgen--app.firebasestorage.app/o/' + encodeURIComponent(name) + '?alt=media&token=' + token;
+  const keys = Core.answerKeysOf({ answerKeys: {
+    '2026-11-06': { url: url('2026-11-06'), at: 5, pages: 4, videos: 2 },
+    '2026-11-13': { url: url('2026-11-13'), at: { seconds: 9 }, pages: '3' },
+    '2026-02-30': { url: url('2026-02-30') },
+    '2026-11-01': { url: 'https://evil.example/key.pdf' },
+    '2026-11-02': { url: url('2026-11-02', 'nope') },
+    '2026-11-03': { url: url('2026-11-03', T1, 'pdf-annotator/videos-x.json') },
+    '2026-11-04': { url: url('2026-11-04').replace('https:', 'http:') },
+    '2026-11-05': null
+  } });
+  assert.deepEqual(keys.map((k) => k.key), ['2026-11-13', '2026-11-06']);
+  assert.equal(keys[0].at, 9000);
+  assert.equal(keys[0].pages, 3);
+  assert.equal(keys[1].videos, 2);
+  assert.match(keys[0].label, /13 Nov/);
+  assert.deepEqual(Core.answerKeysOf({}), []);
+  assert.deepEqual(Core.answerKeysOf({ answerKeys: [1] }), []);
+  assert.equal(Core.answerKeyUrlOk('javascript:alert(1)'), false);
+});
+
+test('class days: videos and answer keys side by side, newest day first', () => {
+  const days = [{ key: '2026-11-06', count: 1 }, { key: '2026-11-13', count: 2 }, { key: 'bad' }];
+  const keys = [{ key: '2026-11-13', url: 'k13' }, { key: '2026-11-20', url: 'k20' }];
+  const out = Core.classDays(days, keys);
+  assert.deepEqual(out.map((d) => d.key), ['2026-11-20', '2026-11-13', '2026-11-06']);
+  assert.equal(out[0].video, null);
+  assert.equal(out[0].answerKey.url, 'k20');
+  assert.equal(out[1].video.count, 2);
+  assert.equal(out[1].answerKey.url, 'k13');
+  assert.equal(out[2].answerKey, null);
+  assert.deepEqual(Core.classDays(null, null), []);
+});
+
+test('timeline items carry the answer keys and the class days', () => {
+  const T1 = '11111111-2222-4333-8444-555555555555';
+  const u = 'https://firebasestorage.googleapis.com/v0/b/b/o/' + encodeURIComponent('pdf-annotator/lesson-key-w1-2026-11-13.pdf') + '?alt=media&token=' + T1;
+  const course = { worksheetIds: ['w1'], currentIndex: 0, releasedThrough: 0 };
+  const [item] = Core.timelineItems(course, { w1: { name: 'WS', answerKeys: { '2026-11-13': { url: u, pages: 2 } } } }, {});
+  assert.equal(item.answerKeys.length, 1);
+  assert.equal(item.classDays.length, 1);
+  assert.equal(item.classDays[0].answerKey.url, u);
+});
+
+test('the portal never sends a student to the Ans Key app for an answer key', () => {
+  const portal = fs.readFileSync(new URL('../online/portal.js', import.meta.url), 'utf8');
+  const tl = portal.slice(portal.indexOf('function timelineHtml('), portal.indexOf('/* ---- Ans Key inside the portal ----'));
+  assert.ok(!/data-action="answer-key"|data-action="print-key"/.test(tl));
+  assert.match(tl, /latestKey\.url/);
+  assert.ok(!/answerKeyUrl\(ids\[cur\]\)/.test(portal));
+  assert.match(portal, /var APP_VERSION = 'v1\.9\.0'/);
 });

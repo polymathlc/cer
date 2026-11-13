@@ -466,6 +466,59 @@
     return out.sort(function (p, q) { return p.key < q.key ? -1 : p.key > q.key ? 1 : 0; });
   }
 
+  /* 📄 The answer key as it stood after each class day. Ans Key exports the
+     annotated answer key (with the video QR code) after every lesson and files
+     it on the worksheet as `answerKeys: { 'YYYY-MM-DD': { url, at, pages,
+     videos } }` (answer-key-online.js there). A link is used only when it is
+     Firebase Storage's own, for a key file, with a token: never a URL that
+     merely sits on the document. */
+  var AK_TOKEN_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  function answerKeyUrlOk(url) {
+    var m = /^https:\/\/firebasestorage\.googleapis\.com\/v0\/b\/[A-Za-z0-9._-]+\/o\/([^?#]+)\?(.*)$/.exec(String(url || ''));
+    if (!m) return false;
+    var name;
+    try { name = decodeURIComponent(m[1]); } catch (e) { return false; }
+    if (!/^pdf-annotator\/lesson-key-[A-Za-z0-9_-]{1,80}-\d{4}-\d{2}-\d{2}\.pdf$/.test(name)) return false;
+    var q = m[2].split('&');
+    return q.indexOf('alt=media') >= 0 && q.some(function (kv) { return kv.indexOf('token=') === 0 && AK_TOKEN_RE.test(kv.slice(6)); });
+  }
+  function realDay(key) {
+    if (!VP_DAY_RE.test(String(key || ''))) return false;
+    var p = String(key).split('-').map(Number);
+    var d = new Date(p[0], p[1] - 1, p[2]);
+    return d.getFullYear() === p[0] && d.getMonth() === p[1] - 1 && d.getDate() === p[2] && p[0] >= 2020 && p[0] < 2100;
+  }
+  // A day key → the time at noon that day, for formatDay.
+  function dayNoon(key) { var p = String(key).split('-').map(Number); return new Date(p[0], p[1] - 1, p[2], 12).getTime(); }
+  // [{ key, label, url, at, pages, videos }], NEWEST class day first.
+  function answerKeysOf(doc, now) {
+    var map = doc && doc.answerKeys;
+    if (!map || typeof map !== 'object' || Array.isArray(map)) return [];
+    var out = [];
+    Object.keys(map).forEach(function (key) {
+      var e = map[key];
+      if (!realDay(key) || !e || typeof e !== 'object' || !answerKeyUrlOk(e.url)) return;
+      out.push({
+        key: key, label: formatDay(dayNoon(key), now), url: String(e.url), at: toMillis(e.at),
+        pages: Math.max(0, Math.floor(Number(e.pages) || 0)), videos: Math.max(0, Math.floor(Number(e.videos) || 0))
+      });
+    });
+    return out.sort(function (p, q) { return p.key < q.key ? 1 : p.key > q.key ? -1 : 0; }).slice(0, 200);
+  }
+  /* Every class day of one worksheet, NEWEST first: that day's recorded
+     lessons (from recordingDays) beside that day's answer key. A day with
+     only one of them still shows. */
+  function classDays(days, keys, now) {
+    var byKey = {}, out = [];
+    function slot(key) {
+      if (!byKey[key]) { byKey[key] = { key: key, label: formatDay(dayNoon(key), now), video: null, answerKey: null }; out.push(byKey[key]); }
+      return byKey[key];
+    }
+    (Array.isArray(days) ? days : []).forEach(function (d) { if (d && realDay(d.key)) slot(d.key).video = d; });
+    (Array.isArray(keys) ? keys : []).forEach(function (k) { if (k && realDay(k.key)) slot(k.key).answerKey = k; });
+    return out.sort(function (p, q) { return p.key < q.key ? 1 : p.key > q.key ? -1 : 0; });
+  }
+
   // The timeline of one class: every released worksheet in teaching order,
   // with its state, its last-edited time and its recorded lessons.
   function timelineItems(course, docs, recordings) {
@@ -484,6 +537,10 @@
         // recorded lessons by the day of the class.
         playlist: videoPlaylistOf(d),
         days: recordingDays(recordings[w.id] || []),
+        // 📄 The answer key PDF of every class day, newest first, and the
+        // days themselves (videos and key side by side).
+        answerKeys: answerKeysOf(d),
+        classDays: classDays(recordingDays(recordings[w.id] || []), answerKeysOf(d)),
         loading: !d
       };
     });
@@ -727,6 +784,7 @@
     naturalCompare: naturalCompare, worksheetNameFromFile: worksheetNameFromFile,
     VIDEO_PAGE: VIDEO_PAGE, videoPackCode: videoPackCode, videoPlaylistOf: videoPlaylistOf, videoPageLink: videoPageLink,
     videoPlaylistCurrent: videoPlaylistCurrent, lessonDayKey: lessonDayKey, recordingDays: recordingDays,
+    answerKeyUrlOk: answerKeyUrlOk, answerKeysOf: answerKeysOf, classDays: classDays,
     courseIds: courseIds, currentIndex: currentIndex, releasedThrough: releasedThrough, releasedCount: releasedCount, lockedCount: lockedCount,
     worksheetState: worksheetState, releasedWorksheets: releasedWorksheets, nextWorksheets: nextWorksheets, progressUpdate: progressUpdate, percent: percent,
     ansKeyAt: ansKeyAt, ansKeyState: ansKeyState, finishUpdate: finishUpdate,

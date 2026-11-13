@@ -179,9 +179,10 @@ let studentDb = null;
   check('student: each worksheet shows the date it was last edited in Ans Key', /12 Oct/.test(dateText) && /\d:\d\d (am|pm)/.test(dateText));
   check('student: the current worksheet says it was edited; one never written on says when it was uploaded',
     /^Edited/.test((await page.textContent('.tl-item.is-current .tl-date')).trim()) && /^Uploaded/.test((await page.textContent('.tl-item:nth-child(1) .tl-date')).trim()));
-  check('student: every worksheet has View and Print for the worksheet and for its answer key',
+  check('student: every worksheet has View and Print for the worksheet, and its answer key never opens the Ans Key app',
     (await page.locator('.tl-item [data-action="view"]').count()) === 8 && (await page.locator('.tl-item [data-action="print"]').count()) === 8 &&
-    (await page.locator('.tl-item [data-action="answer-key"]').count()) === 8 && (await page.locator('.tl-item [data-action="print-key"]').count()) === 8);
+    (await page.locator('.tl-item [data-action="answer-key"], .tl-item [data-action="print-key"]').count()) === 0 &&
+    (await page.locator('.tl-item .tl-key-wait').count()) === 8);
   check('student: the video button shows only where a lesson was recorded, with how many', (await page.locator('.tl-item [data-action="video"]').count()) === 1 && /2 videos/.test(await page.textContent('.tl-item.is-current [data-action="video"]')));
   const next = await page.$$eval('.next-tile .name', (els) => els.map((e) => e.textContent));
   check('student: the next two are worksheets 4 and 5', next.join('|') === 'Worksheet 4|Worksheet 5');
@@ -201,15 +202,6 @@ let studentDb = null;
   await page.screenshot({ path: path.join(shots, '04c-student-video-player.png') });
   await page.click('.modal-wide [data-modal-close]');
   check('student: the player closes', (await page.locator('.modal-back').count()) === 0);
-  await page.click('.tl-item.is-current [data-action="answer-key"]');
-  const keySrc = await page.getAttribute('.modal-wide iframe.anskey-frame', 'src');
-  check('student: View answer key opens the worksheet in Ans Key with ?ws=', keySrc === '../anskey/?ws=' + encodeURIComponent(ws3Id));
-  await page.keyboard.press('Escape');
-  await page.click('.tl-item.is-current [data-action="print-key"]');
-  const printSrc = await page.getAttribute('.modal-wide iframe.anskey-frame', 'src');
-  check('student: Print answer key asks Ans Key to print the answers', printSrc === '../anskey/?ws=' + encodeURIComponent(ws3Id) + '&do=print-answers');
-  await page.keyboard.press('Escape');
-
   // The teacher records again: the timeline follows without a reload.
   await page.evaluate(([p, at]) => {
     const d = Object.assign({}, window.__fake.db[p]);
@@ -225,12 +217,15 @@ let studentDb = null;
 
   // 🎬📅 The recordings beside the worksheet, by the day of the class.
   const dayChips = await page.$$eval('.tl-item.is-current .tl-day', (els) => els.map((e) => ({ day: e.dataset.day, text: e.textContent })));
-  const wantDays = await page.evaluate((at) => [at - 86400000, at].map((ms) => window.PolymathOnlineCore.lessonDayKey(ms)), edited);
-  check('student: the lessons are listed beside the worksheet by the day of the class, first lesson first',
+  const wantDays = await page.evaluate((at) => [at, at - 86400000].map((ms) => window.PolymathOnlineCore.lessonDayKey(ms)), edited);
+  const dayDates = await page.$$eval('.tl-item.is-current .tl-cday-date', (els) => els.map((e) => e.textContent));
+  check('student: the lessons are listed beside the worksheet by the day of the class, newest day first',
     dayChips.length === 2 && dayChips[0].day === wantDays[0] && dayChips[1].day === wantDays[1] &&
-    /Sun 11 Oct/.test(dayChips[0].text) && /1 recording · 41:00/.test(dayChips[0].text) && /Mon 12 Oct/.test(dayChips[1].text) && /2 recordings/.test(dayChips[1].text), JSON.stringify(dayChips));
+    /Mon 12 Oct/.test(dayDates[0]) && /Latest/.test(dayDates[0]) && /2 videos/.test(dayChips[0].text) &&
+    /Sun 11 Oct/.test(dayDates[1]) && /Video/.test(dayChips[1].text) && /41:00/.test(dayChips[1].text), JSON.stringify([dayChips, dayDates]));
+  check('student: a day with no key filed yet says it comes after the lesson', (await page.locator('.tl-item.is-current .tl-cday .tl-cday-none').count()) === 2);
   // Before Ans Key has filed the video page, the old chooser still plays them.
-  await page.click('.tl-item.is-current .tl-day >> nth=0');
+  await page.click('.tl-item.is-current .tl-day >> nth=-1');
   await page.waitForSelector('.modal-wide iframe.anskey-frame');
   check('student: with no video page yet, a one-lesson day replays that lesson in Ans Key',
     (await page.getAttribute('.modal-wide iframe.anskey-frame', 'src')) === '../anskey/?ws=' + encodeURIComponent(ws3Id) + '&do=play&rec=rec-old');
@@ -259,12 +254,36 @@ let studentDb = null;
   check('student: ▶ Videos opens Ans Key\'s video page, the same page as the QR code', pageSrc === wantSrc && /^\.\.\/anskey\/videos\.html\?[A-Za-z0-9_-]{31}$/.test(pageSrc), pageSrc);
   await page.screenshot({ path: path.join(shots, '04e-student-video-page.png') });
   await page.keyboard.press('Escape');
-  await page.click('.tl-item.is-current .tl-day >> nth=-1');
+  await page.click('.tl-item.is-current .tl-day >> nth=0');
   await page.waitForSelector('.modal-wide iframe.video-page-frame');
   check('student: a lesson day opens the video page at that day',
-    (await page.getAttribute('.modal-wide iframe.video-page-frame', 'src')) === wantSrc + '#day-' + wantDays[1] &&
+    (await page.getAttribute('.modal-wide iframe.video-page-frame', 'src')) === wantSrc + '#day-' + wantDays[0] &&
     /Mon 12 Oct lesson/.test(await page.textContent('.modal-wide h2')));
   await page.keyboard.press('Escape');
+
+  // 📄 Ans Key files the answer key PDF after each lesson, under the day of the class.
+  const keyUrl = (day, token) => 'https://firebasestorage.googleapis.com/v0/b/mathgen--app.firebasestorage.app/o/' +
+    encodeURIComponent('pdf-annotator/lesson-key-' + ws3Id + '-' + day + '.pdf') + '?alt=media&token=' + token;
+  const KEY_OLD = keyUrl(wantDays[1], '11111111-2222-4333-8444-555555555555');
+  const KEY_NEW = keyUrl(wantDays[0], '66666666-7777-4888-9999-aaaaaaaaaaaa');
+  await page.evaluate(([p, keys]) => {
+    window.__fake.seed(p, Object.assign({}, window.__fake.db[p], { answerKeys: keys }));
+  }, [ws3, {
+    [wantDays[1]]: { url: KEY_OLD, at: edited - 86400000, pages: 4, videos: 1 },
+    [wantDays[0]]: { url: KEY_NEW, at: edited, pages: 4, videos: 3 },
+    '2020-02-30': { url: KEY_NEW },
+    '2026-01-05': { url: 'https://evil.example/key.pdf' }
+  }]);
+  await page.waitForFunction(() => document.querySelectorAll('.tl-item.is-current .tl-key').length === 2);
+  const keyLinks = await page.$$eval('.tl-item.is-current .tl-key', (els) => els.map((e) => ({ href: e.href, target: e.target, text: e.textContent })));
+  check('student: each class day has its own answer key PDF, newest first, and junk keys are not shown',
+    keyLinks.length === 2 && keyLinks[0].href === KEY_NEW && keyLinks[1].href === KEY_OLD && keyLinks.every((k) => k.target === '_blank' && /Answer key/.test(k.text) && /4 pages/.test(k.text)), JSON.stringify(keyLinks));
+  const latestBtn = await page.$eval('.tl-item.is-current .tl-actions a.btn-primary', (a) => ({ href: a.href, text: a.textContent }));
+  check('student: the Answer key button opens the newest PDF, not the Ans Key app', latestBtn.href === KEY_NEW && /View · Mon 12 Oct/.test(latestBtn.text), JSON.stringify(latestBtn));
+  check('student: the class card\'s answer key is the newest PDF', (await page.getAttribute('.class-cta a', 'href')) === KEY_NEW);
+  check('student: no answer key link anywhere points into the Ans Key app',
+    (await page.$$eval('.tl-item a, .class-cta a', (els) => els.filter((a) => /\/anskey\/\?ws=/.test(a.getAttribute('href') || '')).length)) === 0);
+  await page.locator('.tl-item.is-current').screenshot({ path: path.join(shots, '04g-student-answer-keys.png') });
 
   // The teacher opens worksheet 5 in Ans Key: the class moves and 9, 10 come out live.
   await page.evaluate(() => {
@@ -287,9 +306,8 @@ let studentDb = null;
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   check('student phone: the timeline fits with no sideways scroll', !overflow);
   await page.screenshot({ path: path.join(shots, '04d-student-phone.png'), fullPage: true });
-  await page.click('.tl-item.is-current [data-action="answer-key"]');
-  const box = await page.locator('.modal-wide .anskey-frame-wrap').boundingBox();
-  check('student phone: the answer key window fills the screen', box && box.width > 330 && box.height > 500);
+  const keyBox = await page.locator('.tl-item .tl-key >> nth=0').boundingBox();
+  check('student phone: the day\'s answer key fits on the screen', keyBox && keyBox.x >= 0 && keyBox.x + keyBox.width <= 390);
   check('student phone: no script errors', errors.length === 0);
   await context.close();
 }
