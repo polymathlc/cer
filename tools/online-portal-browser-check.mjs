@@ -317,6 +317,43 @@ let studentDb = null;
   await context.close();
 }
 
+/* ---- polymathlc.com.sg/student decides: the approval wins over an older invitation ---- */
+{
+  const docs = JSON.parse(JSON.stringify(db));
+  // An old invitation said P6 Science; the approval says P5 Maths (and a Secondary 1 sibling).
+  docs['onlineMembers/fam'] = { level: 'P6', subjects: ['science'], role: 'student', name: 'Wei', email: 'fam@example.com' };
+  docs['studentAccess/fam'] = { uid: 'fam', status: 'approved', parentName: 'Mdm Lim', parentEmail: 'lim@example.com', childCount: 2,
+    children: [{ name: 'Lim Wei', level: 'P5', subjects: 'math' }, { name: 'Lim Jun', level: 'S1', subjects: 'both' }] };
+  const { page, context, errors } = await open({ user: { uid: 'fam', email: 'fam@example.com', displayName: 'Wei' }, docs, width: 390 });
+  await page.waitForSelector('.class-card');
+  const text = await page.textContent('body');
+  check('/student approval: P5 Maths opens although the old invitation said P6 Science', (await page.locator('.class-card').count()) >= 1 && /P5/.test(await page.textContent('.welcome .chips')));
+  check('/student approval: no P6 Science chip from the old invitation', !/P6/.test(await page.textContent('.welcome .chips')));
+  check('/student approval: no script errors', errors.length === 0 && text.length > 0);
+  await context.close();
+}
+{
+  const docs = JSON.parse(JSON.stringify(db));
+  // Invited for P5 Maths long ago, but now approved for P5 Science only: the Maths class closes.
+  docs['onlineMembers/sci'] = { level: 'P5', subjects: ['math'], role: 'student', name: 'Ana', email: 'sci@example.com' };
+  docs['studentAccess/sci'] = { uid: 'sci', status: 'approved', childCount: 1, children: [{ name: 'Ana Goh', level: 'P5', subjects: 'science' }] };
+  const { page, context, errors } = await open({ user: { uid: 'sci', email: 'sci@example.com', displayName: 'Ana' }, docs, width: 390 });
+  await page.waitForSelector('.empty');
+  check('/student approval: a Science-only account no longer sees the P5 Maths class', (await page.locator('.class-card').count()) === 0);
+  check('/student approval (science only): no script errors', errors.length === 0);
+  await context.close();
+}
+{
+  const docs = JSON.parse(JSON.stringify(db));
+  docs['onlineMembers/wait'] = { level: 'P5', subjects: ['math'], role: 'student', name: 'Kai', email: 'wait@example.com' };
+  docs['studentAccess/wait'] = { uid: 'wait', status: 'pending', childCount: 1, children: [{ name: 'Kai Ong', level: 'P5', subjects: 'math' }] };
+  const { page, context, errors } = await open({ user: { uid: 'wait', email: 'wait@example.com', displayName: 'Kai' }, docs, width: 390 });
+  await page.waitForSelector('.state-card');
+  check('/student approval: an account still waiting sees no classes, and is told why', /Waiting for approval/.test(await page.textContent('.state-card')) && (await page.locator('.class-card').count()) === 0);
+  check('/student approval (waiting): no script errors', errors.length === 0);
+  await context.close();
+}
+
 /* ---- Admin: duplicate a class for another time slot ---- */
 {
   const docs = JSON.parse(JSON.stringify(db));

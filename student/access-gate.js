@@ -1,5 +1,5 @@
 /*
-  POLYMATH STUDENT ACCESS GATE  (v1.0.0, November 2026)
+  POLYMATH STUDENT ACCESS GATE  (v1.1.0, November 2026)
   ======================================================
   One script, loaded by every student app — Science (/cer), Math, Answer Keys,
   Study Buddy, Rewards, English, Chinese, Worksheets (/online) and the My
@@ -27,6 +27,17 @@
         approved  the app opens; the answer is remembered on the device so the
                   next visit opens at once, and checked again in the background
     The pop-up covers the whole app and the page behind it is made inert.
+  • SUBJECTS (v1.1.0). A page that belongs to one subject says so on its tag:
+
+      <script defer src="…/access-gate.js" data-app="math" data-subject="math"></script>
+
+    An approved account only opens it when one of its children is approved for
+    that subject (Math only / Science only / Both). Otherwise the "not in your
+    subjects" screen shows, with a link back to My Polymath. Pages with no
+    data-subject (Study Buddy, English, Chinese, Answer Keys, Rewards, the
+    worksheets portal) open for every approved account. The admins change a
+    child's subjects at polymathlc.com.sg/student/#admin and the app follows:
+    the screen checks again whenever the student comes back to the tab.
   • The admins approve, revoke and edit at polymathlc.com.sg/student/#admin.
 
   WHY IT IS SAFE TO SHIP BEFORE THE RULES
@@ -45,7 +56,7 @@
   var root = typeof window !== 'undefined' ? window : this;
   if (root.PolymathAccess && root.PolymathAccess.version) return;   // loaded twice: the first one wins
 
-  var VERSION = '1.0.0';
+  var VERSION = '1.1.0';
   var PROJECT = 'mathgen--app';
   var API_KEY = 'AIzaSyAUSI3Uh28IeqASEp0JhH4QPaVt-O3meBo';
   var DOCS = 'https://firestore.googleapis.com/v1/projects/' + PROJECT + '/databases/(default)/documents';
@@ -75,6 +86,9 @@
     ['S3', 'Secondary 3'], ['S4', 'Secondary 4'], ['S5', 'Secondary 5'], ['Other', 'Other']
   ];
   var SUBJECTS = [['math', 'Math only'], ['science', 'Science only'], ['both', 'Both Math and Science']];
+  // The subjects a page can belong to (data-subject on its tag).
+  var APP_SUBJECTS = [['math', 'Math'], ['science', 'Science']];
+  var DASHBOARD = 'https://polymathlc.com.sg/student/';
 
   /* ================================================================== */
   /*  Pure logic (no DOM, no network) — exported as PolymathAccess.core  */
@@ -124,6 +138,89 @@
     var status = lower(record.status);
     if (status === 'approved' || status === 'pending' || status === 'revoked') return status;
     return 'pending';
+  }
+
+  /** "math" / "science" for a page's data-subject; anything else means "any subject". */
+  function cleanAppSubject(value) {
+    var key = lower(value);
+    return key === 'math' || key === 'science' ? key : '';
+  }
+
+  function appSubjectLabel(key) {
+    for (var i = 0; i < APP_SUBJECTS.length; i++) if (APP_SUBJECTS[i][0] === key) return APP_SUBJECTS[i][1];
+    return key ? String(key) : '';
+  }
+
+  /** One child's choice ("math" | "science" | "both") → the subjects it opens. */
+  function subjectsOfChoice(choice) {
+    var key = lower(choice);
+    if (key === 'both') return ['math', 'science'];
+    if (key === 'math' || key === 'science') return [key];
+    return [];
+  }
+
+  /**
+   * Every subject the record's children are approved for, sorted: ["math"],
+   * ["science"], ["math", "science"] or [] (a record with no usable children).
+   */
+  function approvedSubjects(record) {
+    var out = [];
+    var children = record && Array.isArray(record.children) ? record.children : [];
+    children.forEach(function (child) {
+      subjectsOfChoice(child && child.subjects).forEach(function (subject) {
+        if (out.indexOf(subject) < 0) out.push(subject);
+      });
+    });
+    return out.sort();
+  }
+
+  /** Every level on the record, in the order of LEVELS, without repeats. */
+  function approvedLevels(record) {
+    var seen = {};
+    var children = record && Array.isArray(record.children) ? record.children : [];
+    children.forEach(function (child) { if (child && child.level) seen[child.level] = true; });
+    var out = [];
+    LEVELS.forEach(function (pair) { if (seen[pair[0]]) out.push(pair[0]); });
+    Object.keys(seen).forEach(function (level) { if (out.indexOf(level) < 0) out.push(level); });
+    return out;
+  }
+
+  /**
+   * Each child as { level, subjects: [...] } — what the worksheets portal (/online)
+   * uses to decide which classes an account sees (a P4 Science child and a P6 Math
+   * child see P4 Science and P6 Math, never P6 Science).
+   */
+  function approvedPairs(record) {
+    var children = record && Array.isArray(record.children) ? record.children : [];
+    var out = [];
+    children.forEach(function (child) {
+      var subjects = subjectsOfChoice(child && child.subjects);
+      if (!child || !child.level || !subjects.length) return;
+      for (var i = 0; i < out.length; i++) {
+        if (out[i].level === child.level) {
+          subjects.forEach(function (s) { if (out[i].subjects.indexOf(s) < 0) out[i].subjects.push(s); });
+          out[i].subjects.sort();
+          return;
+        }
+      }
+      out.push({ level: String(child.level), subjects: subjects.slice().sort() });
+    });
+    return out;
+  }
+
+  /** May an approved record open a page of this subject? (No subject → yes.) */
+  function subjectAllowed(record, subject) {
+    var key = cleanAppSubject(subject);
+    if (!key) return true;
+    return approvedSubjects(record).indexOf(key) >= 0;
+  }
+
+  /** A cached subject list (from localStorage) → a clean list, or null if unknown. */
+  function cleanSubjectList(list) {
+    if (!Array.isArray(list)) return null;
+    var out = [];
+    list.forEach(function (s) { var key = cleanAppSubject(s); if (key && out.indexOf(key) < 0) out.push(key); });
+    return out.sort();
   }
 
   /**
@@ -261,6 +358,9 @@
     lower: lower, cleanText: cleanText, isEmail: isEmail, levelLabel: levelLabel, subjectsLabel: subjectsLabel,
     isAccessAdmin: isAccessAdmin, isStaff: isStaff, needsGate: needsGate, statusOf: statusOf,
     validateForm: validateForm, buildMail: buildMail,
+    APP_SUBJECTS: APP_SUBJECTS, cleanAppSubject: cleanAppSubject, appSubjectLabel: appSubjectLabel,
+    subjectsOfChoice: subjectsOfChoice, approvedSubjects: approvedSubjects, approvedLevels: approvedLevels,
+    approvedPairs: approvedPairs, subjectAllowed: subjectAllowed, cleanSubjectList: cleanSubjectList,
     encodeValue: encodeValue, encodeFields: encodeFields, decodeValue: decodeValue, decodeFields: decodeFields,
     escapeHtml: escapeHtml
   };
@@ -274,19 +374,34 @@
   function writeStore(store, key, value) {
     try { if (root[store]) { if (value === null) root[store].removeItem(key); else root[store].setItem(key, value); } } catch (error) { /* fine */ }
   }
-  function cachedStatus(uid) {
+  /** { status, subjects } remembered on this device (subjects null when a v1.0 page saved it). */
+  function cachedAccess(uid) {
     var raw = readStore('localStorage', CACHE_PREFIX + uid);
     if (!raw) return null;
-    try { var parsed = JSON.parse(raw); return parsed && parsed.status ? parsed.status : null; } catch (error) { return null; }
+    try {
+      var parsed = JSON.parse(raw);
+      if (!parsed || !parsed.status) return null;
+      return { status: parsed.status, subjects: cleanSubjectList(parsed.subjects) };
+    } catch (error) { return null; }
   }
-  function rememberStatus(uid, status) {
-    writeStore('localStorage', CACHE_PREFIX + uid, status ? JSON.stringify({ status: status, at: Date.now() }) : null);
+  function cachedStatus(uid) {
+    var cached = cachedAccess(uid);
+    return cached ? cached.status : null;
+  }
+  function rememberStatus(uid, status, subjects) {
+    var value = null;
+    if (status) {
+      value = { status: status, at: Date.now() };
+      if (Array.isArray(subjects)) value.subjects = cleanSubjectList(subjects);
+    }
+    writeStore('localStorage', CACHE_PREFIX + uid, value ? JSON.stringify(value) : null);
   }
 
   /* ================================================================== */
   /*  State                                                               */
   /* ================================================================== */
   var APP = 'unknown';
+  var APP_SUBJECT = '';      // data-subject on the tag: 'math', 'science' or '' (any)
   var state = { phase: 'idle', user: null, record: null, error: '', protected: null };
   var listeners = [];
   var adapter = null;
@@ -303,7 +418,11 @@
       uid: state.user ? state.user.uid : '',
       isAdmin: !!(state.user && isAccessAdmin(state.user.email, state.user.emailVerified)),
       record: state.record,
-      protected: state.protected
+      protected: state.protected,
+      appSubject: APP_SUBJECT,
+      subjects: state.record && statusOf(state.record) === 'approved' ? approvedSubjects(state.record) : [],
+      levels: state.record ? approvedLevels(state.record) : [],
+      pairs: state.record && statusOf(state.record) === 'approved' ? approvedPairs(state.record) : []
     };
   }
 
@@ -455,10 +574,13 @@
     if (!user) { state.user = null; return setPhase('idle'); }
     state.user = user;
     if (!needsGate(user)) return setPhase(user.isAnonymous ? 'guest' : 'staff');
-    var remembered = cachedStatus(user.uid);
-    // A student approved before opens at once; the check runs quietly behind.
-    setPhase(remembered === 'approved' ? 'approved' : 'checking');
-    check(mine, remembered === 'approved');
+    var remembered = cachedAccess(user.uid);
+    // A student approved before opens at once (when this page's subject was one
+    // of theirs last time); the check runs quietly behind and still decides.
+    var opensAtOnce = !!(remembered && remembered.status === 'approved' &&
+      (!APP_SUBJECT || !remembered.subjects || remembered.subjects.indexOf(APP_SUBJECT) >= 0));
+    setPhase(opensAtOnce ? 'approved' : 'checking');
+    check(mine, opensAtOnce);
   }
 
   function check(mine, quiet) {
@@ -471,9 +593,12 @@
       return fetchRecord(user).then(function (record) {
         if (mine !== runToken) return;
         var status = statusOf(record);
-        rememberStatus(user.uid, status === 'none' ? null : status);
+        rememberStatus(user.uid, status === 'none' ? null : status, status === 'approved' ? approvedSubjects(record) : null);
         state.record = record;
-        if (status === 'approved') return setPhase('approved');
+        if (status === 'approved') {
+          if (!subjectAllowed(record, APP_SUBJECT)) { setPhase('subject'); return scheduleRecheck(); }
+          return setPhase('approved');
+        }
         if (status === 'none') { if (!draft) draft = draftFrom(null, user); return setPhase('form'); }
         if (!editing) draft = draftFrom(record, user);
         setPhase(status);
@@ -496,7 +621,7 @@
   function scheduleRecheck() {
     stopRecheck();
     recheckTimer = root.setTimeout(function () {
-      if (state.phase === 'pending' && !editing) check(runToken, true);
+      if ((state.phase === 'pending' || state.phase === 'subject') && !editing) check(runToken, true);
     }, RECHECK_PENDING_MS);
   }
   function stopRecheck() { if (recheckTimer) { root.clearTimeout(recheckTimer); recheckTimer = null; } }
@@ -552,7 +677,7 @@
   /*  The pop-up (its own shadow root: no app's CSS can reach it)         */
   /* ================================================================== */
   var host = null, shadow = null, observer = null, madeInert = false, savedOverflow = null;
-  var BLOCKING = { checking: true, form: true, pending: true, revoked: true, error: true };
+  var BLOCKING = { checking: true, form: true, pending: true, revoked: true, error: true, subject: true };
 
   var STYLE = [
     ':host{all:initial}',
@@ -604,6 +729,7 @@
     '.summary div{margin:2px 0}',
     '.pill{display:inline-block;border-radius:999px;padding:2px 10px;font-size:13px;font-weight:700}',
     '.pill.pending{background:#FFF4D6;color:#8A5A00}.pill.revoked{background:#FDECEA;color:#8C1D18}',
+    '.pill.approved{background:#F1F8F5;color:#0B6B4F}',
     '.spinner{width:36px;height:36px;border-radius:50%;border:4px solid #DCEFE7;border-top-color:#2E8B6B;animation:spin 1s linear infinite;margin:8px auto 16px}',
     '@keyframes spin{to{transform:rotate(360deg)}}',
     '.center{text-align:center}',
@@ -760,6 +886,25 @@
       '</div>' + helpLine();
   }
 
+  function subjectHtml() {
+    var wanted = appSubjectLabel(APP_SUBJECT) || 'this subject';
+    var have = approvedSubjects(state.record).map(appSubjectLabel);
+    var haveText = have.length ? have.join(' and ') : 'no subjects yet';
+    return header() +
+      '<h1>' + escapeHtml(wanted) + ' is not part of your Polymath subjects</h1>' +
+      '<p>Your account is approved for <b>' + escapeHtml(haveText) + '</b>, so this ' + escapeHtml(wanted) +
+      ' app is closed for you. Open My Polymath to see the apps that are yours. If your child now takes ' + escapeHtml(wanted) +
+      ' with us too, WhatsApp us and we will add it — this page opens by itself once it is added.</p>' +
+      signedInAs() +
+      '<p><span class="pill approved">Approved: ' + escapeHtml(haveText) + '</span></p>' +
+      summaryHtml(state.record) +
+      '<div class="actions">' +
+      '<a class="button primary" href="' + DASHBOARD + '">Open My Polymath</a>' +
+      '<button type="button" class="ghost" data-action="recheck">Check again</button>' +
+      '<button type="button" class="link" data-action="sign-out">Sign out</button>' +
+      '</div>' + helpLine();
+  }
+
   function checkingHtml() {
     return header() + '<div class="center"><div class="spinner" aria-hidden="true"></div><h1>Checking your access…</h1>' + signedInAs() + '</div>';
   }
@@ -781,6 +926,7 @@
     else if (state.phase === 'form' || editing) body = formHtml(errors);
     else if (state.phase === 'pending') body = pendingHtml();
     else if (state.phase === 'revoked') body = revokedHtml();
+    else if (state.phase === 'subject') body = subjectHtml();
     else body = checkingHtml();
     var focusName = null, active = shadow.activeElement;
     if (active && active.name) focusName = active.name;
@@ -847,10 +993,12 @@
     var script = typeof document !== 'undefined' ? document.currentScript : null;
     APP = cleanText((script && script.getAttribute('data-app')) ||
       (root.location ? root.location.hostname + '/' + (root.location.pathname.split('/')[1] || '') : 'unknown'), 40) || 'unknown';
+    APP_SUBJECT = cleanAppSubject(script && script.getAttribute('data-subject'));
+    var waiting = function () { return (state.phase === 'pending' || state.phase === 'subject') && !editing; };
     if (typeof document !== 'undefined' && root.addEventListener) {
-      root.addEventListener('focus', function () { if (state.phase === 'pending' && !editing) check(runToken, true); });
+      root.addEventListener('focus', function () { if (waiting()) check(runToken, true); });
       document.addEventListener('visibilitychange', function () {
-        if (document.visibilityState === 'visible' && state.phase === 'pending' && !editing) check(runToken, true);
+        if (document.visibilityState === 'visible' && waiting()) check(runToken, true);
       });
     }
     findAuth(function (found) {

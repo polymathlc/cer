@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = 'v1.7.0';
+  var APP_VERSION = 'v1.8.0';
   var Core = window.PolymathOnlineCore;
 
   // Who runs the portal. Anyone else signs in as a student or a parent.
@@ -325,6 +325,7 @@
     state.isAdmin = !!(state.user && isAdminEmail(state.user.email));
     state.member = null;
     state.accessError = '';
+    state.studentLevels = [];
     renderHeader();
     if (!state.user) {
       if (state.inviteId && !state.invitePreview) loadInvitePreview();
@@ -359,9 +360,47 @@
   }
 
   /* ================= Joining ================= */
+  // Since November 2026 the approval at polymathlc.com.sg/student decides who
+  // sees which classes: an approved account sees exactly its children's levels
+  // and subjects there, whatever an older invitation or member row said; an
+  // account waiting there (or paused) sees nothing here. Only an account with
+  // no approval record at all (staff, or a student the enrolment pop-up is
+  // still asking) falls back to the invitations below.
+  var STUDENT_ACCESS = 'studentAccess';
+  async function readStudentAccess(user) {
+    try {
+      var snap = await db.collection(STUDENT_ACCESS).doc(user.uid).get();
+      return snap.exists ? (snap.data() || {}) : null;
+    } catch (err) {
+      // Unreadable (offline, or the rules refuse): the invitations decide, as before.
+      console.warn('studentAccess', err && err.code);
+      return null;
+    }
+  }
+  async function resolveMembership(user) {
+    var record = await readStudentAccess(user);
+    var status = Core.studentAccessStatus(record);
+    if (status === 'approved') {
+      var existing = null;
+      try {
+        var own = await db.collection(MEMBERS).doc(user.uid).get();
+        if (own.exists) existing = own.data();
+      } catch (err) { existing = null; }
+      if (state.inviteId) { setUrlWithout('invite'); state.inviteId = ''; }
+      state.accessError = '';
+      state.studentLevels = Core.studentAccessLevels(record);
+      if (existing) touchMember(user, existing);
+      return Core.memberFromStudentAccess(record, existing, user);
+    }
+    if (status === 'pending' || status === 'revoked') {
+      state.accessError = status === 'pending' ? 'student-pending' : 'student-revoked';
+      return null;
+    }
+    return invitedMembership(user);
+  }
   // The invitation link, a member row, or an invitation to this email —
   // in that order. Anything else is a signed-in visitor with no access yet.
-  async function resolveMembership(user) {
+  async function invitedMembership(user) {
     var email = Core.normalizeEmail(user.email);
     if (state.inviteId) {
       var ref = db.collection(INVITES).doc(state.inviteId);
@@ -567,6 +606,8 @@
       'invite-revoked': ['✋', 'This invitation was withdrawn', 'Please contact the centre if you think this is a mistake.'],
       'invite-used': ['👥', 'This invitation is already in use', 'Someone has already joined with this link on another Google account. Sign in with that account, or ask the centre for a new invitation.'],
       'revoked': ['✋', 'Your access has ended', 'This account no longer has access to Polymath Online. Please contact the centre if you think this is a mistake.'],
+      'student-pending': ['⏳', 'Waiting for approval', 'Your worksheets open here as soon as the centre approves your account at My Polymath (polymathlc.com.sg/student). It usually takes one working day.'],
+      'student-revoked': ['✋', 'Your access is paused', 'This account cannot open the Polymath apps at the moment. Open My Polymath (polymathlc.com.sg/student) to update your details, or WhatsApp us on +65 9645 0588.'],
       'no-invite': ['✉️', 'You have not been invited yet', 'Polymath Online is for students and parents at the centre. If you have an invitation email, open its link. Otherwise ask the centre to invite ' + (state.user ? state.user.email : 'you') + '.'],
       'error': ['⚠️', 'We could not open your classes', 'Check your connection and try again.']
     };
@@ -579,7 +620,11 @@
   function studentHtml(member, preview) {
     if (!state.coursesLoaded) return '<div class="loader"><div class="spinner" aria-hidden="true"></div><div>Loading your classes…</div></div>';
     var courses = Core.coursesForMember(state.courses, member);
-    var subjects = Core.cleanSubjects(member.level, member.subjects);
+    // One chip group per (level, subjects) the member may see: an approved
+    // family with two children has two.
+    var pairs = Core.accessPairs(member);
+    var chips = pairs.map(function (pair) { return levelChip(pair.level) + pair.subjects.map(subjectChip).join(''); }).join('');
+    var levelWords = pairs.length ? pairs.map(function (pair) { return pair.level; }).join(' and ') : (member.level || '');
     var first = String(member.name || (state.user && state.user.displayName) || '').split(' ')[0];
     var parent = member.role === 'parent';
     var html = '<div class="reveal">' +
@@ -587,10 +632,16 @@
         '<div><div class="eyebrow">' + (preview ? 'Student view preview' : parent ? 'Parent view' : 'Your worksheets') + '</div>' +
         '<h1 class="page-title" style="margin-top:8px">' + (preview ? 'What a ' + h(member.level) + ' student sees' : 'Hello' + (first ? ', ' + h(first) : '') + ' 👋') + '</h1>' +
         '<p class="page-subtitle">' + (parent ? 'Your child\'s worksheets and answer keys, released as the class goes.' : 'New worksheets appear here on their own as your class goes.') + '</p>' +
-        '<div class="chips">' + levelChip(member.level) + subjects.map(subjectChip).join('') + '</div></div>' +
+        '<div class="chips">' + chips + '</div></div>' +
       '</section>';
+    if (!pairs.length && !preview) {
+      var asked = (state.studentLevels || []).join(', ');
+      html += '<div class="card section empty"><div class="big">📚</div><h3>No online worksheets for your level yet</h3><p>Polymath Online has worksheets for Primary 3 to Primary 6' +
+        (asked ? ' (your account is approved for ' + h(asked) + ')' : '') + '. If this is not right, please WhatsApp the centre on +65 9645 0588.</p></div>';
+      return html + '</div>';
+    }
     if (!courses.length) {
-      html += '<div class="card section empty"><div class="big">📚</div><h3>No classes yet</h3><p>Your ' + h(member.level) + ' worksheets will appear here as soon as the centre sets up your class.</p></div>';
+      html += '<div class="card section empty"><div class="big">📚</div><h3>No classes yet</h3><p>Your ' + h(levelWords) + ' worksheets will appear here as soon as the centre sets up your class.</p></div>';
       return html + '</div>';
     }
     html += '<div class="section">';

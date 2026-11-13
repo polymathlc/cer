@@ -213,7 +213,7 @@ test('the publisher reads, tests or publishes — and only publishes when asked'
 
 test('the gate, the dashboard and the rules name the same three admins and the same email', () => {
   const gate = loadGate();
-  assert.equal(gate.version, '1.0.0');
+  assert.equal(gate.version, '1.1.0');
   assert.deepEqual([...gate.core.ACCESS_ADMINS], ACCESS_ADMINS);
   assert.deepEqual(JSON.parse(JSON.stringify(gate.core.ACCESS_MAIL)), ACCESS_MAIL);
   assert.equal(gate.core.MAX_CHILDREN, MAX_CHILDREN);
@@ -372,8 +372,8 @@ test('dashboard helpers: usernames, sorting, search, counts and the admin edit',
 test('/student signs in, shows the admin dashboard and loads the very same gate as every app', () => {
   assert.ok(DASHBOARD.includes('<div class="account-card" id="accountCard" hidden aria-live="polite"></div>'));
   assert.ok(DASHBOARD.includes('<section class="admin-view" id="adminView" hidden aria-labelledby="adminTitle"></section>'));
-  assert.ok(DASHBOARD.includes('<script src="student-account.js?v=1.4.0"></script>'));
-  assert.ok(DASHBOARD.includes('<script defer src="access-gate.js?v=1.0.0" data-app="student"></script>'));
+  assert.ok(DASHBOARD.includes('<script src="student-account.js?v=1.5.0"></script>'));
+  assert.ok(DASHBOARD.includes('<script defer src="access-gate.js?v=1.1.0" data-app="student"></script>'));
   const at = text => DASHBOARD.indexOf(text);
   assert.ok(at('<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js">') < at('<script src="student-account.js'), 'the SDK first');
   assert.ok(at('<script src="student-account.js') < at('<script defer src="access-gate.js'));
@@ -384,26 +384,101 @@ test('/student signs in, shows the admin dashboard and loads the very same gate 
 // english and chinese load the same file from https://polymathlc.github.io/cer/student/
 // — each of those repositories checks its own pages.)
 const SCIENCE_PAGES = {
-  'index.html': ['student/access-gate.js?v=1.0.0', 'science'],
-  'math.html': ['student/access-gate.js?v=1.0.0', 'science-math'],
-  'mistakes.html': ['student/access-gate.js?v=1.0.0', 'science-mistakes'],
-  'polymath.html': ['student/access-gate.js?v=1.0.0', 'science-polymath'],
-  'fps.html': ['student/access-gate.js?v=1.0.0', 'science-strike'],
-  'bar-model.html': ['student/access-gate.js?v=1.0.0', 'bar-model'],
-  'video-review.html': ['student/access-gate.js?v=1.0.0', 'lesson-replay'],
-  'online/index.html': ['../student/access-gate.js?v=1.0.0', 'online']
+  'index.html': ['student/access-gate.js?v=1.1.0', 'science', 'science'],
+  'math.html': ['student/access-gate.js?v=1.1.0', 'science-math', 'math'],
+  'mistakes.html': ['student/access-gate.js?v=1.1.0', 'science-mistakes', ''],
+  'polymath.html': ['student/access-gate.js?v=1.1.0', 'science-polymath', ''],
+  'fps.html': ['student/access-gate.js?v=1.1.0', 'science-strike', 'science'],
+  'bar-model.html': ['student/access-gate.js?v=1.1.0', 'bar-model', 'math'],
+  'video-review.html': ['student/access-gate.js?v=1.1.0', 'lesson-replay', ''],
+  'online/index.html': ['../student/access-gate.js?v=1.1.0', 'online', '']
 };
 
-test('every student page here loads the gate, once, at the end of the page', () => {
-  for (const [file, [src, app]] of Object.entries(SCIENCE_PAGES)) {
+test('every student page here loads the gate, once, at the end of the page, with its subject', () => {
+  for (const [file, [src, app, subject]] of Object.entries(SCIENCE_PAGES)) {
     const page = fs.readFileSync(path.join(root, file), 'utf8');
     const tags = page.match(/<script defer src="[^"]*access-gate\.js[^"]*"[^>]*><\/script>/g) || [];
     assert.equal(tags.length, 1, file);
-    assert.equal(tags[0], `<script defer src="${src}" data-app="${app}"></script>`, file);
+    const expected = `<script defer src="${src}" data-app="${app}"${subject ? ` data-subject="${subject}"` : ''}></script>`;
+    assert.equal(tags[0], expected, file);
     const at = page.lastIndexOf(tags[0]);
     // fps.html carries it at the end of <head>: its game test splices into the page's LAST </script>.
     assert.ok(/^\s*<\/(body|head)>/.test(page.slice(at + tags[0].length)), file + ': right before </body> (or </head>)');
   }
+});
+
+/* ───────────────────────────── subjects (v1.1.0) ───────────────────────────── */
+
+const child = (name, level, subjects) => ({ name, level, subjects });
+const plain = value => JSON.parse(JSON.stringify(value));
+
+test('subjects: each child\'s choice opens exactly its apps; several children add up', () => {
+  const { core } = loadGate();
+  assert.deepEqual(plain(core.subjectsOfChoice('math')), ['math']);
+  assert.deepEqual(plain(core.subjectsOfChoice('science')), ['science']);
+  assert.deepEqual(plain(core.subjectsOfChoice('both')), ['math', 'science']);
+  assert.deepEqual(plain(core.subjectsOfChoice('english')), []);
+  assert.deepEqual(plain(core.subjectsOfChoice('')), []);
+  assert.deepEqual(plain(core.approvedSubjects(null)), []);
+  assert.deepEqual(plain(core.approvedSubjects({ children: [] })), []);
+  assert.deepEqual(plain(core.approvedSubjects({ children: [child('Ann', 'P5', 'science')] })), ['science']);
+  assert.deepEqual(plain(core.approvedSubjects({ children: [child('Ann', 'P5', 'math')] })), ['math']);
+  assert.deepEqual(plain(core.approvedSubjects({ children: [child('Ann', 'P5', 'both')] })), ['math', 'science']);
+  assert.deepEqual(plain(core.approvedSubjects({ children: [child('Ann', 'P5', 'science'), child('Ben', 'P3', 'math')] })), ['math', 'science']);
+  assert.deepEqual(plain(core.approvedSubjects({ children: [null, child('Ben', 'P3', 'nonsense')] })), []);
+});
+
+test('subjects: a Science-only account never opens a Math page, and the other way round', () => {
+  const { core } = loadGate();
+  const scienceOnly = { status: 'approved', children: [child('Ann', 'P5', 'science')] };
+  const mathOnly = { status: 'approved', children: [child('Ann', 'P5', 'math')] };
+  const both = { status: 'approved', children: [child('Ann', 'P5', 'both')] };
+  assert.equal(core.subjectAllowed(scienceOnly, 'math'), false);
+  assert.equal(core.subjectAllowed(scienceOnly, 'science'), true);
+  assert.equal(core.subjectAllowed(mathOnly, 'science'), false);
+  assert.equal(core.subjectAllowed(mathOnly, 'math'), true);
+  assert.equal(core.subjectAllowed(both, 'math'), true);
+  assert.equal(core.subjectAllowed(both, 'science'), true);
+  // Pages without a subject (Study Buddy, English, Chinese, Answer Keys, Rewards, /online) open for all.
+  for (const record of [scienceOnly, mathOnly, both, { status: 'approved', children: [] }]) {
+    assert.equal(core.subjectAllowed(record, ''), true);
+    assert.equal(core.subjectAllowed(record, undefined), true);
+    assert.equal(core.subjectAllowed(record, 'english'), true, 'an unknown subject on a tag never locks anybody out');
+  }
+  assert.equal(core.cleanAppSubject(' Math '), 'math');
+  assert.equal(core.cleanAppSubject('SCIENCE'), 'science');
+  assert.equal(core.cleanAppSubject('both'), '');
+  assert.equal(core.appSubjectLabel('math'), 'Math');
+  assert.equal(core.appSubjectLabel('science'), 'Science');
+});
+
+test('levels and per-child pairs: the worksheets portal sees each child\'s own level and subjects', () => {
+  const { core } = loadGate();
+  const record = { children: [child('Ann', 'P6', 'math'), child('Ben', 'P4', 'science'), child('Cat', 'P6', 'science'), child('Dan', 'S1', 'both')] };
+  assert.deepEqual(plain(core.approvedLevels(record)), ['P4', 'P6', 'S1']);
+  assert.deepEqual(plain(core.approvedPairs(record)), [
+    { level: 'P6', subjects: ['math', 'science'] },
+    { level: 'P4', subjects: ['science'] },
+    { level: 'S1', subjects: ['math', 'science'] }
+  ]);
+  assert.deepEqual(plain(core.approvedPairs({ children: [child('Ann', '', 'math'), child('Ben', 'P5', '')] })), []);
+  assert.deepEqual(plain(core.approvedLevels(null)), []);
+});
+
+test('the remembered answer keeps the subjects, and an old remembered answer (no subjects) still reads', () => {
+  const { core } = loadGate();
+  assert.deepEqual(plain(core.cleanSubjectList(['science', 'math', 'math', 'english'])), ['math', 'science']);
+  assert.equal(core.cleanSubjectList(undefined), null);
+  assert.equal(core.cleanSubjectList('math'), null);
+  assert.ok(/subjects: cleanSubjectList\(parsed\.subjects\)/.test(GATE_SOURCE));
+  assert.ok(GATE_SOURCE.includes("var BLOCKING = { checking: true, form: true, pending: true, revoked: true, error: true, subject: true };"));
+});
+
+test('the "not in your subjects" screen names both subjects, links back to My Polymath and escapes nothing unsafe', () => {
+  assert.ok(GATE_SOURCE.includes("'<h1>' + escapeHtml(wanted) + ' is not part of your Polymath subjects</h1>'"));
+  assert.ok(GATE_SOURCE.includes("var DASHBOARD = 'https://polymathlc.com.sg/student/';"));
+  assert.ok(GATE_SOURCE.includes('Open My Polymath'));
+  assert.ok(GATE_SOURCE.includes("APP_SUBJECT = cleanAppSubject(script && script.getAttribute('data-subject'));"));
 });
 
 test('an Office block still on its older admin list is not re-tested here (its own workflow upgrades it)', async () => {
@@ -419,4 +494,45 @@ test('regression: the protection probe reads a document id Firestore accepts (__
   const ids = [...GATE_SOURCE.matchAll(/docUrl\('studentAccess\/([^'"]+)'\)/g)].map(m => m[1]);
   assert.deepEqual(ids, ['protection-probe']);
   assert.ok(!/__\w+__/.test(ids[0]));
+});
+
+/* ───────────── who loses something (tools/student-access-impact.mjs) ───────────── */
+test('the impact count: only approved accounts that used an app their subjects close, and Online classes that go', async () => {
+  const { impactReport, reportLines, STAFF: IMPACT_STAFF } = await import('./student-access-impact.mjs');
+  const gate = loadGate();
+  assert.deepEqual(IMPACT_STAFF, [...gate.core.STAFF], 'the same staff list as the gate');
+  const kid = (level, subjects) => ({ name: 'X', level, subjects });
+  const records = [
+    { id: 'a', data: { status: 'approved', email: 'a@x.co', children: [kid('P5', 'science')] } },      // used Math → loses it
+    { id: 'b', data: { status: 'approved', email: 'b@x.co', children: [kid('P5', 'math')] } },         // used Science → loses it
+    { id: 'c', data: { status: 'approved', email: 'c@x.co', children: [kid('P5', 'both')] } },         // loses nothing
+    { id: 'd', data: { status: 'approved', email: 'd@x.co', children: [kid('P6', 'science')] } },      // Online P6 Math goes
+    { id: 'e', data: { status: 'pending', email: 'e@x.co', children: [kid('P4', 'math')] } },
+    { id: 'f', data: { status: 'revoked', email: 'f@x.co', children: [kid('P4', 'math')] } },
+    { id: 'g', data: { status: 'approved', email: 'elsielcr@gmail.com', children: [] } },             // staff: not counted
+    { id: 'h', data: { status: 'approved', email: 'h@x.co', children: [kid('P5', 'science')] } }       // Online-only profile: not Math use
+  ];
+  const report = impactReport(records, {
+    math: { a: { totalAnswered: 12 }, c: { totalAnswered: 3 }, h: { name: 'H', level: 'P5', subject: 'science', onlineMember: true } },
+    science: { b: { xp: 1 }, c: { xp: 2 } },
+    online: { d: { level: 'P6', subjects: ['math', 'science'] }, c: { level: 'P5', subjects: ['math'] }, e: { level: 'P4', subjects: ['math'] } }
+  });
+  assert.equal(report.records, 7);
+  assert.equal(report.staffSkipped, 1);
+  assert.equal(report.approved, 5);
+  assert.equal(report.pending, 1);
+  assert.equal(report.paused, 1);
+  assert.equal(report.approvedScienceOnly, 3);
+  assert.equal(report.approvedMathOnly, 1);
+  assert.equal(report.approvedBoth, 1);
+  assert.equal(report.loseMathApp, 1);
+  assert.equal(report.loseScienceApp, 1);
+  assert.equal(report.loseAnySubjectApp, 2);
+  assert.equal(report.onlineRows, 3);
+  assert.equal(report.onlineLoseSome, 1, 'd keeps P6 Science, loses P6 Math');
+  assert.equal(report.onlineLoseAll, 1, 'e is still waiting');
+  assert.equal(report.onlineGain, 1, 'c gains P5 Science');
+  assert.equal(report.accountsLosingSomething, 3, 'a, b and d');
+  const text = reportLines(report).join('\n');
+  assert.ok(!/@/.test(text), 'counts only: no email in a public log');
 });

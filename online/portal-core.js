@@ -187,12 +187,85 @@
   function percent(part, whole) { return whole > 0 ? Math.round(100 * Math.max(0, Math.min(part, whole)) / whole) : 0; }
 
   /* ---- Who sees which class ---- */
+  // A member's (level, subjects) pairs. Since November 2026 the approval at
+  // polymathlc.com.sg/student decides them: each approved child adds its own
+  // level and subjects (`access`), so a family with a P4 Science child and a
+  // P6 Math child sees P4 Science and P6 Math — never P6 Science. A member row
+  // without `access` (an invitation from before) is its one level + subjects.
+  function accessPairs(member) {
+    if (!member) return [];
+    var out = [];
+    function add(level, subjects) {
+      if (LEVELS.indexOf(level) < 0) return;
+      var clean = cleanSubjects(level, subjects);
+      if (!clean.length) return;
+      for (var i = 0; i < out.length; i++) {
+        if (out[i].level === level) {
+          clean.forEach(function (s) { if (out[i].subjects.indexOf(s) < 0) out[i].subjects.push(s); });
+          out[i].subjects.sort();
+          return;
+        }
+      }
+      out.push({ level: level, subjects: clean });
+    }
+    if (Array.isArray(member.access)) {
+      member.access.forEach(function (pair) { if (pair) add(pair.level, pair.subjects); });
+      return out;
+    }
+    if (member.level) add(member.level, member.subjects);
+    return out;
+  }
   function memberSees(member, course) {
     if (!member || !course) return false;
     if (course.archived) return false;
-    if (!member.level || course.level !== member.level) return false;
-    var subjects = cleanSubjects(member.level, member.subjects);
-    return subjects.indexOf(course.subject) >= 0;
+    return accessPairs(member).some(function (pair) {
+      return pair.level === course.level && pair.subjects.indexOf(course.subject) >= 0;
+    });
+  }
+
+  /* ---- The approval at polymathlc.com.sg/student (studentAccess/{uid}) ---- */
+  function studentAccessStatus(record) {
+    if (!record) return 'none';
+    var s = String(record.status || '').toLowerCase();
+    return s === 'approved' || s === 'revoked' ? s : 'pending';
+  }
+  // Each approved child → its Online (level, subjects): "both" opens Maths and
+  // Science, P3 stays Science only, and levels Online has no classes for
+  // (P1, P2, secondary) add nothing.
+  function accessFromStudentAccess(record) {
+    var children = record && Array.isArray(record.children) ? record.children : [];
+    return accessPairs({ access: children.map(function (child) {
+      return child ? { level: child.level, subjects: child.subjects === 'both' ? ['both'] : [child.subjects] } : null;
+    }) });
+  }
+  // The member the portal works with for an approved account: the approval's
+  // levels and subjects, over whatever an older invitation said.
+  function memberFromStudentAccess(record, existing, user) {
+    var access = accessFromStudentAccess(record);
+    var names = (record && Array.isArray(record.children) ? record.children : [])
+      .map(function (c) { return c && c.name ? String(c.name) : ''; }).filter(Boolean);
+    var base = {};
+    Object.keys(existing || {}).forEach(function (key) { base[key] = existing[key]; });
+    base.uid = (user && user.uid) || base.uid || (record && record.uid) || '';
+    base.email = base.email || (user && user.email) || (record && record.email) || '';
+    base.name = base.name || names.join(' & ') || (user && user.displayName) || '';
+    base.role = base.role === 'parent' ? 'parent' : 'student';
+    base.access = access;
+    base.level = access.length ? access[0].level : '';
+    base.subjects = access.length ? access[0].subjects.slice() : [];
+    base.source = 'student-access';
+    delete base.revoked;
+    delete base.revokedAt;
+    return base;
+  }
+  // Every level an approved account asked for, Online or not (for the "no
+  // classes" note: a Secondary 1 child has no Online worksheets yet).
+  function studentAccessLevels(record) {
+    var out = [];
+    (record && Array.isArray(record.children) ? record.children : []).forEach(function (c) {
+      if (c && c.level && out.indexOf(c.level) < 0) out.push(String(c.level));
+    });
+    return out;
   }
   function coursesForMember(courses, member) {
     var list = Array.isArray(courses) ? courses : Object.keys(courses || {}).map(function (k) { return courses[k]; });
@@ -658,6 +731,8 @@
     worksheetState: worksheetState, releasedWorksheets: releasedWorksheets, nextWorksheets: nextWorksheets, progressUpdate: progressUpdate, percent: percent,
     ansKeyAt: ansKeyAt, ansKeyState: ansKeyState, finishUpdate: finishUpdate,
     memberSees: memberSees, coursesForMember: coursesForMember, compareCourses: compareCourses,
+    accessPairs: accessPairs, studentAccessStatus: studentAccessStatus, accessFromStudentAccess: accessFromStudentAccess,
+    memberFromStudentAccess: memberFromStudentAccess, studentAccessLevels: studentAccessLevels,
     moveItem: moveItem, remapProgress: remapProgress,
     toMillis: toMillis, editedMillis: editedMillis, formatDay: formatDay, formatClock: formatClock, parseAnnotations: parseAnnotations,
     lessonRecordings: lessonRecordings, formatDuration: formatDuration, anskeyLink: anskeyLink, timelineItems: timelineItems,
