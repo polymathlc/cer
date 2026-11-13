@@ -40,7 +40,7 @@
         payment, last PayNow screenshot the parent sent).
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export const OFFICE_CORE_VERSION = '1.3.0';
+export const OFFICE_CORE_VERSION = '1.4.0';
 
 /* ─────────────────────────── The centre ─────────────────────────── */
 export const SITE = 'https://polymathlc.com.sg';
@@ -1979,6 +1979,8 @@ export function familyRecordProblems(family, families) {
 export const SCREENSHOT_LIMIT = 120;
 // The payment record starts here: nothing before September 2026 is listed.
 export const RECORD_START = '2026-09';
+// …and runs to at least December 2027, so a year paid in advance can be ticked off.
+export const RECORD_END = '2027-12';
 export function normalizePaidMonths(list) {
   const seen = new Map();
   (Array.isArray(list) ? list : []).forEach(x => {
@@ -2064,14 +2066,16 @@ export function familyPaymentRecord(family, invoices, payments, opts) {
     if (f.withdrawn && f.lastMonth && period > f.lastMonth) return { key: 'gone', inv: null, hand: null };
     return { key: 'none', inv: null, hand: null };
   };
-  // The window: the last `span` months up to this one, stretched forward to any
-  // later month already invoiced or paid (fees paid in advance).
+  // The window: from the record's start (September 2026, or the last `span`
+  // months once that is far behind) to December 2027 — or this month, or any
+  // later month already invoiced or paid, whichever is latest.
   const thisMonth = today.slice(0, 7);
-  let end = thisMonth;
+  const until = isPeriod(o.until) ? o.until : RECORD_END;
+  let end = until > thisMonth ? until : thisMonth;
   [...monthly.keys(), ...hand.keys()].forEach(p => { if (p > end) end = p; });
   const months = [];
   const from = isPeriod(o.from) ? o.from : RECORD_START;
-  let first = addMonths(thisMonth, -(span - 1));
+  let first = o.months ? addMonths(thisMonth, -(span - 1)) : from;
   if (first < from) first = from;
   for (let p = first; p <= end; p = addMonths(p, 1)) {
     const s = stateFor(p);
@@ -2228,4 +2232,12 @@ export function extraFieldProblems(family) {
   }
   if (f.withdrawn && !f.lastMonth) out.push({ level: 'block', field: 'withdrawal', text: 'Withdrawal is Yes: choose the last month with us.' });
   return out;
+}
+
+// A few months around this one (for a card or a table row), from the full record.
+export function monthsAround(months, period, before, after) {
+  const list = months || [];
+  const at = list.findIndex(m => m.period === period);
+  if (at < 0) return list.slice(-(before + after + 1));
+  return list.slice(Math.max(0, at - before), at + after + 1);
 }
