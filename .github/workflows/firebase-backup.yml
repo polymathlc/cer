@@ -1,0 +1,27 @@
+name: Firebase daily backup (measure)
+on:
+  push:
+    branches: [claude/firebase-daily-backup]
+permissions:
+  contents: read
+jobs:
+  measure:
+    if: github.repository == 'polymathlc/cer'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --prefix "$RUNNER_TEMP/backup-deps" --no-save --no-audit --no-fund firebase-admin@12
+      - env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node tools/office-rules.mjs --setup
+      - env:
+          BACKUP_DEPS: ${{ runner.temp }}/backup-deps
+        run: node tools/firebase-backup-measure.mjs
+      - if: always()
+        run: rm -f "$RUNNER_TEMP/firebase-sa.json"
