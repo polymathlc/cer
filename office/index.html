@@ -474,6 +474,16 @@
   table.rec td.slots .subj { margin:0 3px 3px 0; }
   table.rec td.em { max-width:220px; word-break:break-all; }
   table.rec td.notes { max-width:220px; color:var(--ink-2); }
+  /* v1.12.0: click a heading to sort; Months unpaid */
+  table.rec th.sortable { cursor:pointer; user-select:none; white-space:nowrap; }
+  table.rec th.sortable:hover, table.rec th.sortable:focus-visible { color:var(--deep); background:#eef7f8; outline:none; }
+  table.rec th.sortable.on { color:var(--deep); background:#e3f3f5; }
+  table.rec th .sort-ind { margin-left:4px; font-size:10px; opacity:.45; }
+  table.rec th.sortable.on .sort-ind { opacity:1; }
+  table.rec td.unpaid-cell { min-width:130px; }
+  table.rec .unpaid-list { color:var(--amber); font-weight:700; margin-top:3px; }
+  .ok-t { color:var(--green); font-weight:700; font-size:12.5px; white-space:nowrap; }
+  .rec-sortnote { margin:0 0 8px; color:var(--ink-2); }
   /* Long notes and addresses stay two lines so one family never makes a very tall row; the full text is in the tooltip and the family card. */
   table.rec td.notes .clamp, table.rec .addr { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; line-clamp:2; overflow:hidden; }
   /* Zoom: minus and plus beside the Cards / Table switch. */
@@ -731,6 +741,6 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="version hidden" id="version"></div>
 
-<script type="module" src="office-app.mjs?v=1.11.0"></script>
+<script type="module" src="office-app.mjs?v=1.12.0"></script>
 </body>
 </html>

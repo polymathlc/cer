@@ -40,7 +40,7 @@
         payment, last PayNow screenshot the parent sent).
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export const OFFICE_CORE_VERSION = '1.11.0';
+export const OFFICE_CORE_VERSION = '1.12.0';
 
 /* ─────────────────────────── The centre ─────────────────────────── */
 export const SITE = 'https://polymathlc.com.sg';
@@ -2405,7 +2405,30 @@ export function familyPaymentRecord(family, invoices, payments, opts) {
   });
   const lastPayment = merged[0] || null;
   const lastScreenshot = f.screenshots[0] || null;
+  // v1.12.0 — Months unpaid: every month that is due (from the family's start —
+  // "With us since" — or the record's start, up to and including this month)
+  // and not paid: no invoice yet, or an invoice not fully paid. Paused months,
+  // months after a withdrawal and package months are not due; a combined pair
+  // (November–December 2026) is one item.
+  const startMonth = familyStartMonth(f);
+  const dueFrom = startMonth && startMonth > from ? startMonth : from;
+  const unpaid = [];
+  months.forEach(m => {
+    if (m.period < dueFrom || m.period > thisMonth) return;
+    if (!['none', 'draft', 'waiting', 'part', 'overdue'].includes(m.key)) return;
+    if (!activeStudents(f).length || familyStateIn(f, m.period) !== 'active') return;
+    const j = joint(m.period);
+    if (j && m.period === j.covered && unpaid.some(u => u.period === j.lead)) return;   // one item for the pair
+    unpaid.push({
+      period: m.period, periodTo: j && j.lead === m.period ? j.covered : '', key: m.key,
+      short: j ? (j.lead === m.period ? periodRangeShort(j.lead, j.covered) : monthShort(m.period) + ' ' + m.period.slice(0, 4)) : monthShort(m.period) + ' ' + m.period.slice(0, 4),
+      label: j && j.lead === m.period ? periodRangeLabel(j.lead, j.covered) : periodLabel(m.period),
+      invoiceId: m.invoiceId, outstanding: m.outstanding
+    });
+  });
   return {
+    unpaid, unpaidPeriods: unpaid.map(u => u.period), unpaidCount: unpaid.length, unpaidText: unpaidMonthsText(unpaid),
+    unpaidOwed: round2(unpaid.reduce((n, u) => n + (u.outstanding || 0), 0)),
     months, paidPeriods, paidText: monthsText(paidPeriods), paidCount: paidPeriods.length,
     thisMonthPaid: paidPeriods.includes(thisMonth),
     lastPayment, payments: merged.slice(0, 20),
@@ -2413,6 +2436,26 @@ export function familyPaymentRecord(family, invoices, payments, opts) {
     screenshotDaysAgo: lastScreenshot ? daysBetween(lastScreenshot.date, today) : null,
     paymentDaysAgo: lastPayment ? daysBetween(lastPayment.date, today) : null
   };
+}
+// The month a family started: the earliest of its sign-up date and its children's start dates.
+export function familyStartMonth(family) {
+  const f = family || {};
+  const days = [f.signUpDate, ...(f.students || []).filter(x => x && x.status !== 'left').map(x => x.startDate)].filter(isDayKey).sort();
+  return days.length ? days[0].slice(0, 7) : '';
+}
+// "Oct, Nov–Dec 2026 · Jan 2027"
+export function unpaidMonthsText(items) {
+  const list = (items || []).slice().sort((a, b) => a.period.localeCompare(b.period));
+  if (!list.length) return '';
+  const years = new Map();
+  list.forEach(u => {
+    const end = u.periodTo || u.period;
+    const y = end.slice(0, 4);
+    const lbl = u.periodTo && u.periodTo.slice(0, 4) === u.period.slice(0, 4) ? monthShort(u.period) + '–' + monthShort(u.periodTo)
+      : u.periodTo ? monthShort(u.period) + ' ' + u.period.slice(0, 4) + '–' + monthShort(u.periodTo) : monthShort(u.period);
+    const a = years.get(y) || []; a.push(lbl); years.set(y, a);
+  });
+  return [...years.entries()].map(([y, ms]) => ms.join(', ') + ' ' + y).join(' · ');
 }
 // "today", "yesterday", "5 days ago", "3 Nov"
 export function daysAgoText(n, dayKey) {
@@ -2446,7 +2489,8 @@ export function familyRecordRows(families, ctx) {
         lessonType: type, lessonTypes: types, lessonTypeLabel: types.map(lessonTypeLabel).join(' + '),
         slots: slots.map(id => { const cl = (st.classes || []).find(x => x.slotId === id) || {}; const md = classMode(cl, c.schedule); return { id, label: slotChoiceLabel(c.schedule, id), subject: scheduleSlot(c.schedule, id).subject || '', master: md === 'Master', mode: md, modeLabel: CLASS_MODE_META[md].label }; }),
         otherClasses: st ? st.classes.filter(x => x.custom).map(x => x.label || 'Other arrangement') : [],
-        paidPeriods: rec.paidPeriods, paidText: rec.paidText, months: rec.months,
+        paidPeriods: rec.paidPeriods, paidText: rec.paidText, paidCount: rec.paidCount, months: rec.months,
+        unpaid: rec.unpaid, unpaidText: rec.unpaidText, unpaidCount: rec.unpaidCount, unpaidOwed: rec.unpaidOwed,
         thisMonthPaid: rec.thisMonthPaid,
         lastPayment: rec.lastPayment, lastScreenshot: rec.lastScreenshot,
         screenshotDaysAgo: rec.screenshotDaysAgo, paymentDaysAgo: rec.paymentDaysAgo,
@@ -2462,14 +2506,14 @@ export function familyRecordRows(families, ctx) {
 }
 export const FAMILY_RECORD_HEADERS = Object.freeze([
   'Status', 'Email (account ID)', 'Student name', 'Parent name', 'WhatsApp', 'Primary school', 'Level', 'With us since',
-  'Slots (physical / online / master class)', 'Payment type', 'Package start', 'Package end', 'Months paid', 'Last payment', 'Last payment amount', 'Last screenshot',
+  'Slots (physical / online / master class)', 'Payment type', 'Package start', 'Package end', 'Months paid', 'Months unpaid', 'Last payment', 'Last payment amount', 'Last screenshot',
   'Hardcopy subscription', 'Postal address', 'Withdrawal', 'Last month with us', 'Paused from', 'Paused until', 'Reference', 'Notes'
 ]);
 export function familyRecordCsv(rows) {
   return toCsv([FAMILY_RECORD_HEADERS.slice(), ...(rows || []).map(r => [
     r.statusLabel, r.email, r.studentName, r.parentName, displayPhone(r.whatsapp), r.school, levelLabel(r.level), r.since,
     [...r.slots.map(s => s.label + ' (' + s.modeLabel + ')'), ...r.otherClasses].join('; '),
-    r.paymentTypeLabel, r.paymentType === 'package' ? r.packageStart : '', r.paymentType === 'package' ? r.packageEnd : '', r.paidText,
+    r.paymentTypeLabel, r.paymentType === 'package' ? r.packageStart : '', r.paymentType === 'package' ? r.packageEnd : '', r.paidText, r.unpaidText || '',
     r.lastPayment ? r.lastPayment.date : '', r.lastPayment && r.lastPayment.amount ? moneyPlain(r.lastPayment.amount) : '',
     r.lastScreenshot ? r.lastScreenshot.date : '',
     r.hardcopy ? 'Yes' : 'No', r.hardcopy ? r.address : '', r.withdrawn ? 'Yes' : 'No', r.withdrawn && r.lastMonth ? periodLabel(r.lastMonth) : '',
@@ -2581,6 +2625,66 @@ export function sortFamilies(families, key) {
   return list.sort(cmp);
 }
 // The same order for the table's rows (one per child): by the child's own level.
+/* ── Sorting the records table by a column (v1.12.0) ──
+   A click on a column heading sorts every row by that column, A→Z / smallest
+   first, again for Z→A / largest first, and a third time back to the usual
+   order (the level headings). Blanks always go last. Ties keep a family's
+   children together, in level order. */
+export const RECORD_COLUMNS = Object.freeze([
+  Object.freeze({ key: 'status', label: 'Status' }),
+  Object.freeze({ key: 'email', label: 'Email (account ID)' }),
+  Object.freeze({ key: 'student', label: 'Student' }),
+  Object.freeze({ key: 'parent', label: 'Parent · WhatsApp' }),
+  Object.freeze({ key: 'school', label: 'Primary school' }),
+  Object.freeze({ key: 'since', label: 'With us since' }),
+  Object.freeze({ key: 'slots', label: 'Slots' }),
+  Object.freeze({ key: 'payment', label: 'Payment type' }),
+  Object.freeze({ key: 'paid', label: 'Months paid' }),
+  Object.freeze({ key: 'unpaid', label: 'Months unpaid' }),
+  Object.freeze({ key: 'screenshot', label: 'Last screenshot' }),
+  Object.freeze({ key: 'hardcopy', label: 'Hardcopy' }),
+  Object.freeze({ key: 'withdrawal', label: 'Withdrawal' }),
+  Object.freeze({ key: 'notes', label: 'Notes' })
+]);
+export const RECORD_COLUMN_KEYS = Object.freeze(RECORD_COLUMNS.map(c => c.key));
+const STATUS_ORDER = { active: 0, paused: 1, withdrawn: 2 };
+// The value a row sorts by in a column: a number or text, or null for a blank.
+export function recordSortValue(r, key) {
+  switch (key) {
+    case 'status': return STATUS_ORDER[r.status] != null ? STATUS_ORDER[r.status] : 3;
+    case 'email': return r.email ? String(r.email).toLowerCase() : null;
+    case 'student': return r.studentName ? normText(r.studentName) : null;
+    case 'parent': return r.parentName ? normText(r.parentName) : null;
+    case 'school': return r.school ? normText(r.school) : null;
+    case 'since': return r.since || null;
+    case 'slots': return r.slots && r.slots.length ? normText(r.slots[0].label) : (r.otherClasses && r.otherClasses.length ? normText(r.otherClasses[0]) : null);
+    case 'payment': return r.paymentType === 'package' ? 1 : 0;
+    case 'paid': return Number(r.paidCount) || (r.paidPeriods ? r.paidPeriods.length : 0);
+    case 'unpaid': return Number(r.unpaidCount) || 0;
+    case 'screenshot': return r.lastScreenshot ? r.lastScreenshot.date : null;
+    case 'hardcopy': return r.hardcopy ? 1 : 0;
+    case 'withdrawal': return r.withdrawn ? (r.lastMonth || '9999-99') : null;
+    case 'notes': return r.notes ? normText(r.notes) : null;
+    default: return null;
+  }
+}
+export function sortRecordRowsBy(rows, key, dir) {
+  const list = sortRecordRows(rows, 'level');
+  if (!RECORD_COLUMN_KEYS.includes(key)) return list;
+  const d = dir === 'desc' ? -1 : 1;
+  const at = new Map(list.map((r, i) => [r, i]));
+  return list.slice().sort((a, b) => {
+    const va = recordSortValue(a, key), vb = recordSortValue(b, key);
+    const na = va == null || va === '', nb = vb == null || vb === '';
+    if (na !== nb) return na ? 1 : -1;
+    if (!na) {
+      const c = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb));
+      if (c) return c * d;
+    }
+    // Ties: a family's rows stay together, in their usual order.
+    return byText(a.parentName, b.parentName) || at.get(a) - at.get(b);
+  });
+}
 export function sortRecordRows(rows, key) {
   const k = FAMILY_SORT_KEYS.includes(key) ? key : 'level';
   const list = (rows || []).slice();
