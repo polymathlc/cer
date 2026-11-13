@@ -237,19 +237,26 @@ export async function buildBackup({ found, skipped, authUsers, storageIndex, now
   ];
   const officeZip = B.writeZip(officeZipEntries, nowMs);
 
-  const fullTotals = { collections: plan.linked.length, documents: plan.linked.reduce((a, e) => a + e.meta.count, 0) };
-  const fullHead = [
-    B.prepareEntry('README.txt', B.readmeText({ nowMs, kind: 'full', totals: fullTotals })),
-    B.prepareEntry('backup-manifest.json', B.manifest(plan.linked, nowMs, {
-      email: 'full',
-      leftOut: plan.leftOut.map(e => ({ path: e.meta.path, documents: e.meta.count, bytes: e.size })),
-      skipped
-    }))
-  ];
-  if (storageIndex) fullHead.push(B.prepareEntry('storage/files.json', JSON.stringify({ note: 'Names and sizes of the files in Cloud Storage (photos, screenshots, uploads). The files themselves are not in this backup.', count: storageIndex.length, files: storageIndex }, null, 1)));
-  const fullZip = B.writeZip([...fullHead, ...plan.linked], nowMs);
+  // The full data, in up to LINKED_MAX_PARTS zips of at most LINKED_PART_LIMIT.
+  const storageEntry = storageIndex ? B.prepareEntry('storage/files.json', JSON.stringify({ note: 'Names and sizes of the files in Cloud Storage (photos, screenshots, uploads). The files themselves are not in this backup.', count: storageIndex.length, files: storageIndex }, null, 1)) : null;
+  const headRoom = 256 * 1024 + (storageEntry ? B.entryZipBytes(storageEntry) : 0);
+  const packed = B.packInlineParts(plan.linked, { partLimit: B.LINKED_PART_LIMIT - headRoom, maxParts: B.LINKED_MAX_PARTS });
+  const leftOut = [...plan.leftOut, ...packed.leftOut];
+  const fullParts = packed.parts.map((entries, i) => {
+    const totals = { collections: entries.length, documents: entries.reduce((a, e) => a + e.meta.count, 0) };
+    const head = [
+      B.prepareEntry('README.txt', B.readmeText({ nowMs, kind: 'full', totals })),
+      B.prepareEntry('backup-manifest.json', B.manifest(entries, nowMs, {
+        email: 'full', part: i + 1, parts: packed.parts.length,
+        leftOut: leftOut.map(e => ({ path: e.meta.path, documents: e.meta.count, bytes: e.size })),
+        skipped
+      }))
+    ];
+    if (i === 0 && storageEntry) head.push(storageEntry);
+    return { entries, zip: B.writeZip([...head, ...entries], nowMs) };
+  });
 
-  return { plan, officeData, officeZip, familyAttachment, fullHead, fullZip, dateKey };
+  return { plan, officeData, officeZip, familyAttachment, fullParts, leftOut, dateKey };
 }
 
 /* ─────────────────────────── Sending and checking ─────────────────────────── */
@@ -289,9 +296,9 @@ export async function runBackup({ admin, dryRun, nowMs = Date.now() }) {
   catch (e) { report.push('Storage file list unavailable: ' + String(e && e.code || e && e.message || e).slice(0, 80)); }
 
   const built = await buildBackup({ found, skipped, authUsers, storageIndex, nowMs, problems });
-  const { plan, officeData, officeZip, familyAttachment, fullHead, fullZip, dateKey } = built;
-  B.summaryLines(plan, { skipped }).forEach(l => report.push(l));
-  report.push('Office zip ' + B.prettyBytes(officeZip.length) + ', full zip ' + B.prettyBytes(fullZip.length) + '.');
+  const { plan, officeData, officeZip, familyAttachment, fullParts, leftOut, dateKey } = built;
+  B.summaryLines(Object.assign({}, plan, { leftOut }), { skipped }).forEach(l => report.push(l));
+  report.push('Office zip ' + B.prettyBytes(officeZip.length) + '; full data in ' + fullParts.length + ' zip(s): ' + fullParts.map(p => B.prettyBytes(p.zip.length)).join(', ') + '.');
 
   if (dryRun) {
     report.unshift('**Dry run — nothing sent or written.**');
@@ -301,30 +308,35 @@ export async function runBackup({ admin, dryRun, nowMs = Date.now() }) {
   const mails = [];
   // Email 2 first: decide between the linked zip and inline parts, so email 1 can say what follows.
   let full = [];
-  let linked = false, objectName = null;
-  if (bucket && plan.linked.length) {
+  const objectNames = [];
+  if (bucket && fullParts.length) {
     try {
-      objectName = B.STORAGE_PREFIX + dateKey + '/polymath-full-backup-' + dateKey + '-' + nowMs + '.zip';
-      const file = bucket.file(objectName);
-      await file.save(fullZip, { resumable: false, contentType: 'application/zip', metadata: { cacheControl: 'private, max-age=0', metadata: { polymathBackup: dateKey } } });
-      const [url] = await file.getSignedUrl({ version: 'v4', action: 'read', expires: nowMs + B.SIGNED_URL_HOURS * 3600 * 1000 });
-      const msg = B.fullEmail({ nowMs, entries: plan.linked, leftOut: plan.leftOut, skipped, partIndex: 0, partCount: 1, zipBytes: fullZip.length, linked: true });
-      full.push({ kind: 'full', msg, attachments: [{ filename: 'polymath-full-backup-' + dateKey + '.zip', path: url, contentType: 'application/zip' }] });
-      linked = true;
+      for (let i = 0; i < fullParts.length; i++) {
+        const part = fullParts[i];
+        const suffix = fullParts.length > 1 ? '-part' + (i + 1) : '';
+        const objectName = B.STORAGE_PREFIX + dateKey + '/polymath-full-backup-' + dateKey + suffix + '-' + nowMs + '.zip';
+        const file = bucket.file(objectName);
+        await file.save(part.zip, { resumable: false, contentType: 'application/zip', metadata: { cacheControl: 'private, max-age=0', metadata: { polymathBackup: dateKey } } });
+        objectNames.push(objectName);
+        const [url] = await file.getSignedUrl({ version: 'v4', action: 'read', expires: nowMs + B.SIGNED_URL_HOURS * 3600 * 1000 });
+        const msg = B.fullEmail({ nowMs, entries: part.entries, leftOut, skipped, partIndex: i, partCount: fullParts.length, zipBytes: part.zip.length, linked: true });
+        full.push({ kind: 'full' + (fullParts.length > 1 ? '-part' + (i + 1) : ''), msg, objectName, attachments: [{ filename: 'polymath-full-backup-' + dateKey + suffix + '.zip', path: url, contentType: 'application/zip' }] });
+      }
     } catch (e) {
-      objectName = null;
-      report.push('Storage upload unavailable (' + String(e && e.code || e && e.message || e).slice(0, 80) + '); sending the full backup in parts.');
+      full = [];
+      for (const name of objectNames.splice(0)) { try { await bucket.file(name).delete(); } catch (x) { /* swept on the next run */ } }
+      report.push('Storage upload unavailable (' + String(e && e.code || e && e.message || e).slice(0, 80) + '); sending the full backup in small parts.');
     }
   }
-  if (!linked && plan.linked.length) {
-    const { parts, leftOut } = B.packInlineParts(plan.linked);
-    const allLeft = [...plan.leftOut, ...leftOut];
+  if (!full.length && plan.linked.length) {
+    const { parts, leftOut: notInParts } = B.packInlineParts(plan.linked);
+    const allLeft = [...plan.leftOut, ...notInParts];
     parts.forEach((p, i) => {
-      const zip = B.writeZip([...fullHead.slice(0, 1), B.prepareEntry('backup-manifest.json', B.manifest(p, nowMs, { email: 'full', part: i + 1, parts: parts.length })), ...p], nowMs);
+      const zip = B.writeZip([B.prepareEntry('README.txt', B.readmeText({ nowMs, kind: 'full' })), B.prepareEntry('backup-manifest.json', B.manifest(p, nowMs, { email: 'full', part: i + 1, parts: parts.length })), ...p], nowMs);
       const msg = B.fullEmail({ nowMs, entries: p, leftOut: allLeft, skipped, partIndex: i, partCount: parts.length, zipBytes: zip.length, linked: false });
       full.push({ kind: 'full-part' + (i + 1), msg, attachments: [B.base64Attachment('polymath-full-backup-' + dateKey + (parts.length > 1 ? '-part' + (i + 1) : '') + '.zip', zip)] });
     });
-    if (leftOut.length) report.push('Left out of the parts: ' + leftOut.map(e => e.meta.path).join(', '));
+    if (notInParts.length) report.push('Left out of the parts: ' + notInParts.map(e => e.meta.path).join(', '));
   }
 
   const officeAttachments = [B.base64Attachment('polymath-office-backup-' + dateKey + '.zip', officeZip)];
@@ -339,7 +351,7 @@ export async function runBackup({ admin, dryRun, nowMs = Date.now() }) {
   const ids = [];
   for (const m of mails) {
     const id = B.mailDocId(m.kind, dateKey, nowMs);
-    const doc = B.mailDoc({ message: m.msg, attachments: m.attachments, meta: { kind: m.kind, date: dateKey, storageObject: m.kind === 'full' ? objectName : null } });
+    const doc = B.mailDoc({ message: m.msg, attachments: m.attachments, meta: { kind: m.kind, date: dateKey, storageObject: m.objectName || null } });
     const size = B.attachmentsBase64Size(m.attachments) + Buffer.byteLength(m.msg.html) + Buffer.byteLength(m.msg.text);
     if (size > 1000 * 1024) throw new Error('The ' + m.kind + ' email would be too large for a mail document (' + B.prettyBytes(size) + ').');
     await db.collection('mail').doc(id).set(Object.assign(doc, { createdAt: admin.firestore.FieldValue.serverTimestamp() }));
@@ -361,15 +373,18 @@ export async function runBackup({ admin, dryRun, nowMs = Date.now() }) {
       problems.push('Email ' + id + ' was not confirmed delivered (' + state + ').');
     }
   }
-  const fullDelivered = ids.some(id => /-full-/.test(id) && sent.includes(id));
-  if (objectName && fullDelivered) {
-    try { await bucket.file(objectName).delete(); } catch (e) { report.push('Could not delete tonight\'s Storage copy: ' + String(e && e.code || e)); }
+  // Each Storage copy goes as soon as its email is confirmed sent.
+  for (const m of mails) {
+    if (!m.objectName) continue;
+    const id = B.mailDocId(m.kind, dateKey, nowMs);
+    if (!sent.includes(id)) continue;
+    try { await bucket.file(m.objectName).delete(); } catch (e) { report.push('Could not delete a Storage copy: ' + String(e && e.code || e)); }
   }
   if (bucket) {
     try {
       const [old] = await bucket.getFiles({ prefix: B.STORAGE_PREFIX });
       const cutoff = nowMs - B.STORAGE_KEEP_HOURS * 3600 * 1000;
-      for (const f of old) if (f.name !== objectName && Date.parse(f.metadata.timeCreated || f.metadata.updated || 0) < cutoff) await f.delete();
+      for (const f of old) if (!objectNames.includes(f.name) && Date.parse(f.metadata.timeCreated || f.metadata.updated || 0) < cutoff) await f.delete();
     } catch (e) { /* the next run tries again */ }
   }
   return { report, problems, sent, ids };

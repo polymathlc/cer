@@ -40,8 +40,12 @@ export const SG_OFFSET_MS = 8 * 60 * 60 * 1000;
 // A Firestore document is at most 1 MiB, and the inline email carries its
 // attachments base64-encoded inside one. Keep well clear of the limit.
 export const INLINE_BASE64_BUDGET = 880 * 1024;
-// Gmail and Google Workspace accept 25 MB messages; base64 adds a third.
-export const LINKED_ZIP_LIMIT = 17 * 1024 * 1024;
+// Gmail and Google Workspace accept 25 MB messages and base64 adds a third,
+// so each full-data email carries one zip of at most 13 MB, and there are at
+// most LINKED_MAX_PARTS of them a night.
+export const LINKED_PART_LIMIT = 13 * 1024 * 1024;
+export const LINKED_MAX_PARTS = 3;
+export const LINKED_ZIP_LIMIT = LINKED_PART_LIMIT * LINKED_MAX_PARTS;
 // When Storage is unavailable the full backup is split into inline parts.
 export const FALLBACK_PART_LIMIT = 640 * 1024;
 export const FALLBACK_MAX_PARTS = 6;
@@ -418,8 +422,10 @@ export function readZip(buf) {
 //   inline   — email 1's zip; must fit the inline budget together with the
 //              direct CSV attachments. If it would not, the largest business
 //              collections move to the full backup until it does.
-//   linked   — email 2's zip, sent from Storage; limited to LINKED_ZIP_LIMIT,
-//              dropping the largest collections (listed as left out) to fit.
+//   linked   — the full-data emails' collections, sent from Storage; limited
+//              to LINKED_ZIP_LIMIT in all, dropping the largest collections
+//              (listed as left out) to fit, then split into parts by
+//              packInlineParts with LINKED_PART_LIMIT.
 //
 // Returns { inline, linked, leftOut, movedToFull } with entry lists.
 export function base64Length(bytes) { return Math.ceil(Number(bytes) / 3) * 4; }

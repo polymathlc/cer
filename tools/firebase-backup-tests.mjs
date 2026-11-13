@@ -166,16 +166,18 @@ test('a whole backup builds, fits, and restores back to the same documents', asy
   const problems = [];
   const built = await buildBackup({ found, skipped: [{ path: 'mail', reason: 'log' }], authUsers: [{ uid: 'u1', email: 'kid@example.com', providerData: [] }], storageIndex: [], nowMs: NOW, problems });
   assert.ok(built.officeZip.length < B.INLINE_BASE64_BUDGET);
-  assert.ok(built.fullZip.length < B.LINKED_ZIP_LIMIT);
+  assert.equal(built.fullParts.length, 1);
+  const fullZip = built.fullParts[0].zip;
+  assert.ok(fullZip.length < B.LINKED_PART_LIMIT);
   const officeFiles = B.readZip(built.officeZip).map(f => f.name);
   for (const n of ['README.txt', 'backup-manifest.json', 'firestore/officeFamilies.json', 'firestore/officeInvoices.json', 'auth/users.json', 'csv/officeFamilies.csv'])
     assert.ok(officeFiles.includes(n), n + ' in office zip');
   assert.ok(!officeFiles.includes('firestore/questionAttempts.json'));
-  const fullFiles = B.readZip(built.fullZip).map(f => f.name);
+  const fullFiles = B.readZip(fullZip).map(f => f.name);
   assert.ok(fullFiles.includes('firestore/questionAttempts.json'));
   assert.ok(fullFiles.includes('firestore/users/u1/settings.json'));
 
-  const { collections, auth } = collectFromZips([{ name: 'office.zip', buffer: built.officeZip }, { name: 'full.zip', buffer: built.fullZip }]);
+  const { collections, auth } = collectFromZips([{ name: 'office.zip', buffer: built.officeZip }, { name: 'full.zip', buffer: fullZip }]);
   assert.equal(collections.get('questionAttempts').length, 300);
   assert.equal(collections.get('users/u1/settings')[0].data.theme, 'dark');
   assert.equal(auth[0].uid, 'u1');
