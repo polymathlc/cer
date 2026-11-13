@@ -177,7 +177,10 @@ export async function familyRecordsCsv(byPath, nowMs) {
   const C = await import('../office/office-core.mjs');
   const plain = path => (byPath.get(path) || []).map(d => Object.assign({ id: d.id }, B.decodeValue(d.data)));
   const schedule = (byPath.get('schedule_config') || []).find(d => d.id === 'main');
+  // The office's settings: months billed together (November–December 2026) show as one.
+  const config = plain('officeSettings').find(d => d.id === 'config');
   const rows = C.familyRecordRows(plain('officeFamilies'), {
+    settings: C.normalizeSettings ? C.normalizeSettings(config || {}) : undefined,
     invoices: plain('officeInvoices'),
     payments: plain('officePayments'),
     schedule: schedule ? B.decodeValue(schedule.data) : undefined,

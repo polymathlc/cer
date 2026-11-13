@@ -40,7 +40,7 @@
         payment, last PayNow screenshot the parent sent).
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export const OFFICE_CORE_VERSION = '1.10.0';
+export const OFFICE_CORE_VERSION = '1.11.0';
 
 /* ─────────────────────────── The centre ─────────────────────────── */
 export const SITE = 'https://polymathlc.com.sg';
@@ -624,7 +624,8 @@ export function familyDisplayName(f) {
 // The invoice lines for one family in one month, priced from the live schedule.
 // `issues` explains every line that could not be priced, so the review screen
 // can say WHY a total looks wrong instead of letting $0 slip out to a parent.
-export function buildInvoiceLines(family, schedule) {
+export function buildInvoiceLines(family, schedule, opts) {
+  const o = opts || {};
   const f = normalizeFamily(family);
   const lines = [], issues = [];
   activeStudents(f).forEach(st => {
@@ -655,7 +656,30 @@ export function buildInvoiceLines(family, schedule) {
       if (!amount) issues.push(st.name + ': no monthly fee is set for ' + slotTitle(slot) + ' (' + CLASS_MODE_META[classMode(c, schedule)].label + ') in the schedule.');
     });
   });
+  // Hardcopy printing: on monthly invoices only once a fee is set in Settings.
+  const hc = feeNum(o.hardcopyFee);
+  if (f.hardcopy && hc && lines.length) lines.push(hardcopyLine(hc));
   return { lines, issues };
+}
+export function hardcopyLine(amount, detail) {
+  return { studentId: '', studentName: '', desc: 'Hardcopy printing', detail: detail || 'Worksheets printed and posted', amount: feeNum(amount) || '', kind: 'hardcopy' };
+}
+// The discount line a family's fees get, or null.
+export function discountLine(family, subtotal) {
+  const f = normalizeFamily(family);
+  if (!f.discount || !(subtotal > 0)) return null;
+  const d = f.discount;
+  const off = d.kind === 'percent' ? round2(subtotal * Math.min(100, feeNum(d.value)) / 100) : Math.min(subtotal, feeNum(d.value));
+  if (!(off > 0)) return null;
+  return { studentId: '', studentName: '', desc: d.label || 'Discount', detail: d.kind === 'percent' ? feeNum(d.value) + '% off' : '', amount: -off, kind: 'discount' };
+}
+// One month of the family's fees at today's schedule, after its discount (no credit).
+export function familyMonthlyAmount(family, schedule, settings) {
+  const st = normalizeSettings(settings);
+  const { lines } = buildInvoiceLines(family, schedule, { hardcopyFee: st.hardcopyFee });
+  const sub = round2(lines.reduce((n, l) => n + (Number(l.amount) || 0), 0));
+  const d = discountLine(family, sub);
+  return Math.max(0, round2(sub + (d ? d.amount : 0)));
 }
 
 // One family's invoice for one month. Pure: the caller stores it (and, when
@@ -665,17 +689,11 @@ export function buildInvoice(family, period, ctx) {
   const f = normalizeFamily(family);
   const settings = normalizeSettings(c.settings);
   const issueDate = c.issueDate || (isDayKey(c.today) && c.today.slice(0, 7) === period ? c.today : issueDayKey(period, settings.invoiceDay));
-  const { lines, issues } = buildInvoiceLines(f, c.schedule || {});
+  const { lines, issues } = buildInvoiceLines(f, c.schedule || {}, { hardcopyFee: settings.hardcopyFee });
   const subtotal = round2(lines.reduce((s, l) => s + (Number(l.amount) || 0), 0));
   let running = subtotal;
-  if (f.discount && subtotal > 0) {
-    const d = f.discount;
-    const off = d.kind === 'percent' ? round2(subtotal * Math.min(100, feeNum(d.value)) / 100) : Math.min(subtotal, feeNum(d.value));
-    if (off > 0) {
-      lines.push({ studentId: '', studentName: '', desc: d.label || 'Discount', detail: d.kind === 'percent' ? feeNum(d.value) + '% off' : '', amount: -off, kind: 'discount' });
-      running = round2(running - off);
-    }
-  }
+  const dl = discountLine(f, subtotal);
+  if (dl) { lines.push(dl); running = round2(running + dl.amount); }
   let creditUsed = 0;
   if (f.credit > 0 && running > 0) {
     creditUsed = round2(Math.min(f.credit, running));
@@ -683,9 +701,11 @@ export function buildInvoice(family, period, ctx) {
     running = round2(running - creditUsed);
   }
   const total = Math.max(0, running);
+  // A combined month (November 2026): this invoice also pays the next month.
+  const joint = jointMonth(period, settings);
   return {
     id: invoiceDocId(f.id, period),
-    familyId: f.id, period, code: f.code,
+    familyId: f.id, period, periodTo: joint && joint.lead === period ? joint.covered : '', code: f.code,
     number: invoiceNumber(f.code, period),
     reference: invoiceReference(f.code, period),
     parentName: f.parentName, emails: familyEmails(f), whatsapp: f.whatsapp,
@@ -762,9 +782,9 @@ export function periodSummary(invoices, todayKey) {
 export function publicInvoiceDoc(inv, settings) {
   const st = normalizeSettings(settings);
   return {
-    invoiceId: inv.id, number: inv.number, period: inv.period, periodLabel: periodLabel(inv.period),
+    invoiceId: inv.id, number: inv.number, period: inv.period, periodLabel: invoicePeriodLabel(inv, st),
     // A title only when the invoice has its own (a monthly one keeps "<Month> fees").
-    title: inv.custom || String(inv.title || '').trim() ? invoiceTitle(inv) : '', custom: !!inv.custom, qrMode: invoiceQrMode(inv),
+    title: inv.custom || String(inv.title || '').trim() ? invoiceTitle(inv, st) : '', custom: !!inv.custom, qrMode: invoiceQrMode(inv),
     parentName: inv.parentName,
     // The child's full name: the parent knows it, and a first word is often a surname.
     lines: (inv.lines || []).map(l => ({ studentName: String(l.studentName || ''), desc: l.desc, detail: l.detail || '', amount: round2(l.amount) })),
@@ -796,10 +816,10 @@ export function invoiceQrMode(inv) {
   return QR_MODES.includes(m) ? m : 'exact';
 }
 // What the invoice is for, in a few words: a custom invoice's own title, or the month's fees.
-export function invoiceTitle(inv) {
+export function invoiceTitle(inv, settings) {
   const t = String((inv && inv.title) || '').trim();
   if (t) return t.slice(0, 120);
-  return isPeriod(inv && inv.period) ? periodLabel(inv.period) + ' tuition fees' : 'Invoice';
+  return isPeriod(inv && inv.period) ? invoicePeriodLabel(inv, settings) + ' tuition fees' : 'Invoice';
 }
 // The PayNow payload to print on this invoice, or '' when there is none to show
 // (nothing owed, cancelled, or the invoice says "no QR").
@@ -850,8 +870,11 @@ export function blankCustomInvoice(ctx) {
   const tag = c.tag;
   const f = c.family ? normalizeFamily(c.family) : null;
   const kids = f ? activeStudents(f).map(st => st.name).filter(Boolean) : [];
+  // v1.11.0: a family's children, classes and fees (and hardcopy) are filled in.
+  const fill = f && c.prefill !== false ? familyFeeLines(f, { schedule: c.schedule, settings: s, period: issueDate.slice(0, 7) }) : null;
+  const lines = fill && fill.lines.length ? fill.lines : [{ studentName: kids.length === 1 ? kids[0] : '', desc: '', detail: '', amount: '' }];
   return {
-    id: customInvoiceDocId(tag), tag, custom: true,
+    id: customInvoiceDocId(tag), tag, custom: true, periodTo: fill && fill.lines.length ? fill.periodTo : '',
     familyId: f ? f.id : '', code: f ? f.code : '',
     parentName: f ? f.parentName : '',
     emails: f ? familyEmails(f).join(', ') : '',
@@ -860,8 +883,72 @@ export function blankCustomInvoice(ctx) {
     number: customInvoiceNumber(tag, issueDate),
     reference: customInvoiceReference(tag, f ? f.code : ''),
     issueDate, dueDate: addDays(issueDate, s.dueDays), period: issueDate.slice(0, 7),
-    lines: [{ studentName: kids.length === 1 ? kids[0] : '', desc: '', detail: '', amount: '' }],
+    lines,
     note: '', qrMode: 'exact'
+  };
+}
+/* A family's fees as editable invoice lines (v1.11.0): one line per class with
+   the child's name, level and subject, the fee from the schedule (or the class's
+   own rate), the family's discount, and hardcopy printing when the family has
+   it (the Settings fee, or blank to type in). Every line is marked `prefill`
+   and `forPeriod` (the month the fees are for — the lead month of a combined
+   pair), so the editor can take them all off at once for, say, a materials
+   invoice, and the payment record knows which month a paid invoice covers. */
+export function familyFeeLines(family, ctx) {
+  const c = ctx || {};
+  const st = normalizeSettings(c.settings);
+  const f = normalizeFamily(family);
+  const period = billingPeriodOf(isPeriod(c.period) ? c.period : sgMonthKey(), st);
+  const joint = jointMonth(period, st);
+  const periodTo = joint && joint.lead === period ? joint.covered : '';
+  const when = periodRangeShort(period, periodTo);
+  const { lines: raw, issues } = buildInvoiceLines(f, c.schedule || {}, {});
+  const lines = raw.map(l => Object.assign({}, l, {
+    desc: l.kind === 'class' ? l.desc + ' tuition' : l.desc,
+    detail: [l.detail, when].filter(Boolean).join(' · '),
+    prefill: true, forPeriod: period
+  }));
+  const sub = round2(lines.reduce((n, l) => n + (Number(l.amount) || 0), 0));
+  const d = discountLine(f, sub);
+  if (d) lines.push(Object.assign(d, { prefill: true, forPeriod: period }));
+  if (f.hardcopy && activeStudents(f).length) lines.push(Object.assign(hardcopyLine(st.hardcopyFee, when), { prefill: true, forPeriod: period }));
+  return { lines, issues, period, periodTo, label: periodRangeLabel(period, periodTo) };
+}
+// Take the filled-in children's lines off a draft (a materials invoice, say); typed lines stay.
+export function withoutPrefillLines(lines) {
+  const kept = (lines || []).filter(l => !l.prefill);
+  return kept.length ? kept : [{ studentName: '', desc: '', detail: '', amount: '' }];
+}
+
+/* ── Unpaid earlier months on an invoice (v1.11.0) ──
+   A family that has not paid, say, October 2026 can have it added to this
+   invoice as one more line, so one PayNow collects everything. The line is
+   kind 'arrears' with the month in `period`; once the invoice is paid, that
+   month shows as paid in the payment record. Offered: months from the record's
+   start up to the month before this invoice's, the family active then, with no
+   invoice, no mark and no package (a combined month counts once). */
+export function arrearsMonths(family, invoices, payments, ctx) {
+  const c = ctx || {};
+  const st = normalizeSettings(c.settings);
+  const f = normalizeFamily(family);
+  const today = isDayKey(c.today) ? c.today : sgDayKey();
+  const before = billingPeriodOf(isPeriod(c.before) ? c.before : today.slice(0, 7), st);
+  const rec = familyPaymentRecord(f, invoices, payments, { today, settings: st });
+  const taken = new Set((c.exclude || []).filter(isPeriod));
+  const amount = familyMonthlyAmount(f, c.schedule || {}, st);
+  return rec.months
+    .filter(m => m.period < before && m.key === 'none' && !isCoveredMonth(m.period, st) && !taken.has(m.period) && familyStateIn(f, m.period) === 'active')
+    .map(m => {
+      const j = jointMonth(m.period, st);
+      return { period: m.period, periodTo: j ? j.covered : '', label: billingPeriodLabel(m.period, st), amount };
+    });
+}
+export function arrearsLine(family, item) {
+  const f = normalizeFamily(family);
+  const kids = activeStudents(f).map(x => x.name).filter(Boolean);
+  return {
+    studentId: '', studentName: '', kind: 'arrears', period: item.period, periodTo: item.periodTo || '',
+    desc: item.label + ' tuition fees (not yet paid)', detail: kids.length ? listJoin(kids) : '', amount: round2(item.amount) || ''
   };
 }
 // The editor's draft → the stored fields, or the reasons it cannot be saved.
@@ -908,11 +995,18 @@ export function invoiceFromDraft(draft) {
   const total = Math.max(0, sum);
   const subtotal = round2(lines.filter(l => l.amount > 0).reduce((s, l) => s + l.amount, 0));
   const students = lines.map(l => l.studentName).filter(Boolean).filter((n, i, a) => a.indexOf(n) === i);
+  // A custom invoice with a family's filled-in fees is for that month (feesFrom).
+  const pre = lines.find(l => l.prefill && isPeriod(l.forPeriod));
+  const feesFrom = d.custom && pre ? pre.forPeriod : '';
+  const feesStart = d.custom ? feesFrom : period;
   const fields = {
     parentName, emails, whatsapp, number, reference: reference || cleanRef(number), issueDate, dueDate, period,
     title: String(d.title || '').replace(/\s+/g, ' ').trim().slice(0, 120),
     note: String(d.note || '').trim().slice(0, 600),
-    qrMode, lines, total, subtotal, students, issues: []
+    qrMode, lines, total, subtotal, students, issues: [],
+    // The months the children's fees are for (a combined month), kept only while
+    // filled-in fee lines are on the invoice, or on a monthly invoice.
+    feesFrom, periodTo: feesStart && isPeriod(d.periodTo) && d.periodTo > feesStart ? d.periodTo : ''
   };
   return { ok: !errors.length, errors, fields };
 }
@@ -930,7 +1024,7 @@ export function draftFromInvoice(inv) {
     parentName: inv.parentName || '', emails: (inv.emails || []).join(', '),
     whatsapp: inv.whatsapp ? displayPhone(inv.whatsapp) : '',
     title: inv.title || '', number: inv.number || '', reference: inv.reference || '',
-    issueDate: inv.issueDate || '', dueDate: inv.dueDate || '', period: inv.period || '',
+    issueDate: inv.issueDate || '', dueDate: inv.dueDate || '', period: inv.period || '', periodTo: inv.periodTo || '',
     lines: (inv.lines || []).map(l => Object.assign({}, l)), note: inv.note || '', qrMode: invoiceQrMode(inv),
     ownContacts: !!inv.ownContacts
   };
@@ -957,7 +1051,15 @@ export const DEFAULT_SETTINGS = Object.freeze({
   reminderNote: 'If you have already paid, thank you, and please ignore this message.',
   payNote: '',
   centreWhatsapp: CENTRE_WHATSAPP,
-  useAi: true
+  useAi: true,
+  // Months whose fee also covers the NEXT month (v1.11.0). The centre closes for
+  // the second half of November and the first half of December 2026, so the
+  // November 2026 fee pays for November and December: there is no separate
+  // December invoice. Editable in Settings for later years.
+  combinedMonths: Object.freeze(['2026-11']),
+  // Hardcopy printing, a month, for families with a hardcopy subscription.
+  // 0 = not charged on monthly invoices (a custom invoice still lists the line to fill in).
+  hardcopyFee: 0
 });
 export function normalizeSettings(raw) {
   const s = Object.assign({}, DEFAULT_SETTINGS, raw || {});
@@ -970,7 +1072,83 @@ export function normalizeSettings(raw) {
   s.replyTo = isEmail(s.replyTo) ? cleanEmail(s.replyTo) : SENDER_EMAIL;
   s.fromName = String(s.fromName || SENDER_NAME).trim() || SENDER_NAME;
   s.centreWhatsapp = normalizeWhatsapp(s.centreWhatsapp) || CENTRE_WHATSAPP;
+  s.combinedMonths = normalizeCombinedMonths(raw && Array.isArray(raw.combinedMonths) ? raw.combinedMonths : DEFAULT_SETTINGS.combinedMonths);
+  s.hardcopyFee = feeNum(s.hardcopyFee);
   return s;
+}
+
+/* ── Months billed together (v1.11.0) ──
+   A "combined" month is a LEAD month whose fee also covers the month after it
+   (the COVERED month). November 2026 is the first: the centre closes for half of
+   November and half of December, so one November fee pays for both.
+     • no invoice is prepared for the covered month (December), by hand or by autopilot;
+     • the lead month's invoice reads "November – December 2026";
+     • in the payment record December follows November (paid with it), and a
+       month marked paid by hand on either counts for both;
+     • the statistics for December are the November invoices'.
+   A month can only lead once, and a covered month cannot lead again (no chains). */
+export function normalizeCombinedMonths(list) {
+  const out = [];
+  [...new Set((Array.isArray(list) ? list : []).map(String).filter(isPeriod))].sort().forEach(p => {
+    // Skip a month already covered by the one before it in the list.
+    if (out.length && addMonths(out[out.length - 1], 1) === p) return;
+    out.push(p);
+  });
+  return out.slice(0, 24);
+}
+export function combinedMonthsOf(settings) {
+  if (settings && Array.isArray(settings.combinedMonths)) return normalizeCombinedMonths(settings.combinedMonths);
+  return normalizeCombinedMonths(DEFAULT_SETTINGS.combinedMonths);
+}
+// { lead, covered } when the month is either half of a combined pair, else null.
+export function jointMonth(period, settings) {
+  if (!isPeriod(period)) return null;
+  const list = combinedMonthsOf(settings);
+  if (list.includes(period)) return { lead: period, covered: addMonths(period, 1) };
+  const prev = addMonths(period, -1);
+  if (list.includes(prev)) return { lead: prev, covered: period };
+  return null;
+}
+// The month whose invoice pays for this one: the lead month for a covered month, else itself.
+export function billingPeriodOf(period, settings) {
+  const j = jointMonth(period, settings);
+  return j ? j.lead : period;
+}
+// True for a month that is paid with the month before (no invoice of its own).
+export function isCoveredMonth(period, settings) {
+  const j = jointMonth(period, settings);
+  return !!(j && j.covered === period);
+}
+// "November – December 2026", "December 2026 – January 2027".
+export function periodRangeLabel(from, to) {
+  if (!isPeriod(from)) return '';
+  if (!isPeriod(to) || to <= from) return periodLabel(from);
+  return from.slice(0, 4) === to.slice(0, 4)
+    ? MONTHS[Number(from.slice(5, 7)) - 1] + ' – ' + periodLabel(to)
+    : periodLabel(from) + ' – ' + periodLabel(to);
+}
+// "Nov–Dec 2026"
+export function periodRangeShort(from, to) {
+  if (!isPeriod(from)) return '';
+  if (!isPeriod(to) || to <= from) return monthShort(from) + ' ' + from.slice(0, 4);
+  return from.slice(0, 4) === to.slice(0, 4)
+    ? monthShort(from) + '–' + monthShort(to) + ' ' + to.slice(0, 4)
+    : monthShort(from) + ' ' + from.slice(0, 4) + '–' + monthShort(to) + ' ' + to.slice(0, 4);
+}
+// The label for the fees of a month: "November – December 2026" for a combined pair.
+export function billingPeriodLabel(period, settings) {
+  const j = jointMonth(period, settings);
+  return j ? periodRangeLabel(j.lead, j.covered) : periodLabel(period);
+}
+// What months an invoice's fees are for. A monthly invoice made for a lead month
+// carries `periodTo`; older ones (and custom invoices with children's fees) are
+// read from the settings when given.
+export function invoicePeriodLabel(inv, settings) {
+  if (!inv || !isPeriod(inv.period)) return '';
+  const from = inv.custom && isPeriod(inv.feesFrom) ? inv.feesFrom : inv.period;
+  if (isPeriod(inv.periodTo) && inv.periodTo > from) return periodRangeLabel(from, inv.periodTo);
+  if (inv.custom) return periodLabel(from);
+  return settings ? billingPeriodLabel(inv.period, settings) : periodLabel(inv.period);
 }
 
 /* ─────────────────────────── 5. Bank statements ─────────────────────────── */
@@ -1486,33 +1664,33 @@ function payTextLines(inv, s, owe, payUrl, short) {
     payUrl ? (short ? 'Save the PayNow QR: ' : 'Save the PayNow QR (amount and reference filled in): ') + payLinkFrom(payUrl, true) : ''];
 }
 // "tuition fees for <b>November 2026</b>" for a monthly invoice; a custom one's own title.
-function invoiceWhatHtml(inv, kids) {
-  if (inv.custom || String(inv.title || '').trim()) return '<b>' + escapeHtml(invoiceTitle(inv)) + '</b>';
-  return (kids ? escapeHtml(kids) + '\'s ' : '') + 'tuition fees for <b>' + escapeHtml(periodLabel(inv.period)) + '</b>';
+function invoiceWhatHtml(inv, kids, s) {
+  if (inv.custom || String(inv.title || '').trim()) return '<b>' + escapeHtml(invoiceTitle(inv, s)) + '</b>';
+  return (kids ? escapeHtml(kids) + '\'s ' : '') + 'tuition fees for <b>' + escapeHtml(invoicePeriodLabel(inv, s)) + '</b>';
 }
-function invoiceWhatText(inv, kids) {
-  if (inv.custom || String(inv.title || '').trim()) return invoiceTitle(inv);
-  return (kids ? kids + '\'s ' : '') + 'tuition fees for ' + periodLabel(inv.period);
+function invoiceWhatText(inv, kids, s) {
+  if (inv.custom || String(inv.title || '').trim()) return invoiceTitle(inv, s);
+  return (kids ? kids + '\'s ' : '') + 'tuition fees for ' + invoicePeriodLabel(inv, s);
 }
 // opts: { payUrl, qrCid, today }
 export function invoiceEmail(inv, settings, opts) {
   const s = normalizeSettings(settings), o = Object.assign({ uen: s.uen, merchant: s.merchant }, opts || {});
   const titled = !!(inv.custom || String(inv.title || '').trim());
-  const month = periodLabel(inv.period);
+  const month = invoicePeriodLabel(inv, s);
   const owe = invoiceOutstanding(inv);
-  const subject = titled ? 'Polymath invoice — ' + invoiceTitle(inv) + ' (' + money(owe) + ')' : 'Polymath tuition fees — ' + month + ' (' + money(owe) + ')';
+  const subject = titled ? 'Polymath invoice — ' + invoiceTitle(inv, s) + ' (' + money(owe) + ')' : 'Polymath tuition fees — ' + month + ' (' + money(owe) + ')';
   const kids = listJoin(inv.students || []);
   const note = String(inv.note || '').trim() || s.invoiceNote;
-  const html = emailShell('Invoice ' + inv.number + ' · ' + (titled ? invoiceTitle(inv) : month),
+  const html = emailShell('Invoice ' + inv.number + ' · ' + (titled ? invoiceTitle(inv, s) : month),
     '<p style="font-size:15px;line-height:1.6;margin:0 0 10px;">Dear ' + escapeHtml(inv.parentName || 'Parent') + ',</p>'
-    + '<p style="font-size:15px;line-height:1.6;margin:0 0 6px;">Here is the invoice for ' + invoiceWhatHtml(inv, kids) + '.'
+    + '<p style="font-size:15px;line-height:1.6;margin:0 0 6px;">Here is the invoice for ' + invoiceWhatHtml(inv, kids, s) + '.'
     + (isDayKey(inv.dueDate) ? ' Kindly pay by <b>' + escapeHtml(prettyDate(inv.dueDate)) + '</b>.' : '') + '</p>'
     + linesTableHtml(inv) + qrBlockHtml(inv, o, owe)
     + (o.payUrl ? '<p style="font-size:13px;color:#3d5a61;text-align:center;margin:6px 0 0;"><a href="' + escapeHtml(o.payUrl) + '" style="color:#056c76;">View this invoice online</a></p>' : '')
     + (note ? '<p style="font-size:14px;line-height:1.6;margin:18px 0 0;">' + escapeHtml(note).replace(/\n/g, '<br>') + '</p>' : ''), s);
   const text = [
     'Dear ' + (inv.parentName || 'Parent') + ',', '',
-    'Here is the invoice for ' + invoiceWhatText(inv, kids) + '.' + (isDayKey(inv.dueDate) ? ' Kindly pay by ' + prettyDate(inv.dueDate) + '.' : ''), '',
+    'Here is the invoice for ' + invoiceWhatText(inv, kids, s) + '.' + (isDayKey(inv.dueDate) ? ' Kindly pay by ' + prettyDate(inv.dueDate) + '.' : ''), '',
     'Invoice ' + inv.number, plainLines(inv), '  Total: ' + money(inv.total), (Number(inv.paid) > 0 ? '  Still to pay: ' + money(owe) : ''), '',
     ...payTextLines(inv, s, owe, o.payUrl, false), '',
     note, '', s.signature
@@ -1524,7 +1702,7 @@ export function reminderEmail(inv, settings, opts) {
   const s = normalizeSettings(settings), o = Object.assign({ uen: s.uen, merchant: s.merchant }, opts || {});
   const level = Math.max(1, Number(o.level) || ((inv.reminders || []).length + 1));
   const titled = !!(inv.custom || String(inv.title || '').trim());
-  const month = titled ? invoiceTitle(inv) : periodLabel(inv.period);
+  const month = titled ? invoiceTitle(inv, s) : invoicePeriodLabel(inv, s);
   const what = titled ? 'the invoice for <b>' + escapeHtml(month) + '</b> (' + escapeHtml(inv.number || '') + ')' : 'the tuition fees for <b>' + escapeHtml(month) + '</b>';
   const What = what.charAt(0).toUpperCase() + what.slice(1);
   const owe = invoiceOutstanding(inv);
@@ -1612,7 +1790,7 @@ export function whatsappInvoiceText(inv, settings, payUrl) {
   return [
     'Hi ' + (inv.parentName || '') + ', this is Polymath Learning Centre 😊',
     '',
-    '*' + (titled ? invoiceTitle(inv) : periodLabel(inv.period) + ' tuition fees') + ': ' + money(owe) + '*',
+    '*' + (titled ? invoiceTitle(inv, s) : invoicePeriodLabel(inv, s) + ' tuition fees') + ': ' + money(owe) + '*',
     plainLines(inv).replace(/^ {2}/gm, '• '),
     '',
     mode === 'none' ? 'Invoice ' + (inv.number || '') + '.' + by
@@ -1631,8 +1809,8 @@ export function whatsappReminderText(inv, settings, payUrl) {
     'Hi ' + (inv.parentName || '') + ', a gentle reminder from Polymath Learning Centre 😊',
     '',
     (inv.custom || String(inv.title || '').trim())
-      ? 'Invoice ' + (inv.number || '') + ' (' + invoiceTitle(inv) + ') of *' + money(owe) + '* is still outstanding.'
-      : 'The ' + periodLabel(inv.period) + ' tuition fees of *' + money(owe) + '* are still outstanding.',
+      ? 'Invoice ' + (inv.number || '') + ' (' + invoiceTitle(inv, s) + ') of *' + money(owe) + '* is still outstanding.'
+      : 'The ' + invoicePeriodLabel(inv, s) + ' tuition fees of *' + money(owe) + '* are still outstanding.',
     invoiceQrMode(inv) === 'none' ? 'Please quote ' + (inv.number || inv.reference) + ' when you pay.'
       : 'PayNow to UEN ' + s.uen + ', reference *' + inv.reference + '*' + (invoiceQrMode(inv) === 'generic' ? ' (please type the amount).' : '.'),
     payUrl ? (invoiceQrMode(inv) === 'none' ? '🔗 The invoice: ' + payUrl : '⬇ Save the QR: ' + payLinkFrom(payUrl, true)) : '',
@@ -2120,11 +2298,37 @@ export function familyPaymentRecord(family, invoices, payments, opts) {
   const span = Math.max(1, Math.min(36, Number(o.months) || 12));
   const f = normalizeFamily(family);
   const invs = (invoices || []).filter(i => i && i.familyId === f.id && i.status !== 'void');
+  const settings = o.settings ? normalizeSettings(o.settings) : null;
+  const joint = p => settings ? jointMonth(p, settings) : null;
   const monthly = new Map();
   invs.filter(i => !i.custom && isPeriod(i.period)).forEach(i => { if (!monthly.has(i.period)) monthly.set(i.period, i); });
+  // v1.11.0: a month can also be paid by a LINE on another invoice — an unpaid
+  // earlier month added to an invoice ('arrears'), or a custom invoice with the
+  // family's filled-in fees for a month (only where that month has no monthly invoice).
+  const byLine = new Map();
+  invs.forEach(i => (i.lines || []).forEach(l => {
+    if (l && l.kind === 'arrears' && isPeriod(l.period) && !byLine.has(l.period)) byLine.set(l.period, i);
+  }));
+  invs.filter(i => i.custom).forEach(i => (i.lines || []).forEach(l => {
+    if (l && l.prefill && isPeriod(l.forPeriod) && !byLine.has(l.forPeriod)) byLine.set(l.forPeriod, i);
+  }));
   const hand = new Map(f.paidMonths.map(p => [p.period, p]));
+  const PAIDISH = ['paid', 'hand'];
+  // A combined pair is paid once: the covered month follows the lead month, and
+  // a mark on either month counts for both.
   const stateFor = period => {
-    const inv = monthly.get(period);
+    const own = stateFor0(period);
+    const j = joint(period);
+    if (!j || PAIDISH.includes(own.key)) return own;
+    const other = stateFor0(j.covered === period ? j.lead : j.covered);
+    if (j.covered === period) {
+      if (['paused', 'gone', 'package'].includes(own.key)) return own;
+      return Object.assign({}, other, { joint: j.lead });
+    }
+    return PAIDISH.includes(other.key) ? Object.assign({}, other, { joint: j.covered }) : own;
+  };
+  const stateFor0 = period => {
+    const inv = monthly.get(period) || byLine.get(period);
     const h = hand.get(period);
     if (inv) {
       const st = invoiceState(inv, today).key;
@@ -2146,6 +2350,7 @@ export function familyPaymentRecord(family, invoices, payments, opts) {
   const until = isPeriod(o.until) ? o.until : RECORD_END;
   let end = until > thisMonth ? until : thisMonth;
   [...monthly.keys(), ...hand.keys()].forEach(p => { if (p > end) end = p; });
+  const pairs = settings ? combinedMonthsOf(settings) : [];
   const months = [];
   const from = isPeriod(o.from) ? o.from : RECORD_START;
   let first = o.months ? addMonths(thisMonth, -(span - 1)) : from;
@@ -2153,16 +2358,21 @@ export function familyPaymentRecord(family, invoices, payments, opts) {
   for (let p = first; p <= end; p = addMonths(p, 1)) {
     const s = stateFor(p);
     const meta = MONTH_STATE_META[s.key];
+    const j = joint(p);
     months.push({
       period: p, label: monthShort(p), year: p.slice(0, 4), key: s.key,
-      stateLabel: meta.label, tone: meta.tone, icon: meta.icon,
+      stateLabel: meta.label + (j ? ' · ' + periodRangeShort(j.lead, j.covered) + ' paid as one' : ''), tone: meta.tone, icon: meta.icon,
+      joint: j ? (j.lead === p ? 'lead' : 'covered') : '', jointWith: j ? (j.lead === p ? j.covered : j.lead) : '',
+      viaLine: !!(s.inv && !(monthly.get(p) === s.inv)),
       invoiceId: s.inv ? s.inv.id : '', total: s.inv ? round2(s.inv.total) : 0, paid: s.inv ? round2(s.inv.paid) : 0,
       outstanding: s.inv ? invoiceOutstanding(s.inv) : 0, handDate: s.hand ? s.hand.date : '', handAmount: s.hand ? s.hand.amount : '',
       current: p === thisMonth
     });
   }
   const fromDay = from + '-01';
-  const paidPeriods = [...new Set([...monthly.keys(), ...hand.keys(), ...months.filter(m => m.key === 'package').map(m => m.period)])]
+  const candidates = [...monthly.keys(), ...hand.keys(), ...byLine.keys(), ...months.filter(m => m.key === 'package').map(m => m.period)];
+  pairs.forEach(p => candidates.push(p, addMonths(p, 1)));
+  const paidPeriods = [...new Set(candidates)]
     .filter(p => p >= from && ['paid', 'hand', 'package'].includes(stateFor(p).key)).sort();
   // Every payment we know of, newest first.
   const seen = new Set();
@@ -2219,7 +2429,7 @@ export function familyRecordRows(families, ctx) {
   const out = [];
   (families || []).forEach(f0 => {
     const f = normalizeFamily(f0);
-    const rec = familyPaymentRecord(f, c.invoices || [], c.payments || [], { today: c.today, months: c.months });
+    const rec = familyPaymentRecord(f, c.invoices || [], c.payments || [], { today: c.today, months: c.months, settings: c.settings });
     const kids = f.students.filter(s => s.name && (c.includeLeft || s.status !== 'left'));
     (kids.length ? kids : [null]).forEach(st => {
       const types = st ? studentLessonTypes(st, c.schedule) : [];
@@ -2594,8 +2804,11 @@ export function familyStats(families, ctx) {
   // Collected for the month, from that month's invoices of the same families.
   const kidsById = new Map();
   (families || []).forEach(f => (f.students || []).forEach(st => kidsById.set((f.id || '') + '|' + st.id, st)));
+  // A covered month (December 2026) is collected on the lead month's invoices.
+  const invPeriod = c.settings ? billingPeriodOf(period, c.settings) : period;
+  out.billedWith = invPeriod !== period ? invPeriod : '';
   (c.invoices || []).forEach(inv => {
-    if (!inv || inv.status === 'void' || inv.period !== period || !famIds.has(inv.familyId)) return;
+    if (!inv || inv.status === 'void' || inv.period !== invPeriod || !famIds.has(inv.familyId)) return;
     out.invoices++;
     out.billed = round2(out.billed + (Number(inv.total) || 0));
     out.outstanding = round2(out.outstanding + invoiceOutstanding(inv));

@@ -585,6 +585,21 @@
   .ed-preview { position:sticky; top:0; }
   .ed-preview .qr-box .q img, .ed-preview .qr-box .q canvas { width:170px !important; height:170px !important; }
   .ed-lines { display:flex; flex-direction:column; gap:10px; }
+  /* v1.11.0: lines filled in from the family, earlier unpaid months, months billed together */
+  .ed-line.pre { border-color:#bfe3e7; background:#f2fafb; }
+  .ed-line.arrears { border-color:var(--amber-line); background:var(--amber-bg); }
+  .ed-lines-head { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+  .ed-fill { display:inline-flex; gap:6px; flex-wrap:wrap; text-transform:none; letter-spacing:0; }
+  .arrears-box { margin-top:10px; padding:10px 12px; border:1px dashed var(--amber-line); border-radius:12px; background:#fffdf6; }
+  .arrears-btns { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .joint-list { display:flex; flex-direction:column; gap:8px; margin-bottom:12px; }
+  .joint-item { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .joint-item .linkbtn { margin-left:auto; }
+  .joint-add { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .md.joint.j-lead { border-top-right-radius:3px; border-bottom-right-radius:3px; }
+  .md.joint.j-covered { border-top-left-radius:3px; border-bottom-left-radius:3px; margin-left:-4px; }
+  .mo.joint { position:relative; }
+  .mo.joint.j-covered::before { content:'🔗'; position:absolute; left:-9px; top:50%; transform:translateY(-50%); font-size:10px; }
   .ed-line { display:grid; grid-template-columns:minmax(0,.9fr) minmax(0,1.4fr) minmax(0,1fr) 110px 72px; gap:8px; align-items:end; padding:10px; border:1px solid var(--line-2); border-radius:12px; background:var(--paper); }
   .ed-line .field { margin:0; }
   .ed-line input.money { text-align:right; }
@@ -716,6 +731,6 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="version hidden" id="version"></div>
 
-<script type="module" src="office-app.mjs?v=1.10.0"></script>
+<script type="module" src="office-app.mjs?v=1.11.0"></script>
 </body>
 </html>
