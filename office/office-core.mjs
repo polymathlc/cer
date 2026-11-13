@@ -40,7 +40,7 @@
         payment, last PayNow screenshot the parent sent).
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export const OFFICE_CORE_VERSION = '1.5.0';
+export const OFFICE_CORE_VERSION = '1.6.0';
 
 /* ─────────────────────────── The centre ─────────────────────────── */
 export const SITE = 'https://polymathlc.com.sg';
@@ -2371,4 +2371,162 @@ export function familyFilterOptions(families, schedule) {
   const slots = allSlotIds().filter(id => slotHasClass(scheduleSlot(schedule, id)) || used.has(id))
     .map(id => ({ id, label: slotChoiceLabel(schedule, id) }));
   return { schools: [...schools.values()].sort(byText), slots };
+}
+
+/* ═══════════════ 📊 Families: key statistics (v1.6.0) ═══════════════
+   The summary on top of the Families tab. Two money figures, never mixed:
+     • Monthly fees — what ONE month of lessons is worth at today's schedule
+       fees (a child's own fee or a class's own rate wins), for every child who
+       is active in an active family that has not left by the month. Package
+       families count too: the figure is the value of the enrolment, not what
+       is invoiced. Sibling discounts are shown on their own line.
+     • Collected — money recorded against that month's invoices (capped at
+       each invoice's total), split over the invoice's lines in proportion.
+   Categories: Math / Science by the class's subject; Online regular,
+   Physical regular and Master class by the class itself (a Master Class slot,
+   else its mode). A child counts once in each category they take a class in,
+   so Math + Science can be more than the number of children. */
+export const STAT_CATEGORIES = Object.freeze([
+  Object.freeze({ key: 'math', group: 'subject', label: 'Math', icon: '➗' }),
+  Object.freeze({ key: 'science', group: 'subject', label: 'Science', icon: '🔬' }),
+  Object.freeze({ key: 'online', group: 'type', label: 'Online regular', icon: '💻' }),
+  Object.freeze({ key: 'physical', group: 'type', label: 'Physical regular', icon: '🏫' }),
+  Object.freeze({ key: 'master', group: 'type', label: 'Master class', icon: '⭐' })
+]);
+// Which categories one class (or one invoice line) belongs to.
+export function classCategories(cls, schedule) {
+  const c = cls || {};
+  if (c.custom || (!c.slotId && c.label)) {
+    const text = String(c.label || c.desc || '');
+    const subject = /sci/i.test(text) ? 'science' : (/math/i.test(text) ? 'math' : '');
+    const type = /master/i.test(text) ? 'master' : (c.mode === 'Online' ? 'online' : 'physical');
+    return { subject, type };
+  }
+  const slot = scheduleSlot(schedule, c.slotId);
+  const sk = subjectKey(slot.subject);
+  return {
+    subject: sk === 'math' || sk === 'science' ? sk : '',
+    type: isMaster(slot) ? 'master' : (c.mode === 'Online' ? 'online' : 'physical')
+  };
+}
+// The child's classes that the statistics read (valid slots and custom classes).
+function statClasses(st) {
+  return (st.classes || []).filter(c => c && (c.custom || isValidSlotId(c.slotId)));
+}
+// One family's monthly fee lines, each with its categories. A child's own
+// monthly fee is shared over their classes in proportion to the schedule fees
+// (equally when the schedule has none); with no class it is 'unsorted'.
+export function familyFeeParts(family, schedule, kidFilter) {
+  const f = normalizeFamily(family);
+  const parts = [];
+  let discount = 0;
+  const kids = activeStudents(f).filter(st => !kidFilter || kidFilter(st));
+  kids.forEach(st => {
+    const cls = statClasses(st);
+    const own = feeNum(st.monthlyFee);
+    const priced = cls.map(c => ({ c, amount: c.custom ? feeNum(c.rate) : (feeNum(c.rate) || monthlyFeeFor(scheduleSlot(schedule, c.slotId), c.mode, schedule)) }));
+    if (own) {
+      if (!priced.length) { parts.push({ studentId: st.id, amount: own, subject: '', type: '', unsorted: true }); return; }
+      const sum = priced.reduce((s, p) => s + p.amount, 0);
+      priced.forEach(p => parts.push(Object.assign({ studentId: st.id, amount: round2(own * (sum > 0 ? p.amount / sum : 1 / priced.length)) }, classCategories(p.c, schedule))));
+      return;
+    }
+    priced.forEach(p => parts.push(Object.assign({ studentId: st.id, amount: p.amount }, classCategories(p.c, schedule))));
+  });
+  const gross = round2(parts.reduce((s, p) => s + p.amount, 0));
+  if (f.discount && gross > 0) {
+    const d = f.discount;
+    discount = d.kind === 'percent' ? round2(gross * Math.min(100, feeNum(d.value)) / 100) : Math.min(gross, feeNum(d.value));
+  }
+  return { parts, gross, discount };
+}
+// An invoice's collected money, split over its positive lines.
+export function invoiceCollectedParts(inv, schedule, kidOk) {
+  if (!inv || inv.status === 'void') return [];
+  const collected = Math.min(Number(inv.paid) || 0, Number(inv.total) || 0);
+  if (!(collected > 0)) return [];
+  const pos = (inv.lines || []).filter(l => Number(l.amount) > 0);
+  const sum = pos.reduce((s, l) => s + Number(l.amount), 0);
+  if (!(sum > 0)) return [{ studentId: '', amount: round2(collected), subject: '', type: '', unsorted: true }];
+  return pos.filter(l => !kidOk || !l.studentId || kidOk(l.studentId))
+    .map(l => {
+      const amount = round2(collected * Number(l.amount) / sum);
+      if (l.kind === 'class' || l.slotId) return Object.assign({ studentId: l.studentId || '', amount }, classCategories({ slotId: l.slotId, mode: l.mode }, schedule));
+      if (l.kind === 'custom') return Object.assign({ studentId: l.studentId || '', amount }, classCategories({ custom: true, label: l.desc, mode: l.detail }, schedule));
+      // A child's own monthly fee line, or a line typed by hand: read its words.
+      const cat = classCategories({ custom: true, label: (l.desc || '') + ' ' + (l.detail || ''), mode: /online/i.test(l.detail || '') ? 'Online' : 'Physical' }, schedule);
+      const known = /math|sci|master/i.test((l.desc || '') + ' ' + (l.detail || ''));
+      return Object.assign({ studentId: l.studentId || '', amount }, known ? cat : { subject: '', type: '', unsorted: true });
+    });
+}
+// A family counts in a month when it is active and has not left before it.
+export function familyCurrentIn(f, period) {
+  const n = normalizeFamily(f);
+  if (n.status !== 'active') return false;
+  if (isPeriod(period) && n.withdrawn && n.lastMonth && period > n.lastMonth) return false;
+  return true;
+}
+// ctx: { schedule, invoices, period, today, kidFilter(student) }
+export function familyStats(families, ctx) {
+  const c = ctx || {};
+  const schedule = c.schedule || {};
+  const period = isPeriod(c.period) ? c.period : (c.today ? String(c.today).slice(0, 7) : sgMonthKey());
+  const cats = {};
+  STAT_CATEGORIES.forEach(k => { cats[k.key] = { key: k.key, label: k.label, icon: k.icon, group: k.group, students: 0, families: 0, fees: 0, collected: 0 }; });
+  const out = {
+    period, families: 0, students: 0, paused: 0, noClass: 0, both: 0,
+    fees: 0, discounts: 0, net: 0, unsortedFees: 0,
+    collected: 0, billed: 0, outstanding: 0, invoices: 0, unsortedCollected: 0,
+    categories: cats
+  };
+  const famIds = new Set();
+  (families || []).forEach(raw => {
+    const f = normalizeFamily(raw);
+    if (!familyCurrentIn(f, period)) return;
+    const kids = (f.students || []).filter(st => st.status !== 'left' && (!c.kidFilter || c.kidFilter(st)));
+    const active = kids.filter(st => st.status === 'active');
+    out.paused += kids.filter(st => st.status === 'paused').length;
+    if (!active.length) return;
+    out.families++;
+    famIds.add(f.id);
+    const famIn = new Set();
+    active.forEach(st => {
+      out.students++;
+      const cls = statClasses(st);
+      if (!cls.length) { out.noClass++; return; }
+      const mine = new Set();
+      cls.forEach(cl => { const k = classCategories(cl, schedule); if (k.subject) mine.add(k.subject); if (k.type) mine.add(k.type); });
+      mine.forEach(k => { cats[k].students++; famIn.add(k); });
+      if (mine.has('math') && mine.has('science')) out.both++;
+    });
+    famIn.forEach(k => { cats[k].families++; });
+    const activeIds = new Set(active.map(st => st.id));
+    const fee = familyFeeParts(f, schedule, st => activeIds.has(st.id));
+    fee.parts.forEach(p => {
+      if (p.unsorted) { out.unsortedFees = round2(out.unsortedFees + p.amount); return; }
+      if (p.subject) cats[p.subject].fees = round2(cats[p.subject].fees + p.amount);
+      if (p.type) cats[p.type].fees = round2(cats[p.type].fees + p.amount);
+    });
+    out.fees = round2(out.fees + fee.gross);
+    out.discounts = round2(out.discounts + fee.discount);
+  });
+  out.net = round2(out.fees - out.discounts);
+  // Collected for the month, from that month's invoices of the same families.
+  const kidsById = new Map();
+  (families || []).forEach(f => (f.students || []).forEach(st => kidsById.set((f.id || '') + '|' + st.id, st)));
+  (c.invoices || []).forEach(inv => {
+    if (!inv || inv.status === 'void' || inv.period !== period || !famIds.has(inv.familyId)) return;
+    out.invoices++;
+    out.billed = round2(out.billed + (Number(inv.total) || 0));
+    out.outstanding = round2(out.outstanding + invoiceOutstanding(inv));
+    const kidOk = c.kidFilter ? (sid => { const st = kidsById.get(inv.familyId + '|' + sid); return !st || c.kidFilter(st); }) : null;
+    invoiceCollectedParts(inv, schedule, kidOk).forEach(p => {
+      out.collected = round2(out.collected + p.amount);
+      if (p.unsorted) { out.unsortedCollected = round2(out.unsortedCollected + p.amount); return; }
+      if (p.subject) cats[p.subject].collected = round2(cats[p.subject].collected + p.amount);
+      if (p.type) cats[p.type].collected = round2(cats[p.type].collected + p.amount);
+    });
+  });
+  out.percent = out.billed > 0 ? Math.round(Math.min(out.collected, out.billed) / out.billed * 100) : 0;
+  return out;
 }

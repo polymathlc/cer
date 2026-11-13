@@ -33,9 +33,9 @@
      mail/polymath-office-*    emails for the Trigger Email extension
    Reads: schedule_config/main (the /schedule page's own document).
    ═══════════════════════════════════════════════════════════════════════════ */
-import * as C from './office-core.mjs?v=1.5.0';
+import * as C from './office-core.mjs?v=1.6.0';
 
-const OFFICE_VERSION = 'v1.5.0';
+const OFFICE_VERSION = 'v1.6.0';
 
 /* ═══════════════ Firebase — the CER project ═══════════════ */
 firebase.initializeApp({
@@ -77,6 +77,7 @@ const S = {
   ui: {
     famSearch: '', famFilter: 'all', famType: '', famView: savedFamView(),
     famSort: savedFamSort(), famF: C.cleanFamilyFilters({}), famPanel: false,
+    statMonth: '', statsOpen: savedStatsOpen(),
     stuSearch: '', stu: { level: '', subject: '', mode: '', day: '', status: 'active', pay: '', cls: '' }, stuSort: { key: 'name', dir: 1 },
     tt: { level: '', subject: '', mode: '' },
     invFilter: 'all', invSearch: ''
@@ -91,6 +92,9 @@ function savedFamView() { try { return localStorage.getItem('polymath-office-fam
 function rememberFamView(v) { try { localStorage.setItem('polymath-office-famview', v); } catch (e) { /* private window */ } }
 // …and how the families are sorted (by level unless changed).
 function savedFamSort() { try { const v = localStorage.getItem('polymath-office-famsort'); return C.FAMILY_SORT_KEYS.includes(v) ? v : 'level'; } catch (e) { return 'level'; } }
+// …and whether the statistics on top of Families are shown or folded away.
+function savedStatsOpen() { try { return localStorage.getItem('polymath-office-stats') !== 'closed'; } catch (e) { return true; } }
+function rememberStatsOpen(v) { try { localStorage.setItem('polymath-office-stats', v ? 'open' : 'closed'); } catch (e) { /* private window */ } }
 function rememberFamSort(v) { try { localStorage.setItem('polymath-office-famsort', v); } catch (e) { /* private window */ } }
 let IX = { fam: new Map(), invByFam: new Map(), invById: new Map(), payByKey: new Map(), roster: new Map(), rows: [] };
 const unsubs = [];
@@ -564,6 +568,66 @@ const FAM_FILTER_LABELS = {
   withdrawn: v => v === 'yes' ? '👋 Withdrawn' : 'Not withdrawn',
   paid: v => (v === 'paid' ? '✅ Paid ' : '⏳ Not paid ') + C.periodLabel(C.isPeriod(S.ui.famF.month) ? S.ui.famF.month : C.sgMonthKey())
 };
+/* ── 📊 Key statistics on top of Families ──
+   For every active family, or — once a search, chip or filter narrows the
+   list — for the families shown (and, with a child filter, only the children
+   who match). The basis of each figure is spelt out under the tiles. */
+function famFiltered() {
+  return S.ui.famFilter !== 'all' || !!C.normText(S.ui.famSearch) || childFiltersOn() || C.activeFamilyFilters(S.ui.famF).length > 0;
+}
+function statMonths() {
+  const months = [];
+  for (let p = C.RECORD_START; p <= C.RECORD_END; p = C.addMonths(p, 1)) months.push(p);
+  const cur = C.sgMonthKey();
+  if (!months.includes(cur)) months.push(cur);
+  return months.sort();
+}
+function famStatsHtml(list) {
+  const period = C.isPeriod(S.ui.statMonth) ? S.ui.statMonth : C.sgMonthKey();
+  const filtered = famFiltered();
+  const st = C.familyStats(filtered ? list : S.families, {
+    schedule: S.schedule, invoices: S.invoices, period, today: today(),
+    kidFilter: filtered && childFiltersOn() ? kidShown : null
+  });
+  const mo = C.monthShort(period);
+  const scope = filtered ? '<span class="pill amber" title="The figures follow the search and filters below">Families shown · filters on</span>' : '<span class="pill green">All active families</span>';
+  const monthSel = '<select class="plain" id="stat-month" data-ch="statMonth" aria-label="Month for the statistics">'
+    + statMonths().map(p => '<option value="' + p + '" ' + (p === period ? 'selected' : '') + '>' + esc(C.periodLabel(p)) + (p === C.sgMonthKey() ? ' (this month)' : '') + '</option>').join('') + '</select>';
+  const head = '<div class="kpi-head"><div class="kpi-title"><h2>📊 Key statistics</h2>' + scope + '</div>'
+    + '<div class="kpi-tools">' + (S.ui.statsOpen ? monthSel : '') + '<button class="btn ghost small" data-act="toggleStats" aria-expanded="' + !!S.ui.statsOpen + '" aria-controls="fam-stats-body">' + (S.ui.statsOpen ? 'Hide' : 'Show') + '</button></div></div>';
+  if (!S.ui.statsOpen) {
+    return '<section class="kpis folded" id="fam-stats">' + head
+      + '<div class="kpi-mini">' + C.plural(st.students, 'student', 'students') + ' · ➗ ' + st.categories.math.students + ' Math · 🔬 ' + st.categories.science.students + ' Science · ' + money(st.net) + ' a month</div></section>';
+  }
+  const tile = (cls, label, value, hint, extra) => '<div class="kpi ' + cls + '"><div class="kpi-label">' + label + '</div><div class="kpi-value">' + value + '</div>' + (hint ? '<div class="kpi-hint">' + hint + '</div>' : '') + (extra || '') + '</div>';
+  const overview = '<div class="kpi-row four">'
+    + tile('k-students', '👦 Students', String(st.students),
+      'in ' + C.plural(st.families, 'family', 'families') + (st.paused ? ' · ' + st.paused + ' paused' : '') + (st.noClass ? ' · <span class="warn-t">' + st.noClass + ' without a class</span>' : '') + (st.both ? ' · ' + st.both + ' take both subjects' : ''))
+    + tile('k-fees', '💵 Monthly fees', money(st.net), money(st.fees) + ' at schedule fees' + (st.discounts ? ' − ' + money(st.discounts) + ' discounts' : '') + ' · ' + money(st.net * 12) + ' a year')
+    + tile('k-collected', '✅ Collected for ' + esc(mo), money(st.collected), st.invoices ? 'of ' + money(st.billed) + ' invoiced · ' + st.percent + '%' : 'no ' + esc(mo) + ' invoices yet',
+      st.billed > 0 ? '<div class="kpi-bar" role="img" aria-label="' + st.percent + '% collected"><span style="width:' + Math.min(100, st.percent) + '%"></span></div>' : '')
+    + tile('k-owing', '⏳ Still to collect', money(st.outstanding), st.invoices ? 'on ' + esc(C.periodLabel(period)) + ' invoices' : '—')
+    + '</div>';
+  const group = (g, title) => {
+    const cats = C.STAT_CATEGORIES.filter(k => k.group === g).map(k => st.categories[k.key]);
+    const total = cats.reduce((a, c) => a + c.fees, 0);
+    return '<div class="kpi-group"><div class="kpi-sub">' + title + '</div><div class="kpi-row ' + (cats.length === 2 ? 'two' : 'three') + '">'
+      + cats.map(c => {
+        const share = total > 0 ? Math.round(c.fees / total * 100) : 0;
+        return '<div class="kpi cat cat-' + c.key + '" data-cat="' + c.key + '"><div class="kpi-label">' + c.icon + ' ' + esc(c.label) + '</div>'
+          + '<div class="kpi-value">' + c.students + ' <span class="kpi-unit">' + (c.students === 1 ? 'student' : 'students') + '</span></div>'
+          + '<div class="kpi-hint">' + C.plural(c.families, 'family', 'families') + '</div>'
+          + '<dl class="kpi-money"><div><dt>Fees a month</dt><dd>' + money(c.fees) + '</dd></div><div><dt>Collected ' + esc(mo) + '</dt><dd>' + money(c.collected) + '</dd></div></dl>'
+          + '<div class="kpi-bar" role="img" aria-label="' + share + '% of the fees"><span style="width:' + share + '%"></span></div><div class="kpi-share">' + share + '% of ' + (g === 'subject' ? 'subject' : 'lesson') + ' fees</div></div>';
+      }).join('') + '</div></div>';
+  };
+  const unsorted = st.unsortedFees || st.unsortedCollected
+    ? ' Not sorted into a category (a child\'s own fee with no class, or a hand-typed invoice line): ' + money(st.unsortedFees) + ' of fees, ' + money(st.unsortedCollected) + ' collected.' : '';
+  return '<section class="kpis" id="fam-stats"><div id="fam-stats-body">' + head + overview + '<div class="kpi-groups">' + group('subject', 'By subject') + group('type', 'By type of lesson') + '</div>'
+    + '<p class="kpi-note"><b>Monthly fees</b>: one month of lessons for every active child at today\'s schedule fees (a child\'s own fee or a class\'s own rate wins), before sibling discounts in the categories; package families included. '
+    + '<b>Collected</b>: payments recorded against ' + esc(C.periodLabel(period)) + ' invoices, split over each invoice\'s classes. '
+    + 'A child counts once in every subject and type they take a class in, so a child in Math and Science counts in both.' + esc(unsorted) + '</p></div></section>';
+}
 function famFilterPanelHtml() {
   const F = S.ui.famF;
   const opts = C.familyFilterOptions(S.families, S.schedule);
@@ -633,6 +697,7 @@ VIEWS.families = function () {
   return '<div class="page-head"><div><h1>Families</h1><p>One record per confirmed sign-up. The email is the family\'s account ID, the same for every child.</p></div>'
     + '<div class="actions"><button class="btn ghost" data-act="exportRecords" title="Every field of the families shown, one row per child">⬇ CSV</button><button class="btn ghost" data-act="openImport">⬆ Import spreadsheet</button><button class="btn" data-act="newFamily">＋ Add a family</button></div></div>'
     + sharedBanner
+    + (S.familiesLoaded && S.families.length ? famStatsHtml(list) : '')
     + '<div class="toolbar"><div class="search"><input type="search" placeholder="Search parent, student, school, phone, email or code" value="' + esc(S.ui.famSearch) + '" data-in="famSearch" data-keep="famSearch" aria-label="Search families"></div>'
     + '<div class="ffsort"><label for="fam-sort">Sort</label><select id="fam-sort" class="plain" data-ch="famSort">' + C.FAMILY_SORTS.map(o => '<option value="' + o.key + '" ' + (S.ui.famSort === o.key ? 'selected' : '') + '>' + esc(o.label) + '</option>').join('') + '</select></div>'
     + '<button class="btn ghost fftoggle' + (S.ui.famPanel ? ' open' : '') + '" data-act="famPanel" aria-expanded="' + !!S.ui.famPanel + '" aria-controls="fam-filter-panel">⚲ Filters' + (nOn ? ' <span class="n">' + nOn + '</span>' : '') + '</button>'
@@ -2237,6 +2302,7 @@ const ACT = {
   famFilter(el) { S.ui.famFilter = el.dataset.k; render(); },
   famType(el) { S.ui.famType = el.dataset.k; render(); },
   famPanel() { S.ui.famPanel = !S.ui.famPanel; render(); },
+  toggleStats() { S.ui.statsOpen = !S.ui.statsOpen; rememberStatsOpen(S.ui.statsOpen); render(); },
   famFClear(el) { const k = el.dataset.k; S.ui.famF[k] = ''; if (k === 'paid') S.ui.famF.month = ''; render(); },
   famFReset() { S.ui.famF = C.cleanFamilyFilters({}); render(); },
   famView(el) { S.ui.famView = el.dataset.k === 'table' ? 'table' : 'cards'; rememberFamView(S.ui.famView); render(); },
@@ -2683,6 +2749,7 @@ const INP = {
 };
 const CHG = {
   stuDay(el) { S.ui.stu.day = el.value; render(); },
+  statMonth(el) { S.ui.statMonth = C.isPeriod(el.value) ? el.value : ''; render(); },
   famSort(el) { S.ui.famSort = C.FAMILY_SORT_KEYS.includes(el.value) ? el.value : 'level'; rememberFamSort(S.ui.famSort); render(); },
   famF(el) {
     const k = el.dataset.k;
