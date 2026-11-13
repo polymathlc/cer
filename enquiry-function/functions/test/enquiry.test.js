@@ -61,12 +61,15 @@ function requestHarness(repository) {
   } };
 }
 
-test('server recipients are required, fixed to two addresses and immutable', () => {
+test('server recipients are required, fixed to two addresses plus support@, and immutable', () => {
   for (const value of [undefined, '', 'one@example.test', 'one@example.test,one@example.test',
     'one@example.test,two@example.test,three@example.test', 'one@example.test,two@example.test\r\nBcc: bad@example.test'])
     assert.throws(() => recipientConfiguration(value));
-  assert.equal(RECIPIENTS.length, 2);
+  assert.deepEqual(RECIPIENTS, ['centre-one@example.test', 'centre-two@example.test', 'support@polymathlc.com.sg']);
   assert.equal(Object.isFrozen(RECIPIENTS), true);
+  // support@ is never added twice when it is already one of the configured pair.
+  assert.deepEqual(recipientConfiguration('one@example.test,Support@polymathlc.com.sg'),
+    ['one@example.test', 'Support@polymathlc.com.sg']);
 });
 
 test('science accepts exactly P3 through S1; maths only P4-P6', () => {

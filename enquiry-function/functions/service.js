@@ -26,11 +26,14 @@ function line(value, max, min = 1) {
   if (result.length < min || result.length > max) fail();
   return result;
 }
+const SUPPORT_EMAIL = 'support@polymathlc.com.sg';
 function recipientConfiguration(value) {
   const recipients = typeof value === 'string' ? value.split(',').map(address => address.trim()) : [];
   if (recipients.length !== 2 || new Set(recipients).size !== 2
       || recipients.some(address => !/^[^\s@<>(),;:\\"]+@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/i.test(address)))
     throw new Error('A fixed pair of server enquiry recipients must be configured.');
+  // The support inbox is always copied too, on top of the two configured inboxes.
+  if (!recipients.some(address => address.toLowerCase() === SUPPORT_EMAIL)) recipients.push(SUPPORT_EMAIL);
   return Object.freeze(recipients);
 }
 function validateEnquiry(body) {
@@ -116,5 +119,5 @@ function createService({ repository, recipients, now = Date.now, report = () => 
   }
   return { handler, cleanup: () => repository.cleanup(now()) };
 }
-module.exports = { recipientConfiguration, ORIGINS, LIMITS, RETENTION_MS, MAIL_PREFIX, REQUEST_COLLECTION,
+module.exports = { recipientConfiguration, SUPPORT_EMAIL, ORIGINS, LIMITS, RETENTION_MS, MAIL_PREFIX, REQUEST_COLLECTION,
   LIMIT_COLLECTION, EnquiryError, validateEnquiry, buildSubmission, createService };

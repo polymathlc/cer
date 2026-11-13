@@ -13,7 +13,7 @@
 // extension sends. Everything that came from the parent is escaped.
 const { SENDER_EMAIL, SENDER_NAME, UEN, escapeHtml, validEmail } = require('./receipt');
 
-const NOTIFICATION_EMAILS = Object.freeze(['chungzhikai@gmail.com', 'admin@polymathlc.com.sg']);
+const NOTIFICATION_EMAILS = Object.freeze(['chungzhikai@gmail.com', 'admin@polymathlc.com.sg', 'support@polymathlc.com.sg']);
 const BOOKING_MAIL_PREFIX = 'polymath-schedule-booking-';
 const WHATSAPP_NUMBER = '6596450588';
 const WHATSAPP_DISPLAY = '+65 9645 0588';
