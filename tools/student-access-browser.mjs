@@ -49,11 +49,12 @@ const ADMINS = ['chungzhikai@gmail.com', 'admin@polymathlc.com.sg', 'support@pol
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.json': 'application/json', '.webmanifest': 'application/manifest+json' };
 
 /* ───────────── the stand-in database (shared by REST and the fake SDK) ───────────── */
-const db = { studentAccess: new Map(), mail: new Map(), protectedRules: false };
+const db = { studentAccess: new Map(), mail: new Map(), onlineMembers: new Map(), protectedRules: false };
 const USERS = {
   student: { uid: 'stu1', email: 'tan.kid@gmail.com', emailVerified: true, displayName: 'Tan Kid' },
   staff: { uid: 'staff1', email: 'elsielcr@gmail.com', emailVerified: true, displayName: 'Elsie' },
-  admin: { uid: 'adm1', email: 'chungzhikai@gmail.com', emailVerified: true, displayName: 'Zhi Kai' }
+  admin: { uid: 'adm1', email: 'chungzhikai@gmail.com', emailVerified: true, displayName: 'Zhi Kai' },
+  science: { uid: 'sci1', email: 'goh.family@gmail.com', emailVerified: true, displayName: 'Goh Family' }
 };
 const byUid = Object.fromEntries(Object.values(USERS).map(u => [u.uid, u]));
 
@@ -158,14 +159,15 @@ const FAKE_COMPAT_APP = `(function () {
           return function () { stop = true; };
         },
         doc: function (id) { return {
+          get: function () { return call('get', { collection: name, id: id }).then(function (d) { return { exists: d.exists, data: function () { return d.data; } }; }); },
           update: function (data) { return call('update', { collection: name, id: id, data: data }); },
-          set: function (data) { return call('set', { collection: name, id: id, data: data }); },
+          set: function (data, options) { return call(options && options.merge ? 'update' : 'set', { collection: name, id: id, data: data }); },
           delete: function () { return call('delete', { collection: name, id: id }); }
         }; }
       };
     } };
   }
-  firestore.FieldValue = { serverTimestamp: function () { return '__now__'; } };
+  firestore.FieldValue = { serverTimestamp: function () { return '__now__'; }, delete: function () { return '__delete__'; } };
   window.firebase = { apps: apps, initializeApp: function (c) { apps.push({ name: '[DEFAULT]', options: c }); return apps[0]; }, auth: auth, firestore: firestore };
 })();`;
 const FAKE_MODULAR_APP = `var apps = [];
@@ -177,7 +179,9 @@ export function onAuthStateChanged(auth, fn) { return auth.onAuthStateChanged(fn
 export function signOut(auth) { return auth.signOut(); }`;
 
 function standInApp(name, kind) {
-  const gate = `<script defer src="${APPS}/cer/student/access-gate.js?v=1.0.0" data-app="${name}"></script>`;
+  // The Math app and the Science app (cer) belong to one subject each; the rest to none.
+  const subject = name === 'math' ? 'math' : name === 'cer' ? 'science' : '';
+  const gate = `<script defer src="${APPS}/cer/student/access-gate.js?v=1.1.0" data-app="${name}"${subject ? ` data-subject="${subject}"` : ''}></script>`;
   const signIn = kind === 'compat'
     ? `<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
        <script>firebase.initializeApp({ projectId: 'mathgen--app' }); firebase.auth().onAuthStateChanged(function (u) { document.getElementById('who').textContent = u ? u.email : 'signed out'; });</script>`
@@ -210,7 +214,12 @@ async function route(r) {
     const now = v => (v === '__now__' ? new Date().toISOString() : v);
     const clean = data => Object.fromEntries(Object.entries(data).map(([k, v]) => [k, now(v)]));
     if (op === 'list') return r.fulfill(json(200, [...store.entries()].map(([id, data]) => ({ id, data }))));
-    if (op === 'update') store.set(body.id, { ...store.get(body.id), ...clean(body.data) });
+    if (op === 'get') return r.fulfill(json(200, { exists: store.has(body.id), data: store.get(body.id) || null }));
+    if (op === 'update') {
+      const merged = { ...(store.get(body.id) || {}), ...clean(body.data) };
+      for (const key of Object.keys(merged)) if (merged[key] === '__delete__') delete merged[key];
+      store.set(body.id, merged);
+    }
     if (op === 'set') store.set(body.id, clean(body.data));
     if (op === 'delete') store.delete(body.id);
     return r.fulfill(json(200, {}));
@@ -377,6 +386,14 @@ await step('an admin opens /student/#admin, sees the request waiting and approve
   await adminPage.waitForFunction(() => document.querySelector('.filter-chip.is-active span')?.textContent === '0');
   assert.equal(db.studentAccess.get('stu1').status, 'approved');
   assert.equal(db.studentAccess.get('stu1').decidedBy, 'chungzhikai@gmail.com');
+  // The Worksheets portal follows: P5 Both → P5 Maths + Science; the P3 child's "Math only" adds nothing (P3 is Science only there).
+  for (let i = 0; i < 50 && !db.onlineMembers.has('stu1'); i++) await adminPage.waitForTimeout(100);
+  const member = db.onlineMembers.get('stu1');
+  assert.ok(member, 'an onlineMembers row is written on approval');
+  assert.deepEqual(member.access, [{ level: 'P5', subjects: ['math', 'science'] }]);
+  assert.equal(member.level, 'P5');
+  assert.equal(member.source, 'student-access');
+  assert.equal(member.role, 'student');
 });
 
 /* ───────────── 7. the waiting student unlocks ───────────── */
@@ -399,6 +416,8 @@ await step('the admin pauses access → the student is blocked again and may ask
   await card.locator('[data-admin="revoke"]', { hasText: 'Tap again' }).click();
   await adminPage.waitForFunction(() => document.querySelector('.filter-chip[data-filter="revoked"] span')?.textContent === '1');
   assert.equal(db.studentAccess.get('stu1').status, 'revoked');
+  for (let i = 0; i < 50 && db.onlineMembers.get('stu1')?.revoked !== true; i++) await adminPage.waitForTimeout(100);
+  assert.equal(db.onlineMembers.get('stu1').revoked, true, 'pausing closes the Worksheets portal too');
   await studentPage.reload();
   await waitGate(studentPage, 'Your access is paused');
   await inGate(studentPage, '[data-action="edit"]').click();
@@ -410,6 +429,90 @@ await step('the admin pauses access → the student is blocked again and may ask
   assert.equal(db.studentAccess.get('stu1').submissions, 2);
   for (let i = 0; i < 50 && !db.mail.has('polymath-access-stu1-2'); i++) await studentPage.waitForTimeout(100);   // the email is sent just after
   assert.ok(db.mail.has('polymath-access-stu1-2'));
+});
+
+/* ───────────── 9. subjects: the approval decides which apps open ───────────── */
+await step('a Science-only family: Science and the shared apps open, Math is refused at its direct address', async () => {
+  db.studentAccess.set('sci1', { uid: 'sci1', email: 'goh.family@gmail.com', status: 'approved', enrolled: true, parentName: 'Mr Goh Boon Huat',
+    parentEmail: 'goh.bh@gmail.com', childCount: 1, children: [{ name: 'Goh Xin Yi', level: 'P6', subjects: 'science' }],
+    submittedAt: new Date().toISOString(), app: 'cer', submissions: 1 });
+  const page = await newPage(USERS.science, { width: 390, height: 844 });
+  await page.goto(APPS + '/math/');
+  await waitGate(page, 'Math is not part of your Polymath subjects');
+  const text = await gateText(page);
+  assert.match(text, /approved for Science/);
+  assert.match(text, /Open My Polymath/);
+  assert.equal(await page.evaluate(() => document.body.hasAttribute('inert')), true, 'the Math app behind is inert');
+  await page.locator('#appButton').click({ force: true, timeout: 1500 }).catch(() => {});
+  assert.equal(await page.evaluate(() => window.__clicked || 0), 0, 'the Math app\'s buttons do nothing');
+  if (shots) await page.screenshot({ path: path.join(shots, 'not-your-subject-phone.png'), fullPage: false });
+  for (const app of ['cer', 'tutor', 'english', 'chinese', 'anskey', 'rewards']) {
+    await page.goto(APPS + '/' + app + '/');
+    await page.waitForFunction(() => window.PolymathAccess && window.PolymathAccess.state.phase === 'approved', null, { timeout: 8000 });
+    assert.equal(await page.evaluate(() => !!document.getElementById('polymath-access-gate')?.isConnected), false, app + ' opens');
+  }
+  await page.goto(APPS + '/math/');   // remembered as Science-only: refused again, with no flash of the app
+  await waitGate(page, 'Math is not part of your Polymath subjects');
+  await page.context().close();
+});
+
+await step('the Science-only family\'s My Polymath: the Math tile is locked and says why; Science opens', async () => {
+  const page = await newPage(USERS.science, { width: 390, height: 844 });
+  await page.goto(SITE + '/student/');
+  await page.waitForSelector('.app-tile[data-app="math"].is-subject-locked');
+  assert.equal(await page.getAttribute('.app-tile[data-app="math"]', 'href'), null, 'the Math tile has no address');
+  assert.match(await page.textContent('.app-tile[data-app="math"]'), /Not in your subjects/);
+  assert.ok(await page.getAttribute('.app-tile[data-app="science"]', 'href'), 'Science keeps its address');
+  assert.ok(await page.getAttribute('.app-tile[data-app="psle"]', 'href'), 'Science PSLE keeps its address');
+  assert.ok(await page.getAttribute('.app-tile[data-app="english"]', 'href'), 'English keeps its address');
+  assert.match(await page.textContent('#subjectsNote'), /approved for Science/);
+  assert.match(await page.textContent('#accountCard'), /Approved · Science/);
+  await page.click('.app-tile[data-app="math"]', { force: true });   // aria-disabled: Playwright would wait for it forever
+  await page.waitForSelector('.locked-note');
+  assert.match(await page.textContent('.locked-note'), /Math is not one of your Polymath subjects/);
+  assert.equal(new URL(page.url()).pathname, '/student/', 'tapping it goes nowhere');
+  if (shots) await page.screenshot({ path: path.join(shots, 'student-science-only-phone.png'), fullPage: false });
+  await page.context().close();
+});
+
+await step('the admin changes the child to Both Math and Science → the Math tile and the Math app open, and Worksheets follow', async () => {
+  await adminPage.locator('.filter-chip[data-filter="approved"]').click();
+  const card = adminPage.locator('.record', { hasText: 'Mr Goh Boon Huat' });
+  await card.waitFor();
+  assert.match(await card.textContent(), /Science/);
+  await card.locator('[data-admin="edit"]').click();
+  await card.locator('select[name="childSubjects"]').selectOption('both');
+  await adminPage.waitForTimeout(900);   // the list redraws live (every 300 ms here): the choice must survive it
+  assert.equal(await card.locator('select[name="childSubjects"]').inputValue(), 'both', 'an unsaved edit survives the live redraw');
+  await card.locator('button[type="submit"]').click();
+  for (let i = 0; i < 50 && db.studentAccess.get('sci1').children[0].subjects !== 'both'; i++) await adminPage.waitForTimeout(100);
+  assert.equal(db.studentAccess.get('sci1').children[0].subjects, 'both');
+  for (let i = 0; i < 50 && !db.onlineMembers.has('sci1'); i++) await adminPage.waitForTimeout(100);
+  assert.deepEqual(db.onlineMembers.get('sci1').access, [{ level: 'P6', subjects: ['math', 'science'] }]);
+  const page = await newPage(USERS.science, { width: 390, height: 844 });
+  await page.goto(SITE + '/student/');
+  await page.waitForFunction(() => window.PolymathAccess && window.PolymathAccess.state.phase === 'approved' && window.PolymathAccess.state.subjects.length === 2);
+  await page.waitForFunction(() => !document.querySelector('.app-tile.is-subject-locked'));
+  assert.ok(await page.getAttribute('.app-tile[data-app="math"]', 'href'), 'the Math tile has its address back');
+  assert.equal(await page.isHidden('#subjectsNote'), true);
+  await page.goto(APPS + '/math/');
+  await waitNoGate(page);
+  await page.locator('#appButton').click();
+  assert.equal(await page.evaluate(() => window.__clicked), 1, 'the Math app works');
+  await page.context().close();
+});
+
+await step('admins and staff never get a subject lock', async () => {
+  for (const who of [USERS.admin, USERS.staff]) {
+    const page = await newPage(who);
+    await page.goto(APPS + '/math/');
+    await page.waitForFunction(() => window.PolymathAccess && ['staff'].includes(window.PolymathAccess.state.phase));
+    assert.equal(await page.evaluate(() => !!document.getElementById('polymath-access-gate')?.isConnected), false);
+    await page.goto(SITE + '/student/');
+    await page.waitForTimeout(500);
+    assert.equal(await page.locator('.app-tile.is-subject-locked').count(), 0);
+    await page.context().close();
+  }
 });
 
 await step('/student for a signed-in student shows who they are and their status; signed out shows the sign-in card', async () => {

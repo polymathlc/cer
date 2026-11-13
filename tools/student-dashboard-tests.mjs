@@ -47,7 +47,7 @@ const EXPECTED = [
 const LOCKED = ['online'];
 
 function tiles() {
-  return [...page.matchAll(/<a class="app-tile( is-locked)?" data-app="([^"]+)" (?:href|data-href)="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g)].map(match => ({
+  return [...page.matchAll(/<a class="app-tile( is-locked)?" data-app="([^"]+)"(?: data-subject="(?:math|science)")? (?:href|data-href)="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g)].map(match => ({
     locked: !!match[1],
     tag: match[0].slice(0, match[0].indexOf('>') + 1),
     app: match[2],
@@ -368,9 +368,9 @@ test('the greeting reads Singapore time, and the version is on the page', () => 
   };
   vm.runInNewContext(script[1], sandbox);
   const api = sandbox.window.MyPolymath;
-  assert.equal(api.version, 'v1.4.0');
-  assert.equal(elements.versionBadge.textContent, 'v1.4.0', 'the badge shows the version');
-  assert.ok(page.includes('id="versionBadge" aria-hidden="true">v1.4.0<'), 'the badge is right before script runs too');
+  assert.equal(api.version, 'v1.5.0');
+  assert.equal(elements.versionBadge.textContent, 'v1.5.0', 'the badge shows the version');
+  assert.ok(page.includes('id="versionBadge" aria-hidden="true">v1.5.0<'), 'the badge is right before script runs too');
   assert.equal(api.singaporeHour(new Date(Date.UTC(2026, 9, 25, 0, 0))), 8, '00:00 UTC is 8 am in Singapore');
   assert.equal(api.greetingFor(8), 'Good morning');
   assert.equal(api.greetingFor(14), 'Good afternoon');

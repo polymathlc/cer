@@ -7,7 +7,7 @@
 <title>My Polymath — Student Dashboard | Polymath Learning Centre</title>
 <meta name="description" content="Every Polymath Learning Centre app in one place: Science, Science PSLE, Math, Answer Keys, Study Buddy, Rewards, Worksheets, Chinese and English.">
 <!--
-  MY POLYMATH — the student dashboard at polymathlc.com.sg/student  (v1.4.0)
+  MY POLYMATH — the student dashboard at polymathlc.com.sg/student  (v1.5.0)
   ------------------------------------------------------------------------
   One page of square tiles, one per student app. Each tile is a plain link to
   the app's own published address, so the tiles need no script to work.
@@ -23,6 +23,15 @@
   the SAME file every app loads from polymathlc.github.io/cer/student/; the
   sign-in card and the admin dashboard are student-account.js. The record is
   Firestore studentAccess/{uid}, protected by tools/student-access-rules.mjs.
+
+  SUBJECTS (v1.5.0). The approval also decides WHICH apps open: each child is
+  Math only, Science only or Both. The Science, Science PSLE and Math tiles carry
+  data-subject and lock (🔒 Not in your subjects) for an approved account that
+  does not have that subject; the apps themselves refuse too, at their direct
+  addresses (data-subject on each app's access-gate tag). Answer Keys, Study
+  Buddy, Rewards, Chinese and English open for every approved account. Polymath
+  Online (/online) shows each child's own level and subjects. An admin changes
+  them with Edit at #admin, and every app follows.
 
   WHERE THE APPS ACTUALLY LIVE (v1.2.0 — this is the bug it fixes).
   polymathlc.com.sg is the custom domain of ONE repository, polymathlc/website,
@@ -403,6 +412,14 @@
     animation: fadeUp 0.25s ease both;
   }
   @media (prefers-reduced-motion: reduce) { .app-tile.is-locked.is-nudged, .locked-note { animation: none; } }
+  /* ───────── Subjects (v1.5.0): a tile outside the approved subjects ───────── */
+  .subjects-note { margin: 0 0 var(--space-md, 16px); font-size: var(--font-size-sm, 0.875rem); color: var(--text-secondary); }
+  .subjects-note[hidden] { display: none; }
+  .subjects-note b { color: var(--text-primary); }
+  .record-apps { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .app-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--border-subtle); }
+  .app-chip.is-on { background: #F1F8F5; color: #0B6B4F; border-color: #DCEFE7; }
+  .app-chip.is-off { background: var(--bg-tertiary); color: var(--text-tertiary); text-decoration: line-through; }
 
   /* ───────── Install help ───────── */
   .help-card {
@@ -460,7 +477,7 @@
     .app-tile, .app-tile::before, .tile-go { transition: none; }
   }
 
-  /* ───────── 🔐 Sign-in card and the access admin dashboard (v1.4.0) ───────── */
+  /* ───────── 🔐 Sign-in card and the access admin dashboard (v1.4.0, subjects v1.5.0) ───────── */
   [hidden] { display: none !important; }
   .account-card { margin-top: var(--space-md); background: var(--bg-primary); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: var(--space-md); box-shadow: var(--shadow-sm); text-align: left; }
   .account-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-sm) var(--space-md); }
@@ -575,9 +592,10 @@
   <section class="admin-view" id="adminView" hidden aria-labelledby="adminTitle"></section>
 
   <nav aria-label="Polymath apps" data-apps-view>
+    <p class="subjects-note" id="subjectsNote" hidden aria-live="polite"></p>
     <ul class="tile-grid" id="tileGrid">
       <li style="--order:0">
-        <a class="app-tile" data-app="science" href="https://polymathlc.github.io/cer/" style="--tile-wash:#BBDEFB;--tile-ink:#1565C0">
+        <a class="app-tile" data-app="science" data-subject="science" href="https://polymathlc.github.io/cer/" style="--tile-wash:#BBDEFB;--tile-ink:#1565C0">
           <img class="tile-icon" src="assets/apps/science.png" alt="" width="84" height="84">
           <span class="tile-badge" hidden>Last opened</span>
           <span class="tile-go" aria-hidden="true">→</span>
@@ -589,7 +607,7 @@
         </a>
       </li>
       <li style="--order:1">
-        <a class="app-tile" data-app="psle" href="https://polymathlc.github.io/cer/#psle" style="--tile-wash:#C5CAE9;--tile-ink:#283593">
+        <a class="app-tile" data-app="psle" data-subject="science" href="https://polymathlc.github.io/cer/#psle" style="--tile-wash:#C5CAE9;--tile-ink:#283593">
           <img class="tile-icon" src="assets/apps/psle.png" alt="" width="84" height="84">
           <span class="tile-badge" hidden>Last opened</span>
           <span class="tile-go" aria-hidden="true">→</span>
@@ -601,7 +619,7 @@
         </a>
       </li>
       <li style="--order:2">
-        <a class="app-tile" data-app="math" href="https://polymathlc.github.io/math/" style="--tile-wash:#C8E6C9;--tile-ink:#2E7D32">
+        <a class="app-tile" data-app="math" data-subject="math" href="https://polymathlc.github.io/math/" style="--tile-wash:#C8E6C9;--tile-ink:#2E7D32">
           <img class="tile-icon" src="assets/apps/math.png" alt="" width="84" height="84">
           <span class="tile-badge" hidden>Last opened</span>
           <span class="tile-go" aria-hidden="true">→</span>
@@ -708,14 +726,14 @@
   © Polymath Learning Centre · polymathlc.com.sg
 </footer>
 
-<div class="version-badge" id="versionBadge" aria-hidden="true">v1.4.0</div>
+<div class="version-badge" id="versionBadge" aria-hidden="true">v1.5.0</div>
 
 <script>
   /* My Polymath — the little the page does with script. Everything works without it. */
   (function () {
     'use strict';
 
-    var DASHBOARD_VERSION = 'v1.4.0';
+    var DASHBOARD_VERSION = 'v1.5.0';
     var LAST_OPENED_KEY = 'polymath-dashboard-last-opened';
 
     var versionBadge = document.getElementById('versionBadge');
@@ -779,16 +797,17 @@
     var printButton = document.getElementById('printButton');
     if (printButton) printButton.addEventListener('click', function () { window.print(); });
 
-    window.MyPolymath = { version: DASHBOARD_VERSION, greetingFor: greetingFor, singaporeHour: singaporeHour };
+    window.MyPolymath = { version: DASHBOARD_VERSION, greetingFor: greetingFor, singaporeHour: singaporeHour, showLockedNote: showLockedNote };
   })();
 </script>
-<!-- 🔐 Student access (v1.4.0): sign-in + admin dashboard, then the enrolment pop-up every app shares.
+<!-- 🔐 Student access (v1.5.0): sign-in + admin dashboard, then the enrolment pop-up every app shares.
+     The Science, Science PSLE and Math tiles (data-subject) open only for the subjects an admin approved.
      Without the sign-in library (offline) the tiles still work; each app asks for itself. -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="student-account.js?v=1.4.0"></script>
-<script defer src="access-gate.js?v=1.0.0" data-app="student"></script>
+<script src="student-account.js?v=1.5.0"></script>
+<script defer src="access-gate.js?v=1.1.0" data-app="student"></script>
 <script defer src="pwa-install.js?v=2.0.0" data-app-name="My Polymath" data-app-key="hub" data-app-icon="assets/app-icons/icon-192.png" data-accent="#0B6B4F" data-sw="sw.js" data-floating="auto"></script>
 </body>
 </html>

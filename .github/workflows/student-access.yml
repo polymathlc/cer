@@ -18,10 +18,10 @@ name: Student access approval
 
 on:
   pull_request:
-    paths: ['student/access-gate.js', 'student/student-account.js', 'student/index.html', 'tools/student-access*', '.github/workflows/student-access.yml']
+    paths: ['student/access-gate.js', 'student/student-account.js', 'student/index.html', 'online/portal.js', 'online/portal-core.js', 'tools/student-access*', '.github/workflows/student-access.yml']
   push:
     branches: [main]
-    paths: ['student/access-gate.js', 'student/student-account.js', 'student/index.html', 'tools/student-access*', '.github/workflows/student-access.yml']
+    paths: ['student/access-gate.js', 'student/student-account.js', 'student/index.html', 'online/portal.js', 'online/portal-core.js', 'tools/student-access*', '.github/workflows/student-access.yml']
   workflow_dispatch:
     inputs:
       apply:
@@ -54,6 +54,7 @@ jobs:
           node --check student/access-gate.js
           node --check student/student-account.js
           node --check tools/student-access-rules.mjs
+          node --check tools/student-access-impact.mjs
           node --test tools/student-access-tests.mjs
 
       - name: Browser walk-through (pop-up, waiting, admin approves, pause)
@@ -92,6 +93,16 @@ jobs:
           else
             echo "Student access protection: installed (the gate is on); all $(jq -r '.validated' <<<"$out") permission cases pass." >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      - name: Who loses something under the subject rules (read only, counts only)
+        if: github.repository == 'polymathlc/cer' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && !inputs.apply
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/impact-deps" --no-save --no-audit --no-fund firebase-admin@12 >/dev/null
+          out=$(IMPACT_DEPS="$RUNNER_TEMP/impact-deps" node tools/student-access-impact.mjs)
+          echo "$out"
+          { echo "### Subjects: who loses something"; tail -n +2 <<<"$out" | sed 's/^/- /'; } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish the protection (only when asked)
         if: github.repository == 'polymathlc/cer' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.apply

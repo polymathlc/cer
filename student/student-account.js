@@ -1,5 +1,5 @@
 /*
-  MY POLYMATH — sign-in and the student access admin dashboard  (v1.4.0)
+  MY POLYMATH — sign-in and the student access admin dashboard  (v1.5.0)
   ======================================================================
   polymathlc.com.sg/student          a student / parent signs in here once; the
                                      enrolment pop-up (access-gate.js, the SAME
@@ -14,13 +14,24 @@
 
   The tiles stay plain links that work with no script: each app checks access
   itself, so the dashboard showing a tile never lets anybody past the gate.
+
+  SUBJECTS (v1.5.0) — this dashboard controls every app:
+  • Each child is Math only, Science only or Both. The Science, Science PSLE and
+    Math tiles (data-subject) lock for an approved account without that subject
+    ("🔒 Not in your subjects"); the apps refuse at their direct addresses too.
+    Answer Keys, Study Buddy, Rewards, Chinese and English open for every
+    approved account.
+  • Polymath Online (/online): approving, editing or pausing here also writes
+    the account's onlineMembers/{uid} row — each child's own level (P3–P6) and
+    subjects as `access` — and the portal reads the approval itself as well, so
+    the worksheets follow this page even before that row is written.
   Firestore: studentAccess/{uid}; the rules (tools/student-access-rules.mjs) let
   only these three admins list, approve, edit or delete.
 */
 (function () {
   'use strict';
 
-  var VERSION = 'v1.4.0';
+  var VERSION = 'v1.5.0';
   var FIREBASE_CONFIG = {
     apiKey: 'AIzaSyAUSI3Uh28IeqASEp0JhH4QPaVt-O3meBo',
     authDomain: 'mathgen--app.firebaseapp.com',
@@ -41,6 +52,15 @@
   ];
   var SUBJECTS = [['math', 'Math only'], ['science', 'Science only'], ['both', 'Both Math and Science']];
   var STATUS_LABEL = { pending: 'Waiting', approved: 'Approved', revoked: 'Paused' };
+  // The two subjects a tile (or an app) can belong to, in the order shown.
+  var APP_SUBJECTS = [['science', 'Science'], ['math', 'Math']];
+  // Polymath Online has classes for these levels only; P3 is Science only.
+  var ONLINE_LEVELS = ['P3', 'P4', 'P5', 'P6'];
+  var ONLINE_MEMBERS = 'onlineMembers';
+  var WHATSAPP_NUMBER = '+65 9645 0588';
+  // Markers onlineMemberPatch() returns; the page swaps in the Firestore sentinels.
+  var SERVER_TIME = '__serverTimestamp__';
+  var DELETE_FIELD = '__deleteField__';
 
   /* ---------------------------- pure helpers ---------------------------- */
   function esc(value) {
@@ -125,8 +145,108 @@
     return out;
   }
 
+  /* ---------------------------- subjects (v1.5.0) ---------------------------- */
+  /** One child's choice → the subjects it opens ("both" → math and science). */
+  function subjectsOfChoice(choice) {
+    var key = lower(choice);
+    if (key === 'both') return ['math', 'science'];
+    if (key === 'math' || key === 'science') return [key];
+    return [];
+  }
+  /** Every subject a record's children have, sorted (the same rule as access-gate.js). */
+  function approvedSubjects(record) {
+    var out = [];
+    ((record && record.children) || []).forEach(function (child) {
+      subjectsOfChoice(child && child.subjects).forEach(function (s) { if (out.indexOf(s) < 0) out.push(s); });
+    });
+    return out.sort();
+  }
+  function appSubjectLabel(key) { for (var i = 0; i < APP_SUBJECTS.length; i++) if (APP_SUBJECTS[i][0] === key) return APP_SUBJECTS[i][1]; return key || ''; }
+  /** "Science and Math", "Math", or "" — in the order of APP_SUBJECTS. */
+  function subjectsWords(list) {
+    var words = APP_SUBJECTS.filter(function (p) { return (list || []).indexOf(p[0]) >= 0; }).map(function (p) { return p[1]; });
+    return words.join(' and ');
+  }
+  /**
+   * Which subjects the tiles on this page may open for the signed-in account:
+   * null = no subject locks at all (signed out, an admin, staff, or an account the
+   * enrolment pop-up is still deciding — the pop-up covers the page then), or the
+   * approved list (possibly empty).
+   */
+  function tileSubjects(signedIn, gate) {
+    if (!signedIn || !signedIn.uid || isAdmin(signedIn)) return null;
+    if (!gate || (gate.phase !== 'approved' && gate.phase !== 'subject')) return null;
+    return Array.isArray(gate.subjects) ? gate.subjects.slice() : null;
+  }
+  /** Is a tile for this subject locked? (A tile with no subject never is.) */
+  function tileLocked(tileSubject, allowed) {
+    if (!tileSubject || !allowed) return false;
+    return allowed.indexOf(tileSubject) < 0;
+  }
+  /**
+   * Each child's Polymath Online (level, subjects): only levels Online has
+   * classes for, P3 Science only, children of the same level merged.
+   */
+  function onlineAccessFor(record) {
+    var out = [];
+    ((record && record.children) || []).forEach(function (child) {
+      if (!child || ONLINE_LEVELS.indexOf(child.level) < 0) return;
+      var subjects = subjectsOfChoice(child.subjects).filter(function (s) { return child.level !== 'P3' || s === 'science'; });
+      if (!subjects.length) return;
+      for (var i = 0; i < out.length; i++) {
+        if (out[i].level === child.level) {
+          subjects.forEach(function (s) { if (out[i].subjects.indexOf(s) < 0) out[i].subjects.push(s); });
+          out[i].subjects.sort();
+          return;
+        }
+      }
+      out.push({ level: child.level, subjects: subjects.slice().sort() });
+    });
+    return out;
+  }
+  /**
+   * What to write to onlineMembers/{uid} so Polymath Online follows this record,
+   * or null when nothing needs writing. `existing` is the member row now (or null).
+   * Approved with Online levels → the row says exactly those levels and subjects
+   * (and an old removal is lifted). Approved with no Online level, waiting or
+   * paused → an existing row is closed; no row is made for it.
+   */
+  function onlineMemberPatch(record, existing, uid) {
+    var status = statusOf(record);
+    var access = status === 'approved' ? onlineAccessFor(record) : [];
+    var same = existing && JSON.stringify(existing.access || null) === JSON.stringify(access) && existing.source === 'student-access';
+    if (access.length) {
+      if (same && !existing.revoked && existing.level === access[0].level) return null;
+      var names = ((record && record.children) || []).map(function (c) { return c && c.name ? String(c.name) : ''; }).filter(Boolean);
+      var email = lower(record && record.email);
+      var patch = {
+        uid: uid || (record && record.uid) || '',
+        level: access[0].level,
+        subjects: access[0].subjects.slice(),
+        access: access,
+        source: 'student-access',
+        syncedAt: SERVER_TIME
+      };
+      if (!existing) {
+        patch.role = 'student';
+        patch.name = names.join(' & ');
+        patch.email = email;
+        patch.emailLower = email;
+        patch.joinedAt = SERVER_TIME;
+      }
+      if (existing && (existing.revoked || existing.revokedAt)) { patch.revoked = DELETE_FIELD; patch.revokedAt = DELETE_FIELD; }
+      return patch;
+    }
+    if (!existing) return null;
+    if (same && existing.revoked === true) return null;
+    return { access: [], source: 'student-access', revoked: true, revokedAt: SERVER_TIME, syncedAt: SERVER_TIME };
+  }
+
   var helpers = { esc: esc, isAdmin: isAdmin, statusOf: statusOf, loginCandidates: loginCandidates, accountLabel: accountLabel,
     toDate: toDate, sgTime: sgTime, matches: matches, sortRecords: sortRecords, counts: counts, editedRecord: editedRecord,
+    subjectsOfChoice: subjectsOfChoice, approvedSubjects: approvedSubjects, appSubjectLabel: appSubjectLabel, subjectsWords: subjectsWords,
+    tileSubjects: tileSubjects, tileLocked: tileLocked, onlineAccessFor: onlineAccessFor, onlineMemberPatch: onlineMemberPatch,
+    SERVER_TIME: SERVER_TIME, DELETE_FIELD: DELETE_FIELD, ONLINE_LEVELS: ONLINE_LEVELS, APP_SUBJECTS: APP_SUBJECTS,
     ACCESS_ADMINS: ACCESS_ADMINS, LEVELS: LEVELS, SUBJECTS: SUBJECTS };
   window.MyPolymathAccount = { version: VERSION, helpers: helpers };
 
@@ -137,6 +257,83 @@
   var adminButton = document.getElementById('adminButton');
   var adminView = document.getElementById('adminView');
   var appSections = document.querySelectorAll('[data-apps-view]');
+  var subjectsNote = document.getElementById('subjectsNote');
+
+  /* ---------------------- subject locks on the tiles ---------------------- */
+  // Runs before sign-in is known too (signed out → every tile as it is in the HTML).
+  var LOCK_TEXT = function (subject) {
+    return appSubjectLabel(subject) + ' is not one of your Polymath subjects. WhatsApp us on ' + WHATSAPP_NUMBER + ' to add it.';
+  };
+  function lockTile(tile, subject) {
+    if (tile.classList.contains('is-subject-locked')) return;
+    tile.setAttribute('data-subject-href', tile.getAttribute('href') || '');
+    tile.removeAttribute('href');
+    tile.classList.add('is-locked', 'is-subject-locked');
+    tile.setAttribute('role', 'link');
+    tile.setAttribute('tabindex', '0');
+    tile.setAttribute('aria-disabled', 'true');
+    tile.setAttribute('data-locked', LOCK_TEXT(subject));
+    var words = tile.querySelector('.tile-words');
+    if (words && !words.querySelector('.tile-lock')) {
+      var pill = document.createElement('span');
+      pill.className = 'tile-lock';
+      pill.setAttribute('data-subject-lock', '');
+      pill.innerHTML = '<span aria-hidden="true">🔒</span> Not in your subjects';
+      words.insertBefore(pill, words.firstChild);
+    }
+    Array.prototype.forEach.call(tile.querySelectorAll('.tile-go, .tile-badge'), function (el) { el.setAttribute('data-was-hidden', el.hidden ? '1' : ''); el.hidden = true; });
+  }
+  function unlockTile(tile) {
+    if (!tile.classList.contains('is-subject-locked')) return;
+    var href = tile.getAttribute('data-subject-href');
+    if (href) tile.setAttribute('href', href);
+    tile.removeAttribute('data-subject-href');
+    tile.classList.remove('is-locked', 'is-subject-locked', 'is-nudged');
+    tile.removeAttribute('role');
+    tile.removeAttribute('tabindex');
+    tile.removeAttribute('aria-disabled');
+    tile.removeAttribute('data-locked');
+    var pill = tile.querySelector('[data-subject-lock]');
+    if (pill) pill.remove();
+    Array.prototype.forEach.call(tile.querySelectorAll('.tile-go, .tile-badge'), function (el) {
+      if (el.hasAttribute('data-was-hidden')) { el.hidden = el.getAttribute('data-was-hidden') === '1'; el.removeAttribute('data-was-hidden'); }
+    });
+  }
+  function applySubjectLocks() {
+    var allowed = tileSubjects(user, gateState);
+    Array.prototype.forEach.call(document.querySelectorAll('.app-tile[data-subject]'), function (tile) {
+      var subject = tile.getAttribute('data-subject');
+      if (tileLocked(subject, allowed)) lockTile(tile, subject); else unlockTile(tile);
+    });
+    if (subjectsNote) {
+      var missing = allowed ? APP_SUBJECTS.filter(function (p) { return allowed.indexOf(p[0]) < 0; }) : [];
+      if (allowed && missing.length) {
+        var have = subjectsWords(allowed);
+        subjectsNote.hidden = false;
+        subjectsNote.innerHTML = (have ? 'Your account is approved for <b>' + esc(have) + '</b>. ' : 'Your account has no subjects yet. ') +
+          esc(missing.map(function (p) { return p[1]; }).join(' and ')) + ' stays locked until the centre adds it — WhatsApp us on ' + esc(WHATSAPP_NUMBER) + '.';
+      } else {
+        subjectsNote.hidden = true;
+        subjectsNote.textContent = '';
+      }
+    }
+  }
+  // A subject-locked tile has no address; tapping it says why (the page's own note).
+  document.addEventListener('click', function (event) {
+    var tile = event.target && event.target.closest ? event.target.closest('.app-tile.is-subject-locked') : null;
+    if (!tile) return;
+    event.preventDefault();
+    tile.classList.remove('is-nudged');
+    void tile.offsetWidth;
+    tile.classList.add('is-nudged');
+    var note = tile.getAttribute('data-locked') || 'This app is not one of your subjects.';
+    if (window.MyPolymath && typeof window.MyPolymath.showLockedNote === 'function') window.MyPolymath.showLockedNote(note);
+  });
+  document.addEventListener('keydown', function (event) {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    var tile = event.target && event.target.closest ? event.target.closest('.app-tile.is-subject-locked') : null;
+    if (tile) { event.preventDefault(); tile.click(); }
+  });
 
   /* ------------------------------ Firebase ------------------------------ */
   var fb = window.firebase;
@@ -163,7 +360,10 @@
     if (isAdmin(user)) return '<span class="status-chip is-staff">Admin</span>';
     var phase = gateState && gateState.phase;
     if (phase === 'staff') return '<span class="status-chip is-staff">Staff</span>';
-    if (phase === 'approved') return '<span class="status-chip is-approved">✓ Approved</span>';
+    if (phase === 'approved' || phase === 'subject') {
+      var words = subjectsWords(gateState.subjects);
+      return '<span class="status-chip is-approved">✓ Approved' + (words ? ' · ' + esc(words) : '') + '</span>';
+    }
     if (phase === 'pending') return '<span class="status-chip is-pending">Waiting for approval</span>';
     if (phase === 'revoked') return '<span class="status-chip is-revoked">Access paused</span>';
     if (phase === 'form') return '<span class="status-chip is-pending">Details needed</span>';
@@ -271,7 +471,7 @@
   }
 
   /* ---------------------------- admin view ---------------------------- */
-  var admin = { records: [], filter: 'pending', query: '', editing: null, confirming: null, unsubscribe: null, error: '', loaded: false, busy: {} };
+  var admin = { records: [], filter: 'pending', query: '', editing: null, confirming: null, unsubscribe: null, error: '', notice: '', loaded: false, busy: {} };
 
   function wantsAdmin() { return location.hash === '#admin'; }
 
@@ -307,6 +507,7 @@
       admin.error = '';
       renderAdmin();
       updatePendingBadge();
+      reconcileOnline();
     }, function (error) {
       admin.error = (error && error.code === 'permission-denied')
         ? 'This account is not allowed to see student requests. Sign in as one of the Polymath admin accounts.'
@@ -343,12 +544,32 @@
       }).join('') + '</tbody></table>';
   }
 
+  /** Which subject apps this family opens, as the admin sees it on each request. */
+  function appChips(record) {
+    var have = approvedSubjects(record);
+    var online = onlineAccessFor(record).map(function (p) { return p.level + ' ' + p.subjects.map(appSubjectLabel).join(' + '); });
+    return '<div class="record-apps" aria-label="Apps this family opens">' +
+      APP_SUBJECTS.map(function (p) {
+        var on = have.indexOf(p[0]) >= 0;
+        return '<span class="app-chip ' + (on ? 'is-on' : 'is-off') + '">' + (on ? '✓ ' : '') + esc(p[1]) + '</span>';
+      }).join('') +
+      '<span class="app-chip is-on">✓ English, Chinese, Study Buddy, Answer Keys, Rewards</span>' +
+      (online.length ? '<span class="app-chip is-on">Worksheets: ' + esc(online.join(', ')) + '</span>' : '<span class="app-chip is-off">Worksheets</span>') +
+    '</div>';
+  }
+
   function selectHtml(name, list, value, placeholder) {
     return '<select name="' + name + '">' + (placeholder ? '<option value="">' + esc(placeholder) + '</option>' : '') +
       list.map(function (p) { return '<option value="' + esc(p[0]) + '"' + (p[0] === value ? ' selected' : '') + '>' + esc(p[1]) + '</option>'; }).join('') + '</select>';
   }
 
   function editHtml(record) {
+    // What the admin has typed so far wins over the record (the list redraws live).
+    var draft = (admin.editing && admin.editing.draft) || null;
+    var shown = {};
+    Object.keys(record).forEach(function (k) { shown[k] = record[k]; });
+    if (draft) { shown.parentName = draft.parentName; shown.parentEmail = draft.parentEmail; shown.status = draft.status; shown.adminNote = draft.adminNote; }
+    record = shown;
     var children = (admin.editing && admin.editing.children) || record.children || [];
     var rows = children.map(function (c, i) {
       return '<div class="edit-child" data-index="' + i + '">' +
@@ -403,6 +624,7 @@
           '<div><span class="muted">Sent:</span> ' + esc(sgTime(record.submittedAt)) + (record.app ? ' from ' + esc(record.app) : '') +
             (record.submissions > 1 ? ' · sent ' + esc(record.submissions) + ' times' : '') + '</div>' +
           (record.enrolled === true ? '<div><span class="muted">Confirmed still enrolled</span> ✓</div>' : '') +
+          appChips(record) +
           (record.adminNote ? '<div><span class="muted">Note:</span> ' + esc(record.adminNote) + '</div>' : '') +
           decided +
         '</div>' +
@@ -419,6 +641,17 @@
     if (!isAdmin(user)) {
       adminView.innerHTML = '<div class="admin-card"><h2 id="adminTitle">Admins only</h2><p>This page is only for Polymath\'s admin accounts. You are signed in as <b>' + esc(accountLabel(user.email)) + '</b>.</p><p><a href="#">← Back to your apps</a></p></div>';
       return;
+    }
+    // Keep an open Edit form's unsaved answers across the live redraw.
+    if (admin.editing && admin.editing.fresh) {
+      delete admin.editing.fresh;   // the rows were just changed on purpose (add / remove a child)
+    } else if (admin.editing) {
+      var openForm = adminView.querySelector('[data-admin-form="' + admin.editing.id + '"]');
+      if (openForm) {
+        var typed = readEditForm(openForm);
+        admin.editing.children = typed.children;
+        admin.editing.draft = typed;
+      }
     }
     var c = counts(admin.records);
     var filters = [['pending', 'Waiting', c.pending], ['approved', 'Approved', c.approved], ['revoked', 'Paused', c.revoked], ['all', 'All', c.all]];
@@ -437,6 +670,7 @@
       '</div>' +
       protectionBanner() +
       (admin.error ? '<div class="admin-banner is-error">' + esc(admin.error) + '</div>' : '') +
+      (admin.notice ? '<div class="admin-banner is-warning">' + esc(admin.notice) + '</div>' : '') +
       '<div class="admin-tools">' +
         '<div class="filter-chips" role="tablist">' + filters.map(function (f) {
           return '<button type="button" role="tab" class="filter-chip' + (admin.filter === f[0] ? ' is-active' : '') + '" aria-selected="' + (admin.filter === f[0]) + '" data-admin="filter" data-filter="' + f[0] + '">' + f[1] + ' <span>' + f[2] + '</span></button>';
@@ -446,7 +680,7 @@
       (!admin.loaded && !admin.error ? '<p class="muted">Loading requests…</p>' : '') +
       (admin.loaded && !shown.length ? '<div class="admin-empty">' + (admin.filter === 'pending' && !admin.query ? 'Nobody is waiting for approval. 🎉' : 'No requests match.') + '</div>' : '') +
       '<div class="record-list">' + shown.map(recordHtml).join('') + '</div>' +
-      '<p class="muted admin-foot">Staff and teacher accounts (the three admins, Elsie, Abigail and Keertana) are never asked. Anyone else who signs in to a Polymath app is asked once and waits here.</p>';
+      '<p class="muted admin-foot">Each child\'s subjects decide the apps: Math only opens Math, Science only opens Science and Science PSLE, Both opens all three. English, Chinese, Study Buddy, Answer Keys and Rewards open for every approved family, and the Worksheets portal shows each child\'s own level (P3 to P6) and subjects. Change them with Edit; every app follows. Staff and teacher accounts (the three admins, Elsie, Abigail and Keertana) are never asked. Anyone else who signs in to a Polymath app is asked once and waits here.</p>';
     if (hadFocus) {
       var search = adminView.querySelector('#adminSearch');
       if (search) { search.focus(); try { search.setSelectionRange(caret, caret); } catch (error) { /* fine */ } }
@@ -466,9 +700,52 @@
       status: status,
       decidedBy: lower(user.email),
       decidedAt: fb.firestore.FieldValue.serverTimestamp()
+    }).then(function () {
+      var next = {};
+      Object.keys(record).forEach(function (k) { next[k] = record[k]; });
+      next.status = status;
+      return syncOnline(id, next);
     }).catch(function (error) {
       admin.error = 'Could not save: ' + (error && error.message ? error.message : 'unknown error');
     }).then(function () { delete admin.busy[id]; admin.confirming = null; renderAdmin(); });
+  }
+
+  /* -------- Polymath Online follows this page (onlineMembers/{uid}) -------- */
+  function firestoreValue(value) {
+    if (value === SERVER_TIME) return fb.firestore.FieldValue.serverTimestamp();
+    if (value === DELETE_FIELD) return fb.firestore.FieldValue.delete();
+    return value;
+  }
+  /** Bring one account's Online row in line with its record. Never fails the admin's save. */
+  function syncOnline(id, record) {
+    if (!db || !id) return Promise.resolve(false);
+    var ref = db.collection(ONLINE_MEMBERS).doc(id);
+    return ref.get().then(function (snap) {
+      var existing = snap && snap.exists ? (snap.data() || {}) : null;
+      var patch = onlineMemberPatch(record, existing, id);
+      if (!patch) return false;
+      var data = {};
+      Object.keys(patch).forEach(function (k) { data[k] = firestoreValue(patch[k]); });
+      return ref.set(data, { merge: true }).then(function () { return true; });
+    }).catch(function (error) {
+      admin.notice = 'Saved. The Worksheets portal could not be updated just now (' + (error && error.code ? error.code : 'error') + '); it still follows this page when the student opens it.';
+      return false;
+    });
+  }
+  /**
+   * Once per visit: every request whose Online row disagrees with it (approved
+   * before v1.5.0, or changed elsewhere) is brought in line. Quietly; a failure
+   * only means the portal keeps reading the approval itself.
+   */
+  var reconciled = false;
+  function reconcileOnline() {
+    if (reconciled || !db || !admin.loaded || !admin.records.length) return;
+    reconciled = true;
+    var list = admin.records.slice();
+    (function next(i) {
+      if (i >= list.length) return;
+      syncOnline(list[i]._id, list[i]).then(function () { next(i + 1); });
+    })(0);
   }
 
   function remove(id) {
@@ -512,6 +789,7 @@
     admin.busy[id] = true;
     db.collection('studentAccess').doc(id).set(next).then(function () {
       admin.editing = null;
+      return syncOnline(id, next);
     }).catch(function (error) {
       admin.error = 'Could not save: ' + (error && error.message ? error.message : 'unknown error');
     }).then(function () { delete admin.busy[id]; renderAdmin(); });
@@ -551,6 +829,8 @@
         admin.editing.children = values.children;
         if (action === 'add-child') admin.editing.children.push({ name: '', level: '', subjects: '' });
         else admin.editing.children.splice(parseInt(target.getAttribute('data-index'), 10), 1);
+        admin.editing.draft = values;
+        admin.editing.fresh = true;
         var rec = findRecord(admin.editing.id);
         if (rec) {
           // Keep what was typed in the other boxes while the rows change.
@@ -583,6 +863,7 @@
     if (!user) { stopAdmin(); admin.records = []; admin.loaded = false; }
     renderAccount();
     showView();
+    applySubjectLocks();
     // Admins see how many are waiting, even from the apps view.
     if (isAdmin(user) && !admin.unsubscribe) startAdmin();
   });
@@ -590,7 +871,7 @@
 
   function watchGate() {
     if (!window.PolymathAccess || typeof window.PolymathAccess.onChange !== 'function') return false;
-    window.PolymathAccess.onChange(function (snapshot) { gateState = snapshot; renderAccount(); if (wantsAdmin()) renderAdmin(); });
+    window.PolymathAccess.onChange(function (snapshot) { gateState = snapshot; renderAccount(); applySubjectLocks(); if (wantsAdmin()) renderAdmin(); });
     return true;
   }
   if (!watchGate()) document.addEventListener('DOMContentLoaded', watchGate);

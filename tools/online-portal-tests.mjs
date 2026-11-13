@@ -386,3 +386,40 @@ test('the recorded lessons are grouped by the day of the class, first lesson fir
   assert.equal(items[0].playlist.hash, VP_HASH);
   assert.equal(items[0].days.length, 1);
 });
+
+test('polymathlc.com.sg/student decides: each approved child adds its own level and subjects', () => {
+  const classes = [
+    course({ id: 'm5', level: 'P5', subject: 'math' }), course({ id: 's5', level: 'P5', subject: 'science' }),
+    course({ id: 'm6', level: 'P6', subject: 'math' }), course({ id: 's6', level: 'P6', subject: 'science' }),
+    course({ id: 's3', level: 'P3', subject: 'science' })
+  ];
+  const record = { status: 'approved', children: [
+    { name: 'Ann', level: 'P6', subjects: 'math' }, { name: 'Ben', level: 'P5', subjects: 'both' },
+    { name: 'Cat', level: 'P3', subjects: 'both' }, { name: 'Dan', level: 'S1', subjects: 'both' }
+  ] };
+  assert.deepEqual(plainList(Core.accessFromStudentAccess(record)), [
+    { level: 'P6', subjects: ['math'] }, { level: 'P5', subjects: ['math', 'science'] }, { level: 'P3', subjects: ['science'] }
+  ]);
+  const member = Core.memberFromStudentAccess(record, { level: 'P6', subjects: ['science'], revoked: true, name: 'Old name' }, { uid: 'u1', email: 'a@b.co' });
+  assert.deepEqual(Core.coursesForMember(classes, member).map((c) => c.id), ['m5', 's5', 'm6', 's3'].sort((a, b) => Core.compareCourses(classes.find(c => c.id === a), classes.find(c => c.id === b))));
+  assert.ok(!Core.memberSees(member, classes[3]), 'P6 Science from the old invitation is gone');
+  assert.equal(member.revoked, undefined, 'the approval wins over an old removal');
+  assert.equal(member.name, 'Old name');
+  assert.equal(member.source, 'student-access');
+  assert.equal(member.uid, 'u1');
+});
+
+test('/student approval: no Online level → no classes; statuses read like the gate', () => {
+  const member = Core.memberFromStudentAccess({ children: [{ name: 'Dan', level: 'S2', subjects: 'math' }] }, null, { uid: 'u2' });
+  assert.deepEqual(plainList(member.access), []);
+  assert.equal(member.level, '');
+  assert.equal(member.name, 'Dan');
+  assert.ok(!Core.memberSees(member, course({ level: 'P5', subject: 'math' })));
+  assert.equal(Core.studentAccessStatus(null), 'none');
+  assert.equal(Core.studentAccessStatus({ status: 'approved' }), 'approved');
+  assert.equal(Core.studentAccessStatus({ status: 'revoked' }), 'revoked');
+  assert.equal(Core.studentAccessStatus({ status: 'odd' }), 'pending');
+  assert.deepEqual(plainList(Core.studentAccessLevels({ children: [{ level: 'P5' }, { level: 'S1' }, { level: 'P5' }] })), ['P5', 'S1']);
+  // An older member row (no `access`) still sees its one level and subjects.
+  assert.deepEqual(plainList(Core.accessPairs({ level: 'P5', subjects: 'both' })), [{ level: 'P5', subjects: ['math', 'science'] }]);
+});
