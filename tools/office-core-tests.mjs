@@ -672,11 +672,11 @@ test('older records need no migration: new fields default, lesson type is read f
   assert.equal(old.email, 'tan@example.com');
   assert.deepEqual(old.paidMonths, []);
   assert.deepEqual(old.screenshots, []);
-  assert.deepEqual(old.students.map(s => s.lessonType), ['', '', '', '']);
+  assert.ok(old.students.every(s => !('lessonType' in s)), 'no type of lesson is kept on a child (v1.9.0)');
   assert.deepEqual(old.students.map(s => C.studentLessonType(s, REC_SCHEDULE)), ['online', 'master', 'physical', '']);
   const chosen = C.normalizeStudent({ name: 'X', lessonType: 'master', classes: [{ slotId: 'FRI-2', mode: 'Online' }] });
-  assert.equal(C.studentLessonType(chosen, REC_SCHEDULE), 'master', 'a chosen type wins');
-  assert.equal(C.normalizeStudent({ lessonType: 'weekend' }).lessonType, '', 'an unknown type is dropped');
+  assert.equal(C.studentLessonType(chosen, REC_SCHEDULE), 'online', 'an older stored choice is dropped: the classes say');
+  assert.deepEqual(C.studentLessonTypes(old.students[2], REC_SCHEDULE), ['online', 'physical'], 'a child can mix them');
   assert.equal(C.normalizeStudent({ startDate: '3 Nov 2026' }).startDate, '2026-11-03', 'a typed start date is read');
   assert.deepEqual(C.LESSON_TYPES.map(t => t.label), ['Online regular', 'Physical regular', 'Masterclass']);
   assert.equal(C.familyStatusLabel('inactive'), 'Withdrawn', 'the older "Not active" reads as Withdrawn');
@@ -699,7 +699,8 @@ test('slots: the picker lists the schedule, marks what suits the child, and tick
   let kid = C.normalizeStudent({ id: 's', name: 'Jun', level: 'P5', lessonType: 'online', classes: [] });
   kid = C.toggleStudentSlot(kid, 'FRI-2', REC_SCHEDULE);
   kid = C.toggleStudentSlot(kid, 'SAT-1', REC_SCHEDULE);
-  assert.deepEqual(kid.classes.map(c => c.slotId + ':' + c.mode), ['FRI-2:Online', 'SAT-1:Online']);
+  assert.deepEqual(kid.classes.map(c => c.slotId + ':' + c.mode), ['FRI-2:Physical', 'SAT-1:Physical'], 'ticked in the first mode the slot runs; changed per class after');
+  assert.equal(C.toggleStudentSlot(kid, 'SAT-2', REC_SCHEDULE).classes[2].mode, 'Master', 'a Master Class slot is ticked as a Master class');
   assert.deepEqual(C.studentSlotIds(kid), ['FRI-2', 'SAT-1']);
   kid = C.toggleStudentSlot(kid, 'FRI-2', REC_SCHEDULE);
   assert.deepEqual(C.studentSlotIds(kid), ['SAT-1'], 'ticking again takes it off');
@@ -714,21 +715,35 @@ test('slots: the picker lists the schedule, marks what suits the child, and tick
   assert.equal(C.slotChoiceLabel(REC_SCHEDULE, 'SAT-2'), 'Sat 11:00am · Master Class · P6 Science');
 });
 
-test('type of lesson: changing it moves classes to its mode, and mismatches are pointed out', () => {
-  const kid = { name: 'Jun', lessonType: '', classes: [{ slotId: 'FRI-2', mode: 'Online' }, { slotId: 'WED-1', mode: 'Online' }, { custom: true, label: '1-to-1', mode: 'Online' }] };
-  const phys = C.applyLessonType(kid, 'physical', REC_SCHEDULE);
-  assert.deepEqual(phys.classes.map(c => c.mode), ['Physical', 'Online', 'Physical'], 'WED-1 runs online only, so it stays');
-  assert.deepEqual(C.lessonTypeIssues(phys, REC_SCHEDULE), ['Wed 3:00pm runs online only, but the type of lesson is Physical regular.']);
-  assert.equal(kid.classes[0].mode, 'Online', 'the original is untouched');
-  const master = C.applyLessonType({ name: 'M', classes: [{ slotId: 'FRI-2', mode: 'Online' }] }, 'master', REC_SCHEDULE);
-  assert.deepEqual(C.lessonTypeIssues(master, REC_SCHEDULE), ['Fri 5:00pm is a regular class, but the type of lesson is Masterclass.']);
-  const online = C.applyLessonType({ name: 'O', classes: [{ slotId: 'SAT-2', mode: 'Physical' }] }, 'online', REC_SCHEDULE);
-  assert.deepEqual(C.lessonTypeIssues(online, REC_SCHEDULE), ['Sat 11:00am is a Master Class, but the type of lesson is Online regular.']);
-  assert.deepEqual(C.lessonTypeIssues(C.applyLessonType(kid, '', REC_SCHEDULE), REC_SCHEDULE), [], 'no type, no complaint');
-  assert.equal(C.modeForLessonType(REC_SCHEDULE.slots['TUE-3'], 'online'), 'Physical', 'a slot that only runs physical stays physical');
-  assert.equal(C.slotFitsLessonType(C.scheduleSlot(REC_SCHEDULE, 'SAT-2'), 'master'), true);
-  assert.equal(C.slotFitsLessonType(C.scheduleSlot(REC_SCHEDULE, 'SAT-2'), 'physical'), false);
-  assert.equal(C.slotFitsLessonType(C.scheduleSlot(REC_SCHEDULE, 'MON-1'), ''), false, 'no class, no fit');
+test('each class is physical, online or a Master class; a child can mix them (v1.9.0)', () => {
+  const S = REC_SCHEDULE;
+  assert.deepEqual(C.CLASS_MODES, ['Physical', 'Online', 'Master']);
+  assert.deepEqual(C.slotClassModes(C.scheduleSlot(S, 'FRI-2')), ['Physical', 'Online', 'Master']);
+  assert.deepEqual(C.slotClassModes(C.scheduleSlot(S, 'TUE-3')), ['Physical', 'Master']);
+  assert.deepEqual(C.slotClassModes(C.scheduleSlot(S, 'SAT-2')), ['Master'], 'a Master Class slot');
+  assert.equal(C.classMode({ slotId: 'SAT-2', mode: 'Physical' }, S), 'Master', 'older records: a Master Class slot reads as Master class');
+  assert.equal(C.classMode({ slotId: 'FRI-2', mode: 'Online' }, S), 'Online');
+  assert.equal(C.classMode({ slotId: 'FRI-2', mode: 'Weird' }, S), 'Physical');
+  assert.equal(C.normalizeStudent({ classes: [{ slotId: 'FRI-2', mode: 'Master' }] }).classes[0].mode, 'Master', 'kept');
+  // Fees: a regular slot taken as a Master class costs the Master Class fee.
+  assert.deepEqual(['Physical', 'Online', 'Master'].map(m => C.monthlyFeeFor(C.scheduleSlot(S, 'FRI-2'), m, S)), [220, 180, 320]);
+  const lines = C.buildInvoiceLines({ id: 'f', status: 'active', students: [{ id: 'k', name: 'Kai', status: 'active', classes: [{ slotId: 'FRI-2', mode: 'Online' }, { slotId: 'SAT-1', mode: 'Master' }, { slotId: 'SAT-2', mode: 'Physical' }] }] }, S).lines;
+  assert.deepEqual(lines.map(l => l.amount + ' ' + l.detail), ['180 Fri 5:00pm · Online', '320 Sat 9:00am · Master class', '320 Sat 11:00am · Master class']);
+  // One child, three kinds of class: counted in each, filtered by each.
+  const kid = { id: 'k', name: 'Kai', status: 'active', classes: [{ slotId: 'FRI-2', mode: 'Online' }, { slotId: 'TUE-3', mode: 'Physical' }, { slotId: 'SAT-1', mode: 'Master' }] };
+  assert.deepEqual(C.studentLessonTypes(kid, S), ['online', 'physical', 'master']);
+  for (const m of ['Online', 'Physical', 'Master']) assert.ok(C.studentMatchesFilters(kid, { mode: m }, S), m);
+  assert.ok(C.studentMatchesFilters(kid, { lessonType: 'master' }, S));
+  const st = C.familyStats([{ id: 'f', status: 'active', students: [kid] }], { schedule: S, period: '2026-11' });
+  assert.deepEqual(['online', 'physical', 'master'].map(k => st.categories[k].students + ':' + st.categories[k].fees), ['1:180', '1:220', '1:320']);
+  // All of a child's classes into one option at once, where the slot allows.
+  const all = C.applyLessonType({ name: 'J', lessonType: 'online', classes: [{ slotId: 'FRI-2', mode: 'Online' }, { slotId: 'WED-1', mode: 'Online' }, { custom: true, label: '1-to-1', mode: 'Online' }] }, 'master', S);
+  assert.deepEqual(all.classes.map(c => c.mode), ['Master', 'Master', 'Master']);
+  assert.ok(!('lessonType' in all), 'nothing is stored on the child');
+  assert.deepEqual(C.lessonTypeIssues(all, S), []);
+  assert.equal(C.modeForLessonType(C.scheduleSlot(S, 'SAT-2'), 'online'), 'Master');
+  assert.equal(C.modeForLessonType(C.scheduleSlot(S, 'TUE-3'), 'online'), 'Physical', 'a slot that only runs physical stays physical');
+  assert.equal(C.classModeLabel('Master'), '⭐ Master class');
 });
 
 test('the email is the account ID: one email, one family', () => {
@@ -850,9 +865,9 @@ test('the records table and its CSV: one row per child, every field Zhi Kai list
   assert.equal(kai.statusLabel, 'Active');
   assert.equal(kai.since, '2026-02-01');
   assert.equal(rows[1].since, '2026-01-05', 'no start date: the family\'s sign-up date');
-  assert.equal(kai.lessonTypeLabel, 'Physical regular');
-  assert.equal(rows[1].lessonTypeLabel, 'Online regular');
-  assert.equal(rows[1].lessonTypeChosen, false);
+  assert.deepEqual(kai.lessonTypes, ['physical', 'master'], 'read from the classes: a regular class and a Master Class');
+  assert.deepEqual(kai.slots.map(s => s.modeLabel), ['Physical', 'Master class']);
+  assert.deepEqual(rows[1].lessonTypes, ['online']);
   assert.deepEqual(kai.slots.map(s => s.id), ['TUE-3', 'SAT-2']);
   assert.equal(kai.notes, 'Prefers WhatsApp · Weak in fractions');
   assert.equal(kai.paidText, 'Nov 2026');
@@ -860,9 +875,10 @@ test('the records table and its CSV: one row per child, every field Zhi Kai list
   const csv = C.familyRecordCsv(rows);
   const lines = csv.split(/\r?\n/);
   assert.equal(lines[0], C.FAMILY_RECORD_HEADERS.join(','));
-  for (const h of ['Status', 'Email (account ID)', 'Student name', 'Parent name', 'WhatsApp', 'Primary school', 'With us since', 'Type of lesson', 'Slots', 'Months paid', 'Last payment', 'Last screenshot', 'Notes'])
+  assert.ok(!C.FAMILY_RECORD_HEADERS.includes('Type of lesson'), 'no type of lesson per child any more');
+  for (const h of ['Status', 'Email (account ID)', 'Student name', 'Parent name', 'WhatsApp', 'Primary school', 'With us since', 'Slots (physical / online / master class)', 'Months paid', 'Last payment', 'Last screenshot', 'Notes'])
     assert.ok(C.FAMILY_RECORD_HEADERS.includes(h), h);
-  assert.ok(lines[1].includes('Nanyang Primary') && lines[1].includes('Physical regular') && lines[1].includes('Tue 7:00pm · P6 Math (Physical); Sat 11:00am · Master Class · P6 Science (Physical)'));
+  assert.ok(lines[1].includes('Nanyang Primary') && lines[1].includes('Tue 7:00pm · P6 Math (Physical); Sat 11:00am · Master Class · P6 Science (Master class)'));
   assert.ok(lines[1].includes('2026-11-03') && lines[1].includes('PLC K7M2QX'));
   const all = C.familyRecordRows(fams, { schedule: REC_SCHEDULE, includeLeft: true, today: '2026-11-12' });
   assert.ok(all.some(r => r.studentName === 'Gone'));

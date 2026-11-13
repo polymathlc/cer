@@ -548,15 +548,18 @@ try {
   await page.waitForSelector('.modal .student-card');
   const limCard = n => page.locator('.modal .student-card').nth(n);
   await limCard(0).locator('input[data-k="school"]').fill('Nanyang Primary');
-  await limCard(0).locator('select[data-ch="stuType"]').selectOption('physical');
+  assert.equal(await page.locator('.modal select[data-ch="stuType"]').count(), 0, 'no type of lesson per child (v1.9.0)');
   await page.click('.modal [data-act="togglePicker"][data-s="0"]');
   await page.waitForSelector('.modal .ms-pop');
-  assert.ok(await page.locator('.modal .ms-opt.dim input[value="WED-1"]').count() === 1, 'an online-only slot is faded for physical regular');
   await page.check('.modal .ms-opt input[value="SAT-1"]');                 // Science as well as Math
   await page.waitForSelector('.modal .ms-opt.on input[value="SAT-1"]');
   await page.click('.modal .ms-foot [data-act="togglePicker"]');
+  // Each class: physical, online or Master class — Science taken as a Master class.
+  const sciMode = limCard(0).locator('.class-row', { hasText: 'Sat 9:00am' }).locator('select[data-k="mode"]');
+  assert.deepEqual(await sciMode.locator('option').evaluateAll(os => os.map(o => o.value + (o.disabled ? '-' : ''))), ['Physical', 'Online', 'Master'], 'three options on a slot that runs both');
+  await sciMode.selectOption('Master');
+  await page.waitForSelector('.modal .class-row:has-text("Sat 9:00am") input[placeholder="Schedule $320.00"]');
   await limCard(0).locator('input[data-k="notes"]').fill('Weak in fractions');
-  await limCard(1).locator('select[data-ch="stuType"]').selectOption('online');
   await limCard(1).locator('input[data-k="school"]').fill('Rosyth School');
   await page.click('.modal [data-act="addShot"]');
   await page.waitForSelector('.modal .shot-row');
@@ -593,8 +596,8 @@ try {
   await page.waitForSelector('#modal.show', { state: 'detached' });
   let all2 = await store(page);
   const limSaved = docsIn(all2, 'officeFamilies').find(f => f.parentName === 'Lim Wei Ming');
-  assert.deepEqual(limSaved.students.map(s => [s.school, s.lessonType]), [['Nanyang Primary', 'physical'], ['Rosyth School', 'online']]);
-  assert.deepEqual(limSaved.students[0].classes.map(c => c.slotId + ':' + c.mode), ['TUE-3:Physical', 'SAT-1:Physical'], 'two slots, Math and Science');
+  assert.deepEqual(limSaved.students.map(s => [s.school, 'lessonType' in s]), [['Nanyang Primary', false], ['Rosyth School', false]]);
+  assert.deepEqual(limSaved.students[0].classes.map(c => c.slotId + ':' + c.mode), ['TUE-3:Physical', 'SAT-1:Master'], 'two slots: Math physical, Science as a Master class');
   assert.equal(limSaved.students[0].notes, 'Weak in fractions');
   assert.deepEqual(limSaved.paidMonths.map(x => x.period + '@' + x.date), ['2026-10@2026-11-03']);
   assert.deepEqual(limSaved.screenshots.map(x => x.date + ':' + x.period), ['2026-11-03:2026-11']);
@@ -639,7 +642,7 @@ try {
   await page.click('[data-act="famView"][data-k="table"]');
   await page.waitForSelector('table.rec');
   const recText = await page.locator('table.rec').innerText();
-  for (const want of ['Email (account ID)', 'Primary school', 'Type of lesson', 'Months paid', 'Last screenshot', 'Nanyang Primary', 'Physical regular', 'lim@example.com', 'Payment type', 'Hardcopy', 'Withdrawal', 'Package', 'March 2027'])
+  for (const want of ['Email (account ID)', 'Primary school', 'Months paid', 'Last screenshot', 'Nanyang Primary', 'lim@example.com', 'Payment type', 'Hardcopy', 'Withdrawal', 'Package', 'March 2027'])
     assert.ok(recText.toLowerCase().includes(want.toLowerCase()), 'the table shows ' + want);
   assert.equal(await page.locator('table.rec tbody tr.click').count(), 7, 'seven children');
   const rowLevels = await page.locator('table.rec tbody tr.click').evaluateAll(trs => trs.map(t => t.dataset.level));
@@ -658,14 +661,22 @@ try {
   await dl.saveAs(recCsvPath);
   const csvText = readFileSync(recCsvPath, 'utf8');
   assert.ok(csvText.startsWith(C.FAMILY_RECORD_HEADERS.join(',')), 'the CSV has the record headings');
-  assert.ok(csvText.includes('Nanyang Primary') && csvText.includes('Online regular'));
+  assert.ok(csvText.includes('Nanyang Primary') && csvText.includes('(Online)') && csvText.includes('P6 Science (Master class)'));
   assert.ok(csvText.includes('Package,2026-12-01,2027-02-28') && csvText.includes('Singapore 120001') && csvText.includes('March 2027'), 'the CSV carries hardcopy, package and withdrawal');
-  // Filter by type of lesson.
-  await page.click('[data-act="famType"][data-k="online"]');
+  assert.equal(await page.locator('[data-act="famType"]').count(), 0, 'no Type of lesson chips');
+  // Filter by how a class is taken.
+  await page.click('[data-act="famPanel"]');
+  await page.waitForSelector('#ff-mode');
+  assert.deepEqual(await page.locator('#ff-mode option').evaluateAll(os => os.map(o => o.value)), ['', 'Physical', 'Online', 'Master']);
+  await page.selectOption('#ff-mode', 'Online');
   await settle(page);
   assert.ok(await page.locator('table.rec tbody tr.click').count() >= 2);
-  assert.ok(!(await page.locator('table.rec').innerText()).includes('Lim Kai'), 'only online children');
-  await page.click('[data-act="famType"][data-k=""]');
+  assert.ok(!(await page.locator('table.rec').innerText()).includes('Lim Kai'), 'only children with an online class');
+  await page.selectOption('#ff-mode', 'Master');
+  await settle(page);
+  assert.ok((await page.locator('table.rec').innerText()).includes('Lim Kai'), 'Lim Kai takes Science as a Master class');
+  await page.click('.ffbar [data-act="famFReset"]');
+  await page.click('[data-act="famPanel"]');
   await page.click('[data-act="famView"][data-k="cards"]');
   await page.waitForSelector('.fam-grid');
 
@@ -774,14 +785,17 @@ try {
 
   // ── 📣 Announcements: write, choose with the filters, test to myself, confirm, send, log ──
   await page.click('#tabs [data-view="families"]');
-  await page.click('[data-act="famType"][data-k="online"]');
+  await page.click('[data-act="famPanel"]');
+  await page.waitForSelector('#ff-mode');
+  await page.selectOption('#ff-mode', 'Online');
   await settle(page);
   await page.click('[data-act="famAnnounce"]');
   await page.waitForSelector('.ann-compose');
-  assert.equal(await page.locator('[data-act="annType"].on').getAttribute('data-k'), 'online', 'Email these families carries the filters over');
-  await page.click('[data-act="annType"][data-k=""]');
+  assert.equal(await page.inputValue('#af-mode'), 'Online', 'Email these families carries the filters over');
+  await page.click('[data-act="annFReset"]');
   await page.click('#tabs [data-view="families"]');
-  await page.click('[data-act="famType"][data-k=""]');
+  await page.click('.ffbar [data-act="famFReset"]');
+  await page.click('[data-act="famPanel"]');
   await page.click('#tabs [data-view="announce"]');
   await page.waitForSelector('.ann-compose');
   assert.ok(await page.locator('#ann-send-btn').isDisabled(), 'nothing to send before a subject and a message');

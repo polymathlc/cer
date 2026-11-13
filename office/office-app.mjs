@@ -33,9 +33,9 @@
      mail/polymath-office-*    emails for the Trigger Email extension
    Reads: schedule_config/main (the /schedule page's own document).
    ═══════════════════════════════════════════════════════════════════════════ */
-import * as C from './office-core.mjs?v=1.8.0';
+import * as C from './office-core.mjs?v=1.9.0';
 
-const OFFICE_VERSION = 'v1.8.0';
+const OFFICE_VERSION = 'v1.9.0';
 
 /* ═══════════════ Firebase — the CER project ═══════════════ */
 firebase.initializeApp({
@@ -200,11 +200,9 @@ function recordOf(f) {
   if (f.id && IX.fam.get(f.id) === f) IX.rec.set(f.id, r);
   return r;
 }
-function lessonTypeChip(type, chosen, full) {
-  const t = C.lessonTypeMeta(type);
-  if (!t) return '<span class="lt none" title="Type of lesson not chosen yet">Type?</span>';
-  return '<span class="lt ' + t.key + (chosen ? '' : ' guess') + '" title="' + esc(t.label + (chosen ? '' : ' (read from the classes — open the family to choose)')) + '">' + t.icon + ' ' + esc(full ? t.label : t.short) + '</span>';
-}
+// 🏫 physical · 💻 online · ⭐ Master class — how a child takes one class.
+function modeIcon(mode) { return (C.CLASS_MODE_META[mode] || C.CLASS_MODE_META.Physical).icon; }
+const MODE_CHOICES = C.CLASS_MODES.map(m => [m, C.classModeLabel(m)]);
 function monthDots(months, n) {
   // The months around this one: two before, this month, and the rest ahead.
   return '<span class="mdots">' + C.monthsAround(months, C.sgMonthKey(), 2, Math.max(0, n - 3)).map(m => '<span class="md ' + m.key + (m.current ? ' cur' : '') + '" title="' + esc(C.periodLabel(m.period) + ': ' + C.MONTH_STATE_META[m.key].label) + '">' + esc(m.label) + '</span>').join('') + '</span>';
@@ -392,7 +390,7 @@ function classChips(row) {
   if (!row.classes.length) return '<span class="warn-t">⚠ Not in a class</span>';
   return row.classes.map(c => {
     const slot = c.slotId ? C.scheduleSlot(S.schedule, c.slotId) : null;
-    return subjChip(c.subject, slot && C.isMaster(slot), (c.when ? c.when + ' · ' : '') + (c.subject || c.title) + (c.mode === 'Online' ? ' 💻' : ''));
+    return subjChip(c.subject, c.mode === 'Master' || (slot && C.isMaster(slot)), (c.when ? c.when + ' · ' : '') + (c.subject || c.title) + (c.mode === 'Online' ? ' 💻' : ''));
   }).join(' ');
 }
 function stepHtml(tone, ico, title, text, buttons) {
@@ -514,12 +512,12 @@ const FAM_FILTERS = {
 };
 function familyMatchesType(f, type) {
   if (!type) return true;
-  return f.students.some(s => s.status !== 'left' && C.studentLessonType(s, S.schedule) === type);
+  return f.students.some(s => s.status !== 'left' && C.studentHasLessonType(s, type, S.schedule));
 }
 function familyMatchesSearch(f, q) {
   if (!q) return true;
   const hay = C.normText([f.parentName, f.email, f.email2, f.whatsapp, f.code, f.address, f.notes,
-    ...f.students.map(s => s.name + ' ' + s.school + ' ' + s.notes + ' ' + C.lessonTypeLabel(C.studentLessonType(s, S.schedule)))].join(' '));
+    ...f.students.map(s => s.name + ' ' + s.school + ' ' + s.notes + ' ' + C.studentLessonTypes(s, S.schedule).map(C.lessonTypeLabel).join(' '))].join(' '));
   return q.split(' ').every(w => hay.includes(w));
 }
 // The filter panel's context for one family (its payment record is cached).
@@ -542,7 +540,7 @@ function shownKidsOnly(f) { return Object.assign({}, f, { students: f.students.f
 // type of lesson and every child filter of the panel.
 function kidShown(s) {
   if (!s || s.status === 'left') return false;
-  if (S.ui.famType && C.studentLessonType(s, S.schedule) !== S.ui.famType) return false;
+  if (S.ui.famType && !C.studentHasLessonType(s, S.ui.famType, S.schedule)) return false;
   return !C.hasChildFilters(S.ui.famF) || C.studentMatchesFilters(s, S.ui.famF, S.schedule);
 }
 function childFiltersOn() { return !!S.ui.famType || C.hasChildFilters(S.ui.famF); }
@@ -570,7 +568,7 @@ function levelHeading(level, n, one, many) { return levelName(level) + ' · ' + 
 const FAM_FILTER_LABELS = {
   level: v => C.levelLabel(v),
   subject: v => v,
-  mode: v => v === 'Online' ? '💻 Online' : '🏫 Physical',
+  mode: v => C.classModeLabel(v),
   day: v => (C.DAYS.find(d => d.code === v) || { name: v }).name,
   slot: v => C.slotChoiceLabel(S.schedule, v),
   school: v => '🏫 ' + v,
@@ -654,7 +652,7 @@ function famFilterPanelHtml() {
     + '<div class="ffgroup"><div class="ffhead">👦 Child</div><div class="ffgrid">'
     + sel('level', 'Level', C.LEVELS.map(l => [l, C.levelLabel(l)]))
     + sel('subject', 'Subject', C.SUBJECTS.map(x => [x, x]))
-    + sel('mode', 'Physical or online', C.MODES.map(x => [x, x === 'Online' ? '💻 Online' : '🏫 Physical']))
+    + sel('mode', 'Physical, online or master class', MODE_CHOICES)
     + sel('day', 'Day', C.DAYS.map(d => [d.code, d.name]))
     + sel('slot', 'Slot', opts.slots.map(o => [o.id, o.label]))
     + sel('school', 'Primary school', opts.schools.map(x => [x, x]))
@@ -687,7 +685,6 @@ VIEWS.families = function () {
   const list = familyList();
   const nOn = C.activeFamilyFilters(S.ui.famF).filter(k => k !== 'month').length;
   const chip = (k, label, hideEmpty) => (hideEmpty && !count(k) && S.ui.famFilter !== k) ? '' : '<button class="chip ' + (S.ui.famFilter === k ? 'on' : '') + '" data-act="famFilter" data-k="' + k + '">' + label + ' <span class="n">' + count(k) + '</span></button>';
-  const typeChip = (k, label) => '<button class="chip ' + (S.ui.famType === k ? 'on' : '') + '" data-act="famType" data-k="' + k + '">' + label + '</button>';
   const viewChip = (k, label) => '<button class="seg ' + (S.ui.famView === k ? 'on' : '') + '" data-act="famView" data-k="' + k + '" aria-pressed="' + (S.ui.famView === k) + '">' + label + '</button>';
   const shared = [...IX.shared.entries()];
   const sharedBanner = shared.length ? '<div class="banner amber"><div class="big">✉</div><div><b>' + C.plural(shared.length, 'email is', 'emails are') + ' used by more than one family</b>'
@@ -717,7 +714,6 @@ VIEWS.families = function () {
     + (S.ui.famPanel ? famFilterPanelHtml() : '')
     + '<div class="chips" style="margin-bottom:10px;">' + chip('all', 'Active') + chip('owing', '💰 Owing') + chip('unpaid', '⏳ ' + esc(C.monthShort(period)) + ' not paid')
     + chip('noshot', '📸 No screenshot in ' + esc(C.monthShort(period))) + chip('noemail', '✉ No email') + chip('shared', '⚠ Shared email', true) + chip('noclass', '🧩 No class') + chip('package', '📦 Package', true) + chip('hardcopy', '📮 Hardcopy', true) + chip('paused', '⏸ Paused') + chip('withdrawn', '👋 Withdrawn') + '</div>'
-    + '<div class="filterrow"><span class="lbl">Type of lesson</span><div class="chips">' + typeChip('', 'All') + C.LESSON_TYPES.map(t => typeChip(t.key, t.icon + ' ' + t.label)).join('') + '</div></div>'
     + (S.families.length ? famActiveFiltersHtml(list.length) : '')
     + body;
 };
@@ -725,12 +721,12 @@ function familyTableHtml(rows) {
   const cur = C.sgMonthKey();
   return '<div class="table-wrap rec-wrap"><table class="t rec"><thead><tr>'
     + '<th>Status</th><th>Email (account ID)</th><th>Student</th><th>Parent · WhatsApp</th><th>Primary school</th><th>With us since</th>'
-    + '<th>Type of lesson</th><th>Slots</th><th>Payment type</th><th>Months paid</th><th>Last payment</th><th>Last screenshot</th><th>Hardcopy</th><th>Withdrawal</th><th>Notes</th><th></th></tr></thead><tbody>'
+    + '<th>Slots</th><th>Payment type</th><th>Months paid</th><th>Last payment</th><th>Last screenshot</th><th>Hardcopy</th><th>Withdrawal</th><th>Notes</th><th></th></tr></thead><tbody>'
     + rows.map((r, i) => {
       const first = i === 0 || rows[i - 1].familyId !== r.familyId;
       const lv = C.normalizeLevel(r.level) || '';
       const newLevel = levelSorted() && r.studentId && (i === 0 || (C.normalizeLevel(rows[i - 1].level) || '') !== lv);
-      const groupRow = newLevel ? '<tr class="lvrow"><td colspan="16"><span class="lv">' + esc(lv || '—') + '</span>' + esc(levelHeading(lv, rows.filter(x => x.studentId && (C.normalizeLevel(x.level) || '') === lv).length, 'child', 'children')) + '</td></tr>' : '';
+      const groupRow = newLevel ? '<tr class="lvrow"><td colspan="15"><span class="lv">' + esc(lv || '—') + '</span>' + esc(levelHeading(lv, rows.filter(x => x.studentId && (C.normalizeLevel(x.level) || '') === lv).length, 'child', 'children')) + '</td></tr>' : '';
       const shotThisMonth = r.lastScreenshot && r.lastScreenshot.date.slice(0, 7) === cur;
       return groupRow + '<tr class="click ' + (first ? 'fam-first' : 'fam-more') + (r.status !== 'active' ? ' off' : '') + '" data-act="openFamily" data-id="' + esc(r.familyId) + '" data-level="' + esc(lv) + '">'
         + '<td>' + (first ? '<span class="pill ' + C.familyStatusMeta(r.status).tone + '" title="' + esc(r.statusText) + '">' + C.familyStatusMeta(r.status).icon + ' ' + esc(r.statusLabel) + '</span>' + (r.status === 'paused' ? '<div class="small muted nowrap">' + esc(r.statusText.replace(/^Paused ?/, '')) + '</div>' : '') : '') + '</td>'
@@ -739,8 +735,7 @@ function familyTableHtml(rows) {
         + '<td>' + (first ? esc(r.parentName) + '<div class="small nowrap">' + (r.whatsapp ? '💬 ' + esc(C.displayPhone(r.whatsapp)) : '<span class="warn-t">💬 no WhatsApp</span>') + '</div>' : '<span class="muted small">〃</span>') + '</td>'
         + '<td>' + (r.school ? esc(r.school) : '<span class="muted">—</span>') + '</td>'
         + '<td class="nowrap">' + (r.since ? esc(C.prettyDate(r.since)) : '<span class="muted">—</span>') + '</td>'
-        + '<td>' + (r.studentId ? lessonTypeChip(r.lessonType, r.lessonTypeChosen, true) : '') + '</td>'
-        + '<td class="slots">' + (r.slots.length || r.otherClasses.length ? r.slots.map(x => subjChip(x.subject, x.master, x.label.replace(/ · .*$/, '') + ' · ' + (x.subject || 'Class') + (x.mode === 'Online' ? ' 💻' : ''))).join(' ') + r.otherClasses.map(x => ' <span class="subj other">📘 ' + esc(x) + '</span>').join('') : (r.studentId ? '<span class="warn-t">⚠ none</span>' : '')) + '</td>'
+        + '<td class="slots">' + (r.slots.length || r.otherClasses.length ? r.slots.map(x => subjChip(x.subject, x.master, x.label.replace(/ · .*$/, '') + ' · ' + (x.subject || 'Class') + ' ' + modeIcon(x.mode))).join(' ') + r.otherClasses.map(x => ' <span class="subj other">📘 ' + esc(x) + '</span>').join('') : (r.studentId ? '<span class="warn-t">⚠ none</span>' : '')) + '</td>'
         + '<td class="nowrap">' + (first ? (r.paymentType === 'package' ? '<span class="pill green">📦 Package</span><div class="small muted">' + esc(C.prettyDateShort(r.packageStart) + ' – ' + C.prettyDate(r.packageEnd)) + '</div>' : '<span class="muted">Monthly</span>') : '') + '</td>'
         + '<td title="' + esc(r.paidText ? 'Paid: ' + r.paidText : 'No month paid yet') + '">' + (first ? monthDots(r.months, 4) : '') + '</td>'
         + '<td class="nowrap">' + (first ? (r.lastPayment ? '<b>' + esc(C.prettyDateShort(r.lastPayment.date)) + '</b>' + (r.lastPayment.amount ? '<div class="small muted">' + money(r.lastPayment.amount) + '</div>' : '') : '<span class="muted">—</span>') : '') + '</td>'
@@ -770,7 +765,6 @@ function famCardHtml(f, period) {
       const r = rowsById.get(s.id);
       const dim = dimOthers && !kidShown(s) ? ' dim' : '';
       return '<div class="fam-kid' + dim + '"' + (dim ? ' title="Does not match the filters"' : '') + '><span class="kid"><span class="lv">' + esc(C.levelLabel(s.level) || '—') + '</span><b>' + esc(s.name) + '</b></span>'
-        + lessonTypeChip(C.studentLessonType(s, S.schedule), !!s.lessonType)
         + (s.status === 'paused' ? '<span class="pill grey">Paused</span>' : (r ? classChips(r) : '')) + '</div>'
         + (s.school ? '<div class="small muted kid-school' + dim + '">🏫 ' + esc(s.school) + (s.startDate ? ' · since ' + esc(C.prettyDate(s.startDate)) : '') + '</div>' : (s.startDate ? '<div class="small muted kid-school' + dim + '">Since ' + esc(C.prettyDate(s.startDate)) + '</div>' : ''));
     }).join('') : '<span class="muted small">No students yet</span>') + '</div>'
@@ -843,7 +837,7 @@ function annFilterPanelHtml() {
   return '<div class="ffgrid ann-ff">'
     + sel('level', 'Level', C.LEVELS.map(l => [l, C.levelLabel(l)]))
     + sel('subject', 'Subject', C.SUBJECTS.map(x => [x, x]))
-    + sel('mode', 'Physical or online', C.MODES.map(x => [x, x === 'Online' ? '💻 Online' : '🏫 Physical']))
+    + sel('mode', 'Physical, online or master class', MODE_CHOICES)
     + sel('day', 'Day', C.DAYS.map(d => [d.code, d.name]))
     + sel('slot', 'Slot', opts.slots.map(o => [o.id, o.label]))
     + sel('school', 'Primary school', opts.schools.map(x => [x, x]))
@@ -871,7 +865,6 @@ VIEWS.announce = function () {
   const d = a.draft;
   const nOn = C.activeFamilyFilters(a.F).filter(k => k !== 'month').length;
   const statusSeg = C.ANNOUNCE_STATUSES.map(t => '<button class="seg ' + (a.status === t.key ? 'on' : '') + '" data-act="annStatus" data-k="' + t.key + '" aria-pressed="' + (a.status === t.key) + '">' + esc(t.label) + '</button>').join('');
-  const typeChip = (k, label) => '<button class="chip ' + (a.type === k ? 'on' : '') + '" data-act="annType" data-k="' + k + '">' + label + '</button>';
   const compose = '<div class="card ann-compose"><h2 class="ann-h">1 · Write the message</h2>'
     + '<div class="form"><div class="field full"><label for="ann-subject">Subject <span class="opt" id="ann-count-subject">' + String(d.subject || '').length + ' / ' + C.ANNOUNCE_LIMITS.subject + '</span></label>'
     + '<input id="ann-subject" type="text" maxlength="' + C.ANNOUNCE_LIMITS.subject + '" value="' + esc(d.subject) + '" data-in="annText" data-k="subject" data-keep="ann-subject" placeholder="e.g. No lessons on Deepavali (Mon 9 Nov)"></div>'
@@ -886,7 +879,7 @@ VIEWS.announce = function () {
     + '<button class="linkbtn" data-act="annClear">Clear the message</button></div></div>';
   const who = '<div class="card ann-who-card"><h2 class="ann-h">2 · Choose who gets it</h2>'
     + '<div class="segs ann-status" role="group" aria-label="Which families">' + statusSeg + '</div>'
-    + '<div class="filterrow" style="margin:12px 0 8px;"><span class="lbl">Type of lesson</span><div class="chips">' + typeChip('', 'All') + C.LESSON_TYPES.map(t => typeChip(t.key, t.icon + ' ' + t.label)).join('') + '</div></div>'
+    + '<div style="height:12px;"></div>'
     + '<div class="ann-search"><div class="search"><input type="search" placeholder="Search parent, student or school" value="' + esc(a.search) + '" data-in="annSearch" data-keep="ann-search" aria-label="Search families"></div>'
     + '<button class="btn ghost fftoggle' + (a.panel ? ' open' : '') + '" data-act="annPanel" aria-expanded="' + !!a.panel + '">⚲ Filters' + (nOn ? ' <span class="n">' + nOn + '</span>' : '') + '</button></div>'
     + (a.panel ? annFilterPanelHtml() : '')
@@ -1001,19 +994,19 @@ VIEWS.timetable = function () {
       }
       totalClasses++; totalStudents += roster.length;
       const k = C.isMaster(slot) ? 'master' : (C.subjectKey(slot.subject) || 'other');
-      const phys = roster.filter(x => x.mode === 'Physical').length;
+      const mix = C.CLASS_MODES.map(m => [m, roster.filter(x => x.mode === m).length]).filter(([, n]) => n);
       return '<td><button class="tt-cls ' + k + (matches(slot) ? '' : ' dim') + '" data-act="openSlot" data-id="' + cell.id + '">'
         + '<span class="t1">' + (C.isMaster(slot) ? '⭐ ' : '') + esc(C.levelLabel(slot.level) + ' ' + slot.subject) + '</span>'
         + (slot.status === 'closed' ? '<span class="closed">Hidden on /schedule</span>' : slot.status === 'full' ? '<span class="closed" style="color:var(--amber)">Full</span>' : '')
         + '<span class="cnt">' + roster.length + '<small>' + (roster.length === 1 ? 'student' : 'students') + '</small></span>'
-        + '<span class="mix">' + (roster.length ? '🏫 ' + phys + ' · 💻 ' + (roster.length - phys) : 'Nobody yet') + ' · ' + money(C.monthlyFeeFor(slot, 'Physical', S.schedule)) + '</span></button></td>';
+        + '<span class="mix">' + (roster.length ? mix.map(([m, n]) => modeIcon(m) + ' ' + n).join(' · ') : 'Nobody yet') + ' · ' + money(C.monthlyFeeFor(slot, 'Physical', S.schedule)) + '</span></button></td>';
     }).join('') + '</tr>').join('');
   const noClass = studentsWithoutClass();
   return '<div class="page-head"><div><h1>Timetable</h1><p>The classes on <a href="../schedule/#timetable" target="_blank" rel="noopener">/schedule</a>, with how many students are in each. Click a class to see who.</p></div>'
     + '<div class="actions"><span class="pill deep">' + C.plural(totalClasses, 'class', 'classes') + ' · ' + C.plural(totalStudents, 'seat') + '</span></div></div>'
     + '<div class="filterrow"><span class="lbl">Level</span><div class="chips">' + chip('level', '', 'All') + C.LEVELS.map(l => chip('level', l, C.levelLabel(l))).join('') + '</div>'
     + '<span class="lbl">Subject</span><div class="chips">' + chip('subject', '', 'All') + chip('subject', 'Math', '➗ Math') + chip('subject', 'Science', '🔬 Science') + '</div>'
-    + '<span class="lbl">Mode</span><div class="chips">' + chip('mode', '', 'All') + chip('mode', 'Physical', '🏫 Physical') + chip('mode', 'Online', '💻 Online') + '</div></div>'
+    + '<span class="lbl">Mode</span><div class="chips">' + chip('mode', '', 'All') + chip('mode', 'Physical', '🏫 Physical') + chip('mode', 'Online', '💻 Online') + chip('mode', 'Master', '⭐ Master class') + '</div></div>'
     + '<div class="card" style="padding:12px;"><div class="tt-wrap"><table class="tt"><thead><tr><th></th>' + C.DAYS.map(d => '<th scope="col">' + d.name + '</th>').join('') + '</tr></thead><tbody>' + body + '</tbody></table></div></div>'
     + (noClass.length ? '<div class="card"><h2>🧩 Not in any class (' + noClass.length + ')</h2><div class="sub">Open the family to put each one in a class.</div><div class="chips">'
       + noClass.map(r => '<button class="chip" data-act="openFamily" data-id="' + esc(r.familyId) + '">' + esc(r.name) + ' · ' + esc(C.levelLabel(r.level) || '?') + '</button>').join('') + '</div></div>' : '');
@@ -1027,11 +1020,11 @@ function renderDrawer() {
   $('drawer-box').innerHTML = '<div class="modal-head"><div><h2>' + esc(C.slotTitle(slot)) + '</h2><p>' + esc(C.slotLabel(id)) + ' · ' + C.plural(roster.length, 'student') + '</p></div>'
     + '<button class="iconbtn x" data-act="closeDrawer" aria-label="Close">✕</button></div>'
     + '<div class="modal-body">'
-    + '<div class="chips" style="margin-bottom:14px;">' + C.slotModes(slot).map(m => '<span class="pill deep">' + (m === 'Online' ? '💻' : '🏫') + ' ' + m + ' ' + money(C.monthlyFeeFor(slot, m, S.schedule)) + '/month</span>').join('') + '</div>'
+    + '<div class="chips" style="margin-bottom:14px;">' + C.slotClassModes(slot).map(m => '<span class="pill deep">' + C.classModeLabel(m) + ' ' + money(C.monthlyFeeFor(slot, m, S.schedule)) + '/month</span>').join('') + '</div>'
     + (roster.length ? '<table class="t"><tbody>' + roster.map(r => {
       const st = famStateFor(r.family, period);
       return '<tr class="click" data-act="openFamily" data-id="' + esc(r.familyId) + '"><td><b>' + esc(r.name) + '</b><div class="small muted">' + esc(r.parentName) + '</div></td>'
-        + '<td>' + (r.mode === 'Online' ? '💻' : '🏫') + '</td><td><span class="dot ' + st.tone + '" title="' + esc(st.label) + '"></span></td>'
+        + '<td title="' + esc(C.CLASS_MODE_META[r.mode] ? C.CLASS_MODE_META[r.mode].long : '') + '">' + modeIcon(r.mode) + '</td><td><span class="dot ' + st.tone + '" title="' + esc(st.label) + '"></span></td>'
         + '<td class="r">' + (r.whatsapp ? '<a class="iconbtn" href="' + esc(C.whatsappLink(r.whatsapp, '', !TOUCH)) + '" target="polymath_whatsapp" rel="noopener" title="WhatsApp" data-act="noop">💬</a>' : '') + '</td></tr>';
     }).join('') + '</tbody></table>' : emptyHtml('🪑', 'Nobody in this class yet', 'Open a family and choose this class for a student.'))
     + '</div><div class="modal-foot"><button class="btn ghost" data-act="copyRoster" data-id="' + id + '">📋 Copy the list</button></div>';
@@ -1075,7 +1068,7 @@ VIEWS.students = function () {
     + '<select class="plain" data-ch="stuDay" aria-label="Day"><option value="">Any day</option>' + C.DAYS.map(d => '<option value="' + d.code + '" ' + (f.day === d.code ? 'selected' : '') + '>' + d.name + '</option>').join('') + '</select></div>'
     + '<div class="filterrow"><span class="lbl">Level</span><div class="chips">' + chip('level', '', 'All') + C.LEVELS.map(l => chip('level', l, C.levelLabel(l))).join('') + '</div>'
     + '<span class="lbl">Subject</span><div class="chips">' + chip('subject', '', 'All') + chip('subject', 'Math', '➗ Math') + chip('subject', 'Science', '🔬 Science') + '</div></div>'
-    + '<div class="filterrow"><span class="lbl">Mode</span><div class="chips">' + chip('mode', '', 'All') + chip('mode', 'Physical', '🏫 Physical') + chip('mode', 'Online', '💻 Online') + '</div>'
+    + '<div class="filterrow"><span class="lbl">Mode</span><div class="chips">' + chip('mode', '', 'All') + chip('mode', 'Physical', '🏫 Physical') + chip('mode', 'Online', '💻 Online') + chip('mode', 'Master', '⭐ Master class') + '</div>'
     + '<span class="lbl">This month</span><div class="chips">' + chip('pay', '', 'All') + chip('pay', 'paid', '✅ Paid') + chip('pay', 'owing', '⏳ Not paid') + chip('pay', 'overdue', '⚠️ Overdue') + '</div>'
     + '<span class="lbl">Show</span><div class="chips">' + chip('status', 'active', 'Active') + chip('status', 'paused', 'Paused') + chip('status', 'left', 'Left') + chip('status', 'all', 'Everyone') + chip('cls', 'none', '🧩 No class') + '</div></div>'
     + (!rows.length ? '<div class="card">' + emptyHtml('📋', IX.rows.length ? 'Nobody matches' : 'No students yet', IX.rows.length ? 'Clear a filter to see more.' : 'Students are added inside a family.', IX.rows.length ? '<button class="btn ghost" data-act="stuClear">Clear filters</button>' : '<button class="btn" data-act="openImport">⬆ Import a spreadsheet</button>') + '</div>'
@@ -1338,7 +1331,7 @@ function slotOptionsHtml(selected, level) {
 // Science on another). It opens in place, so it works the same on a phone.
 function slotPickerHtml(s, si, open) {
   const ids = C.studentSlotIds(s);
-  const type = s.lessonType;
+  const type = '';
   const btn = '<button type="button" class="ms-btn ' + (open ? 'open' : '') + '" data-act="togglePicker" data-s="' + si + '" aria-expanded="' + !!open + '">'
     + '<span class="ms-val">' + (ids.length ? ids.map(id => { const sl = C.scheduleSlot(S.schedule, id); return subjChip(sl.subject, C.isMaster(sl), C.slotShortLabel(id) + ' · ' + (C.slotHasClass(sl) ? C.levelLabel(sl.level) + ' ' + sl.subject : 'no class')); }).join(' ') : '<span class="muted">Choose slots from the schedule…</span>') + '</span>'
     + '<span class="ms-caret">▾</span></button>';
@@ -1346,7 +1339,7 @@ function slotPickerHtml(s, si, open) {
   const groups = C.slotPickerGroups(S.schedule, { selected: ids, level: s.level, lessonType: type, roster: IX.roster });
   const any = groups.some(g => g.options.some(o => o.has));
   const pop = '<div class="ms-pop" role="group" aria-label="Slots for ' + esc(s.name || 'this child') + '">'
-    + '<div class="ms-hint">' + (type ? 'Slots that suit <b>' + esc(C.lessonTypeLabel(type)) + '</b> are bright; the rest are faded but can still be ticked.' : 'Pick the type of lesson to see which slots suit it.')
+    + '<div class="ms-hint">Tick every slot the child takes; choose physical, online or Master class for each under Mode and fee.'
     + (s.level ? ' ★ = ' + esc(C.levelLabel(s.level)) + '.' : '') + '</div>'
     + (!any ? '<div class="ms-empty">The schedule has no classes yet. Add them at <a href="../schedule/#admin" target="_blank" rel="noopener">/schedule</a>.</div>' : '')
     + groups.map(g => {
@@ -1358,7 +1351,7 @@ function slotPickerHtml(s, si, open) {
           + '<input type="checkbox" data-ch="pickSlot" data-s="' + si + '" value="' + o.id + '" ' + (o.chosen ? 'checked' : '') + (o.disabled ? ' disabled' : '') + '>'
           + '<span class="ms-t">' + esc(o.start) + '</span>'
           + '<span class="ms-ttl">' + (o.levelMatch ? '★ ' : '') + esc(o.title) + '</span>'
-          + '<span class="ms-meta">' + o.modes.map(md => md === 'Online' ? '💻' : '🏫').join('') + ' · ' + C.plural(o.count, 'student')
+          + '<span class="ms-meta">' + (o.master ? '⭐' : o.modes.map(md => md === 'Online' ? '💻' : '🏫').join('')) + ' · ' + C.plural(o.count, 'student')
           + (o.status === 'full' ? ' · Full' : o.status === 'closed' ? ' · hidden on /schedule' : '') + '</span></label>';
       }).join('') + '</div>';
     }).join('')
@@ -1419,31 +1412,26 @@ MODALS.family = function (m) {
   const stud = f.students.map((s, si) => {
     const classes = s.classes.map((c, ci) => {
       const slot = c.custom ? null : C.scheduleSlot(S.schedule, c.slotId);
-      const fee = slot ? C.monthlyFeeFor(slot, c.mode, S.schedule) : 0;
-      const modes = slot && c.slotId ? C.slotModes(slot) : ['Physical', 'Online'];
+      const fee = slot ? C.monthlyFeeFor(slot, C.classMode(c, S.schedule), S.schedule) : 0;
+      const modes = slot && c.slotId ? C.slotClassModes(slot) : C.CLASS_MODES;
+      const cur = c.custom ? (C.CLASS_MODES.includes(c.mode) ? c.mode : 'Physical') : C.classMode(c, S.schedule);
       return '<div class="class-row">'
         + (c.custom ? '<input type="text" placeholder="What is it? e.g. 1-to-1 Science" value="' + esc(c.label) + '" data-in="cls" data-s="' + si + '" data-c="' + ci + '" data-k="label" data-keep="cl-' + si + '-' + ci + '">'
           : c.slotId ? '<div class="cls-name">' + subjChip(slot.subject, C.isMaster(slot), C.slotShortLabel(c.slotId) + ' · ' + C.slotTitle(slot)) + '</div>'
             : '<select data-ch="clsSlot" data-s="' + si + '" data-c="' + ci + '">' + slotOptionsHtml(c.slotId, s.level) + '</select>')
-        + '<select data-ch="cls" data-s="' + si + '" data-c="' + ci + '" data-k="mode" aria-label="Physical or online">' + ['Physical', 'Online'].map(md => '<option value="' + md + '" ' + (c.mode === md ? 'selected' : '') + (modes.includes(md) || c.mode === md ? '' : ' disabled') + '>' + (md === 'Online' ? '💻 Online' : '🏫 Physical') + '</option>').join('') + '</select>'
+        + '<select data-ch="cls" data-s="' + si + '" data-c="' + ci + '" data-k="mode" aria-label="Physical, online or master class">' + C.CLASS_MODES.map(md => '<option value="' + md + '" ' + (cur === md ? 'selected' : '') + (modes.includes(md) || cur === md ? '' : ' disabled') + '>' + esc(C.classModeLabel(md)) + '</option>').join('') + '</select>'
         + '<input type="number" min="0" step="0.01" placeholder="' + (c.custom ? 'Fee per month' : (fee ? 'Schedule ' + money(fee) : 'No fee set')) + '" value="' + esc(c.rate) + '" data-in="cls" data-s="' + si + '" data-c="' + ci + '" data-k="rate" data-keep="cr-' + si + '-' + ci + '" title="Leave blank to use the schedule\'s fee" aria-label="Monthly fee">'
         + '<button class="iconbtn" data-act="delClass" data-s="' + si + '" data-c="' + ci + '" title="Remove this class">✕</button></div>';
     }).join('');
-    const type = s.lessonType;
-    const guess = C.derivedLessonType(s, S.schedule);
-    const issues = C.lessonTypeIssues(s, S.schedule);
     return '<div class="student-card"><div class="form">'
       + '<div class="field"><label>Student name</label><input type="text" value="' + esc(s.name) + '" data-in="stu" data-s="' + si + '" data-k="name" data-keep="sn-' + si + '"></div>'
       + '<div class="field"><label>Level</label><select data-ch="stu" data-s="' + si + '" data-k="level"><option value="">—</option>' + C.LEVELS.map(l => '<option value="' + l + '" ' + (C.normalizeLevel(s.level) === l ? 'selected' : '') + '>' + C.levelLabel(l) + '</option>').join('') + '</select></div>'
       + '<div class="field"><label>Status</label><select data-ch="stu" data-s="' + si + '" data-k="status">' + [['active', 'Active'], ['paused', 'Paused (not billed)'], ['left', 'Left']].map(([v, l]) => '<option value="' + v + '" ' + (s.status === v ? 'selected' : '') + '>' + l + '</option>').join('') + '</select></div>'
       + '<div class="field"><label>Primary school</label><input type="text" value="' + esc(s.school) + '" placeholder="e.g. Nanyang Primary" data-in="stu" data-s="' + si + '" data-k="school" data-keep="ss-' + si + '"></div>'
       + '<div class="field"><label>With us since</label><input type="date" value="' + esc(s.startDate) + '" data-in="stu" data-s="' + si + '" data-k="startDate"></div>'
-      + '<div class="field"><label>Type of lesson</label><select data-ch="stuType" data-s="' + si + '"><option value="">' + (guess ? 'Not chosen (' + esc(C.lessonTypeLabel(guess)) + ' from classes)' : 'Choose…') + '</option>'
-      + C.LESSON_TYPES.map(t => '<option value="' + t.key + '" ' + (type === t.key ? 'selected' : '') + '>' + t.icon + ' ' + esc(t.label) + '</option>').join('') + '</select></div>'
       + '</div>'
       + '<div class="field" style="margin-top:14px;"><label>Slots <span class="opt">(tick more than one if the child takes Math and Science)</span></label>' + slotPickerHtml(s, si, m.picker === si) + '</div>'
-      + (issues.length ? '<div class="lt-issues">' + issues.map(x => '<div>⚠ ' + esc(x) + '</div>').join('') + '</div>' : '')
-      + (classes ? '<div class="section-title" style="margin-top:14px;">Mode and fee</div>' + classes : '')
+      + (classes ? '<div class="section-title" style="margin-top:14px;">Mode and fee <span class="opt" style="text-transform:none;letter-spacing:0;font-weight:500;">— physical, online or Master class, for each class</span></div>' + classes : '')
       + '<div class="actions" style="margin-top:10px;"><button class="btn xs ghost" data-act="addCustom" data-s="' + si + '">＋ Other arrangement</button>'
       + '<span style="flex:1"></span><button class="btn xs danger" data-act="delStudent" data-s="' + si + '">Remove student</button></div>'
       + '<div class="form" style="margin-top:12px;grid-template-columns:2fr 1fr;">'
