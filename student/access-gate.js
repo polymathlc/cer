@@ -335,7 +335,7 @@
   /** Is the student-access block published? A signed-out read must be refused. */
   function checkProtected() {
     if (readStore('localStorage', PROTECTED_KEY) === '1') return Promise.resolve(true);
-    return http(docUrl('studentAccess/__protection_probe__'), { method: 'GET', cache: 'no-store' }).then(function (answer) {
+    return http(docUrl('studentAccess/protection-probe'), { method: 'GET', cache: 'no-store' }).then(function (answer) {
       if (answer.status === 403 || answer.status === 401) { writeStore('localStorage', PROTECTED_KEY, '1'); return true; }
       if (answer.status === 200 || answer.status === 404) return false;
       throw new Error('probe ' + answer.status);
