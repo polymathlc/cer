@@ -314,3 +314,75 @@ test('🔁 the Replace window warns when the page count changes, and sums up', (
   assert.equal(Core.replaceSummary(['a'], ['Saturday: offline']), 'Worksheet PDF replaced. 1 could not be replaced. Saturday: offline');
   assert.equal(Core.replaceSummary([], ['This class: offline']), 'The PDF could not be replaced. This class: offline');
 });
+
+/* ---- 🎬📅 v1.7.0: the worksheet's video page is Ans Key's videos.html, the QR code's own ---- */
+const VP_HASH = 'vp1-812-9a3b4c5d';
+const VP_TOKEN = '7e1d0a3c-1b2c-4d5e-8f90-000000000001';
+
+test('the video page link carries the same packed code as the printed QR code', async () => {
+  const vp = Core.videoPlaylistOf({ videoPlaylist: { hash: VP_HASH, token: VP_TOKEN, n: 3, at: 1794474000000 } });
+  assert.deepEqual(vp, { hash: VP_HASH, token: VP_TOKEN, n: 3, at: 1794474000000 });
+  const code = Core.videoPackCode(VP_HASH, VP_TOKEN);
+  assert.match(code, /^[A-Za-z0-9_-]{31}$/);
+  assert.equal(Core.videoPageLink('../anskey/', vp), '../anskey/videos.html?' + code);
+  assert.equal(Core.videoPageLink('../anskey', vp, '2026-11-12'), '../anskey/videos.html?' + code + '#day-2026-11-12');
+  assert.equal(Core.videoPageLink('../anskey/', vp, 'tomorrow'), '../anskey/videos.html?' + code, 'a bad day is left off');
+  // A token that cannot be packed is spelled out, as Ans Key does.
+  assert.equal(Core.videoPageLink('../anskey/', { hash: VP_HASH, token: 'abcdefghijklmnopqrst' }), '../anskey/videos.html?p=' + VP_HASH + '&t=abcdefghijklmnopqrst');
+  // Anything else is no page at all.
+  assert.equal(Core.videoPlaylistOf({ videoPlaylist: { hash: 'living-1', token: VP_TOKEN } }), null);
+  assert.equal(Core.videoPlaylistOf({ videoPlaylist: { hash: VP_HASH, token: 'x"><script>' } }), null);
+  assert.equal(Core.videoPlaylistOf({}), null);
+  assert.equal(Core.videoPageLink('../anskey/', null), '');
+  // Byte for byte Ans Key's packCode, when anskey is checked out beside this repo.
+  const fs = await import('node:fs');
+  for (const dir of ['../../anskey/video-playlist.js', '../../polymathlc/anskey/video-playlist.js']) {
+    const file = new URL(dir, import.meta.url);
+    if (!fs.existsSync(file)) continue;
+    const VP = require(file.pathname).pure;
+    for (const [h, t] of [[VP_HASH, VP_TOKEN], ['vp1-1-0', '00000000-0000-0000-0000-000000000000'], ['vp1-9999999-ffffffff', 'ffffffff-ffff-ffff-ffff-ffffffffffff']]) {
+      assert.equal(Core.videoPackCode(h, t), VP.packCode(h, t));
+      assert.deepEqual(VP.unpackCode(Core.videoPackCode(h, t)), { hash: h, token: t });
+      assert.equal('https://polymathlc.com.sg/anskey/' + Core.videoPageLink('', { hash: h, token: t }), VP.viewerUrl('https://polymathlc.com.sg/anskey/', h, t));
+    }
+    // Both read a lesson's day the same way.
+    const at = Date.UTC(2026, 10, 12, 9, 30);
+    assert.equal(Core.lessonDayKey(at), VP.dayKey(at));
+    break;
+  }
+});
+
+test('a filed list is used only while it holds every lesson', () => {
+  const at = Date.UTC(2026, 10, 12, 9);
+  const recs = [{ id: 'a', at: at - 86400000 }, { id: 'b', at: at }];
+  assert.equal(Core.videoPlaylistCurrent({ n: 2, at: at + 5000 }, recs), true);
+  assert.equal(Core.videoPlaylistCurrent({ n: 5, at: at + 5000 }, recs), true, 'YouTube clips count as videos too');
+  assert.equal(Core.videoPlaylistCurrent({ n: 1, at: at + 5000 }, recs), false, 'fewer videos than lessons');
+  assert.equal(Core.videoPlaylistCurrent({ n: 3, at: at - 60000 }, recs), false, 'filed before the newest lesson');
+  assert.equal(Core.videoPlaylistCurrent({ n: 3, at: 0 }, recs), true, 'an older filing with no time still counts');
+  assert.equal(Core.videoPlaylistCurrent({ n: 0, at: at }, []), false);
+  assert.equal(Core.videoPlaylistCurrent(null, recs), false);
+});
+
+test('the recorded lessons are grouped by the day of the class, first lesson first', () => {
+  const day = (d, h) => new Date(2026, 10, d, h, 0).getTime();
+  const days = Core.recordingDays([
+    { id: 'n2', at: day(12, 18), duration: 600 },
+    { id: 'o', at: day(5, 17), duration: 2460 },
+    { id: 'n1', at: day(12, 17), duration: 60 },
+    { id: 'old', at: 0, duration: 30 }
+  ], day(13, 9));
+  assert.deepEqual(days.map((d) => d.key), ['2026-11-05', '2026-11-12']);
+  assert.deepEqual(days.map((d) => d.label), ['Thu 5 Nov', 'Thu 12 Nov']);
+  assert.deepEqual(days.map((d) => d.count), [1, 2]);
+  assert.deepEqual(days[1].ids, ['n2', 'n1']);
+  assert.equal(days[1].seconds, 660);
+  assert.equal(days[1].at, day(12, 17));
+  assert.deepEqual(Core.recordingDays([]), []);
+  // The timeline hands both to the page.
+  const course = { worksheetIds: ['w1'], currentIndex: 0, releasedThrough: 0 };
+  const items = Core.timelineItems(course, { w1: { name: 'WS', videoPlaylist: { hash: VP_HASH, token: VP_TOKEN, n: 1, at: day(12, 19) } } },
+    { w1: [{ id: 'n1', at: day(12, 17), duration: 60 }] });
+  assert.equal(items[0].playlist.hash, VP_HASH);
+  assert.equal(items[0].days.length, 1);
+});

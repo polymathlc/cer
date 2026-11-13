@@ -301,6 +301,98 @@
     if (action === 'play' && rec) url += '&rec=' + encodeURIComponent(rec);
     return url;
   }
+  /* ---- 🎬 The worksheet's video page: the SAME page as the QR code ----
+     Ans Key (v1.196.0) files every worksheet's videos as one hosted list
+     after each save and each lesson it records, and keeps its address on
+     the worksheet as `videoPlaylist: {hash, token, n, at}`. Page 1 of the
+     printed worksheet carries a QR code to `anskey/videos.html?<code>`;
+     this portal opens exactly that page beside the worksheet, so the paper
+     and the class timeline can never show two different lists. The code is
+     packed the way Ans Key packs it (video-playlist.js `packCode`, byte for
+     byte — tools/online-portal-tests.mjs compares them when anskey is
+     checked out beside this repo). The page itself checks the file against
+     the hash, so a wrong code here can only fail, never mislead. */
+  var VIDEO_PAGE = 'videos.html';
+  var VP_HASH_RE = /^vp1-\d{1,7}-[0-9a-f]{1,8}$/;
+  var VP_TOKEN_RE = /^[0-9A-Za-z-]{16,80}$/;
+  var VP_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+  var VP_DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+  function vpBytesToB64u(bytes) {
+    var bin = '';
+    for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    var b64 = typeof btoa === 'function' ? btoa(bin) : Buffer.from(bin, 'binary').toString('base64');
+    return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function videoPackCode(hash, token) {
+    if (!VP_HASH_RE.test(String(hash || '')) || typeof token !== 'string' || !VP_UUID_RE.test(token)) return '';
+    var parts = hash.split('-');
+    var len = Number(parts[1]), hv = parseInt(parts[2], 16);
+    if (!(len >= 0 && len < 16777216) || !(hv >= 0 && hv <= 4294967295)) return '';
+    var bytes = [(len >>> 16) & 255, (len >>> 8) & 255, len & 255,
+      (hv >>> 24) & 255, (hv >>> 16) & 255, (hv >>> 8) & 255, hv & 255];
+    var hex = token.replace(/-/g, '');
+    for (var i = 0; i < 32; i += 2) bytes.push(parseInt(hex.slice(i, i + 2), 16));
+    return vpBytesToB64u(bytes);
+  }
+  // The worksheet's filed list, checked, or null.
+  function videoPlaylistOf(doc) {
+    var p = doc && doc.videoPlaylist;
+    if (!p || typeof p !== 'object') return null;
+    if (!VP_HASH_RE.test(String(p.hash || '')) || !VP_TOKEN_RE.test(String(p.token || ''))) return null;
+    var n = Math.max(0, Math.floor(Number(p.n) || 0));
+    return { hash: String(p.hash), token: String(p.token), n: n, at: toMillis(p.at) };
+  }
+  // The page's address: Ans Key's videos.html with the same code the QR
+  // carries, and `#day-YYYY-MM-DD` to start at one lesson day.
+  function videoPageLink(anskeyBase, playlist, dayKey) {
+    if (!playlist || !VP_HASH_RE.test(String(playlist.hash || '')) || !VP_TOKEN_RE.test(String(playlist.token || ''))) return '';
+    var base = String(anskeyBase || '').split('#')[0].split('?')[0];
+    if (base && !/\/$/.test(base)) base += '/';
+    var code = videoPackCode(playlist.hash, playlist.token);
+    var url = base + VIDEO_PAGE + '?' + (code || 'p=' + encodeURIComponent(playlist.hash) + '&t=' + encodeURIComponent(playlist.token));
+    if (dayKey && VP_DAY_RE.test(dayKey)) url += '#day-' + dayKey;
+    return url;
+  }
+  // Is the filed list up to date with the lessons on the worksheet? A
+  // lesson recorded after the list was filed (or more lessons than the
+  // list holds videos) means it is not yet — the old chooser is used then,
+  // so a student never misses the newest lesson.
+  function videoPlaylistCurrent(playlist, recordings) {
+    if (!playlist || !playlist.n) return false;
+    var recs = Array.isArray(recordings) ? recordings : [];
+    if (recs.length > playlist.n) return false;
+    if (!playlist.at) return true;
+    return !recs.some(function (r) { return r && r.at && r.at > playlist.at + 1000; });
+  }
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+  // The calendar day a lesson was recorded on, as videos.html reads it.
+  function lessonDayKey(ms) {
+    var n = Number(ms);
+    if (!(n >= Date.UTC(2020, 0, 1) && n < Date.UTC(2100, 0, 1))) return '';
+    var d = new Date(n);
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+  // The recorded lessons grouped by the day of the class they were taught
+  // in, first lesson first: [{ key, label, at, count, seconds, ids }].
+  // Lessons with no recorded time (very old ones) are left out of the days.
+  function recordingDays(recordings, now) {
+    var byKey = {}, out = [];
+    (Array.isArray(recordings) ? recordings : []).forEach(function (r) {
+      var key = r ? lessonDayKey(r.at) : '';
+      if (!key) return;
+      if (!byKey[key]) {
+        byKey[key] = { key: key, label: formatDay(r.at, now), at: r.at, count: 0, seconds: 0, ids: [] };
+        out.push(byKey[key]);
+      }
+      var g = byKey[key];
+      if (r.at < g.at) g.at = r.at;
+      g.count += 1;
+      g.seconds += Number(r.duration) || 0;
+      g.ids.push(r.id);
+    });
+    return out.sort(function (p, q) { return p.key < q.key ? -1 : p.key > q.key ? 1 : 0; });
+  }
+
   // The timeline of one class: every released worksheet in teaching order,
   // with its state, its last-edited time and its recorded lessons.
   function timelineItems(course, docs, recordings) {
@@ -315,6 +407,10 @@
         marked: !!(d && (d.annotationsPath || parseAnnotations(d.annotations).length)),
         pages: d && d.pageCount ? Number(d.pageCount) : 0,
         recordings: recordings[w.id] || [],
+        // 🎬 The worksheet's video page (Ans Key's, the QR code's), and the
+        // recorded lessons by the day of the class.
+        playlist: videoPlaylistOf(d),
+        days: recordingDays(recordings[w.id] || []),
         loading: !d
       };
     });
@@ -556,6 +652,8 @@
     slotsForDay: slotsForDay, slotLabel: slotLabel, courseTitle: courseTitle, autoCourseTitle: autoCourseTitle,
     normalizeEmail: normalizeEmail, isEmail: isEmail, escapeHtml: escapeHtml, initials: initials,
     naturalCompare: naturalCompare, worksheetNameFromFile: worksheetNameFromFile,
+    VIDEO_PAGE: VIDEO_PAGE, videoPackCode: videoPackCode, videoPlaylistOf: videoPlaylistOf, videoPageLink: videoPageLink,
+    videoPlaylistCurrent: videoPlaylistCurrent, lessonDayKey: lessonDayKey, recordingDays: recordingDays,
     courseIds: courseIds, currentIndex: currentIndex, releasedThrough: releasedThrough, releasedCount: releasedCount, lockedCount: lockedCount,
     worksheetState: worksheetState, releasedWorksheets: releasedWorksheets, nextWorksheets: nextWorksheets, progressUpdate: progressUpdate, percent: percent,
     ansKeyAt: ansKeyAt, ansKeyState: ansKeyState, finishUpdate: finishUpdate,

@@ -223,6 +223,49 @@ let studentDb = null;
   check('student: a new recording and edit date appear live', true);
   await page.screenshot({ path: path.join(shots, '04-student.png'), fullPage: true });
 
+  // 🎬📅 The recordings beside the worksheet, by the day of the class.
+  const dayChips = await page.$$eval('.tl-item.is-current .tl-day', (els) => els.map((e) => ({ day: e.dataset.day, text: e.textContent })));
+  const wantDays = await page.evaluate((at) => [at - 86400000, at].map((ms) => window.PolymathOnlineCore.lessonDayKey(ms)), edited);
+  check('student: the lessons are listed beside the worksheet by the day of the class, first lesson first',
+    dayChips.length === 2 && dayChips[0].day === wantDays[0] && dayChips[1].day === wantDays[1] &&
+    /Sun 11 Oct/.test(dayChips[0].text) && /1 recording · 41:00/.test(dayChips[0].text) && /Mon 12 Oct/.test(dayChips[1].text) && /2 recordings/.test(dayChips[1].text), JSON.stringify(dayChips));
+  // Before Ans Key has filed the video page, the old chooser still plays them.
+  await page.click('.tl-item.is-current .tl-day >> nth=0');
+  await page.waitForSelector('.modal-wide iframe.anskey-frame');
+  check('student: with no video page yet, a one-lesson day replays that lesson in Ans Key',
+    (await page.getAttribute('.modal-wide iframe.anskey-frame', 'src')) === '../anskey/?ws=' + encodeURIComponent(ws3Id) + '&do=play&rec=rec-old');
+  await page.keyboard.press('Escape');
+  // A page filed BEFORE the newest lesson is not used: nobody misses a lesson.
+  const VP_HASH = 'vp1-812-9a3b4c5d', VP_TOKEN = '7e1d0a3c-1b2c-4d5e-8f90-000000000001';
+  await page.evaluate(([p, at, hash, token]) => {
+    window.__fake.seed(p, Object.assign({}, window.__fake.db[p], { videoPlaylist: { hash, token, n: 2, at: at } }));
+  }, [ws3, edited, VP_HASH, VP_TOKEN]);
+  await page.waitForTimeout(300);
+  await page.click('.tl-item.is-current [data-action="video"]');
+  await page.waitForSelector('.rec-row');
+  check('student: a video page older than the newest lesson is not used', (await page.locator('.rec-row').count()) === 3);
+  await page.keyboard.press('Escape');
+  // Ans Key files the page after the lesson: ▶ opens the SAME page as the printed QR code.
+  await page.evaluate(([p, at, hash, token]) => {
+    window.__fake.seed(p, Object.assign({}, window.__fake.db[p], { videoPlaylist: { hash, token, n: 4, at: at + 3700000 } }));
+  }, [ws3, edited, VP_HASH, VP_TOKEN]);
+  await page.waitForFunction(() => /4 videos/.test((document.querySelector('.tl-item.is-current [data-action="video"]') || {}).textContent || ''));
+  await page.locator('.tl-item.is-current').screenshot({ path: path.join(shots, '04f-student-lesson-days.png') });
+  check('student: the worksheet says when its videos were last updated', /videos updated Mon 12 Oct/.test(await page.textContent('.tl-item.is-current .tl-sub')));
+  await page.click('.tl-item.is-current [data-action="video"]');
+  await page.waitForSelector('.modal-wide iframe.video-page-frame');
+  const pageSrc = await page.getAttribute('.modal-wide iframe.video-page-frame', 'src');
+  const wantSrc = await page.evaluate(([hash, token]) => '../anskey/videos.html?' + window.PolymathOnlineCore.videoPackCode(hash, token), [VP_HASH, VP_TOKEN]);
+  check('student: ▶ Videos opens Ans Key\'s video page, the same page as the QR code', pageSrc === wantSrc && /^\.\.\/anskey\/videos\.html\?[A-Za-z0-9_-]{31}$/.test(pageSrc), pageSrc);
+  await page.screenshot({ path: path.join(shots, '04e-student-video-page.png') });
+  await page.keyboard.press('Escape');
+  await page.click('.tl-item.is-current .tl-day >> nth=-1');
+  await page.waitForSelector('.modal-wide iframe.video-page-frame');
+  check('student: a lesson day opens the video page at that day',
+    (await page.getAttribute('.modal-wide iframe.video-page-frame', 'src')) === wantSrc + '#day-' + wantDays[1] &&
+    /Mon 12 Oct lesson/.test(await page.textContent('.modal-wide h2')));
+  await page.keyboard.press('Escape');
+
   // The teacher opens worksheet 5 in Ans Key: the class moves and 9, 10 come out live.
   await page.evaluate(() => {
     const course = Object.entries(window.__fake.db).find(([p]) => p.startsWith('onlineCourses/'));

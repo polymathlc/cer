@@ -495,6 +495,18 @@ Run `node --test tools/consult-bridge-tests.mjs` after touching any of it.
 
 ## 🎓 Polymath Online: the student portal (`online/`, v1.0.0)
 
+- **🎬📅 Lesson videos (v1.7.0): the worksheet's video page IS Ans Key's `videos.html`, the page its printed QR code opens.**
+  Ans Key (v1.196.0) files every worksheet's video list after each save and each lesson recorded, as
+  `pdfAnnotator.videoPlaylist = {hash, token, n, at}`. `Core.videoPlaylistOf` reads it, `Core.videoPageLink(ANSKEY_URL, vp, day)`
+  builds `../anskey/videos.html?<code>` (`videoPackCode` = Ans Key's `packCode` byte for byte; the test compares them when
+  anskey is checked out beside) plus `#day-YYYY-MM-DD`. `openVideoPage` shows it in the modal iframe. Never build a second
+  video list here.
+  - `Core.videoPlaylistCurrent(vp, recordings)`: a list filed before the newest lesson, or with fewer videos than lessons, is NOT
+    used; ▶ falls back to the old chooser (`chooseVideo(id, true)`) so a student never misses the newest lesson.
+  - `Core.recordingDays` groups the recorded lessons by the calendar day they were recorded (`a.ts`), first lesson first, read the
+    same way as the player's `lessonDays` (`lessonDayKey`). The timeline shows them as `.tl-day` buttons (`data-action="video-day"`).
+  - The answer key stays Ans Key's own (View/Print on the timeline; the video page links it too), always the latest save.
+
 - Replace PDF (v1.6.0), handled by `replacePdf(id)` in portal.js:
   - The corrected file is put at the SAME `storagePath`: Ans Key's save writes `pdf-annotator/<id>.pdf` back every time, so a new path would be undone.
   - Each doc gets `Core.replacementUpdate` (`pdfVersion` ms, `pdfFileName`, `pdfReplacedBy`, `pageCount`) plus `pdfReplacedAt` and `updatedAt`. Annotations are never touched.
