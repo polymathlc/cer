@@ -33,9 +33,9 @@
      mail/polymath-office-*    emails for the Trigger Email extension
    Reads: schedule_config/main (the /schedule page's own document).
    ═══════════════════════════════════════════════════════════════════════════ */
-import * as C from './office-core.mjs?v=1.10.0';
+import * as C from './office-core.mjs?v=1.11.0';
 
-const OFFICE_VERSION = 'v1.10.0';
+const OFFICE_VERSION = 'v1.11.0';
 
 /* ═══════════════ Firebase — the CER project ═══════════════ */
 firebase.initializeApp({
@@ -200,7 +200,7 @@ function reindex() {
 function recordOf(f) {
   if (!f) return null;
   if (f.id && IX.rec.has(f.id) && IX.fam.get(f.id) === f) return IX.rec.get(f.id);
-  const r = C.familyPaymentRecord(f, S.invoices, S.payments, { today: today() });
+  const r = C.familyPaymentRecord(f, S.invoices, S.payments, { today: today(), settings: S.settings });
   if (f.id && IX.fam.get(f.id) === f) IX.rec.set(f.id, r);
   return r;
 }
@@ -209,7 +209,7 @@ function modeIcon(mode) { return (C.CLASS_MODE_META[mode] || C.CLASS_MODE_META.P
 const MODE_CHOICES = C.CLASS_MODES.map(m => [m, C.classModeLabel(m)]);
 function monthDots(months, n) {
   // The months around this one: two before, this month, and the rest ahead.
-  return '<span class="mdots">' + C.monthsAround(months, C.sgMonthKey(), 2, Math.max(0, n - 3)).map(m => '<span class="md ' + m.key + (m.current ? ' cur' : '') + '" title="' + esc(C.periodLabel(m.period) + ': ' + C.MONTH_STATE_META[m.key].label) + '">' + esc(m.label) + '</span>').join('') + '</span>';
+  return '<span class="mdots">' + C.monthsAround(months, C.sgMonthKey(), 2, Math.max(0, n - 3)).map(m => '<span class="md ' + m.key + (m.current ? ' cur' : '') + (m.joint ? ' joint j-' + m.joint : '') + '" title="' + esc(C.periodLabel(m.period) + ': ' + (m.stateLabel || C.MONTH_STATE_META[m.key].label)) + '">' + esc(m.label) + '</span>').join('') + '</span>';
 }
 function whenText(dayKey) {
   if (!C.isDayKey(dayKey)) return '';
@@ -226,7 +226,8 @@ const stateOf = inv => C.invoiceState(inv, today());
 // The family's status this month: active, paused or withdrawn.
 const famNow = f => C.familyStateIn(f, C.sgMonthKey());
 function famStateFor(f, period) {
-  const inv = invoiceFor(f.id, period);
+  // A covered month (December 2026) shows the lead month's invoice (November).
+  const inv = invoiceFor(f.id, C.billingPeriodOf(period, S.settings));
   if (inv) return Object.assign({ inv }, stateOf(inv));
   const now = C.familyStateIn(f, period);
   if (now === 'withdrawn') return { key: 'withdrawn', label: 'Withdrawn', tone: 'grey', icon: '👋' };
@@ -238,6 +239,7 @@ function studentsWithoutClass() {
   return IX.rows.filter(r => r.status === 'active' && !r.classes.length && !(C.feeNum((r.family.students.find(s => s.id === r.studentId) || {}).monthlyFee)));
 }
 function billableWithoutInvoice(period) {
+  if (C.isCoveredMonth(period, S.settings)) return [];   // paid with the month before
   return S.families.filter(f => C.familyIsBillable(f, period) && !invoiceFor(f.id, period));
 }
 function allOwing() { return C.stillOwing(S.invoices, today()); }
@@ -423,8 +425,9 @@ function bannersHtml() {
 const VIEWS = {};
 VIEWS.home = function () {
   if (!S.familiesLoaded || !S.invoicesLoaded) return emptyHtml('⏳', 'Loading…', 'Fetching families and invoices.');
-  const period = C.sgMonthKey();
-  const label = C.periodLabel(period);
+  // In a covered month (December 2026) the month being collected is the lead month's.
+  const period = C.billingPeriodOf(C.sgMonthKey(), S.settings);
+  const label = C.billingPeriodLabel(period, S.settings);
   const invs = periodInvoices(period);
   const sum = C.periodSummary(invs, today());
   const active = S.families.filter(f => famNow(f) === 'active');
@@ -549,7 +552,7 @@ function kidShown(s) {
 }
 function childFiltersOn() { return !!S.ui.famType || C.hasChildFilters(S.ui.famF); }
 function recordRows(list) {
-  const rows = C.familyRecordRows(list, { schedule: S.schedule, invoices: S.invoices, payments: S.payments, today: today() });
+  const rows = C.familyRecordRows(list, { schedule: S.schedule, invoices: S.invoices, payments: S.payments, today: today(), settings: S.settings });
   // The table shows only the children of the type and the filters chosen.
   const kids = new Map();
   list.forEach(f => f.students.forEach(s => kids.set(f.id + '|' + s.id, s)));
@@ -610,7 +613,7 @@ function famStatsHtml(list) {
   const period = sc.period;
   const filtered = sc.filtered;
   const st = C.familyStats(filtered ? list : S.families, {
-    schedule: S.schedule, invoices: S.invoices, period, today: today(),
+    schedule: S.schedule, invoices: S.invoices, period, today: today(), settings: S.settings,
     kidFilter: sc.kidFilter
   });
   const mo = C.monthShort(period);
@@ -628,7 +631,7 @@ function famStatsHtml(list) {
     + tile('k-students open-cat" data-act="openCategory" data-k="all" role="button" tabindex="0" title="See every student', '👦 Students', String(st.students),
       'in ' + C.plural(st.families, 'family', 'families') + (st.paused ? ' · ' + st.paused + ' paused' : '') + (st.noClass ? ' · <span class="warn-t">' + st.noClass + ' without a class</span>' : '') + (st.both ? ' · ' + st.both + ' take both subjects' : ''))
     + tile('k-fees', '💵 Monthly fees', money(st.net), money(st.fees) + ' at schedule fees' + (st.discounts ? ' − ' + money(st.discounts) + ' discounts' : '') + ' · ' + money(st.net * 12) + ' a year')
-    + tile('k-collected', '✅ Collected for ' + esc(mo), money(st.collected), st.invoices ? 'of ' + money(st.billed) + ' invoiced · ' + st.percent + '%' : 'no ' + esc(mo) + ' invoices yet',
+    + tile('k-collected', '✅ Collected for ' + esc(st.billedWith ? C.periodRangeShort(st.billedWith, period).replace(/ \d{4}$/, '') : mo), money(st.collected), st.invoices ? 'of ' + money(st.billed) + ' invoiced · ' + st.percent + '%' : 'no ' + esc(mo) + ' invoices yet',
       st.billed > 0 ? '<div class="kpi-bar" role="img" aria-label="' + st.percent + '% collected"><span style="width:' + Math.min(100, st.percent) + '%"></span></div>' : '')
     + tile('k-owing', '⏳ Still to collect', money(st.outstanding), st.invoices ? 'on ' + esc(C.periodLabel(period)) + ' invoices' : '—')
     + '</div>';
@@ -649,7 +652,8 @@ function famStatsHtml(list) {
     ? ' Not sorted into a category (a child\'s own fee with no class, or a hand-typed invoice line): ' + money(st.unsortedFees) + ' of fees, ' + money(st.unsortedCollected) + ' collected.' : '';
   return '<section class="kpis" id="fam-stats"><div id="fam-stats-body">' + head + overview + '<div class="kpi-groups">' + group('subject', 'By subject') + group('type', 'By type of lesson') + '</div>'
     + '<p class="kpi-note"><b>Monthly fees</b>: one month of lessons for every active child at today\'s schedule fees (a child\'s own fee or a class\'s own rate wins), before sibling discounts in the categories; package families included. '
-    + '<b>Collected</b>: payments recorded against ' + esc(C.periodLabel(period)) + ' invoices, split over each invoice\'s classes. '
+    + '<b>Collected</b>: payments recorded against ' + esc(C.billingPeriodLabel(period, S.settings)) + ' invoices, split over each invoice\'s classes. '
+    + (st.billedWith ? esc(C.periodLabel(period)) + ' is paid with the ' + esc(C.periodLabel(st.billedWith)) + ' invoice, so these are the same invoices. ' : '')
     + 'A child counts once in every subject and type they take a class in, so a child in Math and Science counts in both.' + esc(unsorted) + '</p></div></section>';
 }
 function famFilterPanelHtml() {
@@ -1106,7 +1110,9 @@ VIEWS.students = function () {
 /* ═══════════════ 🧾 Invoices ═══════════════ */
 VIEWS.invoices = function () {
   const period = S.period;
-  const label = C.periodLabel(period);
+  const joint = C.jointMonth(period, S.settings);
+  const covered = !!(joint && joint.covered === period);
+  const label = covered ? C.periodLabel(period) : C.billingPeriodLabel(period, S.settings);
   const invs = periodInvoices(period);
   const sum = C.periodSummary(invs, today());
   const missing = billableWithoutInvoice(period);
@@ -1128,7 +1134,10 @@ VIEWS.invoices = function () {
   const draftsNoEmail = drafts.filter(i => !recipientsFor(i).length);
   const chip = (k, lbl) => '<button class="chip ' + (S.ui.invFilter === k ? 'on' : '') + '" data-act="invFilter" data-k="' + k + '">' + lbl + ' <span class="n">' + (counts[k] || 0) + '</span></button>';
   let bulk = '';
-  if (missing.length) {
+  if (covered) {
+    bulk = '<div class="bulkbar joint-bar"><div class="txt"><b>🔗 ' + esc(C.periodLabel(period)) + ' is paid with the ' + esc(C.periodLabel(joint.lead)) + ' invoice</b><span>One fee covers ' + esc(label) + ', so there is no separate ' + esc(C.periodLabel(period)) + ' invoice. Change this in Settings → Months billed together.</span></div>'
+      + '<button class="btn white big" data-act="period" data-d="-1">◀ ' + esc(C.periodLabel(joint.lead)) + ' invoices</button></div>';
+  } else if (missing.length) {
     bulk = '<div class="bulkbar"><div class="txt"><b>' + C.plural(missing.length, 'family has', 'families have') + ' no ' + esc(label) + ' invoice yet</b><span>Prices come from each student\'s classes on the schedule — you check them before anything is sent.</span></div>'
       + '<button class="btn white big" data-act="openPrepare">Prepare invoices</button></div>';
   } else if (drafts.length) {
@@ -1154,7 +1163,8 @@ VIEWS.invoices = function () {
     + bulk
     + '<div class="toolbar"><div class="search"><input type="search" placeholder="Search parent, student, number or reference" value="' + esc(S.ui.invSearch) + '" data-in="invSearch" data-keep="invSearch" aria-label="Search invoices"></div></div>'
     + '<div class="chips" style="margin-bottom:16px;">' + chip('all', 'All') + chip('draft', '📝 Not sent') + chip('waiting', '⏳ Waiting') + chip('overdue', '⚠️ Overdue') + chip('part', '◐ Part paid') + chip('paid', '✅ Paid') + chip('void', '✕ Cancelled') + '</div>'
-    + (!invs.length ? '<div class="card">' + emptyHtml('🧾', 'No ' + esc(label) + ' invoices yet', missing.length ? 'Prepare them from each student\'s classes.' : 'Add families and put their children in classes first.', missing.length ? '<button class="btn" data-act="openPrepare">Prepare invoices</button>' : '') + '</div>'
+    + (!invs.length && covered ? '<div class="card">' + emptyHtml('🔗', 'Paid with ' + esc(C.periodLabel(joint.lead)), 'The ' + esc(C.periodLabel(joint.lead)) + ' invoices are for ' + esc(C.billingPeriodLabel(period, S.settings)) + '. A custom invoice dated this month still shows here.') + '</div>'
+      : !invs.length ? '<div class="card">' + emptyHtml('🧾', 'No ' + esc(label) + ' invoices yet', missing.length ? 'Prepare them from each student\'s classes.' : 'Add families and put their children in classes first.', missing.length ? '<button class="btn" data-act="openPrepare">Prepare invoices</button>' : '') + '</div>'
       : !list.length ? '<div class="card">' + emptyHtml('🔍', 'Nothing here', 'Try another filter.') + '</div>'
         : '<div class="inv-list">' + list.map(invRowHtml).join('') + '</div>');
 };
@@ -1183,7 +1193,7 @@ function invRowHtml(inv) {
   const remind = ['overdue', 'part'].includes(st.key);
   return '<div class="inv ' + st.tone + '" data-act="openInvoice" data-id="' + esc(inv.id) + '" role="button" tabindex="0">'
     + pill(st)
-    + '<div class="who"><b>' + esc(inv.parentName) + (inv.custom ? ' <span class="tag-custom">Custom</span>' : '') + '</b><span>' + esc(inv.custom || inv.title ? C.invoiceTitle(inv) + (kids ? ' · ' + kids : '') : kids) + '</span></div>'
+    + '<div class="who"><b>' + esc(inv.parentName) + (inv.custom ? ' <span class="tag-custom">Custom</span>' : '') + '</b><span>' + esc(inv.custom || inv.title ? C.invoiceTitle(inv, S.settings) + (kids ? ' · ' + kids : '') : kids) + '</span></div>'
     + '<div class="amt">' + money(inv.total) + (owe > 0 && owe < inv.total ? '<small>owes ' + money(owe) + '</small>' : '') + '</div>'
     + '<div class="meta">' + esc(inv.number) + '<br>Due ' + esc(C.prettyDateShort(inv.dueDate)) + '<div class="sent">'
     + '<span class="sentmark ' + (emailed ? 'on' : '') + '">✉ ' + (emailed ? 'sent' : canEmail ? '—' : 'no email') + '</span>'
@@ -1250,7 +1260,9 @@ VIEWS.settings = function () {
     + f('invoiceDay', 'Invoice day of the month', 'number', 'Invoices are dated this day (1–28).', 'min="1" max="28"')
     + f('dueDays', 'Days to pay', 'number', 'Due date = invoice date + this many days.', 'min="0" max="60"')
     + f('reminderGapDays', 'Days between reminders', 'number', 'The same invoice is never reminded twice inside this gap.', 'min="1" max="60"')
+    + f('hardcopyFee', 'Hardcopy printing a month ($)', 'number', 'For families with a hardcopy subscription. Above $0 it is added to their monthly invoices; a custom invoice always lists the line, with this amount filled in.', 'min="0" step="0.01" placeholder="0.00"')
     + '</div></div>'
+    + combinedMonthsCard(s)
     + '<div class="card"><h2>🤖 Autopilot</h2><div class="sub">Runs every morning at 9am. ' + (ap && ap.lastRunAt ? 'Last run ' + esc(timeAgo(tsMs(ap.lastRunAt))) + ': ' + esc(ap.result || '') : 'It has not checked in yet.') + '</div>'
     + '<div class="radio-cards">' + radio('off', 'Off', 'You press "Prepare invoices" yourself each month.')
     + radio('review', 'Prepare, then ask me', 'On the invoice day it prepares every family\'s invoice and emails you to check and send them.')
@@ -1277,6 +1289,21 @@ VIEWS.settings = function () {
     + '<button class="btn ghost" data-act="exportBackup">⬇ Download everything (JSON)</button><button class="btn ghost" data-act="exportFamilies">⬇ Families (CSV)</button><button class="btn ghost" data-act="exportInvoices">⬇ This month\'s invoices (CSV)</button></div></div>'
     + '</div>';
 };
+
+// Months billed together: a lead month whose fee also covers the next month.
+function combinedMonthsCard(s) {
+  const list = C.normalizeCombinedMonths(s.combinedMonths);
+  const taken = new Set(list.flatMap(p => [p, C.addMonths(p, 1), C.addMonths(p, -1)]));
+  const choices = [];
+  for (let k = -3; k <= 24; k++) { const p = C.addMonths(C.sgMonthKey(), k); if (!taken.has(p)) choices.push(p); }
+  return '<div class="card" id="combined-card"><h2>🔗 Months billed together</h2><div class="sub">When the centre closes for part of two months, one month\'s fee can cover both. The first month\'s invoice reads, say, "November – December 2026", and no invoice is prepared for the second month. In the payment record the second month follows the first.</div>'
+    + (list.length ? '<div class="joint-list">' + list.map(p => '<div class="joint-item"><span class="pill deep">🔗 ' + esc(C.periodRangeLabel(p, C.addMonths(p, 1))) + '</span><span class="small muted">' + esc(C.periodLabel(p)) + ' fee pays both · no ' + esc(C.periodLabel(C.addMonths(p, 1))) + ' invoice</span>'
+      + '<button class="linkbtn" data-act="combinedDel" data-p="' + p + '" aria-label="Bill ' + esc(C.periodLabel(C.addMonths(p, 1))) + ' separately again">Remove</button></div>').join('') + '</div>'
+      : '<div class="small muted">Every month is billed on its own.</div>')
+    + '<div class="joint-add"><select class="plain" id="combined-add" aria-label="First month of the pair">' + choices.map(p => '<option value="' + p + '">' + esc(C.periodRangeLabel(p, C.addMonths(p, 1))) + '</option>').join('') + '</select>'
+    + '<button class="btn ghost" data-act="combinedAdd">＋ Bill these two months together</button></div>'
+    + '<div class="help" style="margin-top:8px;">Press Save settings afterwards. Payments and marks already recorded are kept: a month marked paid on either month counts for both.</div></div>';
+}
 
 /* ═══════════════ Modals ═══════════════ */
 const MODALS = {};
@@ -1401,7 +1428,7 @@ function paymentRecordHtml(f) {
       return '<div class="year-row"><div class="year-head"><b>' + y + '</b>'
         + (open.length ? '<button type="button" class="btn xs ghost" data-act="markYear" data-y="' + y + '" title="For a family that paid the whole year">✔︎ Mark ' + (open.length === ms.length ? 'all of ' + y : 'the rest of ' + y) + ' paid</button>'
           : allHand ? '<button type="button" class="btn xs ghost" data-act="unmarkYear" data-y="' + y + '">Undo ' + y + ' marks</button>' : '')
-        + '</div><div class="months" role="group" aria-label="' + y + '">' + ms.map(mo => '<button type="button" class="mo ' + mo.key + (mo.current ? ' cur' : '') + '" data-act="markMonth" data-p="' + mo.period + '" title="' + esc(C.periodLabel(mo.period) + ': ' + C.MONTH_STATE_META[mo.key].label + (mo.handDate ? ' on ' + C.prettyDate(mo.handDate) : '') + (mo.outstanding ? ' · ' + money(mo.outstanding) + ' to pay' : '')) + '">'
+        + '</div><div class="months" role="group" aria-label="' + y + '">' + ms.map(mo => '<button type="button" class="mo ' + mo.key + (mo.current ? ' cur' : '') + (mo.joint ? ' joint j-' + mo.joint : '') + '" data-act="markMonth" data-p="' + mo.period + '" title="' + esc(C.periodLabel(mo.period) + ': ' + (mo.stateLabel || C.MONTH_STATE_META[mo.key].label) + (mo.handDate ? ' on ' + C.prettyDate(mo.handDate) : '') + (mo.outstanding ? ' · ' + money(mo.outstanding) + ' to pay' : '')) + '">'
       + '<span class="mo-i">' + C.MONTH_STATE_META[mo.key].icon + '</span><b>' + esc(mo.label) + '</b><small>' + esc(mo.year.slice(2)) + '</small></button>').join('') + '</div></div>';
     }).join('') + '</div>'
     + '<div class="small muted" style="margin-top:6px;">September 2026 to December 2027. Months come from paid invoices (📦 = covered by a package). Tap a month to mark it paid by hand (cash, a whole year paid in advance, or paid before the office), tap again to undo; tap a paid invoice\'s month to open it.</div>'
@@ -1499,7 +1526,7 @@ MODALS.family = function (m) {
     + '<button class="btn ghost sm" data-act="addStudent">＋ Add another child</button>'
     + paymentRecordHtml(f)
     + (inv.length ? '<div class="section-title" style="margin-top:22px;">Invoices' + (owe > 0 ? ' · owes ' + money(owe) : '') + '</div><div class="history">'
-      + inv.slice(0, 8).map(i => { const st = stateOf(i); return '<div><time>' + esc(C.periodLabel(i.period)) + '</time><span>' + money(i.total) + ' ' + pill(st) + ' <button class="linkbtn small" data-act="openInvoice" data-id="' + esc(i.id) + '">open</button></span></div>'; }).join('') + '</div>' : '')
+      + inv.slice(0, 8).map(i => { const st = stateOf(i); return '<div><time>' + esc(C.invoicePeriodLabel(i, S.settings)) + '</time><span>' + money(i.total) + ' ' + pill(st) + ' <button class="linkbtn small" data-act="openInvoice" data-id="' + esc(i.id) + '">open</button></span></div>'; }).join('') + '</div>' : '')
     + '</div></div>';
   return {
     size: 'wide',
@@ -1644,10 +1671,10 @@ MODALS.invoice = function (m) {
     ? '<div class="banner amber" style="margin:0;padding:10px 12px;"><div>✉ No email on this invoice — <button class="linkbtn" data-act="editInvoice" data-id="' + esc(inv.id) + '">add one</button>.</div></div>'
     : '<div class="banner amber" style="margin:0;padding:10px 12px;"><div>✉ No email for this family — <button class="linkbtn" data-act="openFamily" data-id="' + esc(inv.familyId) + '">add one</button>.</div></div>';
   return {
-    size: 'wide', title: esc(inv.parentName) + ' · ' + esc(inv.custom || inv.title ? C.invoiceTitle(inv) : C.periodLabel(inv.period)), sub: esc(inv.number) + ' · ' + pill(st) + (inv.custom ? ' <span class="tag-custom">Custom</span>' : '') + (isFinite(Date.parse(inv.dueDate)) ? ' · due ' + esc(C.prettyDate(inv.dueDate)) : ''),
+    size: 'wide', title: esc(inv.parentName) + ' · ' + esc(inv.custom || inv.title ? C.invoiceTitle(inv, S.settings) : C.invoicePeriodLabel(inv, S.settings)), sub: esc(inv.number) + ' · ' + pill(st) + (inv.custom ? ' <span class="tag-custom">Custom</span>' : '') + (isFinite(Date.parse(inv.dueDate)) ? ' · due ' + esc(C.prettyDate(inv.dueDate)) : ''),
     body: '<div class="split" style="grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);"><div><div class="inv-paper"><div class="hd"><b>POLYMATH LEARNING CENTRE</b><span>Invoice ' + esc(inv.number) + '</span></div><div class="bar"></div><div class="bd">'
       + '<div class="small muted" style="margin-bottom:6px;">For ' + esc(inv.parentName) + ' · issued ' + esc(C.prettyDate(inv.issueDate)) + '</div>'
-      + (inv.custom || inv.title ? '<div style="font-weight:700;margin-bottom:6px;">' + esc(C.invoiceTitle(inv)) + '</div>' : '')
+      + (inv.custom || inv.title ? '<div style="font-weight:700;margin-bottom:6px;">' + esc(C.invoiceTitle(inv, S.settings)) + '</div>' : '')
       + linesHtml
       + qrBoxHtml(inv, owe)
       + (inv.note ? '<div class="small" style="margin-top:12px;white-space:pre-wrap;">' + esc(inv.note) + '</div>' : '')
@@ -1693,7 +1720,7 @@ function editorPreview(d) {
 }
 function editorLinesHtml(d) {
   return '<div class="ed-lines">' + (d.lines || []).map((l, i) =>
-    '<div class="ed-line">'
+    '<div class="ed-line' + (l.prefill ? ' pre' : '') + (l.kind === 'arrears' ? ' arrears' : '') + '"' + (l.prefill ? ' title="Filled in from the family record"' : l.kind === 'arrears' ? ' title="An earlier month not yet paid"' : '') + '>'
     + '<div class="field"><label>Student</label><input type="text" value="' + esc(l.studentName || '') + '" placeholder="optional" data-in="edLine" data-i="' + i + '" data-k="studentName" data-keep="es' + i + '"></div>'
     + '<div class="field grow"><label>What it is for</label><input type="text" value="' + esc(l.desc || '') + '" placeholder="e.g. P5 Math — November" data-in="edLine" data-i="' + i + '" data-k="desc" data-keep="ed' + i + '"></div>'
     + '<div class="field grow"><label>Detail</label><input type="text" value="' + esc(l.detail || '') + '" placeholder="optional, e.g. 4 lessons" data-in="edLine" data-i="' + i + '" data-k="detail" data-keep="et' + i + '"></div>'
@@ -1737,14 +1764,15 @@ MODALS.invEdit = function (m) {
     + field('dueDate', 'Due date', { type: 'date' })
     + '<div class="field"><label>Listed under</label><select data-ch="edPeriod">' + months.map(p => '<option value="' + p + '" ' + (p === d.period ? 'selected' : '') + '>' + esc(C.periodLabel(p)) + '</option>').join('') + '</select><div class="small muted">The month this invoice shows in on the Invoices tab.</div></div>'
     + '</div>'
-    + '<div class="section-title" style="margin-top:16px;">Lines</div>' + editorLinesHtml(d)
+    + '<div class="section-title ed-lines-head" style="margin-top:16px;"><span>Lines</span>' + editorFillButtons(d) + '</div>'
+    + editorDoubleBillHtml(d) + editorLinesHtml(d) + editorArrearsHtml(d)
     + '<div class="section-title" style="margin-top:16px;">QR on the invoice</div>' + qrModePicker(d.qrMode, 'edQrMode', 'ed-qr')
     + '<div class="form" style="margin-top:12px;">' + field('note', 'Note at the end of the invoice', { textarea: true, full: true, ph: S.settings.invoiceNote || 'optional', hint: 'Left empty, the usual line from Settings is used.' }) + '</div>'
     + (base && base.paid > 0 ? '<div class="banner amber" style="margin-top:12px;"><div class="big">💰</div><div><b>' + money(base.paid) + ' has already been received on this invoice.</b>It stays recorded; what is still owed follows the new total.</div></div>' : '')
     + '</div>';
   const right = '<div class="ed-preview"><div class="section-title">Preview</div><div class="inv-paper"><div class="hd"><b>POLYMATH LEARNING CENTRE</b><span>Invoice ' + esc(res.fields.number || '—') + '</span></div><div class="bar"></div><div class="bd">'
     + '<div class="small muted" style="margin-bottom:6px;">For ' + esc(res.fields.parentName || '…') + (C.isDayKey(res.fields.issueDate) ? ' · issued ' + esc(C.prettyDate(res.fields.issueDate)) : '') + '</div>'
-    + '<div style="font-weight:700;margin-bottom:6px;">' + esc(C.invoiceTitle(preview)) + '</div>'
+    + '<div style="font-weight:700;margin-bottom:6px;">' + esc(C.invoiceTitle(preview, S.settings)) + '</div>'
     + '<table class="inv-lines"><tbody>' + res.fields.lines.map(l => '<tr><td>' + (l.studentName ? '<b>' + esc(l.studentName) + '</b><br>' : '') + esc(l.desc) + (l.detail ? '<div class="det">' + esc(l.detail) + '</div>' : '') + '</td><td class="r" style="' + (l.amount < 0 ? 'color:var(--green)' : '') + '">' + money(l.amount) + '</td></tr>').join('')
     + '<tr class="total"><td>Total</td><td class="r" id="ed-total">' + money(res.fields.total) + '</td></tr>'
     + (preview.paid > 0 ? '<tr><td class="muted">Received</td><td class="r" style="color:var(--green)">' + money(preview.paid) + '</td></tr><tr><td><b>Still to pay</b></td><td class="r"><b>' + money(owe) + '</b></td></tr>' : '')
@@ -1764,6 +1792,40 @@ MODALS.invEdit = function (m) {
       + '<button class="btn" data-act="saveInvoiceEdit">' + (isNew ? 'Create the invoice' : 'Save the changes') + '</button>'
   };
 };
+
+// The family's fees: fill them in again, or take them off (a materials invoice).
+function editorFillButtons(d) {
+  const f = famById(d.familyId);
+  const pre = (d.lines || []).some(l => l.prefill);
+  return '<span class="ed-fill">'
+    + (f ? '<button class="btn xs ghost" data-act="edFill" title="Each child\'s classes and fees from the family record">↻ Fill in ' + esc(C.firstWords ? '' : '') + 'the children\'s fees</button>' : '')
+    + (pre ? '<button class="btn xs ghost" data-act="edUnfill" title="Keep only the lines you typed, e.g. for a materials purchase">✕ Take off the children\'s fees</button>' : '')
+    + '</span>';
+}
+// A custom invoice with the children's fees for a month that already has its own invoice charges twice.
+function editorDoubleBillHtml(d) {
+  if (!d.custom || !d.familyId) return '';
+  const pre = (d.lines || []).find(l => l.prefill && C.isPeriod(l.forPeriod));
+  if (!pre) return '';
+  const inv = invoiceFor(d.familyId, pre.forPeriod);
+  if (!inv || inv.status === 'void') return '';
+  return '<div class="banner amber ed-double" style="margin:0 0 10px;"><div class="big">⚠️</div><div><b>This family already has a ' + esc(C.invoicePeriodLabel(inv, S.settings)) + ' invoice (' + esc(inv.number) + ', ' + esc(stateOf(inv).label.toLowerCase()) + ').</b>'
+    + 'These fee lines would charge the same months again. Take them off for a materials invoice, or add only the unpaid months below.</div></div>';
+}
+// Earlier months the family has not paid (say October 2026), to collect on this invoice too.
+function editorArrears(d) {
+  const f = famById(d.familyId);
+  if (!f) return [];
+  const exclude = (d.lines || []).filter(l => l.kind === 'arrears').map(l => l.period);
+  const others = S.invoices.filter(i => i.id !== d.id);
+  return C.arrearsMonths(f, others, S.payments, { today: today(), settings: S.settings, schedule: S.schedule, before: d.period, exclude });
+}
+function editorArrearsHtml(d) {
+  const list = editorArrears(d);
+  if (!list.length) return '';
+  return '<div class="arrears-box"><div class="small"><b>⏳ Not yet paid:</b> add an earlier month to this invoice so the parent pays everything at once. It shows as paid once this invoice is paid.</div>'
+    + '<div class="arrears-btns">' + list.map(a => '<button class="btn xs ghost" data-act="edArrears" data-p="' + a.period + '">＋ ' + esc(a.label) + (a.amount ? ' · ' + money(a.amount) : '') + '</button>').join('') + '</div></div>';
+}
 
 /* ─── The centre's generic PayNow QR ─── */
 MODALS.genericQr = function (m) {
@@ -1833,7 +1895,7 @@ MODALS.pay = function (m) {
       + '<div class="field"><label>Date</label><input type="date" value="' + esc(m.date) + '" data-in="payM" data-k="date"></div>'
       + '<div class="field"><label>How</label><select data-ch="payM" data-k="method">' + [['cash', 'Cash'], ['bank', 'Bank transfer'], ['other', 'Other']].map(([v, l]) => '<option value="' + v + '" ' + (m.method === v ? 'selected' : '') + '>' + l + '</option>').join('') + '</select></div>'
       + '<div class="field"><label>Note <span class="opt">(optional)</span></label><input type="text" value="' + esc(m.note || '') + '" data-in="payM" data-k="note" data-keep="pnote"></div></div>'
-      + (f ? '<div class="small muted" style="margin-top:12px;">' + (open.length ? 'It pays ' + open.sort(by('period')).map(i => esc(C.periodLabel(i.period)) + ' (' + money(C.invoiceOutstanding(i)) + ')').join(', then ') + '; anything extra is kept as credit.' : 'Nothing is owed, so it is kept as credit for the next invoice.') + '</div>' : ''),
+      + (f ? '<div class="small muted" style="margin-top:12px;">' + (open.length ? 'It pays ' + open.sort(by('period')).map(i => esc(C.invoicePeriodLabel(i, S.settings)) + ' (' + money(C.invoiceOutstanding(i)) + ')').join(', then ') + '; anything extra is kept as credit.' : 'Nothing is owed, so it is kept as credit for the next invoice.') + '</div>' : ''),
     foot: '<button class="btn ghost" data-act="closeModal">Cancel</button><button class="btn" data-act="payCommit" ' + (f && Number(m.amount) > 0 ? '' : 'disabled') + '>Record ' + (Number(m.amount) > 0 ? money(m.amount) : 'payment') + '</button>'
   };
 };
@@ -1962,12 +2024,12 @@ async function invoiceImage(inv) {
   const g = ctx.createLinearGradient(0, 0, W, 0); g.addColorStop(0, '#2e9ca6'); g.addColorStop(.5, '#56c4d0'); g.addColorStop(1, '#ec008c');
   ctx.fillStyle = g; ctx.fillRect(0, 108, W, 6);
   ctx.fillStyle = '#fff'; ctx.font = font('bold', 26); ctx.fillText('POLYMATH LEARNING CENTRE', P, 52);
-  ctx.fillStyle = '#b8e4e8'; ctx.font = font('500', 19); ctx.fillText(fitText(ctx, 'Invoice ' + inv.number + ' · ' + (titled ? C.prettyDate(inv.issueDate) : C.periodLabel(inv.period)), W - P * 2), P, 84);
+  ctx.fillStyle = '#b8e4e8'; ctx.font = font('500', 19); ctx.fillText(fitText(ctx, 'Invoice ' + inv.number + ' · ' + (titled ? C.prettyDate(inv.issueDate) : C.invoicePeriodLabel(inv, S.settings)), W - P * 2), P, 84);
   let y = 158;
   ctx.fillStyle = '#6b7f85'; ctx.font = font('500', 18); ctx.fillText('For ' + (inv.parentName || ''), P, y);
   y += 30;
   ctx.fillStyle = '#10303a'; ctx.font = font('bold', 24);
-  ctx.fillText(fitText(ctx, C.invoiceTitle(inv), W - P * 2), P, y);
+  ctx.fillText(fitText(ctx, C.invoiceTitle(inv, S.settings), W - P * 2), P, y);
   y += 26;
   lines.forEach(l => {
     y += 40;
@@ -2116,6 +2178,7 @@ async function prepareCommit() {
 }
 function openPrepare(period) {
   const p = period || (S.view === 'invoices' ? S.period : C.sgMonthKey());
+  if (C.isCoveredMonth(p, S.settings)) { toast(C.periodLabel(p) + ' is paid with the ' + C.periodLabel(C.billingPeriodOf(p, S.settings)) + ' invoice — nothing to prepare.', 'ok'); return; }
   const items = billableWithoutInvoice(p).map(fam => {
     const inv = C.buildInvoice(fam, p, { schedule: S.schedule, settings: S.settings, today: today() });
     return { fam, inv, pick: inv.total > 0 };
@@ -2246,7 +2309,7 @@ async function applyPayment(tx, opts) {
       const next = C.invoiceWithPayment(inv, a.amount, { paymentId: pRef.id, amount: a.amount, date: tx.date || today(), how, at: Date.now() });
       t.update(invRef(inv.id), { paid: next.paid, payments: next.payments, status: next.status, updatedAt: ts(), ...(next.status === 'paid' ? { paidAt: ts() } : {}) });
       if (inv.linkToken) t.set(linkRef(inv.linkToken), Object.assign(C.publicInvoiceDoc(next, S.settings), { updatedAt: ts() }), { merge: true });
-      after.push({ period: inv.period, amount: a.amount, left: C.invoiceOutstanding(next), title: inv.custom || inv.title ? C.invoiceTitle(inv) : '' });
+      after.push({ period: inv.period, amount: a.amount, left: C.invoiceOutstanding(next), title: inv.custom || inv.title ? C.invoiceTitle(inv, S.settings) : '' });
     });
     const fam = fSnap.data();
     const fu = { updatedAt: ts() };
@@ -2697,6 +2760,11 @@ const ACT = {
     if (mo.key === 'paid' && mo.invoiceId) { openModal({ type: 'invoice', id: mo.invoiceId, back: m }); refreshMailState(mo.invoiceId); return; }
     if (mo.key !== 'hand' && ['waiting', 'overdue', 'part', 'draft'].includes(mo.key)
         && !confirm(C.periodLabel(period) + ' has an invoice that is not paid (' + money(mo.outstanding) + '). Mark the month paid by hand anyway?\n\nTo record the money against the invoice, use 💵 Record a payment instead.')) return;
+    // Months billed together are paid once: taking a mark off clears it on both months.
+    if (mo.key === 'hand' && mo.jointWith) {
+      f.paidMonths = C.normalizePaidMonths(f.paidMonths).filter(p => p.period !== period && p.period !== mo.jointWith);
+      renderModal(); return;
+    }
     const next = C.togglePaidMonth(f, period, { date: today(), by: S.user.email });
     f.paidMonths = next.paidMonths;
     renderModal();
@@ -2826,7 +2894,7 @@ const ACT = {
   duplicateInvoice(el) {
     const inv = IX.invById.get(el.dataset.id); if (!inv) return;
     const tag = C.newCustomTag(rnd, customTags());
-    const fresh = C.blankCustomInvoice({ tag, today: today(), settings: S.settings, family: famById(inv.familyId) });
+    const fresh = C.blankCustomInvoice({ tag, today: today(), settings: S.settings, schedule: S.schedule, family: famById(inv.familyId), prefill: false });
     const copy = C.draftFromInvoice(inv);
     const draft = Object.assign({}, fresh, {
       parentName: copy.parentName, emails: copy.emails, whatsapp: copy.whatsapp, title: copy.title,
@@ -2834,6 +2902,25 @@ const ACT = {
       note: copy.note, qrMode: copy.qrMode
     });
     openModal({ type: 'invEdit', editing: false, draft, autoDue: true });
+  },
+  edFill() {
+    const d = S.modal.draft, f = famById(d.familyId); if (!f) return;
+    const fill = fillFamilyLines(d, f);
+    renderModal();
+    toast(fill.lines.length ? 'Filled in ' + C.plural(fill.lines.length, 'line') + ' for ' + fill.label + '.' : 'No classes or fees on this family yet.', fill.lines.length ? 'ok' : 'err');
+  },
+  edUnfill() {
+    const d = S.modal.draft;
+    d.lines = C.withoutPrefillLines(d.lines);
+    d.periodTo = '';
+    renderModal(); toast('The children\'s fees are off. Add your own lines.', 'ok'); focusLastLine('ed');
+  },
+  edArrears(el) {
+    const d = S.modal.draft, f = famById(d.familyId); if (!f) return;
+    const a = editorArrears(d).find(x => x.period === el.dataset.p); if (!a) return;
+    d.lines = (d.lines || []).filter(l => !lineIsBlank(l));
+    d.lines.push(C.arrearsLine(f, a));
+    renderModal(); toast(a.label + ' added' + (a.amount ? ' · ' + money(a.amount) : '') + '.', 'ok');
   },
   edLineAdd(el) { S.modal.draft.lines.push({ studentName: '', desc: el && el.dataset.neg ? 'Discount' : '', detail: '', amount: el && el.dataset.neg ? '-' : '' }); renderModal(); focusLastLine(el && el.dataset.neg ? 'ea' : 'ed'); },
   edLineDel(el) { const ls = S.modal.draft.lines; ls.splice(+el.dataset.i, 1); if (!ls.length) ls.push({ studentName: '', desc: '', detail: '', amount: '' }); renderModal(); },
@@ -2933,6 +3020,17 @@ const ACT = {
     } catch (e) { fail('Could not record', e); busy(btn, false); }
   },
   // Settings
+  combinedAdd() {
+    const d = S.settingsDraft || (S.settingsDraft = clone(S.settings));
+    const sel = $('combined-add'); if (!sel || !C.isPeriod(sel.value)) return;
+    d.combinedMonths = C.normalizeCombinedMonths([...(d.combinedMonths || []), sel.value]);
+    render(); toast(C.periodRangeLabel(sel.value, C.addMonths(sel.value, 1)) + ' added — press Save settings.', 'ok');
+  },
+  combinedDel(el) {
+    const d = S.settingsDraft || (S.settingsDraft = clone(S.settings));
+    d.combinedMonths = C.normalizeCombinedMonths((d.combinedMonths || []).filter(p => p !== el.dataset.p));
+    render(); toast(C.periodLabel(C.addMonths(el.dataset.p, 1)) + ' will be billed on its own — press Save settings.', 'ok');
+  },
   async saveSettings(el) {
     if (!requireProtected()) return;
     const d = C.normalizeSettings(S.settingsDraft);
@@ -2968,7 +3066,7 @@ const ACT = {
   exportInvoices() {
     const p = C.sgMonthKey();
     downloadText(C.toCsv([['Number', 'Parent', 'Students', 'Month', 'For', 'Custom', 'Total', 'Paid', 'Owes', 'Status', 'Due', 'Reference', 'QR'],
-      ...periodInvoices(p).map(i => [i.number, i.parentName, (i.students || []).join('; '), C.periodLabel(i.period), C.invoiceTitle(i), i.custom ? 'yes' : '', i.total, i.paid || 0, C.invoiceOutstanding(i), stateOf(i).label, i.dueDate, i.reference, C.QR_MODE_META[C.invoiceQrMode(i)].short])]), 'polymath-invoices-' + p + '.csv', 'text/csv');
+      ...periodInvoices(p).map(i => [i.number, i.parentName, (i.students || []).join('; '), C.periodLabel(i.period), C.invoiceTitle(i, S.settings), i.custom ? 'yes' : '', i.total, i.paid || 0, C.invoiceOutstanding(i), stateOf(i).label, i.dueDate, i.reference, C.QR_MODE_META[C.invoiceQrMode(i)].short])]), 'polymath-invoices-' + p + '.csv', 'text/csv');
   }
 };
 
@@ -2976,7 +3074,7 @@ const ACT = {
 function customTags() { return new Set(S.invoices.filter(i => i.custom).map(i => String(i.id).replace(/^custom_/, ''))); }
 function openCustomEditor(family) {
   const tag = C.newCustomTag(rnd, customTags());
-  openModal({ type: 'invEdit', editing: false, draft: C.blankCustomInvoice({ tag, today: today(), settings: S.settings, family }), autoDue: true });
+  openModal({ type: 'invEdit', editing: false, draft: C.blankCustomInvoice({ tag, today: today(), settings: S.settings, schedule: S.schedule, family }), autoDue: true });
 }
 function focusLastLine(prefix) {
   const n = S.modal.draft.lines.length - 1;
@@ -2994,11 +3092,29 @@ function editorLinkFamily(famId) {
     d.parentName = f.parentName || d.parentName;
     d.emails = C.familyEmails(f).join(', ');
     d.whatsapp = f.whatsapp ? C.displayPhone(f.whatsapp) : '';
-    const kids = C.activeStudents(f).map(s => s.name).filter(Boolean);
-    if (kids.length === 1) d.lines.forEach(l => { if (!l.studentName) l.studentName = kids[0]; });
+    // A new custom invoice: the children's classes and fees (and hardcopy) are filled in.
+    if (!S.modal.editing && d.custom) fillFamilyLines(d, f);
+    else {
+      const kids = C.activeStudents(f).map(s => s.name).filter(Boolean);
+      if (kids.length === 1) d.lines.forEach(l => { if (!l.studentName && !l.kind) l.studentName = kids[0]; });
+    }
+  } else if (!S.modal.editing && d.custom) {
+    d.lines = C.withoutPrefillLines(d.lines).filter(l => l.kind !== 'arrears');
+    if (!d.lines.length) d.lines.push({ studentName: '', desc: '', detail: '', amount: '' });
+    d.periodTo = '';
   }
   if (!S.modal.editing && d.custom) d.reference = C.customInvoiceReference(d.tag || String(d.id).replace(/^custom_/, ''), d.code);
   renderModal();
+}
+const lineIsBlank = l => !String(l.desc || '').trim() && !String(l.studentName || '').trim() && !String(l.detail || '').trim() && (l.amount === '' || l.amount == null || Number(l.amount) === 0 || l.amount === '-');
+// Replace the filled-in lines (and empty rows) with the family's fees; typed lines and added months stay after them.
+function fillFamilyLines(d, f) {
+  const fill = C.familyFeeLines(f, { schedule: S.schedule, settings: S.settings, period: d.period });
+  const keep = (d.lines || []).filter(l => !l.prefill && !lineIsBlank(l));
+  d.lines = fill.lines.concat(keep);
+  if (!d.lines.length) d.lines.push({ studentName: '', desc: '', detail: '', amount: '' });
+  d.periodTo = fill.lines.length ? fill.periodTo : '';
+  return fill;
 }
 async function saveInvoiceEdit() {
   if (!requireProtected()) return;

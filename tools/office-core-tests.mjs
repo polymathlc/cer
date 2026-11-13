@@ -410,7 +410,7 @@ test('money is read and written the way people write it', () => {
 test('the invoice email carries the amount, the reference, the QR inline, and a Save QR button', () => {
   const inv = Object.assign(C.buildInvoice(FAMILY, '2026-11', { schedule: SCHEDULE, today: '2026-11-01' }), { sentAt: 1 });
   const mail = C.invoiceEmail(inv, {}, { payUrl: 'https://polymathlc.com.sg/pay/?i=TOKEN', qrCid: 'paynowqr' });
-  assert.match(mail.subject, /November 2026/); assert.match(mail.subject, /\$940\.00/);
+  assert.match(mail.subject, /November – December 2026/, 'November 2026 pays November and December'); assert.match(mail.subject, /\$940\.00/);
   assert.ok(mail.html.includes('cid:paynowqr'));
   assert.ok(mail.html.includes('PLC K7M2QX NOV26'));
   assert.ok(mail.html.includes('https://polymathlc.com.sg/pay/?i=TOKEN&amp;save=1'), 'the Save QR button');
@@ -644,10 +644,12 @@ test('custom invoices in words: the email, the reminder, WhatsApp, the parent\'s
   assert.deepEqual([monthly.title, monthly.custom, monthly.qrMode, monthly.note], ['', false, 'exact', 'Thanks'], 'a monthly link looks as before');
   const receipt = C.receiptEmail({ parentName: 'Mdm Goh' }, { amount: 150, date: '2026-11-04' }, [{ period: '2026-11', amount: 150, left: 0, title: 'December holiday programme' }], {});
   assert.ok(receipt.html.includes('December holiday programme') && !receipt.text.includes('November 2026 fees'));
-  // A monthly invoice's words are exactly as before.
+  // A monthly invoice's words: November 2026 also pays December (a combined month).
   const m = C.invoiceEmail({ number: 'PLC-2611-K7M2QX', reference: 'PLC K7M2QX NOV26', period: '2026-11', parentName: 'Tan', students: ['Jun'], lines: [], total: 220, paid: 0, dueDate: '2026-11-10' }, {}, {});
-  assert.equal(m.subject, 'Polymath tuition fees — November 2026 ($220.00)');
-  assert.ok(m.html.includes('Jun\'s tuition fees for <b>November 2026</b>'));
+  assert.equal(m.subject, 'Polymath tuition fees — November – December 2026 ($220.00)');
+  assert.ok(m.html.includes('Jun\'s tuition fees for <b>November – December 2026</b>'));
+  const plain = C.invoiceEmail({ number: 'PLC-2610-K7M2QX', reference: 'PLC K7M2QX OCT26', period: '2026-10', parentName: 'Tan', students: ['Jun'], lines: [], total: 220, paid: 0, dueDate: '2026-10-10' }, {}, {});
+  assert.equal(plain.subject, 'Polymath tuition fees — October 2026 ($220.00)', 'any other month is exactly as before');
 });
 
 /* ─────────── 9. Family records ─────────── */
@@ -1246,4 +1248,165 @@ test('clicking a statistics category lists its children, matches the tile, and h
   assert.equal(csv.length, master.length + 1);
   assert.match(csv[0], /^Student,Level,Primary school,Classes,Fees a month,Parent,Email,WhatsApp/);
   assert.ok(csv.some(l => l.startsWith('Kai,') && l.includes('kok@example.com') && l.includes('Master')));
+});
+
+test('November and December 2026 are paid with one fee: no December invoice, one label, one month in the record (v1.11.0)', () => {
+  const S = REC_SCHEDULE;
+  // The setting: November 2026 by default, editable, no chains.
+  assert.deepEqual(C.normalizeSettings({}).combinedMonths, ['2026-11']);
+  assert.deepEqual(C.normalizeSettings({ combinedMonths: [] }).combinedMonths, [], 'taken off in Settings');
+  assert.deepEqual(C.normalizeCombinedMonths(['2027-12', '2026-11', '2026-12', 'junk', '2026-11']), ['2026-11', '2027-12'], 'December 2026 is already covered, so it cannot lead');
+  assert.deepEqual(C.jointMonth('2026-12', {}), { lead: '2026-11', covered: '2026-12' });
+  assert.deepEqual(C.jointMonth('2026-11', {}), { lead: '2026-11', covered: '2026-12' });
+  assert.equal(C.jointMonth('2027-01', {}), null);
+  assert.equal(C.billingPeriodOf('2026-12', {}), '2026-11');
+  assert.ok(C.isCoveredMonth('2026-12', {}) && !C.isCoveredMonth('2026-11', {}));
+  assert.equal(C.billingPeriodLabel('2026-12', {}), 'November – December 2026');
+  assert.equal(C.billingPeriodLabel('2027-01', {}), 'January 2027');
+  assert.equal(C.periodRangeLabel('2027-12', '2028-01'), 'December 2027 – January 2028');
+  assert.equal(C.periodRangeShort('2026-11', '2026-12'), 'Nov–Dec 2026');
+  // The November invoice says so; the amount is one month's.
+  const inv = C.buildInvoice(SF_FAMS[1], '2026-11', { schedule: S, settings: {}, today: '2026-11-01' });
+  assert.equal(inv.periodTo, '2026-12');
+  assert.equal(inv.total, 400, 'one month of fees for both months');
+  assert.equal(C.invoiceTitle(inv), 'November – December 2026 tuition fees');
+  assert.equal(C.publicInvoiceDoc(inv, {}).periodLabel, 'November – December 2026');
+  assert.match(C.whatsappInvoiceText(inv, {}, ''), /\*November – December 2026 tuition fees: \$400\.00\*/);
+  assert.match(C.reminderEmail(inv, {}, {}).subject || C.reminderEmail(inv, {}, {}).html, /November – December 2026/);
+  assert.equal(C.buildInvoice(SF_FAMS[1], '2027-01', { schedule: S, settings: {}, today: '2027-01-01' }).periodTo, '');
+  // Without the setting, November is November.
+  assert.equal(C.invoiceTitle(C.buildInvoice(SF_FAMS[1], '2026-11', { schedule: S, settings: { combinedMonths: [] } })), 'November 2026 tuition fees');
+
+  // The payment record: December follows November.
+  const fam = { id: 'k', parentName: 'Kok', status: 'active', students: [{ id: 'k1', name: 'Kai', status: 'active', classes: [{ slotId: 'FRI-2', mode: 'Physical' }] }] };
+  const nov = Object.assign(C.buildInvoice(fam, '2026-11', { schedule: S, settings: {}, today: '2026-11-01' }), { status: 'waiting', sentAt: 1 });
+  const rec = (invs, f, settings) => C.familyPaymentRecord(f || fam, invs, [], { today: '2026-11-03', settings: settings || {} });
+  const month = (r, p) => r.months.find(m => m.period === p);
+  let r = rec([nov]);
+  assert.equal(month(r, '2026-12').key, 'waiting', 'December waits with November');
+  assert.equal(month(r, '2026-12').invoiceId, nov.id);
+  assert.equal(month(r, '2026-12').joint, 'covered');
+  assert.equal(month(r, '2026-11').joint, 'lead');
+  assert.match(month(r, '2026-12').stateLabel, /Nov–Dec 2026 paid as one/);
+  const paidNov = Object.assign({}, nov, { paid: nov.total, status: 'paid' });
+  r = rec([paidNov]);
+  assert.equal(month(r, '2026-12').key, 'paid');
+  assert.ok(r.paidPeriods.includes('2026-11') && r.paidPeriods.includes('2026-12'), 'both months paid');
+  assert.match(r.paidText, /Nov, Dec 2026/);
+  // Marks already made by hand are kept: a mark on either month counts for both.
+  r = rec([], Object.assign({}, fam, { paidMonths: ['2026-12'] }));
+  assert.equal(month(r, '2026-11').key, 'hand', 'a December mark pays November too');
+  assert.equal(month(r, '2026-12').key, 'hand');
+  r = rec([], Object.assign({}, fam, { paidMonths: ['2026-11'] }));
+  assert.equal(month(r, '2026-12').key, 'hand', 'a November mark pays December too');
+  r = rec([], Object.assign({}, fam, { paidMonths: ['2026-11'] }), { combinedMonths: [] });
+  assert.equal(month(r, '2026-12').key, 'none', 'without the setting December is its own month');
+  // A family withdrawn after November is not chased for December either way.
+  r = rec([paidNov], Object.assign({}, fam, { status: 'withdrawn', lastMonth: '2026-11' }));
+  assert.equal(month(r, '2026-12').key, 'gone');
+
+  // The statistics for December are the November invoices'.
+  const dec = C.familyStats([fam], { schedule: S, period: '2026-12', invoices: [paidNov], settings: {} });
+  assert.equal(dec.billedWith, '2026-11');
+  assert.equal(dec.collected, paidNov.total);
+  assert.equal(C.familyStats([fam], { schedule: S, period: '2026-12', invoices: [paidNov], settings: { combinedMonths: [] } }).collected, 0);
+});
+
+test('hardcopy printing: a Settings fee goes on monthly invoices; none when it is $0 (v1.11.0)', () => {
+  const S = REC_SCHEDULE;
+  assert.equal(C.normalizeSettings({ hardcopyFee: '12.5' }).hardcopyFee, 12.5);
+  assert.equal(C.normalizeSettings({}).hardcopyFee, 0);
+  const without = C.buildInvoice(SF_FAMS[1], '2027-01', { schedule: S, settings: {} });
+  assert.ok(!without.lines.some(l => l.kind === 'hardcopy'), 'no fee set: monthly invoices are unchanged');
+  const withFee = C.buildInvoice(SF_FAMS[1], '2027-01', { schedule: S, settings: { hardcopyFee: 15 } });
+  const hc = withFee.lines.find(l => l.kind === 'hardcopy');
+  assert.ok(hc && hc.amount === 15 && hc.desc === 'Hardcopy printing');
+  assert.equal(withFee.total, without.total + 15);
+  assert.ok(!C.buildInvoice(SF_FAMS[2], '2026-11', { schedule: S, settings: { hardcopyFee: 15 } }).lines.some(l => l.kind === 'hardcopy'), 'only families with a hardcopy subscription');
+  assert.equal(C.familyMonthlyAmount(SF_FAMS[1], S, { hardcopyFee: 15 }), 415);
+});
+
+test('a custom invoice for a family is filled in: each child\'s level, subject and fee, hardcopy, the total; the fees can be taken off (v1.11.0)', () => {
+  const S = REC_SCHEDULE;
+  const bala = Object.assign({}, SF_FAMS[1], { discount: { kind: 'amount', value: 20, label: 'Sibling discount' } });
+  const d = C.blankCustomInvoice({ tag: 'AB2C3', today: '2026-11-14', settings: { hardcopyFee: 10 }, schedule: S, family: bala });
+  const kinds = d.lines.map(l => l.kind);
+  assert.deepEqual(kinds, ['class', 'class', 'discount', 'hardcopy']);
+  assert.deepEqual(d.lines.map(l => l.studentName), ['Ben', 'Bea', '', '']);
+  assert.match(d.lines[0].desc, /P4 /); assert.match(d.lines[0].desc, /tuition$/);
+  assert.match(d.lines[1].desc, /P6 /);
+  assert.ok(d.lines.every(l => l.prefill && l.forPeriod === '2026-11'), 'marked as filled in, for November');
+  assert.ok(d.lines[0].detail.includes('Nov–Dec 2026'), 'the months are on each line');
+  assert.deepEqual(d.lines.map(l => l.amount), [180, 220, -20, 10]);
+  assert.equal(d.periodTo, '2026-12');
+  // Saved as it is: the total, and a title for both months.
+  let res = C.invoiceFromDraft(Object.assign({}, d, { parentName: 'Bala' }));
+  assert.ok(res.ok, res.errors.join('; '));
+  assert.equal(res.fields.total, 390);
+  assert.equal(res.fields.feesFrom, '2026-11');
+  assert.equal(res.fields.periodTo, '2026-12');
+  assert.equal(C.invoiceTitle(Object.assign({ custom: true }, res.fields)), 'November – December 2026 tuition fees');
+  // Add a line of your own, then take the children's fees off (a materials invoice).
+  const typed = d.lines.concat([{ studentName: '', desc: 'Assessment books', detail: '2 books', amount: 36 }]);
+  const off = C.withoutPrefillLines(typed);
+  assert.deepEqual(off.map(l => l.desc), ['Assessment books']);
+  res = C.invoiceFromDraft(Object.assign({}, d, { parentName: 'Bala', lines: off, title: 'Materials' }));
+  assert.ok(res.ok);
+  assert.equal(res.fields.total, 36);
+  assert.equal(res.fields.periodTo, '', 'no fees, so no months');
+  assert.equal(C.withoutPrefillLines(d.lines).length, 1, 'an empty row to type in');
+  // No hardcopy fee set: the line is there for the amount to be typed.
+  const blankFee = C.blankCustomInvoice({ tag: 'AB2C4', today: '2027-01-05', settings: {}, schedule: S, family: SF_FAMS[1] });
+  const hc = blankFee.lines.find(l => l.kind === 'hardcopy');
+  assert.ok(hc && hc.amount === '');
+  assert.equal(blankFee.periodTo, '');
+  // Not linked to a family: one empty line, as before. Asked not to fill in: as before.
+  assert.equal(C.blankCustomInvoice({ tag: 'AB2C5', today: '2026-11-14' }).lines.length, 1);
+  assert.equal(C.blankCustomInvoice({ tag: 'AB2C6', today: '2026-11-14', schedule: S, family: SF_FAMS[1], prefill: false }).lines[0].desc, '');
+  // A December custom invoice fills in the November–December fees.
+  const decDraft = C.blankCustomInvoice({ tag: 'AB2C7', today: '2026-12-03', schedule: S, family: SF_FAMS[1] });
+  assert.ok(decDraft.lines.filter(l => l.prefill).every(l => l.forPeriod === '2026-11'));
+  // A paid custom invoice with the fees pays those months in the record (when they have no invoice of their own).
+  const paid = Object.assign({ id: 'custom_AB2C3', custom: true, familyId: 'b', paid: 390, status: 'paid' }, C.invoiceFromDraft(Object.assign({}, d, { parentName: 'Bala' })).fields);
+  const r = C.familyPaymentRecord(Object.assign({}, SF_FAMS[1], { paidMonths: [] }), [paid], [], { today: '2026-11-20', settings: {} });
+  assert.equal(r.months.find(m => m.period === '2026-11').key, 'paid');
+  assert.equal(r.months.find(m => m.period === '2026-12').key, 'paid');
+});
+
+test('unpaid earlier months (October 2026) can be added to an invoice and are paid with it (v1.11.0)', () => {
+  const S = REC_SCHEDULE;
+  const fam = { id: 'k', parentName: 'Kok', status: 'active', students: [{ id: 'k1', name: 'Kai', status: 'active', classes: [{ slotId: 'FRI-2', mode: 'Physical' }] }], paidMonths: ['2026-09'] };
+  const ctx = { today: '2026-11-14', settings: {}, schedule: S, before: '2026-11' };
+  let list = C.arrearsMonths(fam, [], [], ctx);
+  assert.deepEqual(list.map(a => a.period), ['2026-10'], 'September is marked paid; October is not');
+  assert.equal(list[0].label, 'October 2026');
+  assert.equal(list[0].amount, 220, 'one month of the family\'s fees');
+  // A December custom invoice still offers October (December is paid with November).
+  assert.deepEqual(C.arrearsMonths(fam, [], [], Object.assign({}, ctx, { before: '2026-12', today: '2026-12-02' })).map(a => a.period), ['2026-10']);
+  // In January 2027 the unpaid November–December shows as one item.
+  const jan = C.arrearsMonths(fam, [], [], Object.assign({}, ctx, { before: '2027-01', today: '2027-01-05' }));
+  assert.deepEqual(jan.map(a => a.label), ['October 2026', 'November – December 2026']);
+  // Already on the invoice: not offered twice.
+  assert.deepEqual(C.arrearsMonths(fam, [], [], Object.assign({}, ctx, { exclude: ['2026-10'] })), []);
+  // The line, and the record once the invoice with it is paid.
+  const line = C.arrearsLine(fam, list[0]);
+  assert.equal(line.kind, 'arrears'); assert.equal(line.period, '2026-10');
+  assert.equal(line.desc, 'October 2026 tuition fees (not yet paid)');
+  const nov = C.buildInvoice(fam, '2026-11', { schedule: S, settings: {}, today: '2026-11-01' });
+  const withOct = C.recomputeInvoice(Object.assign({}, nov, { lines: nov.lines.concat([line]), status: 'waiting', sentAt: 1 }));
+  assert.equal(withOct.total, 440, 'November–December plus October, one PayNow');
+  let r = C.familyPaymentRecord(fam, [withOct], [], { today: '2026-11-03', settings: {} });
+  assert.equal(r.months.find(m => m.period === '2026-10').key, 'waiting', 'October waits with this invoice');
+  assert.equal(r.months.find(m => m.period === '2026-10').invoiceId, nov.id);
+  assert.deepEqual(C.arrearsMonths(fam, [withOct], [], ctx), [], 'no longer offered');
+  r = C.familyPaymentRecord(fam, [Object.assign({}, withOct, { paid: 440, status: 'paid' })], [], { today: '2026-11-20', settings: {} });
+  assert.deepEqual(['2026-09', '2026-10', '2026-11', '2026-12'].map(p => r.months.find(m => m.period === p).key), ['hand', 'paid', 'paid', 'paid']);
+  // The editor keeps the line's month through saving.
+  const saved = C.invoiceFromDraft(Object.assign(C.draftFromInvoice(withOct), {}));
+  assert.ok(saved.ok);
+  assert.ok(saved.fields.lines.some(l => l.kind === 'arrears' && l.period === '2026-10'));
+  assert.equal(saved.fields.periodTo, '2026-12', 'a monthly invoice keeps its months');
+  // A paused or withdrawn month is not offered.
+  const paused = Object.assign({}, fam, { status: 'paused', pauseFrom: '2026-10', pauseUntil: '2026-10' });
+  assert.deepEqual(C.arrearsMonths(paused, [], [], ctx), []);
 });

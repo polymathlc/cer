@@ -868,6 +868,67 @@ try {
   await settle(page);
   await page.click('#tabs [data-view="settings"]');
 
+  // ── v1.11.0: November–December 2026 billed as one, Settings, a filled-in custom invoice, October not yet paid ──
+  await page.waitForSelector('#combined-card');
+  assert.match(await page.locator('#combined-card').innerText(), /November – December 2026/, 'Settings lists the months billed together');
+  await page.fill('#set-hardcopyFee', '12');
+  await page.click('[data-act="saveSettings"]');
+  await page.waitForFunction(() => window.PolymathOffice.S.settings.hardcopyFee === 12);
+  await page.locator('#combined-card').scrollIntoViewIfNeeded();
+  await shot(page, '17b-settings-combined-months');
+  await page.click('#tabs [data-view="invoices"]');
+  await page.waitForSelector('.monthnav');
+  assert.equal(await page.locator('.monthnav b').innerText(), 'November – December 2026', 'the November invoices are for November and December');
+  await page.click('.monthnav [data-act="period"][data-d="1"]');
+  await page.waitForSelector('.joint-bar');
+  assert.match(await page.locator('.joint-bar').innerText(), /December 2026 is paid with the November 2026 invoice/);
+  assert.equal(await page.locator('[data-act="openPrepare"]').count(), 0, 'nothing to prepare for December');
+  await shot(page, '15b-december-paid-with-november');
+  await page.click('.joint-bar [data-act="period"]');
+  await page.waitForFunction(() => window.PolymathOffice.S.period === '2026-11');
+  // A custom invoice for Tan Mei Ling: the children's classes and fees are filled in.
+  const tanFam = docsIn(await store(page), 'officeFamilies').find(f => f.parentName === 'Tan Mei Ling');
+  await page.click('[data-act="newCustomInvoice"]');
+  await page.waitForSelector('text=＋ Custom invoice');
+  await page.selectOption('.modal select[data-ch="edFamily"]', tanFam._id);
+  await page.waitForSelector('.modal .ed-line.pre');
+  const preCount = await page.locator('.modal .ed-line.pre').count();
+  assert.ok(preCount >= 2, 'one line per class: ' + preCount);
+  const preDescs = await page.locator('.modal .ed-line.pre [data-k="desc"]').evaluateAll(xs => xs.map(x => x.value));
+  assert.ok(preDescs.some(d => /P5 Math/.test(d)) && preDescs.some(d => /P5 Science/.test(d)), 'level and subject: ' + preDescs.join(' | '));
+  assert.equal(await page.locator('#ed-total').innerText(), '$440.00', 'the total of the filled-in fees');
+  assert.match(await page.locator('.modal .ed-preview').innerText(), /November – December 2026 tuition fees/);
+  // Tan already has a November invoice: a warning, not a silent second charge.
+  await page.waitForSelector('.modal .ed-double');
+  // October 2026 is not paid: add it.
+  await page.waitForSelector('.modal .arrears-box');
+  assert.match(await page.locator('.modal .arrears-box').innerText(), /October 2026/);
+  await page.click('.modal [data-act="edArrears"][data-p="2026-10"]');
+  await page.waitForSelector('.modal .ed-line.arrears');
+  assert.equal(await page.locator('#ed-total').innerText(), '$880.00', 'November–December and October together');
+  await shot(page, '23b-custom-invoice-filled-in');
+  // Take the children's fees off: only October is left (the warning goes too).
+  await page.click('.modal [data-act="edUnfill"]');
+  await page.waitForFunction(() => !document.querySelector('#modal .ed-line.pre'));
+  assert.equal(await page.locator('.modal .ed-double').count(), 0);
+  assert.equal(await page.locator('#ed-total').innerText(), '$440.00');
+  await page.click('.modal [data-act="saveInvoiceEdit"]');
+  await page.waitForFunction(() => window.PolymathOffice.S.modal && window.PolymathOffice.S.modal.type === 'invoice');
+  const octInvId = await page.evaluate(() => window.PolymathOffice.S.modal.id);
+  const octInv = docsIn(await store(page), 'officeInvoices').find(i => i._id === octInvId);
+  assert.ok(octInv.lines.some(l => l.kind === 'arrears' && l.period === '2026-10' && l.amount === 440), 'October stored on the invoice');
+  // The family's record: October now waits on this invoice.
+  const octRec = C.familyPaymentRecord(Object.assign({ id: tanFam._id }, tanFam), docsIn(await store(page), 'officeInvoices').map(i => Object.assign({ id: i._id }, i)), [], { today: '2026-11-03', settings: {} });
+  assert.equal(octRec.months.find(m => m.period === '2026-10').invoiceId, octInvId);
+  assert.ok(octRec.paidPeriods.includes('2026-12'), 'December is paid with the paid November invoice');
+  // Tidy up: the test invoice is deleted (never sent).
+  await page.click('.modal [data-act="deleteCustomInvoice"]');
+  await page.waitForFunction(id => !window.PolymathOffice.S.invoices.some(i => i.id === id), octInvId);
+  await page.click('#tabs [data-view="settings"]');
+  await page.fill('#set-hardcopyFee', '0');
+  await page.click('[data-act="saveSettings"]');
+  await page.waitForFunction(() => window.PolymathOffice.S.settings.hardcopyFee === 0);
+
   // ── 📣 Announcements: write, choose with the filters, test to myself, confirm, send, log ──
   await page.click('#tabs [data-view="families"]');
   await page.click('[data-act="famPanel"]');

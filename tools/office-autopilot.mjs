@@ -42,6 +42,8 @@ export function autopilotPlan(settings, state, todayKey) {
   const period = todayKey.slice(0, 7);
   const day = Number(todayKey.slice(8, 10));
   if (s.autopilot === 'off') return { act: false, period, why: 'Autopilot is off.' };
+  // A covered month (December 2026) is paid with the month before: no invoice of its own.
+  if (C.isCoveredMonth(period, s)) return { act: false, period, why: C.periodLabel(period) + ' is paid with the ' + C.periodLabel(C.billingPeriodOf(period, s)) + ' invoice (' + C.billingPeriodLabel(period, s) + '), so nothing is prepared.' };
   if (state && state.lastPeriod === period) return { act: false, period, why: C.periodLabel(period) + ' was already prepared.' };
   if (day < s.invoiceDay) return { act: false, period, why: 'Waiting for day ' + s.invoiceDay + '.' };
   if (day > s.invoiceDay + AUTOPILOT_WINDOW_DAYS) return { act: false, period, why: 'Past the invoice-day window for ' + C.periodLabel(period) + ' — prepare it from the office if it is still needed.' };
