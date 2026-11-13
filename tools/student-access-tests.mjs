@@ -401,6 +401,7 @@ test('every student page here loads the gate, once, at the end of the page', () 
     assert.equal(tags.length, 1, file);
     assert.equal(tags[0], `<script defer src="${src}" data-app="${app}"></script>`, file);
     const at = page.lastIndexOf(tags[0]);
-    assert.ok(/^\s*<\/body>/.test(page.slice(at + tags[0].length)), file + ': right before </body>');
+    // fps.html carries it at the end of <head>: its game test splices into the page's LAST </script>.
+    assert.ok(/^\s*<\/(body|head)>/.test(page.slice(at + tags[0].length)), file + ': right before </body> (or </head>)');
   }
 });

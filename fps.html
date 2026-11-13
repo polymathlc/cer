@@ -324,6 +324,9 @@
   @keyframes qSoonPulse { from { transform: scale(1); } to { transform: scale(1.08); } }
   body.reduce-motion #hudQTimer.q-soon { animation: none; }
 </style>
+<!-- 🔐 Polymath student access (v1.0.0): the enrolment pop-up every Polymath app shares. A signed-in student is
+     blocked here until an admin approves them at polymathlc.com.sg/student/#admin. Source: polymathlc/cer student/access-gate.js -->
+<script defer src="student/access-gate.js?v=1.0.0" data-app="science-strike"></script>
 </head>
 <body>
 
@@ -5218,8 +5221,5 @@ function toast(msg, color) {
 }
 
 </script>
-<!-- 🔐 Polymath student access (v1.0.0): the enrolment pop-up every Polymath app shares. A signed-in student is
-     blocked here until an admin approves them at polymathlc.com.sg/student/#admin. Source: polymathlc/cer student/access-gate.js -->
-<script defer src="student/access-gate.js?v=1.0.0" data-app="science-strike"></script>
 </body>
 </html>
