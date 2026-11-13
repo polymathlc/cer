@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
-const { validateEnquiry, buildSubmission, createService, recipientConfiguration, EnquiryError, RETENTION_MS,
+const { validateEnquiry, buildSubmission, createService, recipientConfiguration, mailRecipients, EnquiryError, RETENTION_MS,
   REQUEST_COLLECTION, LIMIT_COLLECTION, MAIL_PREFIX, ORIGINS } = require('../service');
 const { createRepository } = require('../repository');
 
@@ -65,10 +65,11 @@ test('server recipients are required, fixed to two addresses plus support@, and 
   for (const value of [undefined, '', 'one@example.test', 'one@example.test,one@example.test',
     'one@example.test,two@example.test,three@example.test', 'one@example.test,two@example.test\r\nBcc: bad@example.test'])
     assert.throws(() => recipientConfiguration(value));
-  assert.deepEqual(RECIPIENTS, ['centre-one@example.test', 'centre-two@example.test', 'support@polymathlc.com.sg']);
+  assert.deepEqual(RECIPIENTS, ['centre-one@example.test', 'centre-two@example.test']);
   assert.equal(Object.isFrozen(RECIPIENTS), true);
-  // support@ is never added twice when it is already one of the configured pair.
-  assert.deepEqual(recipientConfiguration('one@example.test,Support@polymathlc.com.sg'),
+  // Every enquiry email also copies support@, never twice.
+  assert.deepEqual(mailRecipients(RECIPIENTS), ['centre-one@example.test', 'centre-two@example.test', 'support@polymathlc.com.sg']);
+  assert.deepEqual(mailRecipients(recipientConfiguration('one@example.test,Support@polymathlc.com.sg')),
     ['one@example.test', 'Support@polymathlc.com.sg']);
 });
 
@@ -102,7 +103,7 @@ test('parent name is optional and one-character names are accepted', async () =>
 test('mail is server-addressed plaintext, with safe reply-to and no client headers', () => {
   const input = validateEnquiry({ ...sample(), message: '<img src=x onerror=alert(1)>' });
   const submission = submissionFor(input, '192.0.2.1', NOW);
-  assert.deepEqual(submission.mail.to, RECIPIENTS);
+  assert.deepEqual(submission.mail.to, mailRecipients(RECIPIENTS));
   assert.equal(submission.mail.replyTo, input.email);
   assert.equal(submission.mail.message.html, undefined);
   assert.match(submission.mail.message.text, /<img src=x onerror=alert\(1\)>/);
