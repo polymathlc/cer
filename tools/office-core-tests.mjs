@@ -904,3 +904,89 @@ test('hardcopy, payment type (monthly / package) and withdrawal', () => {
   for (const h of ['Hardcopy subscription', 'Postal address', 'Payment type', 'Package start', 'Package end', 'Withdrawal', 'Last month with us']) assert.ok(csv[0].includes(h), h);
   assert.ok(csv[1].includes('Package,2026-09-15,2026-12-10') && csv[1].includes('Yes,1 Clementi Rd,Yes,December 2026'));
 });
+
+/* ---- Families: sort by level and filters (v1.5.0) ---- */
+const SF_FAMS = [
+  { id: 'a', parentName: 'Ang', email: 'a@x.com', status: 'active', signUpDate: '2026-03-01', paymentType: 'package', packageStart: '2026-09-01', packageEnd: '2027-08-31',
+    students: [{ id: 'a1', name: 'Zoe', level: 'P6', school: 'Nan Hua Primary', status: 'active', classes: [{ slotId: 'TUE-3', mode: 'Physical' }, { slotId: 'SAT-2', mode: 'Physical' }] }] },
+  { id: 'b', parentName: 'Bala', email: 'b@x.com', status: 'active', signUpDate: '2026-09-15', hardcopy: true, address: '1 Clementi Rd', paidMonths: ['2026-11'],
+    students: [
+      { id: 'b1', name: 'Ben', level: 'P4', school: 'Rosyth School', status: 'active', classes: [{ slotId: 'WED-1', mode: 'Online' }] },
+      { id: 'b2', name: 'Bea', level: 'P6', school: 'Rosyth School', status: 'active', classes: [{ slotId: 'TUE-3', mode: 'Physical' }] }] },
+  { id: 'c', parentName: 'Chua', email: 'c@x.com', status: 'active', signUpDate: '2026-06-01', withdrawn: true, lastMonth: '2026-12',
+    students: [{ id: 'c1', name: 'Cal', level: 'P5', school: 'nan hua primary', status: 'active', classes: [{ slotId: 'FRI-2', mode: 'Online' }, { slotId: 'SAT-1', mode: 'Physical' }] },
+      { id: 'c2', name: 'Old', level: 'P3', status: 'left', classes: [] }] },
+  { id: 'd', parentName: 'Dee', email: 'd@x.com', status: 'active', students: [] }
+];
+const ids = list => list.map(f => f.id).join('');
+
+test('families sort by level: youngest child first, mixed levels and no level handled', () => {
+  assert.equal(C.FAMILY_SORTS[0].key, 'level', 'level is the default sort');
+  assert.deepEqual(C.LEVELS.map(C.levelRank), [0, 1, 2, 3, 4]);
+  assert.equal(C.levelRank('Primary 5'), 2);
+  assert.equal(C.levelRank(''), C.LEVELS.length);
+  // Bala has P4 and P6: P4 ascending, P6 descending. A child who left does not count (Chua's P3).
+  assert.equal(C.familyLevelRank(SF_FAMS[1]), 1);
+  assert.equal(C.familyLevelRank(SF_FAMS[1], true), 3);
+  assert.equal(C.familyLevelRank(SF_FAMS[2]), 2);
+  assert.deepEqual(C.familyLevels(SF_FAMS[1]), ['P4', 'P6']);
+  assert.equal(ids(C.sortFamilies(SF_FAMS, 'level')), 'bcad', 'P4 family, P5, P6, then no level');
+  assert.equal(ids(C.sortFamilies(SF_FAMS, 'level-desc')), 'abcd', 'P6 (by the older child, parent A–Z), P5, no level last');
+  assert.equal(ids(C.sortFamilies(SF_FAMS, 'parent')), 'abcd');
+  assert.equal(ids(C.sortFamilies(SF_FAMS, 'student')), 'bcad', 'Bea, Cal, Zoe, no child last');
+  assert.equal(ids(C.sortFamilies(SF_FAMS, 'school')), 'acbd', 'Nan Hua (Ang, Chua), Rosyth, none last');
+  assert.equal(ids(C.sortFamilies(SF_FAMS, 'newest')), 'bcad');
+  assert.equal(ids(C.sortFamilies(SF_FAMS, 'oldest')), 'acbd');
+  assert.equal(ids(C.sortFamilies(SF_FAMS, 'nonsense')), 'bcad', 'unknown sort: by level');
+  assert.equal(ids(SF_FAMS), 'abcd', 'the list given is not changed');
+  // The table: one row per child, by the child's own level.
+  const rows = C.familyRecordRows(SF_FAMS, { schedule: REC_SCHEDULE, today: '2026-11-12' });
+  const names = r => r.map(x => x.studentName || '(' + x.parentName + ')').join(',');
+  assert.equal(names(C.sortRecordRows(rows, 'level')), 'Ben,Cal,Zoe,Bea,(Dee)');
+  assert.equal(names(C.sortRecordRows(rows, 'level-desc')), 'Zoe,Bea,Cal,Ben,(Dee)');
+  assert.equal(names(C.sortRecordRows(rows, 'student')).split(',').slice(1).join(','), 'Bea,Ben,Cal,Zoe');
+  assert.equal(names(C.sortRecordRows(rows, 'parent')), names(rows), 'parent: kept in the families\' order');
+});
+
+test('family filters combine: child filters, family fields and paid / not paid for a month', () => {
+  const ctx = { schedule: REC_SCHEDULE, invoices: [], payments: [], today: '2026-11-12' };
+  const pick = F => ids(SF_FAMS.filter(f => C.familyMatchesFilters(f, F, ctx)));
+  assert.equal(pick({}), 'abcd', 'no filter: everyone');
+  assert.deepEqual(C.cleanFamilyFilters({ level: 'P5', junk: 'x' }), Object.assign({}, C.EMPTY_FAMILY_FILTERS, { level: 'P5' }));
+  assert.deepEqual(C.activeFamilyFilters({ level: 'P5', month: '2026-11' }), ['level'], 'a month alone filters nothing');
+  assert.deepEqual(C.activeFamilyFilters({ paid: 'paid', month: '2026-11' }), ['month', 'paid']);
+  // Child filters: any current child matching.
+  assert.equal(pick({ level: 'P6' }), 'ab', 'Bala has a P6 child too');
+  assert.equal(pick({ level: 'P3' }), '', 'a child who left does not count');
+  assert.equal(pick({ school: 'NAN HUA PRIMARY' }), 'ac', 'school ignores case');
+  assert.equal(pick({ mode: 'Online' }), 'bc');
+  assert.equal(pick({ day: 'SAT' }), 'ac');
+  assert.equal(pick({ slot: 'TUE-3' }), 'ab');
+  assert.equal(pick({ subject: 'Science' }), 'ac');
+  assert.equal(pick({ lessonType: 'master' }), 'a', 'SAT-2 is a Master Class');
+  // The same child must match every child filter: Bala's P4 is online, the P6 physical.
+  assert.equal(pick({ level: 'P6', mode: 'Online' }), '');
+  assert.equal(pick({ level: 'P4', mode: 'Online' }), 'b');
+  // Family fields.
+  assert.equal(pick({ payment: 'package' }), 'a');
+  assert.equal(pick({ payment: 'monthly' }), 'bcd');
+  assert.equal(pick({ hardcopy: 'yes' }), 'b');
+  assert.equal(pick({ hardcopy: 'no' }), 'acd');
+  assert.equal(pick({ withdrawn: 'yes' }), 'c');
+  assert.equal(pick({ withdrawn: 'yes', level: 'P6' }), '', 'filters add up');
+  // Paid / not paid: this month by default; a package month counts as paid,
+  // a month after withdrawal is neither.
+  assert.equal(pick({ paid: 'paid' }), 'ab', 'Nov: Ang on package, Bala marked by hand');
+  assert.equal(pick({ paid: 'unpaid' }), 'cd');
+  assert.equal(pick({ paid: 'paid', month: '2026-10' }), 'a');
+  assert.equal(pick({ paid: 'unpaid', month: '2027-01' }), 'bd', 'Chua left after December');
+  assert.equal(pick({ paid: 'paid', month: '2027-09' }), '', 'the package ended in Aug 2027');
+  assert.ok(C.hasChildFilters({ day: 'MON' }) && !C.hasChildFilters({ paid: 'paid' }));
+  assert.equal(C.studentMatchesFilters(SF_FAMS[1].students[0], { level: 'P4' }, REC_SCHEDULE), true);
+  assert.equal(C.studentMatchesFilters(SF_FAMS[1].students[1], { level: 'P4' }, REC_SCHEDULE), false);
+  // The choices offered.
+  const o = C.familyFilterOptions(SF_FAMS, REC_SCHEDULE);
+  assert.deepEqual(o.schools, ['Nan Hua Primary', 'Rosyth School'], 'one entry per school whatever the case');
+  assert.deepEqual(o.slots.map(x => x.id), ['TUE-3', 'WED-1', 'FRI-2', 'SAT-1', 'SAT-2']);
+  assert.ok(o.slots.every(x => x.label));
+});

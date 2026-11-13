@@ -40,7 +40,7 @@
         payment, last PayNow screenshot the parent sent).
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export const OFFICE_CORE_VERSION = '1.4.0';
+export const OFFICE_CORE_VERSION = '1.5.0';
 
 /* ─────────────────────────── The centre ─────────────────────────── */
 export const SITE = 'https://polymathlc.com.sg';
@@ -2240,4 +2240,135 @@ export function monthsAround(months, period, before, after) {
   const at = list.findIndex(m => m.period === period);
   if (at < 0) return list.slice(-(before + after + 1));
   return list.slice(Math.max(0, at - before), at + after + 1);
+}
+
+/* ── Sorting and filtering the families ──
+   Level order is the centre's: P3, P4, P5, P6, S1, then children with no level.
+   A family with children at different levels sorts by its YOUNGEST level
+   (the lowest), and matches a level filter if ANY child is at that level —
+   the table then shows only the children who match. Every filter combines
+   with every other (all must hold). */
+export const FAMILY_SORTS = Object.freeze([
+  Object.freeze({ key: 'level', label: 'Level (P3 → S1)' }),
+  Object.freeze({ key: 'level-desc', label: 'Level (S1 → P3)' }),
+  Object.freeze({ key: 'parent', label: 'Parent name A–Z' }),
+  Object.freeze({ key: 'student', label: 'Student name A–Z' }),
+  Object.freeze({ key: 'school', label: 'Primary school A–Z' }),
+  Object.freeze({ key: 'newest', label: 'Newest sign-up first' }),
+  Object.freeze({ key: 'oldest', label: 'Oldest sign-up first' })
+]);
+export const FAMILY_SORT_KEYS = Object.freeze(FAMILY_SORTS.map(s => s.key));
+export function levelRank(level) {
+  const i = LEVELS.indexOf(normalizeLevel(level));
+  return i < 0 ? LEVELS.length : i;
+}
+// The children who count: everyone except those who have left.
+function currentKids(f) { return (f.students || []).filter(s => s.status !== 'left'); }
+export function familyLevelRank(f, desc) {
+  const ranks = currentKids(f).map(s => levelRank(s.level)).filter(r => r < LEVELS.length);
+  if (!ranks.length) return desc ? -1 : LEVELS.length;
+  return desc ? Math.max(...ranks) : Math.min(...ranks);
+}
+export function familyLevels(f) {
+  return [...new Set(currentKids(f).map(s => normalizeLevel(s.level)).filter(Boolean))].sort((a, b) => levelRank(a) - levelRank(b));
+}
+const byText = (a, b) => String(a || '').localeCompare(String(b || ''), 'en', { sensitivity: 'base' });
+const firstKidName = f => currentKids(f).map(s => s.name).filter(Boolean).sort(byText)[0] || '';
+const firstSchool = f => currentKids(f).map(s => s.school).filter(Boolean).sort(byText)[0] || '';
+const signedUp = f => f.signUpDate || currentKids(f).map(s => s.startDate).filter(Boolean).sort()[0] || '';
+export function sortFamilies(families, key) {
+  const k = FAMILY_SORT_KEYS.includes(key) ? key : 'level';
+  const list = (families || []).slice();
+  const cmp = {
+    level: (a, b) => familyLevelRank(a) - familyLevelRank(b) || byText(a.parentName, b.parentName),
+    'level-desc': (a, b) => familyLevelRank(b, true) - familyLevelRank(a, true) || byText(a.parentName, b.parentName),
+    parent: (a, b) => byText(a.parentName, b.parentName),
+    student: (a, b) => (!firstKidName(a)) - (!firstKidName(b)) || byText(firstKidName(a), firstKidName(b)) || byText(a.parentName, b.parentName),
+    school: (a, b) => (!firstSchool(a)) - (!firstSchool(b)) || byText(firstSchool(a), firstSchool(b)) || byText(a.parentName, b.parentName),
+    newest: (a, b) => byText(signedUp(b), signedUp(a)) || byText(a.parentName, b.parentName),
+    oldest: (a, b) => (!signedUp(a)) - (!signedUp(b)) || byText(signedUp(a), signedUp(b)) || byText(a.parentName, b.parentName)
+  }[k];
+  return list.sort(cmp);
+}
+// The same order for the table's rows (one per child): by the child's own level.
+export function sortRecordRows(rows, key) {
+  const k = FAMILY_SORT_KEYS.includes(key) ? key : 'level';
+  const list = (rows || []).slice();
+  if (k === 'level' || k === 'level-desc') {
+    const dir = k === 'level' ? 1 : -1;
+    return list.sort((a, b) => {
+      const ra = levelRank(a.level), rb = levelRank(b.level);
+      const na = ra >= LEVELS.length, nb = rb >= LEVELS.length;
+      if (na !== nb) return na ? 1 : -1;   // no level: always last
+      return (ra - rb) * dir || byText(a.parentName, b.parentName) || byText(a.studentName, b.studentName);
+    });
+  }
+  if (k === 'student') return list.sort((a, b) => byText(a.studentName, b.studentName));
+  if (k === 'school') return list.sort((a, b) => (!a.school) - (!b.school) || byText(a.school, b.school) || byText(a.studentName, b.studentName));
+  return list;   // parent / newest / oldest: the families' order, children kept together
+}
+
+export const EMPTY_FAMILY_FILTERS = Object.freeze({
+  level: '', subject: '', mode: '', day: '', slot: '', school: '', lessonType: '',
+  payment: '', hardcopy: '', withdrawn: '', month: '', paid: ''
+});
+export function cleanFamilyFilters(raw) {
+  const out = Object.assign({}, EMPTY_FAMILY_FILTERS);
+  Object.keys(out).forEach(k => { if (raw && raw[k] != null) out[k] = String(raw[k]); });
+  return out;
+}
+export function activeFamilyFilters(F) {
+  const f = cleanFamilyFilters(F);
+  return Object.keys(f).filter(k => f[k] && !(k === 'month' && !f.paid));
+}
+// Child-level tests: a child matches when every child filter holds for them.
+export function studentMatchesFilters(st, F, schedule) {
+  const f = cleanFamilyFilters(F);
+  if (!st || st.status === 'left') return false;
+  if (f.level && normalizeLevel(st.level) !== f.level) return false;
+  if (f.school && normText(st.school) !== normText(f.school)) return false;
+  if (f.lessonType && studentLessonType(st, schedule) !== f.lessonType) return false;
+  const cls = (st.classes || []).filter(c => c && (c.custom || isValidSlotId(c.slotId)));
+  if (f.slot && !cls.some(c => !c.custom && c.slotId === f.slot)) return false;
+  if (f.day && !cls.some(c => !c.custom && String(c.slotId).split('-')[0] === f.day)) return false;
+  if (f.mode && !cls.some(c => c.mode === f.mode)) return false;
+  if (f.subject && !cls.some(c => !c.custom && subjectKey(scheduleSlot(schedule, c.slotId).subject) === subjectKey(f.subject))) return false;
+  return true;
+}
+export function hasChildFilters(F) {
+  const f = cleanFamilyFilters(F);
+  return !!(f.level || f.school || f.lessonType || f.slot || f.day || f.mode || f.subject);
+}
+// Family-level tests, then: at least one child matches the child filters.
+// ctx: { schedule, invoices, payments, today } — for the month paid / not paid test.
+export function familyMatchesFilters(family, F, ctx) {
+  const f = cleanFamilyFilters(F);
+  const c = ctx || {};
+  const fam = normalizeFamily(family);
+  if (f.payment && fam.paymentType !== f.payment) return false;
+  if (f.hardcopy && fam.hardcopy !== (f.hardcopy === 'yes')) return false;
+  if (f.withdrawn && fam.withdrawn !== (f.withdrawn === 'yes')) return false;
+  if (f.paid) {
+    const period = isPeriod(f.month) ? f.month : (c.today ? String(c.today).slice(0, 7) : sgMonthKey());
+    const rec = c.record || familyPaymentRecord(fam, c.invoices || [], c.payments || [], { today: c.today });
+    const mo = rec.months.find(m => m.period === period);
+    const paid = !!mo && ['paid', 'hand', 'package'].includes(mo.key);
+    if (f.paid === 'paid' && !paid) return false;
+    if (f.paid === 'unpaid' && (paid || (mo && mo.key === 'gone'))) return false;
+  }
+  if (hasChildFilters(f)) return currentKids(fam).some(st => studentMatchesFilters(st, f, c.schedule));
+  return true;
+}
+// The choices the filter drop-downs offer, from the families themselves.
+export function familyFilterOptions(families, schedule) {
+  const schools = new Map();
+  (families || []).forEach(f => currentKids(f).forEach(s => {
+    const name = String(s.school || '').trim();
+    if (name && !schools.has(normText(name))) schools.set(normText(name), name);
+  }));
+  const used = new Set();
+  (families || []).forEach(f => currentKids(f).forEach(s => (s.classes || []).forEach(c => { if (c && !c.custom && isValidSlotId(c.slotId)) used.add(c.slotId); })));
+  const slots = allSlotIds().filter(id => slotHasClass(scheduleSlot(schedule, id)) || used.has(id))
+    .map(id => ({ id, label: slotChoiceLabel(schedule, id) }));
+  return { schools: [...schools.values()].sort(byText), slots };
 }

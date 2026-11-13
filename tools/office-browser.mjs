@@ -639,7 +639,11 @@ try {
   const recText = await page.locator('table.rec').innerText();
   for (const want of ['Email (account ID)', 'Primary school', 'Type of lesson', 'Months paid', 'Last screenshot', 'Nanyang Primary', 'Physical regular', 'lim@example.com', 'Payment type', 'Hardcopy', 'Withdrawal', 'Package', 'March 2027'])
     assert.ok(recText.toLowerCase().includes(want.toLowerCase()), 'the table shows ' + want);
-  assert.equal(await page.locator('table.rec tbody tr').count(), 7, 'seven children');
+  assert.equal(await page.locator('table.rec tbody tr.click').count(), 7, 'seven children');
+  const rowLevels = await page.locator('table.rec tbody tr.click').evaluateAll(trs => trs.map(t => t.dataset.level));
+  const rk = l => l ? C.levelRank(l) : 99;
+  assert.ok(rowLevels.every((l, i) => i === 0 || rk(rowLevels[i - 1]) <= rk(l)), 'the table runs by level by default: ' + rowLevels.join(','));
+  assert.ok(await page.locator('table.rec tr.lvrow').count() >= 2, 'a heading row per level');
   await shot(page, '04d-family-table');
   const tanRow = page.locator('table.rec tbody tr', { hasText: 'Tan Jun Wei' });
   await tanRow.locator('[data-act="quickShot"]').click();
@@ -657,11 +661,80 @@ try {
   // Filter by type of lesson.
   await page.click('[data-act="famType"][data-k="online"]');
   await settle(page);
-  assert.ok(await page.locator('table.rec tbody tr').count() >= 2);
+  assert.ok(await page.locator('table.rec tbody tr.click').count() >= 2);
   assert.ok(!(await page.locator('table.rec').innerText()).includes('Lim Kai'), 'only online children');
   await page.click('[data-act="famType"][data-k=""]');
   await page.click('[data-act="famView"][data-k="cards"]');
   await page.waitForSelector('.fam-grid');
+
+  // ── Sorted by level (the default), with a heading per level, and filters that add up ──
+  const activeFams = () => store(page).then(st => docsIn(st, 'officeFamilies').filter(f => (f.status || 'active') === 'active').map(f => C.normalizeFamily(f)));
+  const cardNames = () => page.locator('.fam-grid .fam .fam-name').allInnerTexts();
+  assert.equal(await page.inputValue('#fam-sort'), 'level');
+  assert.deepEqual(await cardNames(), C.sortFamilies(await activeFams(), 'level').map(f => f.parentName || 'Unnamed parent'), 'cards run by the youngest child\'s level');
+  assert.ok(await page.locator('.lvgroup .lvhead').count() >= 2, 'a heading per level');
+  assert.match(await page.locator('.lvhead').first().innerText(), /(Primary|Secondary) \d · \d+ famil/);
+  assert.match(await page.locator('#fam-count').innerText(), /sorted by Level/);
+  // Another sort is remembered on this computer.
+  await page.selectOption('#fam-sort', 'parent');
+  await settle(page);
+  assert.equal(await page.locator('.lvgroup').count(), 0, 'no level headings when sorted by name');
+  assert.deepEqual(await cardNames(), C.sortFamilies(await activeFams(), 'parent').map(f => f.parentName || 'Unnamed parent'));
+  assert.equal(await page.evaluate(() => localStorage.getItem('polymath-office-famsort')), 'parent');
+  await page.selectOption('#fam-sort', 'level-desc');
+  await settle(page);
+  assert.deepEqual(await cardNames(), C.sortFamilies(await activeFams(), 'level-desc').map(f => f.parentName || 'Unnamed parent'));
+  await page.selectOption('#fam-sort', 'level');
+  await settle(page);
+  // The filter panel: a level filter shows a family when one of its children is at that level.
+  await page.click('[data-act="famPanel"]');
+  await page.waitForSelector('#fam-filter-panel');
+  for (const k of ['level', 'subject', 'mode', 'day', 'slot', 'school', 'payment', 'hardcopy', 'withdrawn', 'paid', 'month'])
+    assert.equal(await page.locator('#ff-' + k).count(), 1, 'a filter for ' + k);
+  assert.ok(await page.locator('#ff-month').isDisabled(), 'the month waits for Paid / Not paid');
+  await page.selectOption('#ff-level', 'P6');
+  await settle(page);
+  const p6 = (await activeFams()).filter(f => C.familyMatchesFilters(f, { level: 'P6' }, {}));
+  assert.ok(p6.length >= 1);
+  assert.deepEqual((await cardNames()).slice().sort(), p6.map(f => f.parentName || 'Unnamed parent').sort(), 'only families with a P6 child');
+  assert.ok((await page.locator('.fam-grid .fam').evaluateAll(cs => cs.map(c => c.dataset.levels))).every(l => l.split(' ').includes('P6')));
+  assert.equal(await page.locator('[data-act="famFClear"][data-k="level"]').count(), 1, 'the filter shows as a tag');
+  assert.deepEqual(await page.locator('.lvgroup').evaluateAll(gs => gs.map(g => g.dataset.level)), ['P6'], 'every family sits under P6, even one with a younger child too');
+  assert.match(await page.locator('.fftoggle').innerText(), /Filters\s*1/);
+  assert.match(await page.locator('#fam-count').innerText(), new RegExp('^' + p6.length + ' of '));
+  // Brothers and sisters at other levels are dimmed on the card; the table lists P6 children only.
+  const dimmed = p6.some(f => f.students.some(s => s.status !== 'left' && C.normalizeLevel(s.level) !== 'P6'));
+  if (dimmed) assert.ok(await page.locator('.fam-kid.dim').count() >= 1, 'other children dimmed');
+  await shot(page, '04f-families-filter-p6');
+  await page.click('[data-act="famView"][data-k="table"]');
+  await page.waitForSelector('table.rec');
+  assert.deepEqual([...new Set(await page.locator('table.rec tbody tr.click').evaluateAll(trs => trs.map(t => t.dataset.level)))], ['P6'], 'only the P6 children');
+  // A second filter narrows further: P6 and a hardcopy.
+  await page.selectOption('#ff-hardcopy', 'yes');
+  await settle(page);
+  const p6hc = p6.filter(f => f.hardcopy);
+  assert.equal(await page.locator('table.rec tbody tr.click').count() > 0, p6hc.length > 0);
+  // Paid / not paid for a month.
+  await page.selectOption('#ff-hardcopy', '');
+  await page.selectOption('#ff-paid', 'unpaid');
+  await settle(page);
+  assert.ok(!(await page.locator('#ff-month').isDisabled()), 'now a month can be chosen');
+  await page.selectOption('#ff-month', '2027-03');
+  await settle(page);
+  assert.ok(await page.locator('[data-act="famFClear"][data-k="paid"]').innerText().then(t => t.includes('March 2027')));
+  await page.click('[data-act="famView"][data-k="cards"]');
+  await page.waitForSelector('#fam-count');
+  await shot(page, '04g-families-filters-combined');
+  // One tag removed, then everything cleared.
+  await page.click('[data-act="famFClear"][data-k="paid"]');
+  await settle(page);
+  assert.equal(await page.locator('[data-act="famFClear"][data-k="paid"]').count(), 0);
+  assert.equal(await page.inputValue('#ff-month'), '', 'the month goes with it');
+  await page.click('.ffbar [data-act="famFReset"]');
+  await settle(page);
+  assert.deepEqual(await cardNames(), C.sortFamilies(await activeFams(), 'level').map(f => f.parentName || 'Unnamed parent'), 'everyone is back');
+  await page.click('[data-act="famPanel"]');
+  await page.waitForSelector('#fam-filter-panel', { state: 'detached' });
   await page.click('#tabs [data-view="settings"]');
 
   // An office whose rules are NOT published refuses to save.

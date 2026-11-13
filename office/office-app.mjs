@@ -33,9 +33,9 @@
      mail/polymath-office-*    emails for the Trigger Email extension
    Reads: schedule_config/main (the /schedule page's own document).
    ═══════════════════════════════════════════════════════════════════════════ */
-import * as C from './office-core.mjs?v=1.1.0';
+import * as C from './office-core.mjs?v=1.5.0';
 
-const OFFICE_VERSION = 'v1.4.0';
+const OFFICE_VERSION = 'v1.5.0';
 
 /* ═══════════════ Firebase — the CER project ═══════════════ */
 firebase.initializeApp({
@@ -76,6 +76,7 @@ const S = {
   period: C.sgMonthKey(),
   ui: {
     famSearch: '', famFilter: 'all', famType: '', famView: savedFamView(),
+    famSort: savedFamSort(), famF: C.cleanFamilyFilters({}), famPanel: false,
     stuSearch: '', stu: { level: '', subject: '', mode: '', day: '', status: 'active', pay: '', cls: '' }, stuSort: { key: 'name', dir: 1 },
     tt: { level: '', subject: '', mode: '' },
     invFilter: 'all', invSearch: ''
@@ -88,6 +89,9 @@ const S = {
 // The Families tab remembers cards or table on this computer only.
 function savedFamView() { try { return localStorage.getItem('polymath-office-famview') === 'table' ? 'table' : 'cards'; } catch (e) { return 'cards'; } }
 function rememberFamView(v) { try { localStorage.setItem('polymath-office-famview', v); } catch (e) { /* private window */ } }
+// …and how the families are sorted (by level unless changed).
+function savedFamSort() { try { const v = localStorage.getItem('polymath-office-famsort'); return C.FAMILY_SORT_KEYS.includes(v) ? v : 'level'; } catch (e) { return 'level'; } }
+function rememberFamSort(v) { try { localStorage.setItem('polymath-office-famsort', v); } catch (e) { /* private window */ } }
 let IX = { fam: new Map(), invByFam: new Map(), invById: new Map(), payByKey: new Map(), roster: new Map(), rows: [] };
 const unsubs = [];
 
@@ -502,21 +506,110 @@ function familyMatchesSearch(f, q) {
     ...f.students.map(s => s.name + ' ' + s.school + ' ' + s.notes + ' ' + C.lessonTypeLabel(C.studentLessonType(s, S.schedule)))].join(' '));
   return q.split(' ').every(w => hay.includes(w));
 }
+// The filter panel's context for one family (its payment record is cached).
+function famFilterCtx(f) { return { schedule: S.schedule, invoices: S.invoices, payments: S.payments, today: today(), record: recordOf(f) }; }
 function familyList() {
   const q = C.normText(S.ui.famSearch);
-  return S.families.filter(FAM_FILTERS[S.ui.famFilter] || FAM_FILTERS.all)
+  const F = S.ui.famF;
+  const list = S.families.filter(FAM_FILTERS[S.ui.famFilter] || FAM_FILTERS.all)
     .filter(f => familyMatchesType(f, S.ui.famType))
-    .filter(f => familyMatchesSearch(f, q));
+    .filter(f => familyMatchesSearch(f, q))
+    .filter(f => C.familyMatchesFilters(f, F, famFilterCtx(f)));
+  if (!childFiltersOn()) return C.sortFamilies(list, S.ui.famSort);
+  // With a child filter on, a family is placed by the children who match
+  // (filtered to P6, a family with a P4 and a P6 child sits under P6).
+  const byId = new Map(list.map(f => [f.id, f]));
+  return C.sortFamilies(list.map(shownKidsOnly), S.ui.famSort).map(p => byId.get(p.id));
 }
+function shownKidsOnly(f) { return Object.assign({}, f, { students: f.students.filter(kidShown) }); }
+// A child is shown (in the table, or bright on a card) when it passes the
+// type of lesson and every child filter of the panel.
+function kidShown(s) {
+  if (!s || s.status === 'left') return false;
+  if (S.ui.famType && C.studentLessonType(s, S.schedule) !== S.ui.famType) return false;
+  return !C.hasChildFilters(S.ui.famF) || C.studentMatchesFilters(s, S.ui.famF, S.schedule);
+}
+function childFiltersOn() { return !!S.ui.famType || C.hasChildFilters(S.ui.famF); }
 function recordRows(list) {
   const rows = C.familyRecordRows(list, { schedule: S.schedule, invoices: S.invoices, payments: S.payments, today: today() });
-  // The table shows only the children of the type filtered to.
-  return S.ui.famType ? rows.filter(r => !r.studentId || r.lessonType === S.ui.famType) : rows;
+  // The table shows only the children of the type and the filters chosen.
+  const kids = new Map();
+  list.forEach(f => f.students.forEach(s => kids.set(f.id + '|' + s.id, s)));
+  const shown = childFiltersOn() ? rows.filter(r => !r.studentId || kidShown(kids.get(r.familyId + '|' + r.studentId))) : rows;
+  return C.sortRecordRows(shown, S.ui.famSort);
+}
+// Sorted by level: the cards and rows fall under a heading per level.
+// A family with children at more than one level sits under its youngest
+// child's level (oldest when sorted S1 → P3); its card still shows every child.
+function levelSorted() { return S.ui.famSort === 'level' || S.ui.famSort === 'level-desc'; }
+function familyGroupLevel(f) {
+  const r = C.familyLevelRank(childFiltersOn() ? shownKidsOnly(f) : f, S.ui.famSort === 'level-desc');
+  return C.LEVELS[r] || '';
+}
+function levelName(level) {
+  if (!level) return 'No level yet';
+  return (level[0] === 'S' ? 'Secondary ' : 'Primary ') + level.slice(1);
+}
+function levelHeading(level, n, one, many) { return levelName(level) + ' · ' + C.plural(n, one, many); }
+const FAM_FILTER_LABELS = {
+  level: v => C.levelLabel(v),
+  subject: v => v,
+  mode: v => v === 'Online' ? '💻 Online' : '🏫 Physical',
+  day: v => (C.DAYS.find(d => d.code === v) || { name: v }).name,
+  slot: v => C.slotChoiceLabel(S.schedule, v),
+  school: v => '🏫 ' + v,
+  lessonType: v => C.lessonTypeLabel(v),
+  payment: v => v === 'package' ? '📦 Package' : 'Monthly',
+  hardcopy: v => v === 'yes' ? '📮 Hardcopy' : 'No hardcopy',
+  withdrawn: v => v === 'yes' ? '👋 Withdrawn' : 'Not withdrawn',
+  paid: v => (v === 'paid' ? '✅ Paid ' : '⏳ Not paid ') + C.periodLabel(C.isPeriod(S.ui.famF.month) ? S.ui.famF.month : C.sgMonthKey())
+};
+function famFilterPanelHtml() {
+  const F = S.ui.famF;
+  const opts = C.familyFilterOptions(S.families, S.schedule);
+  const sel = (k, label, choices, any) => '<div class="ff"><label for="ff-' + k + '">' + label + '</label><select id="ff-' + k + '" class="plain' + (F[k] ? ' on' : '') + '" data-ch="famF" data-k="' + k + '">'
+    + '<option value="">' + (any || 'Any') + '</option>'
+    + choices.map(([v, l]) => '<option value="' + esc(v) + '" ' + (F[k] === v ? 'selected' : '') + '>' + esc(l) + '</option>').join('') + '</select></div>';
+  const months = [];
+  for (let p = C.RECORD_START; p <= C.RECORD_END; p = C.addMonths(p, 1)) months.push(p);
+  const cur = C.sgMonthKey();
+  if (!months.includes(cur)) months.push(cur);
+  return '<div class="ffpanel" id="fam-filter-panel">'
+    + '<div class="ffgroup"><div class="ffhead">👦 Child</div><div class="ffgrid">'
+    + sel('level', 'Level', C.LEVELS.map(l => [l, C.levelLabel(l)]))
+    + sel('subject', 'Subject', C.SUBJECTS.map(x => [x, x]))
+    + sel('mode', 'Physical or online', C.MODES.map(x => [x, x === 'Online' ? '💻 Online' : '🏫 Physical']))
+    + sel('day', 'Day', C.DAYS.map(d => [d.code, d.name]))
+    + sel('slot', 'Slot', opts.slots.map(o => [o.id, o.label]))
+    + sel('school', 'Primary school', opts.schools.map(x => [x, x]))
+    + '</div></div>'
+    + '<div class="ffgroup"><div class="ffhead">👪 Family</div><div class="ffgrid">'
+    + sel('payment', 'Payment type', C.PAYMENT_TYPES.map(t => [t.key, t.label]))
+    + sel('hardcopy', 'Hardcopy', [['yes', 'Yes'], ['no', 'No']])
+    + sel('withdrawn', 'Withdrawal', [['yes', 'Yes'], ['no', 'No']])
+    + sel('paid', 'Payment for', [['paid', '✅ Paid'], ['unpaid', '⏳ Not paid']], 'Paid or not')
+    + '<div class="ff"><label for="ff-month">Month</label><select id="ff-month" class="plain' + (F.paid && F.month ? ' on' : '') + '" data-ch="famF" data-k="month"' + (F.paid ? '' : ' disabled title="Choose Paid or Not paid first"') + '>'
+    + '<option value="">This month (' + esc(C.monthShort(cur)) + ')</option>'
+    + months.sort().map(p => '<option value="' + p + '" ' + (F.month === p ? 'selected' : '') + '>' + esc(C.periodLabel(p)) + '</option>').join('') + '</select></div>'
+    + '</div></div>'
+    + '<div class="ffnote small muted">Child filters show a family when <b>one</b> of its children matches; the table lists only the matching children. Filters add up: every one chosen must hold.</div>'
+    + '</div>';
+}
+function famActiveFiltersHtml(shown) {
+  const F = S.ui.famF;
+  const on = C.activeFamilyFilters(F).filter(k => k !== 'month');
+  const total = S.families.filter(FAM_FILTERS[S.ui.famFilter] || FAM_FILTERS.all).length;
+  const sortLabel = (C.FAMILY_SORTS.find(x => x.key === S.ui.famSort) || C.FAMILY_SORTS[0]).label;
+  return '<div class="ffbar"><span class="ffcount" id="fam-count">' + (shown === total ? C.plural(total, 'family', 'families') : shown + ' of ' + C.plural(total, 'family', 'families')) + ' · sorted by ' + esc(sortLabel) + '</span>'
+    + on.map(k => '<button class="chip on fftag" data-act="famFClear" data-k="' + k + '" title="Remove this filter">' + esc(FAM_FILTER_LABELS[k](F[k])) + ' ✕</button>').join('')
+    + (on.length ? '<button class="linkbtn" data-act="famFReset">Clear all filters</button>' : '')
+    + '</div>';
 }
 VIEWS.families = function () {
   const period = C.sgMonthKey();
   const count = k => S.families.filter(FAM_FILTERS[k]).length;
   const list = familyList();
+  const nOn = C.activeFamilyFilters(S.ui.famF).filter(k => k !== 'month').length;
   const chip = (k, label, hideEmpty) => (hideEmpty && !count(k) && S.ui.famFilter !== k) ? '' : '<button class="chip ' + (S.ui.famFilter === k ? 'on' : '') + '" data-act="famFilter" data-k="' + k + '">' + label + ' <span class="n">' + count(k) + '</span></button>';
   const typeChip = (k, label) => '<button class="chip ' + (S.ui.famType === k ? 'on' : '') + '" data-act="famType" data-k="' + k + '">' + label + '</button>';
   const viewChip = (k, label) => '<button class="seg ' + (S.ui.famView === k ? 'on' : '') + '" data-act="famView" data-k="' + k + '" aria-pressed="' + (S.ui.famView === k) + '">' + label + '</button>';
@@ -527,17 +620,28 @@ VIEWS.families = function () {
   let body;
   if (!S.familiesLoaded) body = emptyHtml('⏳', 'Loading…', '');
   else if (!S.families.length) body = emptyHtml('👪', 'No families yet', 'Import your spreadsheet of students and parents, or add a family by hand.', '<button class="btn" data-act="openImport">⬆ Import a spreadsheet</button><button class="btn ghost" data-act="newFamily">＋ Add a family</button>');
-  else if (!list.length) body = emptyHtml('🔍', 'Nobody matches', 'Try a different search or filter.');
+  else if (!list.length) body = emptyHtml('🔍', 'Nobody matches', 'Try a different search or filter.', nOn ? '<button class="btn ghost" data-act="famFReset">Clear all filters</button>' : '');
   else if (S.ui.famView === 'table') body = familyTableHtml(recordRows(list));
+  else if (levelSorted()) {
+    // One heading per level, each with its own grid of cards.
+    const groups = [];
+    list.forEach(f => { const lv = familyGroupLevel(f); const g = groups[groups.length - 1]; if (g && g.level === lv) g.items.push(f); else groups.push({ level: lv, items: [f] }); });
+    body = groups.map(g => '<div class="lvgroup" data-level="' + esc(g.level || 'none') + '"><h2 class="lvhead"><span class="lv">' + esc(g.level || '—') + '</span>' + esc(levelHeading(g.level, g.items.length, 'family', 'families')) + '</h2>'
+      + '<div class="fam-grid">' + g.items.map(f => famCardHtml(f, period)).join('') + '</div></div>').join('');
+  }
   else body = '<div class="fam-grid">' + list.map(f => famCardHtml(f, period)).join('') + '</div>';
   return '<div class="page-head"><div><h1>Families</h1><p>One record per confirmed sign-up. The email is the family\'s account ID, the same for every child.</p></div>'
     + '<div class="actions"><button class="btn ghost" data-act="exportRecords" title="Every field of the families shown, one row per child">⬇ CSV</button><button class="btn ghost" data-act="openImport">⬆ Import spreadsheet</button><button class="btn" data-act="newFamily">＋ Add a family</button></div></div>'
     + sharedBanner
     + '<div class="toolbar"><div class="search"><input type="search" placeholder="Search parent, student, school, phone, email or code" value="' + esc(S.ui.famSearch) + '" data-in="famSearch" data-keep="famSearch" aria-label="Search families"></div>'
+    + '<div class="ffsort"><label for="fam-sort">Sort</label><select id="fam-sort" class="plain" data-ch="famSort">' + C.FAMILY_SORTS.map(o => '<option value="' + o.key + '" ' + (S.ui.famSort === o.key ? 'selected' : '') + '>' + esc(o.label) + '</option>').join('') + '</select></div>'
+    + '<button class="btn ghost fftoggle' + (S.ui.famPanel ? ' open' : '') + '" data-act="famPanel" aria-expanded="' + !!S.ui.famPanel + '" aria-controls="fam-filter-panel">⚲ Filters' + (nOn ? ' <span class="n">' + nOn + '</span>' : '') + '</button>'
     + '<div class="segs" role="group" aria-label="Show as">' + viewChip('cards', '▦ Cards') + viewChip('table', '☰ Table') + '</div></div>'
+    + (S.ui.famPanel ? famFilterPanelHtml() : '')
     + '<div class="chips" style="margin-bottom:10px;">' + chip('all', 'Active') + chip('owing', '💰 Owing') + chip('unpaid', '⏳ ' + esc(C.monthShort(period)) + ' not paid')
     + chip('noshot', '📸 No screenshot in ' + esc(C.monthShort(period))) + chip('noemail', '✉ No email') + chip('shared', '⚠ Shared email', true) + chip('noclass', '🧩 No class') + chip('package', '📦 Package', true) + chip('hardcopy', '📮 Hardcopy', true) + chip('withdrawn', '👋 Withdrawn', true) + chip('inactive', '💤 Not active') + '</div>'
     + '<div class="filterrow"><span class="lbl">Type of lesson</span><div class="chips">' + typeChip('', 'All') + C.LESSON_TYPES.map(t => typeChip(t.key, t.icon + ' ' + t.label)).join('') + '</div></div>'
+    + (S.families.length ? famActiveFiltersHtml(list.length) : '')
     + body;
 };
 function familyTableHtml(rows) {
@@ -547,8 +651,11 @@ function familyTableHtml(rows) {
     + '<th>Type of lesson</th><th>Slots</th><th>Payment type</th><th>Months paid</th><th>Last payment</th><th>Last screenshot</th><th>Hardcopy</th><th>Withdrawal</th><th>Notes</th><th></th></tr></thead><tbody>'
     + rows.map((r, i) => {
       const first = i === 0 || rows[i - 1].familyId !== r.familyId;
+      const lv = C.normalizeLevel(r.level) || '';
+      const newLevel = levelSorted() && r.studentId && (i === 0 || (C.normalizeLevel(rows[i - 1].level) || '') !== lv);
+      const groupRow = newLevel ? '<tr class="lvrow"><td colspan="16"><span class="lv">' + esc(lv || '—') + '</span>' + esc(levelHeading(lv, rows.filter(x => x.studentId && (C.normalizeLevel(x.level) || '') === lv).length, 'child', 'children')) + '</td></tr>' : '';
       const shotThisMonth = r.lastScreenshot && r.lastScreenshot.date.slice(0, 7) === cur;
-      return '<tr class="click ' + (first ? 'fam-first' : 'fam-more') + (r.status === 'inactive' ? ' off' : '') + '" data-act="openFamily" data-id="' + esc(r.familyId) + '">'
+      return groupRow + '<tr class="click ' + (first ? 'fam-first' : 'fam-more') + (r.status === 'inactive' ? ' off' : '') + '" data-act="openFamily" data-id="' + esc(r.familyId) + '" data-level="' + esc(lv) + '">'
         + '<td>' + (first ? '<span class="pill ' + (r.status === 'inactive' ? 'grey' : 'green') + '">' + esc(r.statusLabel) + '</span>' : '') + '</td>'
         + '<td class="em">' + (first ? (r.email ? esc(r.email) + (IX.shared.has(r.email) ? ' <span class="warn-t" title="Another family uses this email">⚠</span>' : '') : '<span class="warn-t">no email</span>') : '<span class="muted small">〃</span>') + '</td>'
         + '<td><b>' + esc(r.studentName || '—') + '</b>' + (r.level ? ' <span class="muted small">' + esc(C.levelLabel(r.level)) + '</span>' : '') + (r.studentStatus && r.studentStatus !== 'active' ? ' <span class="pill grey">' + esc(C.cap(r.studentStatus)) + '</span>' : '') + '</td>'
@@ -572,9 +679,11 @@ function famCardHtml(f, period) {
   const st = famStateFor(f, period);
   const owe = familyOwing(f.id);
   const rec = recordOf(f);
-  const kids = f.students.filter(s => s.status !== 'left');
+  const kids = f.students.filter(s => s.status !== 'left')
+    .slice().sort((a, b) => levelSorted() ? (C.levelRank(a.level) - C.levelRank(b.level)) * (S.ui.famSort === 'level-desc' ? -1 : 1) : 0);
+  const dimOthers = childFiltersOn();
   const rowsById = new Map(IX.rows.filter(r => r.familyId === f.id).map(r => [r.studentId, r]));
-  return '<button type="button" class="fam ' + (f.status === 'inactive' ? 'inactive' : '') + '" data-act="openFamily" data-id="' + esc(f.id) + '">'
+  return '<button type="button" class="fam ' + (f.status === 'inactive' ? 'inactive' : '') + '" data-act="openFamily" data-id="' + esc(f.id) + '" data-levels="' + esc(C.familyLevels(f).join(' ')) + '">'
     + '<div class="fam-top"><div><div class="fam-name">' + esc(f.parentName || 'Unnamed parent') + '</div>'
     + '<span class="code">' + esc(C.familyReference(f.code)) + '</span>' + (f.status === 'inactive' ? ' <span class="pill grey">Not active</span>' : '')
     + (f.paymentType === 'package' ? ' <span class="pill green" title="' + esc(C.packageText(f)) + '">📦 Package</span>' : '')
@@ -582,10 +691,11 @@ function famCardHtml(f, period) {
     + (f.withdrawn ? ' <span class="pill amber">👋 ' + esc(f.lastMonth ? 'Last month ' + C.monthShort(f.lastMonth) + ' ' + f.lastMonth.slice(2, 4) : 'Withdrawn') + '</span>' : '') + '</div>' + pill(st) + '</div>'
     + '<div class="fam-kids">' + (kids.length ? kids.map(s => {
       const r = rowsById.get(s.id);
-      return '<div class="fam-kid"><span class="kid"><span class="lv">' + esc(C.levelLabel(s.level) || '—') + '</span><b>' + esc(s.name) + '</b></span>'
+      const dim = dimOthers && !kidShown(s) ? ' dim' : '';
+      return '<div class="fam-kid' + dim + '"' + (dim ? ' title="Does not match the filters"' : '') + '><span class="kid"><span class="lv">' + esc(C.levelLabel(s.level) || '—') + '</span><b>' + esc(s.name) + '</b></span>'
         + lessonTypeChip(C.studentLessonType(s, S.schedule), !!s.lessonType)
         + (s.status === 'paused' ? '<span class="pill grey">Paused</span>' : (r ? classChips(r) : '')) + '</div>'
-        + (s.school ? '<div class="small muted kid-school">🏫 ' + esc(s.school) + (s.startDate ? ' · since ' + esc(C.prettyDate(s.startDate)) : '') + '</div>' : (s.startDate ? '<div class="small muted kid-school">Since ' + esc(C.prettyDate(s.startDate)) + '</div>' : ''));
+        + (s.school ? '<div class="small muted kid-school' + dim + '">🏫 ' + esc(s.school) + (s.startDate ? ' · since ' + esc(C.prettyDate(s.startDate)) : '') + '</div>' : (s.startDate ? '<div class="small muted kid-school' + dim + '">Since ' + esc(C.prettyDate(s.startDate)) + '</div>' : ''));
     }).join('') : '<span class="muted small">No students yet</span>') + '</div>'
     + '<div class="fam-rec">' + monthDots(rec.months, 4)
     + '<span>' + (rec.lastPayment ? '💵 ' + esc(C.prettyDateShort(rec.lastPayment.date)) : '<span class="muted">💵 —</span>') + '</span>'
@@ -2126,6 +2236,9 @@ const ACT = {
   openFamily(el) { const f = famById(el.dataset.id); if (!f) return; S.drawer = null; renderDrawer(); openModal({ type: 'family', draft: clone(Object.assign({}, f, { _raw: undefined })) }); },
   famFilter(el) { S.ui.famFilter = el.dataset.k; render(); },
   famType(el) { S.ui.famType = el.dataset.k; render(); },
+  famPanel() { S.ui.famPanel = !S.ui.famPanel; render(); },
+  famFClear(el) { const k = el.dataset.k; S.ui.famF[k] = ''; if (k === 'paid') S.ui.famF.month = ''; render(); },
+  famFReset() { S.ui.famF = C.cleanFamilyFilters({}); render(); },
   famView(el) { S.ui.famView = el.dataset.k === 'table' ? 'table' : 'cards'; rememberFamView(S.ui.famView); render(); },
   exportRecords() {
     const rows = recordRows(familyList());
@@ -2570,6 +2683,14 @@ const INP = {
 };
 const CHG = {
   stuDay(el) { S.ui.stu.day = el.value; render(); },
+  famSort(el) { S.ui.famSort = C.FAMILY_SORT_KEYS.includes(el.value) ? el.value : 'level'; rememberFamSort(S.ui.famSort); render(); },
+  famF(el) {
+    const k = el.dataset.k;
+    if (!(k in C.EMPTY_FAMILY_FILTERS)) return;
+    S.ui.famF[k] = el.value;
+    if (k === 'paid' && !el.value) S.ui.famF.month = '';
+    render();
+  },
   fam(el) { S.modal.draft[el.dataset.k] = el.value; renderModal(); },
   stu(el) { S.modal.draft.students[+el.dataset.s][el.dataset.k] = el.value; renderModal(); },
   cls(el) { S.modal.draft.students[+el.dataset.s].classes[+el.dataset.c][el.dataset.k] = el.value; renderModal(); },

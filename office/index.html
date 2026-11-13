@@ -186,6 +186,29 @@
   .filterrow { display:flex; gap:10px 20px; flex-wrap:wrap; align-items:center; margin-bottom:16px; }
   .filterrow .lbl { font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-right:2px; }
   select.plain { padding:8px 10px; border:1px solid var(--line); border-radius:9px; background:var(--white); }
+  /* Families: sort, filter panel, level headings */
+  .ffsort { display:flex; align-items:center; gap:6px; }
+  .ffsort label { font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; }
+  .fftoggle .n { display:inline-block; min-width:18px; padding:0 5px; margin-left:4px; border-radius:9px; background:var(--deep); color:#fff; font-size:11px; line-height:18px; text-align:center; }
+  .fftoggle.open { background:var(--paper); }
+  .ffpanel { border:1px solid var(--line); border-radius:14px; background:var(--white); padding:14px 16px; margin-bottom:14px; display:grid; gap:12px; }
+  .ffgroup { display:grid; gap:8px; }
+  .ffhead { font-size:12px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; }
+  .ffgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:10px 12px; }
+  .ff { display:grid; gap:4px; min-width:0; }
+  .ff label { font-size:12px; font-weight:600; color:var(--muted); }
+  .ff select { width:100%; min-width:0; }
+  .ff select.on { border-color:var(--deep); box-shadow:0 0 0 2px rgba(5,108,118,.14); font-weight:600; }
+  .ff select:disabled { opacity:.55; }
+  .ffbar { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; margin:-4px 0 14px; }
+  .ffcount { font-size:13px; color:var(--muted); margin-right:6px; }
+  .fftag { font-size:12px; }
+  .lvgroup + .lvgroup { margin-top:22px; }
+  .lvhead { display:flex; align-items:center; gap:10px; font-size:15px; font-weight:800; margin:0 0 10px; color:var(--ink); }
+  .lvhead .lv, tr.lvrow .lv { display:inline-flex; align-items:center; justify-content:center; min-width:30px; height:24px; padding:0 6px; border-radius:7px; background:var(--deep); color:#fff; font-size:12px; font-weight:800; }
+  tr.lvrow td { background:var(--paper); font-weight:800; font-size:13px; padding:8px 12px; }
+  tr.lvrow .lv { margin-right:8px; }
+  .fam-kid.dim, .kid-school.dim { opacity:.4; }
 
   /* ─── Family cards ─── */
   .fam-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:16px; }
@@ -535,6 +558,8 @@
     .ms-meta { grid-column:3; white-space:normal; }
     .toolbar .segs { width:100%; } .toolbar .seg { flex:1; }
     .fam-grid { grid-template-columns:1fr; }
+    .ffsort { width:100%; } .ffsort select { flex:1; } .fftoggle { width:100%; }
+    .ffgrid { grid-template-columns:1fr 1fr; }
     .step { flex-wrap:wrap; }
     .step .actions { width:100%; }
     .modal-bg { padding:0; }
@@ -595,6 +620,6 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="version hidden" id="version"></div>
 
-<script type="module" src="office-app.mjs?v=1.1.0"></script>
+<script type="module" src="office-app.mjs?v=1.5.0"></script>
 </body>
 </html>
