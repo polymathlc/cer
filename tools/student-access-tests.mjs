@@ -372,7 +372,7 @@ test('dashboard helpers: usernames, sorting, search, counts and the admin edit',
 test('/student signs in, shows the admin dashboard and loads the very same gate as every app', () => {
   assert.ok(DASHBOARD.includes('<div class="account-card" id="accountCard" hidden aria-live="polite"></div>'));
   assert.ok(DASHBOARD.includes('<section class="admin-view" id="adminView" hidden aria-labelledby="adminTitle"></section>'));
-  assert.ok(DASHBOARD.includes('<script src="student-account.js?v=1.6.0"></script>'));
+  assert.ok(DASHBOARD.includes('<script src="student-account.js?v=1.8.0"></script>'));
   assert.ok(DASHBOARD.includes('<script defer src="access-gate.js?v=1.1.0" data-app="student"></script>'));
   const at = text => DASHBOARD.indexOf(text);
   assert.ok(at('<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js">') < at('<script src="student-account.js'), 'the SDK first');
@@ -606,4 +606,25 @@ test('saved filters: only known values come back; anything else is the default',
     { filter: 'approved', level: 'P5', subject: 'has-math', group: 'level', sort: 'child', view: 'table' });
   assert.deepEqual(JSON.parse(JSON.stringify(h.cleanPrefs({ filter: 'x', level: '<img>', subject: 'english', group: 1, sort: null, view: 'grid' }))),
     { filter: 'pending', level: 'all', subject: 'all', group: 'none', sort: 'newest', view: 'cards' });
+});
+
+test('staff requests (Keertana, an employee) are kept apart from the students and never synced to Online', () => {
+  const gate = loadGate();
+  const h = loadAccount().helpers;
+  assert.deepEqual([...h.STAFF], [...gate.core.STAFF], 'the dashboard and the gate name the same staff');
+  const keertana = { _id: 'k', email: 'PKeertana21@gmail.com', status: 'approved', children: [{ name: 'keertana', level: 'P3', subjects: 'both' }] };
+  const family = { _id: 'f', email: 'parent@gmail.com', status: 'approved', children: [{ name: 'Ann', level: 'P5', subjects: 'math' }] };
+  const split = h.splitStaff([keertana, family]);
+  assert.deepEqual([...split.students.map(r => r._id)], ['f']);
+  assert.deepEqual([...split.staff.map(r => r._id)], ['k']);
+  assert.equal(h.isStaffRecord(keertana), true);
+  assert.equal(h.isStaffRecord(family), false);
+  assert.equal(h.isStaffRecord(null), false);
+  assert.equal(h.staffBadge(keertana), 'Employee');
+  assert.match(h.staffRole(keertana), /Employee/);
+  assert.match(h.staffRole(keertana), /Not an admin/);
+  assert.equal(h.staffBadge({ email: 'abigail.yew@stanfordmanpower.com' }), 'Teacher');
+  assert.equal(h.staffBadge({ email: 'support@polymathlc.com.sg' }), 'Admin');
+  assert.equal(h.counts(split.students).approved, 1, 'the employee is not counted as an approved family');
+  assert.equal(h.classify(split.students).total.total, 1, 'nor as a P3 child');
 });

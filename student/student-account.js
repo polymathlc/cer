@@ -40,7 +40,7 @@
 (function () {
   'use strict';
 
-  var VERSION = 'v1.6.0';
+  var VERSION = 'v1.8.0';
   var FIREBASE_CONFIG = {
     apiKey: 'AIzaSyAUSI3Uh28IeqASEp0JhH4QPaVt-O3meBo',
     authDomain: 'mathgen--app.firebaseapp.com',
@@ -51,6 +51,18 @@
   };
   // Keep equal to ACCESS_ADMINS in access-gate.js and tools/student-access-rules.mjs (a test checks).
   var ACCESS_ADMINS = ['chungzhikai@gmail.com', 'admin@polymathlc.com.sg', 'support@polymathlc.com.sg'];
+  // Keep equal to STAFF in access-gate.js (a test checks). Staff are never students:
+  // a request one of them sent (before their sign-in was verified) is listed apart
+  // under "Staff accounts", never counted, filtered, approved or given Online classes.
+  var STAFF = ACCESS_ADMINS.concat(['elsielcr@gmail.com', 'abigail.yew@stanfordmanpower.com', 'pkeertana21@gmail.com']);
+  // What each staff member is (shown on their row). Keertana is an EMPLOYEE: she writes
+  // questions in Science, Math, English and Chinese (EMPLOYEE_EMAILS in each app) and is
+  // admin in none of them.
+  var STAFF_ROLES = {
+    'pkeertana21@gmail.com': 'Employee: writes questions in the Science, Math, English and Chinese portals. Not an admin.',
+    'abigail.yew@stanfordmanpower.com': 'Teacher (Science and Math admin).',
+    'elsielcr@gmail.com': 'Teacher.'
+  };
   // Centre usernames (no @) sign in as username@this domain — the same mapping the Science app uses.
   var STUDENT_USERNAME_DOMAIN = 'students.sciencequest.app';
   var RESET_SUFFIX_MAX = 9;
@@ -132,6 +144,25 @@
       var ta = toDate(a.submittedAt), tb = toDate(b.submittedAt);
       return (tb ? tb.getTime() : 0) - (ta ? ta.getTime() : 0);
     });
+  }
+  /** A request sent by a staff account (an employee, a teacher or an admin): not a student. */
+  function isStaffRecord(record) {
+    return !!record && STAFF.indexOf(lower(record.email)) >= 0;
+  }
+  function staffRole(record) {
+    var email = lower(record && record.email);
+    return STAFF_ROLES[email] || (ACCESS_ADMINS.indexOf(email) >= 0 ? 'Admin.' : 'Staff.');
+  }
+  function staffBadge(record) {
+    var email = lower(record && record.email);
+    if (ACCESS_ADMINS.indexOf(email) >= 0) return 'Admin';
+    return /^Employee/.test(STAFF_ROLES[email] || '') ? 'Employee' : 'Teacher';
+  }
+  /** Split the requests: { students: [...], staff: [...] }. */
+  function splitStaff(list) {
+    var out = { students: [], staff: [] };
+    (list || []).forEach(function (r) { (isStaffRecord(r) ? out.staff : out.students).push(r); });
+    return out;
   }
   function counts(list) {
     var c = { all: list.length, pending: 0, approved: 0, revoked: 0 };
@@ -389,7 +420,8 @@
     childMatches: childMatches, recordMatchesClass: recordMatchesClass, matchingChildren: matchingChildren, classify: classify,
     chipCounts: chipCounts, recordLevel: recordLevel, recordSubjects: recordSubjects, sortBy: sortBy, groupRecords: groupRecords,
     cleanPrefs: cleanPrefs, levelRank: levelRank, SUBJECT_FILTERS: SUBJECT_FILTERS, GROUPS: GROUPS, SORTS: SORTS, VIEWS: VIEWS,
-    ACCESS_ADMINS: ACCESS_ADMINS, LEVELS: LEVELS, SUBJECTS: SUBJECTS };
+    ACCESS_ADMINS: ACCESS_ADMINS, LEVELS: LEVELS, SUBJECTS: SUBJECTS,
+    STAFF: STAFF, isStaffRecord: isStaffRecord, staffRole: staffRole, staffBadge: staffBadge, splitStaff: splitStaff };
   window.MyPolymathAccount = { version: VERSION, helpers: helpers };
 
   if (typeof document === 'undefined') return;
@@ -613,7 +645,7 @@
   }
 
   /* ---------------------------- admin view ---------------------------- */
-  var admin = { records: [], filter: 'pending', query: '', editing: null, confirming: null, unsubscribe: null, error: '', notice: '', loaded: false, busy: {},
+  var admin = { records: [], staffRecords: [], filter: 'pending', query: '', editing: null, confirming: null, unsubscribe: null, error: '', notice: '', loaded: false, busy: {},
     level: 'all', subject: 'all', group: 'none', sort: 'newest', view: 'cards' };
   // The admin's filters, remembered on this device only (storage may be refused: then the defaults).
   var PREFS_KEY = 'polymath-access-admin-filters-v1';
@@ -654,12 +686,15 @@
     if (admin.unsubscribe || !db) return;
     admin.error = '';
     admin.unsubscribe = db.collection('studentAccess').onSnapshot(function (snap) {
-      admin.records = snap.docs.map(function (doc) {
+      var split = splitStaff(snap.docs.map(function (doc) {
         var data = doc.data() || {};
         data.uid = data.uid || doc.id;
         data._id = doc.id;
         return data;
-      });
+      }));
+      // Staff requests never reach the student list, its counts or the Online sync.
+      admin.records = split.students;
+      admin.staffRecords = split.staff;
       admin.loaded = true;
       admin.error = '';
       renderAdmin();
@@ -905,6 +940,27 @@
     '</article>';
   }
 
+  /** Staff accounts that once sent a request: listed apart, with only Remove. */
+  function staffHtml(list) {
+    if (!list || !list.length) return '';
+    return '<section class="staff-section" id="staffSection" aria-labelledby="staffTitle">' +
+      '<h3 id="staffTitle">Staff accounts <span class="muted">(not students)</span></h3>' +
+      '<p class="muted">These accounts are Polymath staff. They are never asked to enrol, are not counted above and get no student classes; their old request does nothing. Remove it to tidy up.</p>' +
+      list.map(function (record) {
+        var id = esc(record._id), busy = !!admin.busy[record._id];
+        var confirming = admin.confirming && admin.confirming.id === record._id && admin.confirming.action === 'delete';
+        return '<article class="staff-row" data-staff="' + id + '">' +
+          '<div><b>' + esc(record.parentName || accountLabel(record.email)) + '</b> <span class="staff-badge">' +
+            esc(staffBadge(record)) + '</span>' +
+          '<div class="muted">' + esc(accountLabel(record.email)) + '</div>' +
+          '<div>' + esc(staffRole(record)) + '</div></div>' +
+          '<button type="button" class="button button-danger" data-admin="delete" data-id="' + id + '"' + (busy ? ' disabled' : '') + '>' +
+            (confirming ? 'Tap again to remove' : 'Remove request') + '</button>' +
+        '</article>';
+      }).join('') +
+    '</section>';
+  }
+
   function renderAdmin() {
     if (!adminView || !wantsAdmin()) return;
     if (!user) {
@@ -959,7 +1015,8 @@
       (admin.loaded && shown.length ? '<p class="muted result-line" id="adminResultLine">Showing ' + shown.length + ' famil' + (shown.length === 1 ? 'y' : 'ies') + ' · ' + shownKids + ' child' + (shownKids === 1 ? '' : 'ren') + '</p>' : '') +
       (admin.loaded && !shown.length ? '<div class="admin-empty">' + (admin.filter === 'pending' && !admin.query && !classFiltered() ? 'Nobody is waiting for approval. 🎉' : 'No accounts match these filters.') + '</div>' : '') +
       '<div id="adminList">' + listHtml(shown) + '</div>' +
-      '<p class="muted admin-foot">Each child\'s subjects decide the apps: Math only opens Math, Science only opens Science and Science PSLE, Both opens all three. English, Chinese, Study Buddy, Answer Keys and Rewards open for every approved family, and the Worksheets portal shows each child\'s own level (P3 to P6) and subjects. Change them with Edit; every app follows. Staff and teacher accounts (the three admins, Elsie, Abigail and Keertana) are never asked. Anyone else who signs in to a Polymath app is asked once and waits here.</p>';
+      staffHtml(admin.staffRecords) +
+      '<p class="muted admin-foot">Each child\'s subjects decide the apps: Math only opens Math, Science only opens Science and Science PSLE, Both opens all three. English, Chinese, Study Buddy, Answer Keys and Rewards open for every approved family, and the Worksheets portal shows each child\'s own level (P3 to P6) and subjects. Change them with Edit; every app follows. Staff accounts (the three admins, teachers Elsie and Abigail, and employee Keertana) are never asked and are listed apart, never as students. Anyone else who signs in to a Polymath app is asked once and waits here.</p>';
     if (hadFocus) {
       var search = adminView.querySelector('#adminSearch');
       if (search) { search.focus(); try { search.setSelectionRange(caret, caret); } catch (error) { /* fine */ } }
