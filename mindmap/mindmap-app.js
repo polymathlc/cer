@@ -1,5 +1,5 @@
 /* =====================================================================
-   POLYMATH MIND MAP — the app (v1.1.0, November 2026)
+   POLYMATH MIND MAP — the app (v1.2.0, November 2026)
    ---------------------------------------------------------------------
    polymathlc.com.sg/mindmap. See index.html for the overview.
 
@@ -17,7 +17,7 @@
      8. saving, opening, sharing, importing and printing
    ===================================================================== */
 import {
-  auth, db, fb, watchUser, signInGoogle, signInUsername, signOut, friendlyAuthError, isStaffEmail,
+  auth, db, fb, watchUser, signInGoogle, signInUsername, signOut, friendlyAuthError, isStaffEmail, isPublisherEmail, isPublisherAddress,
   aiText, aiImage, transcribe, uploadDataUrl
 } from './mindmap-services.js';
 import {
@@ -27,10 +27,10 @@ import {
   serializeMap, mapBytes, mapToOutline, nodeLabel, parseAiJson, extractHtmlDocument, buildSandboxDoc, SANDBOX_FLAGS,
   allowedBankLevels, BANK_LEVELS, voiceSystemPrompt, voiceUserPrompt, expandPrompt, mapFromTopicPrompt,
   APP_SYSTEM, appBuildPrompt, appUpdatePrompt, imagePrompt, applyOps, buildFromOutline, importOutlineText
-} from './mindmap-core.mjs?v=1.1.0';
+} from './mindmap-core.mjs?v=1.2.0';
 import {
   renderQuestionHtml, questionHasAnswer, mountPicker, loadBank, findQuestions, snapshotOf, bankTopics, pickableQuestions, bankState
-} from './mindmap-questions.js?v=1.1.0';
+} from './mindmap-questions.js?v=1.2.0';
 
 /* =====================================================================
    1. STATE AND HELPERS
@@ -43,6 +43,9 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const S = {
   user: null,
   staff: false,
+  publisher: false,           // v1.2.0: may publish maps to every student (Mr Chung's Maps)
+  published: false,           // the open map is published
+  publishedAtMs: 0,
   levels: [],                 // Science levels the question picker may show
   accessPhase: '',
   map: null,
@@ -183,6 +186,7 @@ function readAccess() {
   const st = api ? api.state : null;
   S.accessPhase = st ? st.phase : '';
   S.staff = isStaffEmail(S.user) || !!(st && (st.phase === 'staff' || st.isAdmin));
+  S.publisher = isPublisherEmail(S.user);
   S.levels = allowedBankLevels({ staff: S.staff, pairs: st && st.pairs || [] });
   $('#versionBadge').hidden = !S.staff;
 }
@@ -220,8 +224,25 @@ watchUser(async user => {
     await waitForAccess();
     if (!S.user || S.user.uid !== user.uid) { S.started = false; return; }
     await startApp();
+    announcePublished();
   }
 });
+
+/** v1.2.0: tell a student when Mr Chung has published maps they have not seen yet. */
+async function announcePublished() {
+  if (!S.user || S.publisher) return;
+  try {
+    const list = await listPublishedMaps();
+    if (!list.length) return;
+    const key = 'polymath-mindmap:seen-published:' + S.user.uid;
+    const seen = new Set(String(local(key) || '').split(',').filter(Boolean));
+    const fresh = list.filter(x => !seen.has(x.id));
+    local(key, list.map(x => x.id).join(','));
+    if (!fresh.length) return;
+    toast(fresh.length === 1 ? '📌 New in Mr Chung\'s Maps: “' + fresh[0].title.slice(0, 50) + '”' : '📌 ' + fresh.length + ' new maps in Mr Chung\'s Maps', '',
+      { action: 'Show me', onAction: openMapsModal, ms: 9000 });
+  } catch (e) { console.warn('[mindmap] published maps', e); }
+}
 
 /** Wait until the access gate has let this account in (it shows its own screens meanwhile). */
 function waitForAccess() {
@@ -2375,6 +2396,9 @@ async function saveNow(announce = false) {
       updatedAt: new Date(now).toISOString(),
       updatedAtMs: now,
       nodeCount: data.nodes.length,
+      // v1.2.0: published maps show to every student under "Mr Chung's Maps". Only a publisher's map can stay published.
+      published: !!(S.published && S.publisher),
+      publishedAtMs: S.published && S.publisher ? (S.publishedAtMs || now) : 0,
       app: 'polymath-mindmap',
       appVersion: MINDMAP_VERSION
     });
@@ -2401,6 +2425,45 @@ async function listMyMaps() {
   snap.forEach(d => { const v = d.data(); out.push({ id: d.id, title: v.title || 'Untitled', updatedAtMs: v.updatedAtMs || Date.parse(v.updatedAt || '') || 0, nodeCount: v.nodeCount || (v.nodes || []).length, raw: v }); });
   return out.sort((a, b) => b.updatedAtMs - a.updatedAtMs);
 }
+/**
+ * v1.2.0 — Mr Chung's Maps: the maps a publisher (Mr Chung, admin@, support@) chose to push to every student.
+ * One equality query (no index needed); only maps owned by a publisher address are shown, newest first.
+ */
+async function listPublishedMaps() {
+  const snap = await fb.getDocs(fb.query(fb.collection(db, 'mindmaps'), fb.where('published', '==', true)));
+  const out = [];
+  snap.forEach(d => {
+    const v = d.data();
+    if (!isPublisherAddress(v.ownerEmail)) return;
+    out.push({ id: d.id, title: v.title || 'Untitled', updatedAtMs: v.updatedAtMs || Date.parse(v.updatedAt || '') || 0,
+      publishedAtMs: Number(v.publishedAtMs) || 0, nodeCount: v.nodeCount || (v.nodes || []).length, ownerUid: v.ownerUid, raw: v });
+  });
+  return out.sort((a, b) => (b.publishedAtMs || b.updatedAtMs) - (a.publishedAtMs || a.updatedAtMs));
+}
+/** The header chip and the ⋯ menu item follow the open map. */
+function updatePublishUi() {
+  const chip = $('#publishChip');
+  if (chip) chip.hidden = !(S.published && !S.readOnly);
+  const item = $('#publishMenuItem');
+  if (item) {
+    item.hidden = !S.publisher || S.readOnly;
+    item.textContent = S.published ? '📌 Unpublish (hide from students)' : '📌 Publish to students';
+  }
+}
+/** Publish or unpublish one of the publisher's own maps. Students see it (read-only) under Mr Chung's Maps. */
+async function setPublished(mapId, on) {
+  if (!S.publisher) { toast('Only Mr Chung can publish maps to students.'); return false; }
+  const isOpen = S.map && S.map.id === mapId && !S.readOnly;
+  if (isOpen && S.dirty) await saveNow();
+  const now = Date.now();
+  try {
+    await fb.setDoc(fb.doc(db, 'mindmaps', mapId), { published: !!on, publishedAtMs: on ? now : 0 }, { merge: true });
+  } catch (e) { toast('Could not ' + (on ? 'publish' : 'unpublish') + ': ' + (e.message || e), 'error'); return false; }
+  if (isOpen) { S.published = !!on; S.publishedAtMs = on ? now : 0; updatePublishUi(); }
+  toast(on ? 'Published. Every student now sees this map under Mr Chung\'s Maps.' : 'Unpublished. Students no longer see this map.', 'good');
+  return true;
+}
+
 function useMap(raw, { readOnly = false } = {}) {
   for (const rec of els.values()) rec.el.remove();
   els.clear();
@@ -2416,10 +2479,16 @@ function useMap(raw, { readOnly = false } = {}) {
   S.dirty = false;
   S.inspectorFor = null;
   S.sharedOwner = readOnly ? (raw.ownerName || 'someone') : '';
+  S.published = raw.published === true;
+  S.publishedAtMs = Number(raw.publishedAtMs) || 0;
+  const fromMrChung = readOnly && S.published && isPublisherAddress(raw.ownerEmail);
   $('#mapTitle').value = S.map.title;
   $('#mapTitle').readOnly = readOnly;
   $('#readonlyBanner').hidden = !readOnly;
-  $('#readonlyText').textContent = readOnly ? 'You are viewing “' + S.map.title + '”, shared by ' + S.sharedOwner + '.' : '';
+  $('#readonlyText').textContent = !readOnly ? '' : fromMrChung
+    ? '📌 “' + S.map.title + '” is one of Mr Chung\'s Maps. You can look, fold and try the questions; make your own copy to change it.'
+    : 'You are viewing “' + S.map.title + '”, shared by ' + S.sharedOwner + '.';
+  updatePublishUi();
   setStatus(readOnly ? 'Read-only' : (raw.updatedAtMs ? 'Saved · ' + timeLabel(raw.updatedAtMs) : 'Not saved yet'), readOnly ? 'readonly' : '');
   render();
   const v = S.map.view;
@@ -2491,31 +2560,70 @@ function offerBackup() {
 }
 
 async function openMapsModal() {
-  const m = openModal({ title: '📂 My mind maps', size: 'mid', body: '<div class="loading-bar"><i></i></div>',
+  const m = openModal({ title: '📂 Mind maps', size: 'mid', body: '<div class="loading-bar"><i></i></div>',
     foot: `<button class="btn" type="button" id="mmImport">⬆️ Open a file</button><span class="grow"></span><button class="btn" type="button" id="mmAi">🪄 Build one with AI</button><button class="btn btn-primary" type="button" id="mmNew">✨ New mind map</button>` });
   $('#mmNew', m.foot).addEventListener('click', () => { closeModal(); newBlankMap(); });
   $('#mmAi', m.foot).addEventListener('click', () => { closeModal(); openAiMapModal(); });
   $('#mmImport', m.foot).addEventListener('click', () => { closeModal(); $('#fileInput').click(); });
   try {
     if (S.dirty) await saveNow();
-    const list = await listMyMaps();
+    // v1.2.0: Mr Chung's Maps first (for every student), then the student's own maps.
+    const [list, published] = await Promise.all([
+      listMyMaps(),
+      listPublishedMaps().catch(e => { console.warn('[mindmap] published maps', e); return []; })
+    ]);
     if (ui.modal !== m) return;
-    if (!list.length) { m.body.innerHTML = '<div class="empty-state">No saved maps yet. Start one below.</div>'; return; }
-    m.body.innerHTML = `<input class="input" id="mmSearch" placeholder="Search your maps" autocomplete="off"><div class="maps-list" id="mmList"></div>`;
+    const card = (x, { mine, fromMrChung }) => `<div class="map-card${S.map && x.id === S.map.id ? ' is-current' : ''}" role="button" tabindex="0" data-open="${x.id}" data-from="${fromMrChung ? 'published' : 'mine'}">
+        <b>${escapeHtml(x.title)}</b>
+        ${fromMrChung ? '<span class="by">by Mr Chung</span>' : ''}
+        ${mine && x.raw.published && S.publisher ? '<span class="pub-tag">📌 Published to students</span>' : ''}
+        <small>${x.nodeCount} item${x.nodeCount === 1 ? '' : 's'} · ${escapeHtml(timeLabel(fromMrChung ? (x.publishedAtMs || x.updatedAtMs) : x.updatedAtMs))}</small>
+        ${mine && S.publisher ? `<button class="map-pub${x.raw.published ? ' is-on' : ''}" type="button" data-pub="${x.id}" aria-label="${x.raw.published ? 'Unpublish' : 'Publish'} ${escapeHtml(x.title)}" title="${x.raw.published ? 'Published: tap to hide it from students' : 'Publish to students (Mr Chung\'s Maps)'}">📌</button>` : ''}
+        ${mine ? `<button class="map-del" type="button" data-del="${x.id}" aria-label="Delete ${escapeHtml(x.title)}" title="Delete">🗑</button>` : ''}</div>`;
+    m.body.innerHTML = `<input class="input" id="mmSearch" placeholder="Search maps" autocomplete="off" style="margin-bottom:14px">
+      <section class="maps-section is-published" id="mmPublishedWrap" ${published.length ? '' : 'hidden'}>
+        <h3>📌 Mr Chung's Maps</h3>
+        <p>${S.publisher ? 'Every student sees these. Tap 📌 on one of your maps below to add or remove it.' : 'From your teacher, for reference. Open one to look, or make your own copy to change it.'}</p>
+        <div class="maps-list" id="mmPublished"></div>
+      </section>
+      <section class="maps-section">
+        <h3>🗂 My maps</h3>
+        ${S.publisher ? '<p>Tap 📌 on a map to publish it to every student, or tap it again to hide it.</p>' : ''}
+        <div class="maps-list" id="mmList"></div>
+      </section>`;
     const draw = q => {
-      const shown = list.filter(x => !q || x.title.toLowerCase().includes(q.toLowerCase()));
-      $('#mmList', m.body).innerHTML = shown.map(x => `<div class="map-card${S.map && x.id === S.map.id ? ' is-current' : ''}" role="button" tabindex="0" data-open="${x.id}">
-        <b>${escapeHtml(x.title)}</b><small>${x.nodeCount} item${x.nodeCount === 1 ? '' : 's'} · ${escapeHtml(timeLabel(x.updatedAtMs))}</small>
-        <button class="map-del" type="button" data-del="${x.id}" aria-label="Delete ${escapeHtml(x.title)}" title="Delete">🗑</button></div>`).join('') || '<div class="empty-state">No maps match.</div>';
+      const match = x => !q || x.title.toLowerCase().includes(q.toLowerCase());
+      $('#mmPublished', m.body).innerHTML = published.filter(match).map(x => card(x, { mine: false, fromMrChung: true })).join('') || '<div class="empty-state">No published maps match.</div>';
+      const mine = list.filter(match);
+      $('#mmList', m.body).innerHTML = mine.map(x => card(x, { mine: true, fromMrChung: false })).join('') ||
+        `<div class="empty-state">${list.length ? 'No maps match.' : 'No saved maps yet. Start one below.'}</div>`;
     };
     draw('');
     $('#mmSearch', m.body).addEventListener('input', e => draw(e.target.value));
     m.body.addEventListener('click', async e => {
+      const pub = e.target.closest('[data-pub]');
+      if (pub) {
+        e.stopPropagation();
+        const item = list.find(x => x.id === pub.dataset.pub);
+        if (!item) return;
+        const on = !item.raw.published;
+        if (await setPublished(item.id, on)) {
+          item.raw.published = on;
+          item.raw.publishedAtMs = on ? Date.now() : 0;
+          const i = published.findIndex(x => x.id === item.id);
+          if (on && i < 0) published.unshift({ ...item, publishedAtMs: item.raw.publishedAtMs, ownerUid: S.user.uid });
+          if (!on && i >= 0) published.splice(i, 1);
+          $('#mmPublishedWrap', m.body).hidden = !published.length;
+          draw($('#mmSearch', m.body).value);
+        }
+        return;
+      }
       const del = e.target.closest('[data-del]');
       if (del) {
         e.stopPropagation();
         const item = list.find(x => x.id === del.dataset.del);
-        if (!(await confirmBox('Delete this mind map?', '“' + (item ? item.title : '') + '” will be deleted for good. Anyone you shared it with will lose it too.', 'Delete', true))) { openMapsModal(); return; }
+        const extra = item && item.raw.published ? ' It is published, so students will lose it too.' : ' Anyone you shared it with will lose it too.';
+        if (!(await confirmBox('Delete this mind map?', '“' + (item ? item.title : '') + '” will be deleted for good.' + extra, 'Delete', true))) { openMapsModal(); return; }
         try {
           await fb.deleteDoc(fb.doc(db, 'mindmaps', del.dataset.del));
           toast('Deleted.');
@@ -2524,8 +2632,18 @@ async function openMapsModal() {
         openMapsModal();
         return;
       }
-      const card = e.target.closest('[data-open]');
-      if (card) { closeModal(); const item = list.find(x => x.id === card.dataset.open); if (item) { if (S.dirty) await saveNow(); useMap({ ...item.raw, id: item.id }); } }
+      const cardEl = e.target.closest('[data-open]');
+      if (!cardEl) return;
+      closeModal();
+      if (S.dirty) await saveNow();
+      if (cardEl.dataset.from === 'published') {
+        const item = published.find(x => x.id === cardEl.dataset.open);
+        // Mr Chung opens his own published map to edit it; everyone else sees it read-only.
+        if (item) useMap({ ...item.raw, id: item.id }, { readOnly: item.ownerUid !== S.user.uid });
+      } else {
+        const item = list.find(x => x.id === cardEl.dataset.open);
+        if (item) useMap({ ...item.raw, id: item.id });
+      }
     });
     m.body.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.dataset.open) e.target.click(); });
   } catch (e) {
@@ -2575,6 +2693,8 @@ function duplicateMap() {
   copy.ownerName = S.user.displayName || '';
   copy.ownerEmail = S.user.email || '';
   copy.createdAt = copy.updatedAt = new Date().toISOString();
+  copy.published = false;           // a copy is private until its owner publishes it
+  copy.publishedAtMs = 0;
   useMap(copy);
   S.dirty = true;
   saveNow();
@@ -2635,6 +2755,7 @@ $('#moreMenu').addEventListener('click', async e => {
     case 'new': newBlankMap(); break;
     case 'ai-map': openAiMapModal(); break;
     case 'duplicate': duplicateMap(); break;
+    case 'publish': setPublished(S.map.id, !S.published); break;
     case 'share': shareMap(); break;
     case 'outline': try { await navigator.clipboard.writeText(mapToOutline(S.map)); toast('Copied the map as an outline.', 'good'); } catch (err) { download(safeName(S.map.title) + '.md', mapToOutline(S.map), 'text/markdown'); } break;
     case 'export': download(safeName(S.map.title) + '.json', JSON.stringify(serializeMap(S.map), null, 2)); break;

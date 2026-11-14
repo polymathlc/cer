@@ -10,7 +10,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="../student/assets/app-icons/favicon-32.png">
 <link rel="apple-touch-icon" href="../student/assets/app-icons/apple-touch-icon.png">
 <!--
-  POLYMATH MIND MAP — polymathlc.com.sg/mindmap   (v1.1.0, November 2026)
+  POLYMATH MIND MAP — polymathlc.com.sg/mindmap   (v1.2.0, November 2026)
   ------------------------------------------------------------------------
   A mind-mapping tool for Polymath students and teachers, with four AI features:
 
@@ -396,6 +396,18 @@ button { cursor: pointer; }
 .map-card small { color: var(--text-tertiary); font-size: 0.75rem; }
 .map-card .map-del { position: absolute; top: 8px; right: 8px; border: 0; background: transparent; border-radius: 8px; padding: 2px 6px; color: var(--text-tertiary); }
 .map-card .map-del:hover { background: var(--bad-bg); color: var(--bad); }
+/* v1.2.0: Mr Chung's Maps (published to every student) above each student's own maps. */
+.maps-section { margin: 4px 0 18px; }
+.maps-section h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; font-size: 1rem; }
+.maps-section > p { margin: 0 0 10px; font-size: 0.82rem; color: var(--text-secondary); }
+.maps-section.is-published .map-card { background: #FFF8E1; border-color: #FFE082; }
+.map-card .map-pub { position: absolute; top: 8px; right: 38px; border: 0; background: transparent; border-radius: 8px; padding: 2px 6px; color: var(--text-tertiary); font-size: 0.9rem; }
+.map-card .map-pub:hover { background: #FFF3C4; color: #8D6E00; }
+.map-card .map-pub.is-on { color: #B26A00; }
+.map-card .pub-tag { align-self: flex-start; font-size: 0.68rem; font-weight: 700; background: #FFE082; color: #6D4C00; border-radius: 999px; padding: 1px 8px; }
+.map-card .by { font-size: 0.75rem; color: var(--text-secondary); }
+.publish-chip { display: inline-flex; align-self: flex-start; width: max-content; align-items: center; gap: 4px; margin-left: 8px; font-size: 0.7rem; font-weight: 700; background: #FFE082; color: #6D4C00; border-radius: 999px; padding: 1px 8px; vertical-align: middle; }
+.publish-chip[hidden] { display: none; }
 .empty-state { text-align: center; color: var(--text-tertiary); padding: 24px; font-size: 0.9rem; }
 
 .pic-preview { border-radius: 14px; background: var(--bg-tertiary); min-height: 200px; display: grid; place-items: center; overflow: hidden; }
@@ -549,7 +561,7 @@ button { cursor: pointer; }
     <a href="../student/" aria-label="My Polymath"><img class="polymath-logo" src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Polymath Learning Centre"></a>
     <div class="title-wrap">
       <input class="map-title" id="mapTitle" value="My mind map" aria-label="Mind map title" maxlength="120">
-      <span class="save-status" id="saveStatus" aria-live="polite">Not saved yet</span>
+      <span class="save-status" id="saveStatus" aria-live="polite">Not saved yet</span><span class="publish-chip" id="publishChip" hidden title="Every student sees this map under Mr Chung's Maps">📌 Published</span>
     </div>
     <div class="header-actions">
       <button class="btn btn-small" id="mapsBtn" type="button" data-tooltip="Open, start or delete your mind maps">📂 <span class="hide-narrow">My maps</span></button>
@@ -560,6 +572,7 @@ button { cursor: pointer; }
           <button type="button" data-action="new">✨ New mind map</button>
           <button type="button" data-action="ai-map">🪄 Build a whole map with AI…</button>
           <button type="button" data-action="duplicate">📄 Make a copy</button>
+          <button type="button" data-action="publish" id="publishMenuItem" hidden>📌 Publish to students</button>
           <hr>
           <button type="button" data-action="share">🔗 Share link</button>
           <button type="button" data-action="outline">📋 Copy as outline</button>
@@ -573,7 +586,7 @@ button { cursor: pointer; }
         </div>
       </div>
       <button class="btn btn-small btn-icon" id="printBtn" type="button" aria-label="Print the map" data-tooltip="Print (A4)">🖨</button>
-      <span class="version-badge" id="versionBadge" hidden>v1.1.0</span>
+      <span class="version-badge" id="versionBadge" hidden>v1.2.0</span>
       <span class="user-chip" id="userChip"><span id="userName"></span><span class="avatar" id="userAvatar"></span></span>
     </div>
   </header>
@@ -642,7 +655,7 @@ button { cursor: pointer; }
 <input type="file" id="fileInput" accept=".json,.txt,.md,application/json,text/plain" hidden>
 <input type="file" id="imageFileInput" accept="image/*" hidden>
 
-<script type="module" src="mindmap-app.js?v=1.1.0"></script>
+<script type="module" src="mindmap-app.js?v=1.2.0"></script>
 <!-- 🔐 Student access gate (v1.1.0): students must be approved at polymathlc.com.sg/student/#admin before
      using this app, exactly as in every other student app. Source: polymathlc/cer student/access-gate.js -->
 <script defer src="../student/access-gate.js?v=1.1.0" data-app="mindmap"></script>

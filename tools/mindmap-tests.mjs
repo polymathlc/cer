@@ -232,7 +232,7 @@ test('the page: noindex, the access gate last, the module, and no keys beyond th
   const page = read('mindmap/index.html');
   assert.match(page, /<meta name="robots" content="noindex">/);
   assert.ok(page.trimEnd().endsWith('<script defer src="../student/access-gate.js?v=1.1.0" data-app="mindmap"></script>\n</body>\n</html>'));
-  assert.ok(page.includes('<script type="module" src="mindmap-app.js?v=1.1.0"></script>'));
+  assert.ok(page.includes('<script type="module" src="mindmap-app.js?v=1.2.0"></script>'));
   const services = read('mindmap/mindmap-services.js');
   assert.ok(!/sk-[A-Za-z0-9]{10,}/.test(services + read('mindmap/mindmap-app.js')), 'no OpenAI key in page code');
   assert.ok(services.includes("httpsCallable(functions, 'askOpenAi'") && services.includes("httpsCallable(functions, 'openAiImage'"), 'ChatGPT goes through the server');
@@ -240,8 +240,8 @@ test('the page: noindex, the access gate last, the module, and no keys beyond th
   // Messages from code windows are trusted only from their own iframe.
   assert.ok(app.includes('e.source === frame.contentWindow'));
   // The same version everywhere.
-  assert.ok(read('mindmap/mindmap-core.mjs').includes(`MINDMAP_VERSION = '1.1.0'`));
-  assert.ok(page.includes('>v1.1.0<'));
+  assert.ok(read('mindmap/mindmap-core.mjs').includes(`MINDMAP_VERSION = '1.2.0'`));
+  assert.ok(page.includes('>v1.2.0<'));
 });
 
 test('the access lists match the gate', () => {
