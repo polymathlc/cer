@@ -5,9 +5,9 @@
 <meta name="robots" content="noindex">  <!-- 🔎 app/tool page: kept out of search results (Oct 2026) -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>My Polymath — Student Dashboard | Polymath Learning Centre</title>
-<meta name="description" content="Every Polymath Learning Centre app in one place: Science, Science PSLE, Math, Answer Keys, Study Buddy, Rewards, Worksheets, Chinese and English.">
+<meta name="description" content="Every Polymath Learning Centre app in one place: Science, Science PSLE, Math, Answer Keys, Study Buddy, Rewards, Worksheets, Chinese, English and Mind Map.">
 <!--
-  MY POLYMATH — the student dashboard at polymathlc.com.sg/student  (v1.5.0)
+  MY POLYMATH — the student dashboard at polymathlc.com.sg/student  (v1.6.0)
   ------------------------------------------------------------------------
   One page of square tiles, one per student app. Each tile is a plain link to
   the app's own published address, so the tiles need no script to work.
@@ -29,7 +29,7 @@
   data-subject and lock (🔒 Not in your subjects) for an approved account that
   does not have that subject; the apps themselves refuse too, at their direct
   addresses (data-subject on each app's access-gate tag). Answer Keys, Study
-  Buddy, Rewards, Chinese and English open for every approved account. Polymath
+  Buddy, Rewards, Chinese, English and Mind Map (v1.6.0) open for every approved account. Polymath
   Online (/online) shows each child's own level and subjects. An admin changes
   them with Edit at #admin, and every app follows.
 
@@ -707,6 +707,21 @@
           </span>
         </a>
       </li>
+      <li style="--order:9">
+        <!-- 🧠 Mind map (v1.6.0): polymathlc.com.sg/mindmap, published by the website sync from mindmap/ in this
+             repo, so like Worksheets it links to the website itself. It loads the same access gate with no
+             data-subject, so it opens for every approved account, like Study Buddy, Chinese and English. -->
+        <a class="app-tile" data-app="mindmap" href="https://polymathlc.com.sg/mindmap/" style="--tile-wash:#E1BEE7;--tile-ink:#7B1FA2">
+          <img class="tile-icon" src="assets/apps/mindmap.png" alt="" width="84" height="84">
+          <span class="tile-badge" hidden>Last opened</span>
+          <span class="tile-go" aria-hidden="true">→</span>
+          <span class="tile-words">
+            <span class="tile-name">Mind Map</span>
+            <span class="tile-blurb">Build maps with pictures, apps and questions</span>
+            <span class="print-address">polymathlc.com.sg/mindmap</span>
+          </span>
+        </a>
+      </li>
     </ul>
   </nav>
 
@@ -726,14 +741,14 @@
   © Polymath Learning Centre · polymathlc.com.sg
 </footer>
 
-<div class="version-badge" id="versionBadge" aria-hidden="true">v1.5.0</div>
+<div class="version-badge" id="versionBadge" aria-hidden="true">v1.6.0</div>
 
 <script>
   /* My Polymath — the little the page does with script. Everything works without it. */
   (function () {
     'use strict';
 
-    var DASHBOARD_VERSION = 'v1.5.0';
+    var DASHBOARD_VERSION = 'v1.6.0';
     var LAST_OPENED_KEY = 'polymath-dashboard-last-opened';
 
     var versionBadge = document.getElementById('versionBadge');

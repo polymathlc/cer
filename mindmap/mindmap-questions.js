@@ -23,7 +23,7 @@ import { db, fb, BANK_ADMIN_EMAILS } from './mindmap-services.js';
 import {
   TOPIC_LEVELS, BANK_LEVELS, questionServable, questionLevel, filterQuestions, questionHeadline, questionFirstImage,
   questionIsMcq, questionSnapshot, questionSearchText, tableRows, escapeHtml, levelRank
-} from './mindmap-core.mjs?v=1.0.0';
+} from './mindmap-core.mjs?v=1.1.0';
 
 /* ------------------------------------------------------------------ */
 /*  Sanitising                                                          */
@@ -257,9 +257,12 @@ export function levelOf(q) { return questionLevel(q, bank.topicLevels); }
 /* ------------------------------------------------------------------ */
 /**
  * Opens the picker in `host` (a modal body the page made). Calls
- * `onPlace(questions[])` with the chosen bank questions.
+ * `onPlace(questions[], { free, folded })` with the chosen bank questions.
+ * `placement` (v1.1.0) = { target, free, folded }: the footer lets the user put the
+ * questions under `target` (a topic's name) or each on its own, and folded or open.
  */
-export function mountPicker(host, { staff = false, levels = BANK_LEVELS, onPlace, onClose, alreadyOnMap = [], notice = '' }) {
+export function mountPicker(host, { staff = false, levels = BANK_LEVELS, onPlace, onClose, alreadyOnMap = [], notice = '', placement = null }) {
+  const how = { free: !!(placement && placement.free), folded: placement ? placement.folded !== false : false };
   const state = {
     search: '', topic: '', level: '', kind: '', sort: 'newest', view: (() => { try { return localStorage.getItem('mindmap-picker-view') || 'tiles'; } catch (e) { return 'tiles'; } })(),
     picked: new Map(), active: '', shown: 60, answerShown: false
@@ -398,15 +401,28 @@ export function mountPicker(host, { staff = false, levels = BANK_LEVELS, onPlace
   function footer() {
     const foot = host.footerEl;
     if (!foot) return;
-    foot.innerHTML = `<span class="grow">${state.picked.size ? state.picked.size + ' chosen. They will be placed under the selected topic.' : 'Tap a question to preview, tap again (or its circle) to choose. Double-tap to place at once.'}</span>
+    const target = placement && placement.target ? placement.target : 'the selected topic';
+    const where = how.free ? 'each on its own (attached to no topic)' : 'under “' + target + '”';
+    const choices = placement ? `
+      <div class="pk-place" role="group" aria-label="Where the questions go">
+        <div class="seg" role="radiogroup" aria-label="Place">
+          <button type="button" role="radio" data-pk-where="topic" aria-checked="${how.free ? 'false' : 'true'}" class="${how.free ? '' : 'is-on'}" title="Each question hangs from ${escapeHtml(target)}">🔗 Under ${escapeHtml(target.length > 18 ? target.slice(0, 17) + '…' : target)}</button>
+          <button type="button" role="radio" data-pk-where="free" aria-checked="${how.free ? 'true' : 'false'}" class="${how.free ? 'is-on' : ''}" title="Each question is its own container, attached to nothing">📦 On its own</button>
+        </div>
+        <label class="pk-fold"><input type="checkbox" data-pk-folded ${how.folded ? 'checked' : ''}> Folded (one line each)</label>
+      </div>` : '';
+    foot.innerHTML = `${choices}<span class="grow">${state.picked.size ? state.picked.size + ' chosen. They will be placed ' + escapeHtml(where) + '.' : 'Tap a question to preview, tap again (or its circle) to choose. Double-tap to place at once.'}</span>
       <button class="btn" type="button" data-pk="clear" ${state.picked.size ? '' : 'disabled'}>Clear</button>
       <button class="btn btn-primary" type="button" data-pk="place" ${state.picked.size ? '' : 'disabled'}>Place ${state.picked.size || ''} in map</button>`;
     foot.querySelector('[data-pk="clear"]').addEventListener('click', () => { state.picked.clear(); draw(); });
     foot.querySelector('[data-pk="place"]').addEventListener('click', place);
+    foot.querySelectorAll('[data-pk-where]').forEach(b => b.addEventListener('click', () => { how.free = b.dataset.pkWhere === 'free'; footer(); }));
+    const folded = foot.querySelector('[data-pk-folded]');
+    if (folded) folded.addEventListener('change', () => { how.folded = folded.checked; footer(); });
   }
   function place() {
     if (!state.picked.size) return;
-    onPlace([...state.picked.values()]);
+    onPlace([...state.picked.values()], { ...how });
   }
 
   loadBank({ onProgress: (part, n) => { $('#pkCount').textContent = 'Loading the question bank… ' + n + ' questions'; } }).then(() => {
@@ -420,7 +436,7 @@ export function mountPicker(host, { staff = false, levels = BANK_LEVELS, onPlace
     $('#pkLoading').remove();
     $('#pkCount').textContent = '';
     grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">The question bank could not be loaded. ${escapeHtml(e.message || '')}<br><br><button class="btn btn-small" type="button" id="pkRetry">Try again</button></div>`;
-    grid.querySelector('#pkRetry').addEventListener('click', () => mountPicker(host, { staff, levels, onPlace, onClose, alreadyOnMap, notice }));
+    grid.querySelector('#pkRetry').addEventListener('click', () => mountPicker(host, { staff, levels, onPlace, onClose, alreadyOnMap, notice, placement: placement ? { ...placement, ...how } : null }));
   });
   footer();
   return { close: () => onClose && onClose() };

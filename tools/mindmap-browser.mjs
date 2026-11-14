@@ -95,6 +95,50 @@ try {
     await mcq.click();
     await page.waitForSelector('.mm-node.type-question .qc-answer');
 
+    // v1.1.0: a question card folds to one line and opens again.
+    const firstQ = page.locator('.mm-node.type-question').first();
+    const qid = await firstQ.getAttribute('data-id');
+    const openBox = await firstQ.boundingBox();
+    // The card may sit outside the visible canvas (the canvas is panned, not scrolled), so the click is dispatched.
+    await firstQ.locator('.q-fold').dispatchEvent('click');
+    await page.waitForSelector(`.mm-node[data-id="${qid}"].is-folded .q-mini`);
+    const foldedBox = await page.locator(`.mm-node[data-id="${qid}"]`).boundingBox();
+    assert.ok(foldedBox.height < openBox.height, 'a folded card is shorter than an open one');
+    assert.equal(await page.locator(`.mm-node[data-id="${qid}"] .q-body`).count(), 0, 'a folded card hides the question body');
+    await page.locator(`.mm-node[data-id="${qid}"] .q-mini`).dispatchEvent('click');
+    await page.waitForSelector(`.mm-node[data-id="${qid}"]:not(.is-folded) .q-body`);
+    await shot(page, 'student-question-folding');
+
+    // v1.1.0: questions placed on their own are free-standing containers, attached to no topic.
+    const branchesBefore = await page.$$eval('path.branch', p => p.length);
+    await page.click('.mm-node.is-root');
+    await page.click('#toolQuestion');
+    await page.waitForSelector('.q-tile');
+    await page.click('[data-pk-where="free"]');
+    await page.check('[data-pk-folded]');
+    await page.click('.q-tile >> nth=2 >> .q-check');
+    await page.click('.q-tile >> nth=3 >> .q-check');
+    assert.match(await page.textContent('.modal-foot .grow'), /on its own/);
+    await page.click('[data-pk="place"]');
+    await page.waitForFunction(() => document.querySelectorAll('.mm-node.type-question.is-free.is-folded').length === 2);
+    assert.equal(await page.$$eval('path.branch', p => p.length), branchesBefore, 'no branch is drawn to a free-standing question');
+    await page.waitForTimeout(450);
+    await shot(page, 'student-free-questions');
+    // Tidy-up leaves them where they are.
+    const freeId = await page.getAttribute('.mm-node.type-question.is-free >> nth=0', 'data-id');
+    const spotBefore = await page.$eval(`.mm-node[data-id="${freeId}"]`, e => [e.style.left, e.style.top]);
+    await page.click('#toolTidy');
+    await page.waitForTimeout(500);
+    assert.deepEqual(await page.$eval(`.mm-node[data-id="${freeId}"]`, e => [e.style.left, e.style.top]), spotBefore, 'tidy-up does not move a free question');
+    // An attached question can be made to stand on its own from the panel.
+    const head = page.locator(`.mm-node[data-id="${qid}"] .q-head`);
+    await head.dispatchEvent('pointerdown', { pointerId: 7, button: 0, isPrimary: true });
+    await head.dispatchEvent('pointerup', { pointerId: 7, button: 0, isPrimary: true });
+    if (await page.locator('#inspectorToggle').isVisible()) await page.click('#inspectorToggle');
+    await page.waitForSelector('[data-i="detach"]');
+    await page.click('[data-i="detach"]');
+    await page.waitForSelector(`.mm-node[data-id="${qid}"].is-free`);
+
     // Keyboard building, undo.
     await page.click('.mm-node.is-root');
     const before = await page.$$eval('.mm-node', n => n.length);
@@ -108,10 +152,15 @@ try {
 
     // It saved, to mindmaps/{id}, owned by this account.
     await page.waitForFunction(() => window.__saves >= 1);
+    // The newest save (the page saves 1.4 s after the last change) holds the free-standing questions.
+    await page.waitForFunction(() => [...window.__store.entries()].some(([k, v]) => k.startsWith('mindmaps/') && v.nodes.filter(n => n.type === 'question' && !n.parentId).length >= 2), null, { timeout: 10000 });
     const saved = await page.evaluate(() => [...window.__store.entries()].filter(([k]) => k.startsWith('mindmaps/')).map(([, v]) => v));
     assert.equal(saved.length, 1);
     assert.equal(saved[0].ownerUid, 'student1');
     assert.ok(saved[0].nodes.length >= 10);
+    const savedFree = saved[0].nodes.filter(n => n.type === 'question' && !n.parentId);
+    assert.ok(savedFree.length >= 2, 'free-standing questions are saved with no parent');
+    assert.ok(savedFree.every(n => n.question.folded === true || n.id === qid), 'and they were saved folded');
     assert.deepEqual(errors, []);
     await ctx.close();
   }
