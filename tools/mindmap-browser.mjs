@@ -50,6 +50,12 @@ try {
     await page.keyboard.type('Plants');
     await page.keyboard.press('Enter');
     assert.equal(await page.$eval('.mm-node.is-root .mm-text', e => e.textContent), 'Plants', 'typing renames the centre');
+    // v1.3.0: the voice panel is hidden until the 🎙 tool opens it.
+    assert.ok(await page.$eval('#voiceDock', e => e.hidden), 'the voice panel is hidden by default');
+    assert.equal(await page.isVisible('#commandInput'), false);
+    await page.click('#toolVoice');
+    await page.waitForSelector('#voiceDock:not([hidden]) #commandInput');
+    assert.equal(await page.getAttribute('#toolVoice', 'aria-pressed'), 'true');
     await page.fill('#commandInput', 'make a map about plants');
     await page.press('#commandInput', 'Enter');
     await page.waitForSelector('.mm-node.type-image img.pic', { timeout: 15000 });
@@ -90,10 +96,45 @@ try {
     await page.click('[data-view="list"]');
     await page.click('[data-pk="place"]');
     await page.waitForFunction(() => document.querySelectorAll('.mm-node.type-question').length === 4);
-    // Checking an MCQ answer on the map.
-    const mcq = page.locator('.mm-node.type-question [data-option-id="o1"]').first();
-    await mcq.click();
-    await page.waitForSelector('.mm-node.type-question .qc-answer');
+    // v1.3.0: an MCQ is answered like in the cer app: numbered options, pick one, Check answer.
+    const mcqCard = page.locator('.mm-node.type-question:has([data-qmcq])').first();
+    const optNums = await mcqCard.locator('.qp-opt').evaluateAll(o => o.map(x => x.textContent.trim().slice(0, 2)));
+    assert.deepEqual(optNums, ['1.', '2.', '3.', '4.'], 'MCQ options are numbered like cer');
+    await mcqCard.locator('[data-qmcq][value="o1"]').dispatchEvent('click');
+    await mcqCard.locator('[data-qact="check"]').first().dispatchEvent('click');
+    await mcqCard.locator('.qp-feedback').first().waitFor();
+    assert.equal(await mcqCard.locator('.qp-opt.is-wrong').count(), 1, 'the wrong pick is marked');
+    assert.equal(await mcqCard.locator('.qp-opt.is-right').count(), 1, 'the correct option is shown');
+    // v1.3.0: a structured question shows its (a), (b), (c) parts and marks, with space to answer and AI marking.
+    const openCard = page.locator('.mm-node.type-question:has(.qp-open)').first();
+    const tags = await openCard.locator('.qp-part-tag').allTextContents();
+    assert.ok(['(a)', '(b)', '(c)'].every(t => tags.includes(t)), 'part labels are shown: ' + tags.join(' '));
+    assert.ok(await openCard.locator('.q-marks').count() >= 2, 'marks are shown');
+    assert.deepEqual(await openCard.locator('.qp-chip').allTextContents(), ['Claim', 'Evidence', 'Reasoning']);
+    const box = openCard.locator('textarea.qp-open').first();
+    await box.fill('Set-up A');
+    const boxKey = await box.getAttribute('data-qinput');
+    await openCard.locator(`[data-qact="check"][data-qkey="${boxKey}"]`).dispatchEvent('click');
+    await openCard.locator('.qp-feedback').first().waitFor({ timeout: 10000 });
+    assert.match(await openCard.locator('.qp-feedback').first().textContent(), /Good start/);
+    assert.match(await openCard.locator('.qp-model').first().textContent(), /Set-up A|Metal conducts heat/);
+    assert.equal(await openCard.locator('textarea.qp-open').first().inputValue(), 'Set-up A', 'the answer stays in its box');
+    await openCard.locator(`[data-qact="hint"][data-qkey="${boxKey}"]`).dispatchEvent('click');
+    await openCard.locator('.qp-hint').first().waitFor({ timeout: 10000 });
+    // A blank is marked on the spot when the word matches.
+    const blank = openCard.locator('input.qp-blank').first();
+    await blank.fill('Conductor');
+    await openCard.locator(`[data-qact="check"][data-qkey="${await blank.getAttribute('data-qblank')}"]`).dispatchEvent('click');
+    await openCard.locator('.qp-feedback.is-correct').first().waitFor({ timeout: 10000 });
+    assert.match(await openCard.locator('.qp-score').textContent(), /Score/);
+    if (shots) {   // a copy of each card, at full size on top of the page, for the pictures
+      for (const [card, name] of [[openCard, 'student-question-practice'], [mcqCard, 'student-question-mcq']]) {
+        await card.evaluate(el => { const c = el.cloneNode(true); c.id = 'shotCopy'; Object.assign(c.style, { position: 'fixed', left: '120px', top: '80px', transform: 'none', zIndex: 99999 }); document.body.appendChild(c); });
+        await page.locator('#shotCopy').screenshot({ path: path.join(shots, name + '.png') });
+        await page.evaluate(() => document.getElementById('shotCopy').remove());
+      }
+    }
+    assert.ok(await page.evaluate(() => window.__aiCalls.some(c => /marking ONE part/.test(c.prompt))), 'open answers are marked by the AI');
 
     // v1.1.0: a question card folds to one line and opens again.
     const firstQ = page.locator('.mm-node.type-question').first();
@@ -229,6 +270,7 @@ try {
   // ── Phone ──
   {
     const { page, errors, ctx } = await open(browser, { phone: true });
+    await page.click('#toolVoice');
     await page.fill('#commandInput', 'make a map about plants');
     await page.press('#commandInput', 'Enter');
     await page.waitForSelector('.mm-node.type-image img.pic', { timeout: 15000 });

@@ -10,7 +10,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="../student/assets/app-icons/favicon-32.png">
 <link rel="apple-touch-icon" href="../student/assets/app-icons/apple-touch-icon.png">
 <!--
-  POLYMATH MIND MAP — polymathlc.com.sg/mindmap   (v1.2.0, November 2026)
+  POLYMATH MIND MAP — polymathlc.com.sg/mindmap   (v1.3.0, November 2026)
   ------------------------------------------------------------------------
   A mind-mapping tool for Polymath students and teachers, with four AI features:
 
@@ -347,6 +347,53 @@ button { cursor: pointer; }
 .voice-transcript .interim { color: var(--text-tertiary); }
 .voice-reply { font-size: 0.85rem; color: var(--science-ink); min-height: 0; }
 .command-form { display: flex; gap: 6px; }
+.voice-dock[hidden] { display: none !important; }
+.voice-side { display: flex; align-items: center; gap: 4px; }
+.voice-hide { font-size: 1.1rem; line-height: 1; }
+.tool.is-on { background: var(--accent-light); box-shadow: inset 0 0 0 2px var(--accent-base); }
+/* With the voice panel away, nothing needs to sit above it. */
+#app.voice-off .zoom-dock { bottom: 14px; }
+/* v1.3.0: answering a question on the map, laid out like the cer app's practice card. */
+.qp-sec + .qp-sec { margin-top: 12px; padding-top: 12px; border-top: 1px dashed #BBDEFB; }
+.qp-part-row { display: flex; gap: 8px; align-items: flex-start; }
+.qp-part-tag { flex: none; font-weight: 700; color: var(--science-ink); background: #E3F2FD; border-radius: 8px; padding: 0 7px; line-height: 1.6; font-size: 0.85rem; }
+.qp-qtext { min-width: 0; flex: 1; }
+.qp-qtext p { margin: 0 0 6px; }
+.q-marks { font-weight: 700; color: var(--text-secondary); white-space: nowrap; }
+.qp-caption { display: block; text-align: center; color: var(--text-tertiary); }
+.qp-answer { margin: 8px 0 10px; }
+.qp-chip { display: inline-block; font-size: 0.72rem; font-weight: 700; border-radius: 999px; padding: 1px 10px; margin-bottom: 4px; background: var(--bg-tertiary); }
+.qp-open, .qp-line { width: 100%; box-sizing: border-box; border: 1px solid var(--border-default, #D6D6D6); border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 0.88rem; line-height: 1.45; background: #fff; resize: vertical; cursor: text; user-select: text; }
+.qp-open:focus, .qp-line:focus, .qp-blank:focus { outline: none; border-color: #64B5F6; box-shadow: 0 0 0 3px rgba(100, 181, 246, 0.25); }
+.qp-open[data-verdict="correct"], .qp-line[data-verdict="correct"] { border-color: #43A047; }
+.qp-open[data-verdict="partial"], .qp-line[data-verdict="partial"] { border-color: #FB8C00; }
+.qp-open[data-verdict="incorrect"], .qp-line[data-verdict="incorrect"] { border-color: #E53935; }
+.qp-actions { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.qp-actions .btn { font-size: 0.78rem; padding: 4px 10px; }
+.qp-check { background: #E8F5E9; border-color: #A5D6A7; color: #2E7D32; }
+.qp-hint { margin-top: 6px; padding: 7px 10px; border: 1px solid #FFB74D; background: #FFF3E0; border-radius: 8px; font-size: 0.82rem; line-height: 1.5; }
+.qp-feedback { margin-top: 6px; font-size: 0.84rem; line-height: 1.5; }
+.qp-feedback.is-correct > b { color: #2E7D32; }
+.qp-feedback.is-partial > b { color: #E65100; }
+.qp-feedback.is-incorrect > b { color: #C62828; }
+.qp-feedback.is-error { color: #C62828; }
+.qp-model { margin-top: 3px; color: #1B5E20; font-size: 0.82rem; }
+.qp-muted { color: var(--text-tertiary); font-weight: 400; }
+.qp-opt { display: flex; gap: 8px; align-items: flex-start; padding: 7px 10px; border: 1px solid var(--border-default, #D6D6D6); border-radius: 8px; margin-bottom: 6px; cursor: pointer; background: #fff; transition: background 0.15s ease, border-color 0.15s ease; }
+.qp-opt:hover { background: #F5FAFF; }
+.qp-opt input { margin-top: 3px; accent-color: #1E88E5; }
+.qp-opt.is-picked { border-color: #64B5F6; }
+.qp-opt.is-right { background: #DCFCE7; border-color: #16A34A; }
+.qp-opt.is-wrong { background: #FEE2E2; border-color: #DC2626; }
+.qp-sentence { line-height: 2.3; }
+.qp-blank { width: 11ch; border: 0; border-bottom: 2px solid #90CAF9; background: #F5FAFF; border-radius: 4px 4px 0 0; padding: 1px 6px; font: inherit; font-size: 0.88rem; text-align: center; }
+.qp-blank.is-correct { border-color: #43A047; background: #F0FDF4; }
+.qp-blank.is-incorrect { border-color: #E53935; background: #FEF2F2; }
+.qp-explain { margin-top: 10px; padding: 9px 12px; border-left: 4px solid #FFB74D; background: #FFF8E1; border-radius: 6px; font-size: 0.85rem; }
+.qp-score { margin-top: 10px; padding: 7px 10px; border-radius: 10px; background: #E3F2FD; font-size: 0.85rem; }
+.qp-score.is-done { background: #E8F5E9; }
+.qc-opt-num { margin-right: 2px; }
+@media print { .qp-actions, .qp-hint { display: none !important; } }
 .command-form .input { padding: 8px 12px; border-radius: var(--radius-full); font-size: 0.9rem; }
 .voice-side { display: flex; gap: 4px; }
 
@@ -580,13 +627,14 @@ button { cursor: pointer; }
           <button type="button" data-action="import">⬆️ Open a file (.json or outline)</button>
           <button type="button" data-action="print">🖨 Print</button>
           <hr>
+          <button type="button" data-action="voice-panel">🎙 Voice panel: <b id="voicePanelState">off</b></button>
           <button type="button" data-action="voice-speak">🔈 Read replies aloud: <b id="speakState">on</b></button>
           <button type="button" data-action="help">⌨️ Shortcuts and help</button>
           <button type="button" data-action="signout">↩︎ Sign out</button>
         </div>
       </div>
       <button class="btn btn-small btn-icon" id="printBtn" type="button" aria-label="Print the map" data-tooltip="Print (A4)">🖨</button>
-      <span class="version-badge" id="versionBadge" hidden>v1.2.0</span>
+      <span class="version-badge" id="versionBadge" hidden>v1.3.0</span>
       <span class="user-chip" id="userChip"><span id="userName"></span><span class="avatar" id="userAvatar"></span></span>
     </div>
   </header>
@@ -607,6 +655,7 @@ button { cursor: pointer; }
         <button class="tool" id="toolCode" type="button" data-tooltip="Code window: paste or build a learning app">💻</button>
         <button class="tool" id="toolQuestion" type="button" data-tooltip="Add questions from the question bank">❓</button>
         <button class="tool" id="toolExpand" type="button" data-tooltip="✨ AI ideas for the selected topic">✨</button>
+        <button class="tool" id="toolVoice" type="button" aria-pressed="false" aria-controls="voiceDock" data-tooltip="🎙 Voice and AI commands (show or hide)">🎙</button>
         <div class="sep"></div>
         <button class="tool" id="toolConnect" type="button" data-tooltip="Connect two items (C)">🔗</button>
         <button class="tool" id="toolTidy" type="button" data-tooltip="Tidy up the layout (T)">🧹</button>
@@ -626,7 +675,8 @@ button { cursor: pointer; }
         </div>
       </div>
 
-      <div class="voice-dock" id="voiceDock">
+      <!-- v1.3.0: off and hidden until the 🎙 tool (or ⋯ menu) shows it; ⌄ folds it away again. -->
+      <div class="voice-dock" id="voiceDock" hidden>
         <button class="mic-btn" id="micBtn" type="button" aria-pressed="false" aria-label="Build by voice">🎙</button>
         <div class="voice-middle">
           <div class="voice-status"><span id="voiceStatus">Tap the mic and talk to build your map</span><span class="level" id="voiceLevel" hidden><i></i><i></i><i></i><i></i><i></i></span></div>
@@ -638,6 +688,7 @@ button { cursor: pointer; }
         </div>
         <div class="voice-side">
           <button class="btn btn-small btn-ghost" id="voiceModeBtn" type="button" data-tooltip="How the mic listens">Live</button>
+          <button class="btn btn-small btn-ghost btn-icon voice-hide" id="voiceHideBtn" type="button" aria-label="Hide the voice panel" data-tooltip="Hide the voice panel">⌄</button>
         </div>
       </div>
 
@@ -655,7 +706,7 @@ button { cursor: pointer; }
 <input type="file" id="fileInput" accept=".json,.txt,.md,application/json,text/plain" hidden>
 <input type="file" id="imageFileInput" accept="image/*" hidden>
 
-<script type="module" src="mindmap-app.js?v=1.2.0"></script>
+<script type="module" src="mindmap-app.js?v=1.3.0"></script>
 <!-- 🔐 Student access gate (v1.1.0): students must be approved at polymathlc.com.sg/student/#admin before
      using this app, exactly as in every other student app. Source: polymathlc/cer student/access-gate.js -->
 <script defer src="../student/access-gate.js?v=1.1.0" data-app="mindmap"></script>

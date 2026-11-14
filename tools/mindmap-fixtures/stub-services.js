@@ -9,8 +9,17 @@ const topics = ['Magnets', 'Light', 'Heat', 'Plant Systems', 'Forces', 'Electric
 for (let i = 0; i < 14; i++) {
   const t = topics[i % topics.length];
   const blocks = [{ id: 'b1', type: 'text', content: `<p>Question ${i + 1} about <b>${t}</b>: which statement is correct? <script>alert(1)</script><img src=x onerror=alert(1)></p>` }];
-  if (i % 2 === 0) blocks.push({ id: 'b2', type: 'mcq', correctId: 'o2', options: [{ id: 'o1', text: '(1) It attracts wood' }, { id: 'o2', text: '(2) It attracts iron' }, { id: 'o3', text: '(3) It repels everything' }, { id: 'o4', text: '(4) None' }] });
-  else { blocks.push({ id: 'b3', type: 'table', data: { 0: { 0: 'Set-up', 1: 'Result' }, 1: { 0: 'A', 1: 'Melts fast' } } }); blocks.push({ id: 'b4', type: 'answer', claim: 'Metal conducts heat', evidence: 'Ice melted faster', reasoning: 'Heat flows quickly' }); }
+  if (i % 2 === 0) blocks.push({ id: 'b2', type: 'mcq', correctId: 'o2', options: [{ id: 'o1', text: 'It attracts wood' }, { id: 'o2', text: 'It attracts iron' }, { id: 'o3', text: 'It repels everything' }, { id: 'o4', text: 'None' }] });
+  else {
+    // Like a cer structured question: parts (a), (b) and (c) with marks, answer spaces and blanks.
+    blocks[0].part = 'a'; blocks[0].marks = 1;
+    blocks.push({ id: 'b3', type: 'table', part: 'a', data: { 0: { 0: 'Set-up', 1: 'Result' }, 1: { 0: 'A', 1: 'Melts fast' } } });
+    blocks.push({ id: 'b5', type: 'plainanswer', part: 'a', content: '<p>Set-up A</p>' });
+    blocks.push({ id: 'b6', type: 'text', part: 'b', marks: 2, content: '<p>(b) Explain why the ice in set-up A melted faster.</p>' });
+    blocks.push({ id: 'b4', type: 'answer', part: 'b', claim: 'Metal conducts heat', evidence: 'Ice melted faster', reasoning: 'Heat flows quickly' });
+    blocks.push({ id: 'b7', type: 'fillblank', part: 'c', marks: 1, text: 'Metal is a good [[conductor]] of heat.' });
+    blocks.push({ id: 'b8', type: 'explanation', content: '<p>Metal conducts heat from the surroundings to the ice.</p>' });
+  }
   sampleQs.push({ id: 'q' + i, title: 'Q' + i, topic: t, category: 'Concept', marks: 2, blocks, createdAt: { seconds: 1700000000 + i }, holdBack: i === 13 });
 }
 store.set('config/admin', { uid: 'admin1' });
@@ -73,6 +82,9 @@ export async function aiText(prompt, opts = {}) {
     }
     return { text: JSON.stringify({ say: 'I built a plant map with a picture, an app and questions.', ops }), route: 'gemini' };
   }
+  if (/marking ONE part/.test(prompt)) return { text: JSON.stringify({ verdict: 'partial', feedback: 'Good start, add the evidence.', modelAnswer: 'Metal conducts heat.' }), route: 'gemini' };
+  if (/fill-in-the-blank/.test(prompt)) return { text: JSON.stringify([{ i: 0, verdict: 'correct' }]), route: 'gemini' };
+  if (/asked for a hint/.test(prompt)) return { text: 'Think about which material lets heat pass through quickly.', route: 'gemini' };
   if (/Suggest \d+ NEW sub-ideas/.test(prompt)) return { text: JSON.stringify({ ideas: [{ text: 'Idea A', note: 'Note A' }, { text: 'Idea B', note: 'Note B' }, { text: 'Idea C', note: 'Note C' }] }), route: 'gemini' };
   if (/Build a complete, well-organised mind map/.test(prompt)) return { text: JSON.stringify({ title: 'Water cycle', branches: [{ text: 'Evaporation', children: [{ text: 'Heat from Sun' }] }, { text: 'Condensation', children: [{ text: 'Clouds form' }] }, { text: 'Precipitation' }, { text: 'Collection' }] }), route: 'gemini' };
   if (/interactive learning app|Change it as asked/.test(prompt)) return { text: '```html\n<!doctype html><html><head><style>body{font-family:sans-serif}</style></head><body><h3>Water travel</h3><input type="range" id="r" min="0" max="10" value="0"><div id="o">0</div><script>r.oninput=()=>{o.textContent=r.value;console.log("moved",r.value)};console.error("test error");try{parent.document.title}catch(e){console.warn("sandbox ok: "+e.name)}</script></body></html>\n```', route: 'openai' };

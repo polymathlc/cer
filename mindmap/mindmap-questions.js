@@ -22,8 +22,10 @@
 import { db, fb, BANK_ADMIN_EMAILS } from './mindmap-services.js';
 import {
   TOPIC_LEVELS, BANK_LEVELS, questionServable, questionLevel, filterQuestions, questionHeadline, questionFirstImage,
-  questionIsMcq, questionSnapshot, questionSearchText, tableRows, escapeHtml, levelRank
-} from './mindmap-core.mjs?v=1.2.0';
+  questionIsMcq, questionSnapshot, questionSearchText, tableRows, escapeHtml, levelRank,
+  questionHasParts, questionPartKeys, blockOpensLabel, partBodyHtml, mcqLabelStyle, mcqLabelOf, mcqOptionText,
+  fillBlankSegments, questionPracticeItems, practiceScore
+} from './mindmap-core.mjs?v=1.3.0';
 
 /* ------------------------------------------------------------------ */
 /*  Sanitising                                                          */
@@ -63,6 +65,7 @@ export function sanitizeHtml(html) {
         if (cs > 1 && cs < 20) keep.colspan = String(cs);
         if (rs > 1 && rs < 40) keep.rowspan = String(rs);
       }
+      if (tag === 'SPAN' && child.getAttribute('class') === 'q-marks') keep.class = 'q-marks';   // the [marks] tag partBodyHtml adds
       for (const attr of [...child.attributes]) child.removeAttribute(attr.name);
       for (const [k, v] of Object.entries(keep)) child.setAttribute(k, v);
       walk(child);
@@ -84,14 +87,14 @@ export function renderQuestionHtml(q, { showAnswers = false, interactive = false
   const blocks = Array.isArray(q && q.blocks) ? q.blocks : [];
   const out = [];
   const answers = [];
-  for (const b of blocks) {
-    if (!b) continue;
+  // v1.3.0: parts (a)(b)(ii) and [marks] drawn as the cer app draws them, and numbered MCQ options.
+  const keys = questionHasParts(blocks) ? questionPartKeys(blocks) : blocks.map(() => '');
+  const style = mcqLabelStyle(q);
+  blocks.forEach((b, bi) => {
+    if (!b) return;
     switch (b.type) {
-      case 'text':
-        out.push('<div class="qc-block">' + sanitizeHtml(b.content) + '</div>');
-        break;
-      case 'part':
-        out.push('<div class="qc-block">' + (b.label ? '<span class="qc-part">' + escapeHtml(b.label) + '</span>' : '') + sanitizeHtml(b.content) + '</div>');
+      case 'text': case 'part':
+        out.push(partRowHtml(blockOpensLabel(blocks, keys, bi) || (b.type === 'part' ? String(b.label || '') : ''), sanitizeHtml(partBodyHtml(b))));
         break;
       case 'image':
         if (/^https:\/\//i.test(String(b.url || ''))) out.push('<img src="' + escapeHtml(b.url) + '" alt="' + escapeHtml(b.caption || 'Question picture') + '" loading="lazy">' + (b.caption ? '<div class="qc-block"><small>' + escapeHtml(b.caption) + '</small></div>' : ''));
@@ -104,12 +107,12 @@ export function renderQuestionHtml(q, { showAnswers = false, interactive = false
       case 'mcq': {
         const opts = Array.isArray(b.options) ? b.options : [];
         const done = !!picked;
-        out.push('<div class="qc-options">' + opts.map(o => {
+        out.push('<div class="qc-options">' + opts.map((o, k) => {
           const id = String(o && o.id || '');
           let cls = 'qc-option';
           if (id && id === b.correctId && (done || reveal || showAnswers)) cls += ' is-right';
           if (done && id === picked && id !== b.correctId) cls += ' is-wrong';
-          const body = sanitizeHtml(o && o.text);
+          const body = '<b class="qc-opt-num">' + escapeHtml(mcqLabelOf(k, style)) + '.</b> ' + sanitizeHtml(mcqOptionText(o && o.text, k, style));
           return interactive && !done
             ? '<button type="button" class="' + cls + '" data-option-id="' + escapeHtml(id) + '">' + body + '</button>'
             : '<div class="' + cls + '">' + body + '</div>';
@@ -146,15 +149,191 @@ export function renderQuestionHtml(q, { showAnswers = false, interactive = false
         break;
       case 'workingSpace': case 'openLines': case 'answerLine':
         out.push('<div class="qc-lines" aria-hidden="true"></div>');
+        if (b.content) answers.push('<div class="qc-answer"><b>Answer:</b> ' + sanitizeHtml(b.content) + '</div>');
         break;
       default: break;
     }
-  }
+  });
   if ((showAnswers || reveal) && answers.length) out.push(...answers);
   return '<div class="qc">' + (out.join('') || '<p>(This question has no text.)</p>') + '</div>';
 }
 export function questionHasAnswer(q) {
   return (Array.isArray(q && q.blocks) ? q.blocks : []).some(b => b && (['answer', 'plainanswer', 'explanation'].includes(b.type) || (b.type === 'mcq' && b.correctId) || (b.type === 'fillblank' && /\[\[/.test(b.text || ''))));
+}
+
+/** A line of question text with its part tag beside it — cer's _qpTextHtml. */
+function partRowHtml(label, inner) {
+  const text = '<div class="qp-qtext">' + (inner || '') + '</div>';
+  if (!label) return '<div class="qc-block">' + text + '</div>';
+  return '<div class="qc-block qp-part-row"><span class="qp-part-tag">' + escapeHtml(label) + '</span>' + text + '</div>';
+}
+
+/* ------------------------------------------------------------------ */
+/*  v1.3.0 — answering a question on the map, as in the cer app         */
+/* ------------------------------------------------------------------ */
+const CER_COLOURS = { Claim: ['#E3F2FD', '#1565C0'], Evidence: ['#FFF3E0', '#E65100'], Reasoning: ['#E8F5E9', '#2E7D32'] };
+const VERDICT = {
+  correct: { icon: '✓', cls: 'is-correct', word: 'Correct' },
+  partial: { icon: '≈', cls: 'is-partial', word: 'Partly right' },
+  incorrect: { icon: '✗', cls: 'is-incorrect', word: 'Not quite' }
+};
+function partActionsHtml(key, busy) {
+  const k = escapeHtml(key);
+  return '<div class="qp-actions">' +
+    '<button type="button" class="btn btn-small btn-ghost" data-qact="hint" data-qkey="' + k + '"' + (busy === 'hint' ? ' disabled' : '') + ' title="A nudge that does not give the answer away">' + (busy === 'hint' ? 'Thinking…' : '💡 Hint') + '</button>' +
+    '<button type="button" class="btn btn-small qp-check" data-qact="check" data-qkey="' + k + '"' + (busy === 'check' ? ' disabled' : '') + '>' + (busy === 'check' ? 'Checking…' : '✓ Check answer') + '</button>' +
+    '</div>';
+}
+function feedbackHtml(r, extra = '') {
+  if (!r) return '';
+  if (r.error) return '<div class="qp-feedback is-error">' + escapeHtml(r.error) + '</div>';
+  const v = VERDICT[r.verdict] || VERDICT.incorrect;
+  return '<div class="qp-feedback ' + v.cls + '"><b>' + v.icon + ' ' + v.word + '</b>' + (r.feedback ? ' — ' + escapeHtml(r.feedback) : '') + extra + '</div>';
+}
+function fmtScore(n) { return Number.isInteger(n) ? String(n) : n.toFixed(1); }
+
+/**
+ * The question as something to ANSWER, laid out like the cer app's practice card (buildOpenBody):
+ *  • parts (a)(b)(ii) beside their wording, [marks] at the end, a new card for each part;
+ *  • a writing box for every answer area (Claim / Evidence / Reasoning for a CER answer),
+ *    with 💡 Hint and ✓ Check answer — the AI marks it and then shows the model answer;
+ *  • MCQ options numbered 1. 2. 3. 4. with a radio each, checked on the spot (no AI);
+ *  • fill-in-the-blanks with a box per blank (exact matches at once, the rest by the AI);
+ *  • the explanation and common mistakes once every part has been checked (or when staff show answers);
+ *  • a running score, as cer's practice score: correct 1, partly ½, each blank counts.
+ * `state` = { answers, mcq, results, hints, busy, showKey } for this card; none of it is saved to the map.
+ */
+export function renderQuestionPractice(q, { nodeId = 'q', state = {}, staff = false, reveal = false } = {}) {
+  const blocks = Array.isArray(q && q.blocks) ? q.blocks : [];
+  const keys = questionHasParts(blocks) ? questionPartKeys(blocks) : blocks.map(() => '');
+  const style = mcqLabelStyle(q);
+  const items = questionPracticeItems(q);
+  const byKey = new Map(items.map(it => [it.key, it]));
+  const answers = state.answers || {}, results = state.results || {}, hints = state.hints || {}, busy = state.busy || {}, chosen = state.mcq || {};
+  const score = practiceScore(items, results);
+  const showKey = !!(reveal || (staff && state.showKey));
+  const sections = [];
+  let cur = null;
+  const sec = () => { if (!cur) { cur = { html: '', hasAnswer: false }; sections.push(cur); } return cur; };
+  const add = h => { sec().html += h; };
+  const addAnswer = h => { const s2 = sec(); s2.html += h; s2.hasAnswer = true; };
+  const hintBox = key => hints[key] ? '<div class="qp-hint">💡 ' + escapeHtml(hints[key]) + '</div>' : '';
+  const late = [];
+  const modelLine = text => '<div class="qp-model"><b>Model answer:</b> ' + escapeHtml(text) + '</div>';
+  const openBox = it => {
+    const r = results[it.key];
+    const colours = CER_COLOURS[it.title];
+    const chip = it.title ? '<div class="qp-chip"' + (colours ? ' style="background:' + colours[0] + ';color:' + colours[1] + '"' : '') + '>' + escapeHtml(it.title) + '</div>' : '';
+    const value = escapeHtml(answers[it.key] || '');
+    const verdict = r && r.verdict ? ' data-verdict="' + escapeHtml(r.verdict) + '"' : '';
+    const box = it.line
+      ? '<input class="qp-line" type="text" data-qinput="' + escapeHtml(it.key) + '" value="' + value + '" placeholder="Your answer"' + verdict + ' autocomplete="off">'
+      : '<textarea class="qp-open" rows="' + (it.rows || 3) + '" data-qinput="' + escapeHtml(it.key) + '" placeholder="Type your answer…"' + verdict + '>' + value + '</textarea>';
+    const model = (r && (r.model || it.model)) || '';
+    let fb = '';
+    if (r) fb = feedbackHtml(r, model ? modelLine(model) : '');
+    else if (showKey && it.model) fb = '<div class="qp-feedback is-key">' + modelLine(it.model) + '</div>';
+    return '<div class="qp-answer" data-qitem="' + escapeHtml(it.key) + '">' + chip + box + partActionsHtml(it.key, busy[it.key]) + hintBox(it.key) + fb + '</div>';
+  };
+  blocks.forEach((b, bi) => {
+    if (!b) return;
+    const opens = blockOpensLabel(blocks, keys, bi);
+    // An answer, blank or MCQ that opens its own part (with no line of text above it) still gets its part tag and marks.
+    if (opens && b.type !== 'text' && b.type !== 'part' && b.type !== 'explanation' && b.type !== 'commonMistake') {
+      cur = null;
+      const marks = Number(b.marks) > 0 ? '<span class="q-marks">[' + Math.round(Number(b.marks)) + ']</span>' : '';
+      add(partRowHtml(opens, marks));
+    }
+    switch (b.type) {
+      case 'text':
+        // A part label opens a new card; otherwise a text block after an answer area does (cer's rule).
+        if (cur && (cur.hasAnswer || opens)) cur = null;
+        add(partRowHtml(opens, sanitizeHtml(partBodyHtml(b))));
+        break;
+      case 'part':
+        if (cur) cur = null;
+        add(partRowHtml(opens || String(b.label || ''), sanitizeHtml(partBodyHtml(b))));
+        break;
+      case 'image':
+        if (/^https:\/\//i.test(String(b.url || ''))) add('<div class="qc-block"><img src="' + escapeHtml(b.url) + '" alt="' + escapeHtml(b.caption || 'Question picture') + '" loading="lazy" draggable="false">' + (b.caption ? '<small class="qp-caption">' + escapeHtml(b.caption) + '</small>' : '') + '</div>');
+        break;
+      case 'table': {
+        const rows = Array.isArray(b.rows) ? b.rows.map(r => (r && r.c) || []) : tableRows(b.data);
+        if (rows.length) add('<table>' + rows.map(r => '<tr>' + r.map(c => '<td>' + sanitizeHtml(c) + '</td>').join('') + '</tr>').join('') + '</table>');
+        break;
+      }
+      case 'mcq': {
+        const it = byKey.get(bi + ':mcq');
+        if (!it) break;
+        const r = results[it.key];
+        const pick = chosen[it.key] || '';
+        const opts = (b.options || []).map((o, k) => {
+          const opt = it.options[k];
+          let cls = 'qp-opt';
+          if (r || showKey) { if (opt.correct) cls += ' is-right'; else if (r && opt.id === pick) cls += ' is-wrong'; }
+          if (opt.id === pick) cls += ' is-picked';
+          return '<label class="' + cls + '"><input type="radio" name="mcq_' + escapeHtml(nodeId) + '_' + bi + '" value="' + escapeHtml(opt.id) + '" data-qmcq="' + escapeHtml(it.key) + '"' + (opt.id === pick ? ' checked' : '') + '>' +
+            '<span><b>' + escapeHtml(mcqLabelOf(k, style)) + '.</b> ' + sanitizeHtml(mcqOptionText(o && o.text, k, style)) + '</span></label>';
+        }).join('');
+        const right = it.options.find(o => o.correct);
+        const chosenOpt = it.options.find(o => o.id === pick);
+        const extra = (chosenOpt ? ' <span class="qp-muted">(you chose ' + escapeHtml(chosenOpt.label) + ')</span>' : '') +
+          (right ? '<div class="qp-model"><b>Correct answer:</b> ' + escapeHtml(right.label) + '. ' + escapeHtml(right.text) + '</div>' : '');
+        addAnswer('<div class="qp-answer qp-mcq" data-qitem="' + escapeHtml(it.key) + '">' + opts + partActionsHtml(it.key, busy[it.key]) + hintBox(it.key) + feedbackHtml(r, extra) + '</div>');
+        break;
+      }
+      case 'fillblank': {
+        const it = byKey.get(bi + ':blank');
+        if (!it) { add('<div class="qc-block">' + escapeHtml(String(b.text || '')).replace(/\n/g, '<br>') + '</div>'); break; }
+        const segs = fillBlankSegments(b.text);
+        const r = results[it.key];
+        const vals = Array.isArray(answers[it.key]) ? answers[it.key] : [];
+        let n = 0;
+        const sentence = segs.map(sg => {
+          if (sg.type === 'text') return escapeHtml(sg.text).replace(/\n/g, '<br>');
+          const k = n++;
+          const v = r && r.blanks ? r.blanks[k] : '';
+          return '<input class="qp-blank' + (v ? ' is-' + v : '') + '" type="text" data-qblank="' + escapeHtml(it.key) + '" data-n="' + k + '" value="' + escapeHtml(vals[k] || '') + '" aria-label="Blank ' + (k + 1) + '" autocomplete="off" spellcheck="false">';
+        }).join('');
+        const wrong = r && r.blanks ? it.answers.filter((a, k) => r.blanks[k] !== 'correct') : [];
+        const answersLine = '<div class="qp-model"><b>Answers:</b> ' + it.answers.map(a => escapeHtml(a)).join(', ') + '</div>';
+        let fb = '';
+        if (r) fb = '<div class="qp-feedback ' + (wrong.length ? (wrong.length === it.answers.length ? 'is-incorrect' : 'is-partial') : 'is-correct') + '"><b>' + (wrong.length ? '' : '✓ ') + (it.answers.length - wrong.length) + ' / ' + it.answers.length + ' correct</b>' + (wrong.length ? answersLine : '') + '</div>';
+        else if (showKey) fb = '<div class="qp-feedback is-key">' + answersLine + '</div>';
+        addAnswer('<div class="qp-answer" data-qitem="' + escapeHtml(it.key) + '"><div class="qp-sentence">' + sentence + '</div>' + partActionsHtml(it.key, busy[it.key]) + hintBox(it.key) + fb + '</div>');
+        break;
+      }
+      case 'answer': {
+        let h = '';
+        for (const f of ['claim', 'evidence', 'reasoning']) { const it = byKey.get(bi + ':' + f); if (it) h += openBox(it); }
+        addAnswer(h);
+        break;
+      }
+      case 'plainanswer': case 'workingSpace': case 'openLines': case 'answerLine': {
+        const it = byKey.get(bi + ':content');
+        if (it) addAnswer(openBox(it));
+        break;
+      }
+      case 'studentAnswer':
+        add('<div class="qc-mistake"><b>' + escapeHtml(b.label || "Student's Answer") + ':</b> ' + sanitizeHtml(b.answer) + '</div>');
+        break;
+      case 'explanation':
+        if (b.content) late.push('<div class="qp-explain"><b>💡 Explanation</b><div>' + sanitizeHtml(b.content) + '</div></div>');
+        break;
+      case 'commonMistake':
+        late.push('<div class="qc-mistake"><b>⚠ ' + escapeHtml(b.title || 'Common Mistake') + ':</b> ' + sanitizeHtml(b.text) + '</div>');
+        break;
+      default: break;
+    }
+  });
+  const filled = sections.filter(x => x.html);
+  let html = '<div class="qc qp' + (filled.length > 1 ? ' qp-multi' : '') + '">' + (filled.map(x => '<div class="qp-sec">' + x.html + '</div>').join('') || '<p>(This question has no text.)</p>');
+  if (late.length && (score.done || showKey)) html += late.join('');
+  if (score.marked) {
+    html += '<div class="qp-score' + (score.done ? ' is-done' : '') + '">' + (score.done ? '🎉 ' : '') + 'Score: <b>' + fmtScore(score.score) + ' / ' + score.total + '</b>' +
+      (score.done ? '' : ' <span class="qp-muted">(' + score.marked + ' of ' + items.length + ' part' + (items.length === 1 ? '' : 's') + ' checked)</span>') + '</div>';
+  }
+  return html + '</div>';
 }
 
 /* ------------------------------------------------------------------ */
