@@ -481,5 +481,152 @@ test('the portal never sends a student to the Ans Key app for an answer key', ()
   assert.ok(!/data-action="answer-key"|data-action="print-key"/.test(tl));
   assert.match(tl, /latestKey\.url/);
   assert.ok(!/answerKeyUrl\(ids\[cur\]\)/.test(portal));
-  assert.match(portal, /var APP_VERSION = 'v1\.9\.0'/);
+  const v = (portal.match(/var APP_VERSION = 'v(\d+)\.(\d+)\.\d+'/) || []).slice(1).map(Number);
+  assert.ok(v[0] > 1 || (v[0] === 1 && v[1] >= 9), 'answer key PDFs arrived in v1.9.0');
+});
+
+/* ---- 📂 Browse Ans Key app (portal v1.10.0) ---- */
+const KEY_URL = (id, day) => 'https://firebasestorage.googleapis.com/v0/b/mathgen--app.firebasestorage.app/o/' +
+  encodeURIComponent('pdf-annotator/lesson-key-' + id + '-' + day + '.pdf') + '?alt=media&token=0b5e4a5c-1f6c-4c1e-9a7e-2c1d3e4f5a6b';
+const pen = (id) => ({ id, type: 'pen', page: 1, points: [[1, 2], [3, 4]] });
+const lesson = (id, url) => ({ id, type: 'video', url: url || 'https://a/' + id + '.m4a', ts: 1700000000000, lessonRecording: { version: 1, duration: 60000 } });
+
+test('the library says what a worksheet carries: answers, videos, key PDFs and its class', () => {
+  const d = { storagePath: 'pdf-annotator/x.pdf', annotations: JSON.stringify([pen('p1'), pen('p2'), lesson('v1')]), pageCount: 4,
+    answerKeys: { '2026-11-03': { url: KEY_URL('x', '2026-11-03'), pages: 4 }, 'nope': { url: 'https://evil/x' } }, onlineCourseId: 'k9' };
+  assert.deepEqual(Core.libraryInfo(d), { answers: true, big: false, videos: 1, keys: 1, inClass: 'k9', pages: 4, hidden: false, hasPdf: true });
+  const blank = Core.libraryInfo({ storagePath: 'p.pdf', annotations: '' });
+  assert.equal(blank.answers, false);
+  assert.equal(blank.videos, 0);
+  const onlyVideo = Core.libraryInfo({ storagePath: 'p.pdf', annotations: JSON.stringify([lesson('v1'), lesson('v2')]) });
+  assert.equal(onlyVideo.answers, false, 'a recorded lesson is not an answer key');
+  assert.equal(onlyVideo.videos, 2);
+  const big = Core.libraryInfo({ storagePath: 'p.pdf', annotationsPath: 'pdf-annotator/p.annotations.json',
+    videoPlaylist: { hash: 'vp1-120-abcd', token: '0b5e4a5c-1f6c-4c1e-9a7e-2c1d3e4f5a6b', n: 3 } });
+  assert.equal(big.answers, true, 'a big answer key in Storage counts as written on');
+  assert.equal(big.videos, 3, 'its videos are read off the filed video page');
+});
+
+test('browsing: the class level and subject by default, everything when asked, and every search word', () => {
+  const c = course({ level: 'P5', subject: 'math' });
+  const doc = { name: 'Fractions of a set', level: 'P5', subject: 'math', wsDay: 'Monday', wsDate: '2026-10-05', storagePath: 'a.pdf' };
+  assert.equal(Core.libraryMatches(doc, c, 'class', ''), true);
+  assert.equal(Core.libraryMatches({ ...doc, subject: 'both' }, c, 'class', ''), true);
+  assert.equal(Core.libraryMatches({ ...doc, level: 'P6' }, c, 'class', ''), false);
+  assert.equal(Core.libraryMatches({ ...doc, level: 'P6' }, c, 'all', ''), true);
+  assert.equal(Core.libraryMatches({ ...doc, subject: 'science' }, c, 'class', ''), false);
+  assert.equal(Core.libraryMatches(doc, c, 'class', 'set fractions'), true, 'any order');
+  assert.equal(Core.libraryMatches(doc, c, 'class', 'monday 2026-10'), true, 'day and date');
+  assert.equal(Core.libraryMatches(doc, c, 'class', 'ratio'), false);
+  assert.equal(Core.libraryMatches({ ...doc, storagePath: '' }, c, 'all', ''), false, 'no PDF, nothing to add');
+});
+
+test('the library is newest lesson first, then by name', () => {
+  const list = [
+    { id: 'a', data: { name: 'Worksheet 10', wsDate: '2026-10-05' } },
+    { id: 'b', data: { name: 'Worksheet 2', wsDate: '2026-10-05' } },
+    { id: 'c', data: { name: 'Newest', wsDate: '2026-11-02' } },
+    { id: 'd', data: { name: 'No date' } }
+  ];
+  assert.deepEqual(Core.libraryOrder(list).map((x) => x.id), ['c', 'b', 'a', 'd']);
+});
+
+test('a worksheet joins as it is only when it is in no class and everything it carries is wanted', () => {
+  const both = { answers: true, videos: true };
+  const written = { storagePath: 'a.pdf', annotations: JSON.stringify([pen('p'), lesson('v')]) };
+  assert.equal(Core.libraryNeedsCopy(written, both, 'k1'), false);
+  assert.equal(Core.libraryNeedsCopy(written, { answers: true, videos: false }, 'k1'), true, 'leaving its videos behind means a copy');
+  assert.equal(Core.libraryNeedsCopy(written, { answers: false, videos: true }, 'k1'), true, 'leaving its answers behind means a copy');
+  assert.equal(Core.libraryNeedsCopy({ ...written, onlineCourseId: 'other' }, both, 'k1'), true, 'another class keeps its own');
+  assert.equal(Core.libraryNeedsCopy({ storagePath: 'a.pdf', annotations: '' }, { answers: false, videos: false }, 'k1'), false, 'a blank one has nothing to lose');
+});
+
+test('future worksheets go at the end and the class stays where it is', () => {
+  const c = course({ worksheetIds: ['a', 'b', 'c', 'd'], currentIndex: 1, releasedThrough: 3 });
+  const plan = Core.placeWorksheets(c, ['x', 'y', 'a'], 'future');
+  assert.deepEqual(plan.worksheetIds, ['a', 'b', 'c', 'd', 'x', 'y'], 'one already in the class is not added twice');
+  assert.equal(plan.currentIndex, 1);
+  assert.equal(plan.currentDocId, 'b');
+  assert.equal(plan.releasedThrough, 3);
+  assert.equal(plan.added, 2);
+  assert.equal(Core.ansKeyState(course(plan), 4), 'queued');
+});
+
+test('previous worksheets go before the current one, done and released, and the class stays on its worksheet', () => {
+  const c = course({ worksheetIds: ['a', 'b', 'c', 'd', 'e'], currentIndex: 2, releasedThrough: 4 });
+  const plan = Core.placeWorksheets(c, ['p1', 'p2'], 'previous');
+  assert.deepEqual(plan.worksheetIds, ['a', 'b', 'p1', 'p2', 'c', 'd', 'e']);
+  assert.equal(plan.currentIndex, 4);
+  assert.equal(plan.currentDocId, 'c', 'still on the same worksheet');
+  assert.equal(plan.releasedThrough, 6, 'what was out is still out');
+  const after = course(plan);
+  assert.equal(Core.ansKeyState(after, 2), 'done');
+  assert.equal(Core.ansKeyState(after, 3), 'done');
+  assert.equal(Core.worksheetState(after, 3), 'released', 'students have them');
+});
+
+test('previous worksheets on a class not started: at the start, and the class is on the first one after them', () => {
+  const c = course({ worksheetIds: ['a', 'b', 'c'], currentIndex: -1, releasedThrough: -1 });
+  const plan = Core.placeWorksheets(c, ['p1', 'p2'], 'previous');
+  assert.deepEqual(plan.worksheetIds, ['p1', 'p2', 'a', 'b', 'c']);
+  assert.equal(plan.currentIndex, 2);
+  assert.equal(plan.currentDocId, 'a');
+  assert.equal(plan.releasedThrough, 1, 'the two previous ones are out; the rest wait for their lessons');
+  const after = course(plan);
+  assert.equal(Core.ansKeyState(after, 0), 'done');
+  assert.equal(Core.ansKeyState(after, 2), 'current');
+  assert.equal(Core.ansKeyState(after, 3), 'next');
+  const empty = Core.placeWorksheets(course({ worksheetIds: [] }), ['p1', 'p2'], 'previous');
+  assert.deepEqual(empty.worksheetIds, ['p1', 'p2']);
+  assert.equal(empty.currentIndex, 1, 'an empty class is on the last of them');
+  assert.equal(empty.releasedThrough, 1);
+  const released = Core.placeWorksheets(course({ worksheetIds: ['a', 'b', 'c'], currentIndex: -1, releasedThrough: 1 }), ['p'], 'previous');
+  assert.equal(released.releasedThrough, 2, 'released ahead of the first lesson stays released, shifted');
+});
+
+test('the answer key replaces, the videos add, and nothing is doubled', () => {
+  const target = JSON.stringify([pen('old'), lesson('t1')]);
+  const source = JSON.stringify([pen('s1'), pen('s2'), lesson('s-v1'), lesson('t1'), { id: 'yt', type: 'video', url: 'https://youtu.be/x' }]);
+  const both = Core.mergeAnnotations(target, source, { answers: true, videos: true });
+  const ids = JSON.parse(both.json).map((a) => a.id);
+  assert.deepEqual(ids, ['s1', 's2', 'yt', 't1', 's-v1'], 'the source writing (a plain video link is writing too), the target lesson, then the new one');
+  assert.equal(both.answers, 3);
+  assert.equal(both.videos, 1, 'a lesson already on the target is not added again');
+  assert.equal(both.replacedAnswers, 1);
+  const videosOnly = JSON.parse(Core.mergeAnnotations(target, source, { answers: false, videos: true }).json).map((a) => a.id);
+  assert.deepEqual(videosOnly, ['old', 't1', 's-v1'], 'its own answers stay');
+  const answersOnly = JSON.parse(Core.mergeAnnotations(target, source, { answers: true, videos: false }).json).map((a) => a.id);
+  assert.deepEqual(answersOnly, ['s1', 's2', 'yt', 't1'], 'its own lessons stay');
+  const sameFile = Core.mergeAnnotations(JSON.stringify([lesson('a', 'https://a/same.m4a')]), JSON.stringify([lesson('b', 'https://a/same.m4a')]), { videos: true });
+  assert.equal(sameFile.videos, 0, 'the same recording under another id is the same lesson');
+  assert.equal(Core.mergeAnnotations('not json', '[]', { answers: true }).json, '[]');
+});
+
+test('a copy takes only what was asked for', () => {
+  const source = JSON.stringify([pen('s1'), lesson('v1')]);
+  assert.deepEqual(JSON.parse(Core.pickAnnotations(source, { answers: true, videos: true }).json).map((a) => a.id), ['s1', 'v1']);
+  assert.deepEqual(JSON.parse(Core.pickAnnotations(source, { answers: true }).json).map((a) => a.id), ['s1']);
+  assert.deepEqual(JSON.parse(Core.pickAnnotations(source, { videos: true }).json).map((a) => a.id), ['v1']);
+  assert.equal(Core.pickAnnotations(source, {}).json, '[]', 'neither: a clean worksheet');
+});
+
+test('answer key PDFs: the worksheet keeps its own days, takes the others, and only real ones', () => {
+  const tgt = { answerKeys: { '2026-11-03': { url: KEY_URL('t', '2026-11-03'), pages: 2 } } };
+  const src = { answerKeys: {
+    '2026-11-03': { url: KEY_URL('s', '2026-11-03'), pages: 9 },
+    '2026-10-27': { url: KEY_URL('s', '2026-10-27'), pages: 3 },
+    '2026-10-20': { url: 'https://evil.example/key.pdf' },
+    'someday': { url: KEY_URL('s', '2026-10-13') }
+  } };
+  const out = Core.mergeAnswerKeyMaps(tgt, src);
+  assert.deepEqual(Object.keys(out).sort(), ['2026-10-27', '2026-11-03']);
+  assert.equal(out['2026-11-03'].pages, 2, 'its own day wins');
+  assert.deepEqual(Core.mergeAnswerKeyMaps(null, null), {});
+});
+
+test('what a pick brings, in words', () => {
+  const info = { answers: true, keys: 2, videos: 3 };
+  assert.equal(Core.libraryBringLabel(info, { answers: true, videos: true }), 'answer key · 2 answer key PDFs · 3 videos');
+  assert.equal(Core.libraryBringLabel(info, { videos: true }), '3 videos');
+  assert.equal(Core.libraryBringLabel({ answers: false, keys: 0, videos: 0 }, { answers: true, videos: true }), 'the worksheet only');
 });

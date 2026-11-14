@@ -498,5 +498,128 @@ let studentDb = null;
   await phone.context.close();
 }
 
+/* ---- Admin: 📂 Browse Ans Key app — previous and future worksheets, answer keys and videos ---- */
+{
+  const T = '0b5e4a5c-1f6c-4c1e-9a7e-2c1d3e4f5a6b';
+  const keyUrl = (id, day) => 'https://firebasestorage.googleapis.com/v0/b/mathgen--app.firebasestorage.app/o/' +
+    encodeURIComponent('pdf-annotator/lesson-key-' + id + '-' + day + '.pdf') + '?alt=media&token=' + T;
+  const pen = (id) => ({ id, type: 'pen', page: 1, points: [[1, 1], [2, 2]] });
+  const lesson = (id) => ({ id, type: 'video', url: 'https://a/' + id + '.m4a', ts: 1762000000000, lessonRecording: { version: 1, duration: 600000, title: 'Q' + id } });
+  const ws = (id, name, extra) => Object.assign({ name, level: 'P5', subject: 'math', storagePath: 'pdf-annotator/seed-' + id + '.pdf', pageCount: 2, annotations: '' }, extra || {});
+  const docs = {
+    'onlineCourses/tue': { title: 'P5 Mathematics · Tuesday 5:00pm', level: 'P5', subject: 'math', day: 'Tuesday', slot: 1, worksheetIds: ['c1', 'c2', 'c3', 'c4'], currentIndex: 1, releasedThrough: 3 },
+    'pdfAnnotator/c1': ws('c1', 'Term 4 · WS 1', { onlineCourseId: 'tue', onlineSeq: 0, wsDay: 'Tuesday', wsSlot: 1 }),
+    'pdfAnnotator/c2': ws('c2', 'Term 4 · WS 2', { onlineCourseId: 'tue', onlineSeq: 1, wsDay: 'Tuesday', wsSlot: 1 }),
+    'pdfAnnotator/c3': ws('c3', 'Term 4 · WS 3', { onlineCourseId: 'tue', onlineSeq: 2, wsDay: 'Tuesday', wsSlot: 1, annotations: JSON.stringify([pen('mine'), lesson('own')]) }),
+    'pdfAnnotator/c4': ws('c4', 'Term 4 · WS 4', { onlineCourseId: 'tue', onlineSeq: 3, wsDay: 'Tuesday', wsSlot: 1 }),
+    // The Ans Key library: a taught worksheet with answers, two lessons and a key PDF…
+    'pdfAnnotator/L1': ws('L1', 'Ratio warm-up', { wsDay: 'Monday', wsDate: '2026-10-05', annotations: JSON.stringify([pen('a1'), pen('a2'), lesson('v1'), lesson('v2')]),
+      answerKeys: { '2026-10-05': { url: keyUrl('L1', '2026-10-05'), pages: 2 } } }),
+    // …one already in another class (so it is copied, never moved)…
+    'onlineCourses/mon': { title: 'P5 Mathematics · Monday 3:00pm', level: 'P5', subject: 'math', day: 'Monday', slot: 0, worksheetIds: ['L2'], currentIndex: 0, releasedThrough: 0 },
+    'pdfAnnotator/L2': ws('L2', 'Fractions review', { wsDay: 'Monday', wsDate: '2026-10-12', onlineCourseId: 'mon', onlineSeq: 0, annotations: JSON.stringify([pen('b1'), lesson('v3')]) }),
+    // …a blank one, and one for another level.
+    'pdfAnnotator/L3': ws('L3', 'Speed practice', { wsDay: 'Monday', wsDate: '2026-10-19' }),
+    'pdfAnnotator/L4': ws('L4', 'P6 Algebra', { level: 'P6', wsDate: '2026-10-26' })
+  };
+  const { page, context, errors } = await open({ user: admin, docs });
+  await page.waitForSelector('.tabs');
+  await page.click('[data-action="open-course"][data-id="tue"]');
+  await page.waitForSelector('[data-action="browse-anskey"]');
+  check('browse: the class has a Browse Ans Key app button', /Browse Ans Key app/.test(await page.textContent('[data-action="browse-anskey"]')));
+  await page.click('[data-action="browse-anskey"]');
+  await page.waitForSelector('.modal .lib-row');
+  const rows = async () => page.$$eval('.modal .lib-row .lib-name', (els) => els.map((e) => e.textContent));
+  let names = await rows();
+  check('browse: it lists the class level and subject, newest first, not what the class already has', names.join('|') === 'Speed practice|Fractions review|Ratio warm-up');
+  const l1 = await page.textContent('.modal .lib-row:has([data-pick="L1"])');
+  check('browse: each worksheet says what it carries', /Answer key/.test(l1) && /2 videos/.test(l1) && /1 key PDF/.test(l1));
+  check('browse: one in another class says so', /In P5 Mathematics · Monday 3:00pm/.test(await page.textContent('.modal .lib-row:has([data-pick="L2"])')));
+  await page.fill('#libSearch', 'ratio');
+  await page.waitForFunction(() => document.querySelectorAll('.modal .lib-row').length === 1);
+  check('browse: the search narrows the list as it is typed, and keeps the caret', (await rows()).join() === 'Ratio warm-up' && await page.evaluate(() => document.activeElement && document.activeElement.id === 'libSearch'));
+  await page.fill('#libSearch', '');
+  await page.waitForFunction(() => document.querySelectorAll('.modal .lib-row').length === 3);
+  await page.click('.modal [data-m="scope"][data-v="all"]');
+  await page.waitForFunction(() => document.querySelectorAll('.modal .lib-row').length === 4);
+  check('browse: All levels shows the rest of Ans Key too', (await rows()).includes('P6 Algebra'));
+  await page.click('.modal [data-m="scope"][data-v="class"]');
+  await page.waitForFunction(() => document.querySelectorAll('.modal .lib-row').length === 3);
+  check('browse: nothing can be added before something is ticked', await page.locator('.modal [data-m="add"]').isDisabled());
+
+  // Two lessons the class has already had: L1 (whole) and L2 (from the Monday class).
+  await page.click('.modal [data-m="mode"][data-v="previous"]');
+  await page.check('.modal [data-pick="L1"]');
+  await page.check('.modal [data-pick="L2"]');
+  check('browse: the ticks are numbered in order, as previous worksheets', /Previous #1/.test(await page.textContent('.modal .lib-row:has([data-pick="L1"])')) && /Previous #2/.test(await page.textContent('.modal .lib-row:has([data-pick="L2"])')));
+  check('browse: it says where previous worksheets go', /Before worksheet 2 \(the current worksheet\), done and released/.test(await page.textContent('.modal .lib-where')));
+  check('browse: the button says what will happen', (await page.textContent('.modal [data-m="add"]')).trim() === 'Add 2 as previous worksheets');
+  await page.screenshot({ path: path.join(shots, '14-browse-anskey.png') });
+  await page.click('.modal [data-m="add"]');
+  await page.waitForSelector('.modal-back', { state: 'detached', timeout: 10000 });
+  let fake = await page.evaluate(() => window.__fake.db);
+  let cls = fake['onlineCourses/tue'];
+  const copyId = cls.worksheetIds[2];
+  check('browse: previous worksheets go before the current one, in the order ticked', cls.worksheetIds[0] === 'c1' && cls.worksheetIds[1] === 'L1' && copyId !== 'L2' && cls.worksheetIds[3] === 'c2' && cls.worksheetIds.length === 6);
+  check('browse: the class stays on its worksheet, and they are done and released', cls.currentDocId === 'c2' && cls.currentIndex === 3 && cls.releasedThrough === 5);
+  const L1 = fake['pdfAnnotator/L1'], copy = fake['pdfAnnotator/' + copyId];
+  check('browse: a worksheet in no class joins as it is, filed under the class lesson', L1.onlineCourseId === 'tue' && L1.onlineSeq === 1 && L1.wsDay === 'Tuesday' && L1.wsSlot === 1 && JSON.parse(L1.annotations).length === 4);
+  check('browse: one in another class is copied with its answer key and videos', copy.onlineCopiedFrom === 'L2' && copy.onlineCourseId === 'tue' && copy.wsDay === 'Tuesday' &&
+    JSON.parse(copy.annotations).map((x) => x.id).join() === 'b1,v3');
+  check('browse: the other class keeps its worksheet', fake['pdfAnnotator/L2'].onlineCourseId === 'mon' && JSON.stringify(fake['onlineCourses/mon'].worksheetIds) === '["L2"]');
+  await page.waitForFunction(() => document.querySelectorAll('.seq-row').length === 6, null, { timeout: 5000 });
+  const labels = await page.$$eval('.seq-row .seq-status', (els) => els.map((e) => e.textContent.trim()));
+  check('browse: the teaching order shows them as done, before the current worksheet', labels[1] === '✓ Done' && labels[2] === '✓ Done' && labels[3] === '▶ Current worksheet');
+
+  // A future one, without its videos: copied, answers only.
+  await page.click('[data-action="browse-anskey"]');
+  await page.waitForSelector('.modal .lib-row');
+  check('browse: what was added (or copied) is gone from the list', (await rows()).join('|') === 'Speed practice');
+  await page.click('.modal [data-m="scope"][data-v="all"]');
+  await page.waitForFunction(() => document.querySelectorAll('.modal .lib-row').length === 2);
+  await page.check('.modal [data-pick="L4"]');
+  await page.uncheck('.modal [data-bring="videos"]');
+  check('browse: it says where future worksheets go', /After worksheet 6, at the end/.test(await page.textContent('.modal .lib-where')));
+  await page.click('.modal [data-m="add"]');
+  await page.waitForSelector('.modal-back', { state: 'detached', timeout: 10000 });
+  fake = await page.evaluate(() => window.__fake.db);
+  cls = fake['onlineCourses/tue'];
+  check('browse: a future worksheet goes at the end and the class does not move', cls.worksheetIds.length === 7 && cls.worksheetIds[6] === 'L4' && cls.currentDocId === 'c2' && cls.releasedThrough === 5);
+  check('browse: a blank worksheet in no class joins as it is', fake['pdfAnnotator/L4'].onlineCourseId === 'tue' && fake['pdfAnnotator/L4'].onlineSeq === 6);
+
+  // 📂 From Ans Key on a row: worksheet 5 (c3) takes L1's answer key and videos.
+  await page.click('[data-action="link-anskey"][data-id="c3"]');
+  await page.waitForSelector('.modal .lib-row');
+  check('from Ans Key: only worksheets with answers or videos to give are listed', !(await rows()).includes('Speed practice') && (await rows()).includes('Ratio warm-up'));
+  check('from Ans Key: nothing happens before one is chosen', await page.locator('.modal [data-m="use"]').isDisabled());
+  await page.check('.modal [data-source="L1"]');
+  check('from Ans Key: the button says what comes across', (await page.textContent('.modal [data-m="use"]')).trim() === 'Use answer key · 1 answer key PDF · 2 videos');
+  await page.screenshot({ path: path.join(shots, '15-from-anskey.png') });
+  await page.click('.modal [data-m="use"]');
+  await page.waitForSelector('.modal-back', { state: 'detached', timeout: 10000 });
+  fake = await page.evaluate(() => window.__fake.db);
+  const c3 = fake['pdfAnnotator/c3'];
+  check('from Ans Key: the answer key replaces its writing and the videos join its own', JSON.parse(c3.annotations).map((x) => x.id).join() === 'a1,a2,own,v1,v2');
+  check('from Ans Key: the answer key PDFs come too, and it remembers where from', c3.answerKeys && c3.answerKeys['2026-10-05'] && c3.onlineAnswersFrom === 'L1' && c3.onlineVideosFrom === 'L1');
+  check('from Ans Key: the source is untouched', JSON.parse(fake['pdfAnnotator/L1'].annotations).length === 4);
+  check('from Ans Key: a message says what came across', /now uses its answer key and 2 videos from “Ratio warm-up”/.test(await page.textContent('body')));
+  check('browse: no script errors', errors.length === 0 || (console.log(errors), false));
+  await context.close();
+
+  // On a phone the window fits.
+  const phone = await open({ user: admin, docs, width: 390 });
+  await phone.page.waitForSelector('.tabs');
+  await phone.page.click('[data-action="open-course"][data-id="tue"]');
+  await phone.page.click('[data-action="browse-anskey"]');
+  await phone.page.waitForSelector('.modal .lib-row');
+  check('browse: on a phone the window does not scroll sideways', await phone.page.evaluate(() => {
+    const m = document.querySelector('.modal').getBoundingClientRect();
+    return m.right <= window.innerWidth + 1 && document.documentElement.scrollWidth <= window.innerWidth + 1;
+  }));
+  await phone.page.screenshot({ path: path.join(shots, '16-browse-phone.png') });
+  check('browse: no script errors on a phone', phone.errors.length === 0);
+  await phone.context.close();
+}
+
 await browser.close();
 console.log(`Passed ${checks} Polymath Online browser checks.`);

@@ -695,6 +695,187 @@
     return out;
   }
 
+  /* ---- 📂 Browse Ans Key (portal v1.10.0) ----
+     The admin picks worksheets straight out of the Ans Key app's library
+     (every `pdfAnnotator` document) instead of uploading files again:
+       · as PREVIOUS worksheets: lessons the class has already had. They go
+         in before the worksheet the class is on, count as done, and are
+         released to students straight away;
+       · as FUTURE worksheets: lessons still to come, at the end of the list,
+         queued like any upload.
+     For each one the admin chooses what comes with it: its ANSWER KEY (the
+     teacher's writing on it in Ans Key, and the answer key PDFs Ans Key
+     filed after each lesson) and its VIDEO RECORDINGS (the lessons recorded
+     on it). A worksheet in no class, taken whole, joins the class as it is;
+     anything else is copied, so the original and its class never change.
+     A worksheet already in the class can also take its answer key and
+     videos from another Ans Key worksheet ("From Ans Key" on its row). */
+
+  // What a worksheet in the library carries, read from its document alone.
+  // An answer key kept in Storage (`annotationsPath`) is too big to read for
+  // a list, so it counts as written on; its videos are then known from the
+  // video page Ans Key filed (`videoPlaylist.n`).
+  function libraryInfo(doc) {
+    var d = doc || {};
+    var answers = 0, videos = 0;
+    if (d.annotationsPath) {
+      answers = 1;
+      var vp = videoPlaylistOf(d);
+      videos = vp ? vp.n : 0;
+    } else {
+      parseAnnotations(d.annotations).forEach(function (a) {
+        if (!a) return;
+        if (a.lessonRecording) { if (a.type === 'video' && a.url) videos++; }
+        else answers++;
+      });
+    }
+    return {
+      answers: answers > 0,
+      big: !!d.annotationsPath,
+      videos: videos,
+      keys: answerKeysOf(d).length,
+      inClass: d.onlineCourseId ? String(d.onlineCourseId) : '',
+      pages: d.pageCount ? Number(d.pageCount) || 0 : 0,
+      hidden: !!d.hidden,
+      hasPdf: !!d.storagePath
+    };
+  }
+  // Does a library worksheet belong in the list being browsed? `scope` is
+  // 'class' (the class's level and subject) or 'all'; `query` matches the
+  // name, day and date, every word of it, in any order.
+  function libraryMatches(doc, course, scope, query) {
+    var d = doc || {};
+    if (!d.storagePath) return false;
+    if (scope !== 'all' && course) {
+      if (d.level !== course.level) return false;
+      if (d.subject !== course.subject && d.subject !== 'both') return false;
+    }
+    var words = String(query || '').toLowerCase().split(/\s+/).filter(Boolean);
+    if (!words.length) return true;
+    var hay = [d.name, d.wsDay, d.wsDate, d.level, subjectLabel(d.subject)].filter(Boolean).join(' ').toLowerCase();
+    return words.every(function (w) { return hay.indexOf(w) >= 0; });
+  }
+  // The library in the order it is browsed: newest lesson date first (the
+  // date Ans Key files a worksheet under, else when it was made), then by name.
+  function libraryOrder(list) {
+    function when(item) {
+      var d = item && item.data || {};
+      if (d.wsDate && VP_DAY_RE.test(d.wsDate)) return dayNoon(d.wsDate);
+      return toMillis(d.createdAt) || toMillis(d.updatedAt) || 0;
+    }
+    return (Array.isArray(list) ? list.slice() : []).sort(function (a, b) {
+      var wa = when(a), wb = when(b);
+      if (wa !== wb) return wb - wa;
+      return naturalCompare(a && a.data && a.data.name, b && b.data && b.data.name);
+    });
+  }
+  // Can a picked worksheet join the class as it is, or must it be copied?
+  // Only one in no class, with everything it carries wanted, joins as it is.
+  function libraryNeedsCopy(doc, bring, courseId) {
+    var d = doc || {}, b = bring || {};
+    if (d.onlineCourseId && d.onlineCourseId !== courseId) return true;
+    if (d.onlineCourseId === courseId) return false;
+    var info = libraryInfo(d);
+    if (info.answers && !b.answers) return true;
+    if (info.videos && !b.videos) return true;
+    if (info.keys && !b.answers) return true;
+    return false;
+  }
+  // Where the picked worksheets go and where the class then stands.
+  //   'future':   at the end; the class stays exactly where it is.
+  //   'previous': just before the worksheet the class is on (at the start of
+  //               a class not started yet). They are done: the class moves
+  //               past them, and they are released to students. A class not
+  //               started yet is then on the first worksheet after them.
+  // Ids already in the class are left where they are, not added twice.
+  function placeWorksheets(course, addIds, mode) {
+    var ids = courseIds(course).slice();
+    var add = [];
+    (Array.isArray(addIds) ? addIds : []).forEach(function (id) {
+      if (id && ids.indexOf(id) < 0 && add.indexOf(id) < 0) add.push(id);
+    });
+    var cur = currentIndex(course), rel = releasedThrough(course);
+    var k = add.length;
+    if (mode !== 'previous') {
+      var tail = ids.concat(add);
+      return {
+        worksheetIds: tail, insertedAt: ids.length, added: k,
+        currentIndex: cur, currentDocId: cur >= 0 ? tail[cur] : null, releasedThrough: rel
+      };
+    }
+    var at = cur >= 0 ? cur : 0;
+    var out = ids.slice(0, at).concat(add, ids.slice(at));
+    var nextCur;
+    if (cur >= 0) nextCur = cur + k;
+    else nextCur = k ? Math.min(k, out.length - 1) : -1;
+    // Released stays released (shifted with its worksheets), and every
+    // previous worksheet is out.
+    var nextRel = rel >= 0 ? (rel >= at ? rel + k : rel) : -1;
+    nextRel = Math.max(nextRel, at + k - 1);
+    if (nextCur >= 0 && cur >= 0) nextRel = Math.max(nextRel, nextCur);
+    nextRel = Math.min(nextRel, out.length - 1);
+    return {
+      worksheetIds: out, insertedAt: at, added: k,
+      currentIndex: nextCur, currentDocId: nextCur >= 0 ? out[nextCur] : null, releasedThrough: nextRel
+    };
+  }
+  // A worksheet's annotations with another one's answer key and/or videos.
+  //   answers: the source's writing REPLACES the target's (one answer key).
+  //   videos:  the source's recorded lessons are ADDED beside the target's
+  //            own, once each (a lesson already there is not doubled).
+  // The target keeps whatever was not asked for. Returns the new JSON and
+  // how many of each came across.
+  function mergeAnnotations(targetJson, sourceJson, bring) {
+    var b = bring || {};
+    var target = parseAnnotations(targetJson), source = parseAnnotations(sourceJson);
+    var isRec = function (a) { return !!(a && a.lessonRecording); };
+    var keepAnswers = target.filter(function (a) { return a && !isRec(a); });
+    var keepVideos = target.filter(isRec);
+    var srcAnswers = source.filter(function (a) { return a && !isRec(a); });
+    var srcVideos = source.filter(function (a) { return isRec(a) && a.type === 'video' && a.url; });
+    var have = {};
+    keepVideos.forEach(function (a) { if (a.id) have[a.id] = true; if (a.url) have['url:' + a.url] = true; });
+    var addVideos = b.videos ? srcVideos.filter(function (a) { return !(a.id && have[a.id]) && !have['url:' + a.url]; }) : [];
+    var answers = b.answers ? srcAnswers : keepAnswers;
+    return {
+      json: JSON.stringify(answers.concat(keepVideos, addVideos)),
+      answers: b.answers ? srcAnswers.length : 0,
+      videos: addVideos.length,
+      replacedAnswers: b.answers ? keepAnswers.length : 0
+    };
+  }
+  // Only what was asked for, for a copy: the answer key, the videos, both or
+  // neither (a clean worksheet).
+  function pickAnnotations(sourceJson, bring) {
+    return mergeAnnotations('[]', sourceJson, bring);
+  }
+  // The answer key PDFs filed per class day: the target's own days win, the
+  // source's fill the days the target has none for. Only real, checked
+  // entries are carried (answerKeysOf's rule).
+  function mergeAnswerKeyMaps(target, source) {
+    var out = {};
+    var add = function (doc) {
+      var map = doc && doc.answerKeys;
+      if (!map || typeof map !== 'object' || Array.isArray(map)) return;
+      Object.keys(map).forEach(function (key) {
+        var e = map[key];
+        if (out[key] || !realDay(key) || !e || typeof e !== 'object' || !answerKeyUrlOk(e.url)) return;
+        out[key] = e;
+      });
+    };
+    add(target);
+    add(source);
+    return out;
+  }
+  // The words for what a worksheet brings, e.g. "answer key · 3 videos".
+  function libraryBringLabel(info, bring) {
+    var b = bring || {}, bits = [];
+    if (b.answers && info && info.answers) bits.push('answer key');
+    if (b.answers && info && info.keys) bits.push(info.keys + ' answer key PDF' + (info.keys === 1 ? '' : 's'));
+    if (b.videos && info && info.videos) bits.push(info.videos + ' video' + (info.videos === 1 ? '' : 's'));
+    return bits.length ? bits.join(' · ') : 'the worksheet only';
+  }
+
   /* ---- 🔁 Replacing a worksheet's PDF ----
      The new file goes to the SAME storage path: Ans Key writes that path back
      on every save, so a new path would be undone by the next save. What
@@ -785,6 +966,9 @@
     VIDEO_PAGE: VIDEO_PAGE, videoPackCode: videoPackCode, videoPlaylistOf: videoPlaylistOf, videoPageLink: videoPageLink,
     videoPlaylistCurrent: videoPlaylistCurrent, lessonDayKey: lessonDayKey, recordingDays: recordingDays,
     answerKeyUrlOk: answerKeyUrlOk, answerKeysOf: answerKeysOf, classDays: classDays,
+    libraryInfo: libraryInfo, libraryMatches: libraryMatches, libraryOrder: libraryOrder, libraryNeedsCopy: libraryNeedsCopy,
+    placeWorksheets: placeWorksheets, mergeAnnotations: mergeAnnotations, pickAnnotations: pickAnnotations,
+    mergeAnswerKeyMaps: mergeAnswerKeyMaps, libraryBringLabel: libraryBringLabel,
     courseIds: courseIds, currentIndex: currentIndex, releasedThrough: releasedThrough, releasedCount: releasedCount, lockedCount: lockedCount,
     worksheetState: worksheetState, releasedWorksheets: releasedWorksheets, nextWorksheets: nextWorksheets, progressUpdate: progressUpdate, percent: percent,
     ansKeyAt: ansKeyAt, ansKeyState: ansKeyState, finishUpdate: finishUpdate,

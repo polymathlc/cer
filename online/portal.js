@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = 'v1.9.0';
+  var APP_VERSION = 'v1.10.0';
   var Core = window.PolymathOnlineCore;
 
   // Who runs the portal. Anyone else signs in as a student or a parent.
@@ -999,7 +999,7 @@
       '</div>';
     html += '<div class="section"><div class="section-head"><div><h2 class="section-heading">Add worksheets</h2>' +
       '<div class="section-note">Upload the full list once. Files are added in name order (Worksheet 2 before Worksheet 10), after any already here.</div></div>' +
-      '<button class="btn" type="button" data-action="add-existing">Add from Ans Key</button></div>' +
+      '<button class="btn btn-browse" type="button" data-action="browse-anskey" data-tooltip="Pick worksheets from the Ans Key app as previous or future worksheets, with their answer keys and videos">📂 Browse Ans Key app</button></div>' +
       '<label class="dropzone" id="dropzone" for="fileInput"><input id="fileInput" type="file" accept="application/pdf,.pdf" multiple class="visually-hidden">' +
         '<div style="font-size:1.6rem">📄</div><div style="margin-top:6px"><b>Drop PDFs here</b>, as many as you like, or click to choose files</div>' +
         '<div class="small muted" style="margin-top:4px">Select several at once with Shift or Ctrl (⌘ on a Mac). Each one becomes a worksheet in Ans Key, ready for you to write its answer key.</div>' +
@@ -1023,6 +1023,7 @@
             '<a class="btn btn-xs" href="' + h(answerKeyUrl(id)) + '" target="_blank" rel="noopener" data-tooltip="Open in Ans Key">Ans Key</a>' +
             '<button class="btn btn-xs" type="button" data-action="view" data-id="' + h(id) + '" aria-label="View PDF">PDF</button>' +
             '<button class="btn btn-xs" type="button" data-action="replace-pdf" data-id="' + h(id) + '" aria-label="Replace the PDF of worksheet ' + (i + 1) + '" data-tooltip="Upload a corrected PDF. The answer key stays.">Replace</button>' +
+            '<button class="btn btn-xs" type="button" data-action="link-anskey" data-id="' + h(id) + '" aria-label="Answer key and videos for worksheet ' + (i + 1) + ' from Ans Key" data-tooltip="Take the answer key and the video recordings from another worksheet in Ans Key">From Ans Key</button>' +
             '<button class="btn btn-xs btn-danger" type="button" data-action="remove-ws" data-index="' + i + '" aria-label="Remove from class">✕</button>' +
           '</div></div>';
       });
@@ -1398,7 +1399,11 @@
     if (!resp.ok) throw new Error('the answer key could not be read (HTTP ' + resp.status + ')');
     return resp.text();
   }
-  async function copyWorksheet(fromId, courseId, course, seq) {
+  async function copyWorksheet(fromId, courseId, course, seq, bring) {
+    // Duplicate class copies the answer key alone; 📂 Browse Ans Key says
+    // what comes along (answer key, videos), and files the copy under the
+    // class's own day and session so Ans Key shows it in that lesson.
+    var b = bring || { answers: true, videos: false };
     var snap = await db.collection(WORKSHEETS).doc(fromId).get();
     if (!snap.exists) throw new Error('it is no longer in Ans Key');
     var d = snap.data();
@@ -1411,7 +1416,15 @@
     var payload = Core.worksheetCopy(d, { id: ref.id, storageDir: STORAGE_DIR, courseId: courseId, seq: seq, fromId: fromId,
       level: course.level, subject: course.subject, by: state.user.email, teacherEmail: TEACHER_EMAIL });
     await storage.ref(payload.storagePath).put(pdf, { contentType: 'application/pdf' });
-    var answers = Core.stripLessonRecordings(await readAnnotationsText(d));
+    var answers = bring ? Core.pickAnnotations(await readAnnotationsText(d), b) : Core.stripLessonRecordings(await readAnnotationsText(d));
+    if (bring) {
+      payload.wsDay = course.day || '';
+      payload.wsSlot = (course.slot === 0 || course.slot === 1 || course.slot === 2) ? course.slot : null;
+      if (b.answers) {
+        var keys = Core.mergeAnswerKeyMaps(null, d);
+        if (Object.keys(keys).length) payload.answerKeys = keys;
+      }
+    }
     if (new Blob([answers.json]).size <= ANN_INLINE_LIMIT) payload.annotations = answers.json;
     else {
       // As Ans Key does: an answer key too big for the document sits beside the PDF.
@@ -1529,8 +1542,10 @@
       if (!snap.exists) throw new Error('This class no longer exists.');
       var course = Object.assign({ id: snap.id }, snap.data());
       var oldIds = Core.courseIds(course);
-      var newIds = makeIds(oldIds.slice());
-      var progress = Core.remapProgress(course, newIds);
+      var newIds = makeIds(oldIds.slice(), course);
+      // 📂 Previous worksheets move the class past them; anything else keeps
+      // the class on the worksheet it is on.
+      var progress = opts.progress ? opts.progress(course, newIds) : Core.remapProgress(course, newIds);
       tx.set(ref, Object.assign({ worksheetIds: newIds, updatedAt: FieldValue.serverTimestamp() }, progress), { merge: true });
       return { oldIds: oldIds, newIds: newIds };
     });
@@ -1905,58 +1920,353 @@
     }, 4000);
   }
 
-  /* ---- Adding worksheets already in Ans Key ---- */
-  async function addExisting() {
+  /* ---- 📂 Browse Ans Key app (v1.10.0) ----
+     Every worksheet in the Ans Key app, to add to the class without
+     uploading it again: as PREVIOUS worksheets (lessons the class has had,
+     done and released) or FUTURE worksheets (still to come, queued), each
+     with its answer key and/or its video recordings as chosen. The rules
+     are Core.placeWorksheets, Core.libraryNeedsCopy and Core.pickAnnotations;
+     this is the window around them. */
+  var library = { items: null, loading: null, scopeAll: false };
+  function loadLibrary(course, all) {
+    // The class's level (subject is filtered in the list) or, asked for, everything.
+    var key = all ? 'all' : course.level;
+    if (library.items && library.key === key) return Promise.resolve(library.items);
+    if (library.loading && library.key === key) return library.loading;
+    library.key = key;
+    var q = all ? db.collection(WORKSHEETS).limit(1500) : db.collection(WORKSHEETS).where('level', '==', course.level).limit(800);
+    library.loading = q.get().then(function (snap) {
+      var list = [];
+      snap.forEach(function (doc) { list.push({ id: doc.id, data: doc.data() }); });
+      library.items = Core.libraryOrder(list);
+      library.loading = null;
+      return library.items;
+    }).catch(function (err) { library.loading = null; library.key = ''; throw err; });
+    return library.loading;
+  }
+  function libraryClassName(courseId) {
+    var c = state.courses[courseId];
+    return c ? Core.courseTitle(c) : 'another class';
+  }
+  function libraryBadges(info) {
+    var out = '';
+    out += info.answers ? '<span class="lib-badge ok" title="Written on in Ans Key">✍ Answer key</span>' : '<span class="lib-badge" title="Nothing written on it yet">No answers yet</span>';
+    if (info.videos) out += '<span class="lib-badge video">▶ ' + info.videos + (info.videos === 1 ? ' video' : ' videos') + '</span>';
+    if (info.keys) out += '<span class="lib-badge">📄 ' + info.keys + ' key PDF' + (info.keys === 1 ? '' : 's') + '</span>';
+    if (info.inClass) out += '<span class="lib-badge class" title="Already in ' + h(libraryClassName(info.inClass)) + '; a copy is added here">In ' + h(libraryClassName(info.inClass)) + '</span>';
+    if (info.hidden) out += '<span class="lib-badge">🔒 Hidden in Ans Key</span>';
+    return out;
+  }
+  function libraryMeta(d) {
+    return [d.wsDay, d.wsDate ? Core.formatDay(new Date(d.wsDate + 'T12:00:00').getTime()) : '', d.level, Core.subjectLabel(d.subject), d.pageCount ? d.pageCount + ' pages' : '']
+      .filter(Boolean).join(' · ');
+  }
+
+  async function browseAnsKey() {
     var course = state.courses[state.courseId];
     if (!course) return;
-    var candidates = [];
-    var picked = [];
-    var loading = true;
-    var close = openModal(function () {
+    var ui = { query: '', all: false, picked: [], mode: 'future', bring: { answers: true, videos: true }, phase: 'pick', done: 0, failed: [], error: '' };
+    function visible() {
+      // Not what the class already has, nor the original of a copy it has.
+      var live = state.courses[course.id] || course;
+      var have = Core.courseIds(live).slice();
+      Core.courseIds(live).forEach(function (id) { var d = state.docs[id]; if (d && d.onlineCopiedFrom) have.push(d.onlineCopiedFrom); });
+      return (library.items || []).filter(function (c) {
+        return have.indexOf(c.id) < 0 && Core.libraryMatches(c.data, course, ui.all ? 'all' : 'class', ui.query);
+      });
+    }
+    function itemById(id) { return (library.items || []).find(function (x) { return x.id === id; }); }
+    function whereText() {
+      var at = Core.ansKeyAt(course), total = Core.courseIds(course).length;
+      if (ui.mode === 'future') return total ? 'After worksheet ' + total + ', at the end of the list. They wait their turn, like any upload.' : 'As the first worksheets of the class.';
+      if (Core.currentIndex(course) < 0) return 'At the start of the list, done and released to students. The class is then on the first worksheet after them.';
+      return 'Before worksheet ' + (at + 1) + ' (the current worksheet), done and released to students. The class stays on the same worksheet.';
+    }
+    var modal = openModal(function () {
+      var head = '<div class="modal-head"><div><div class="eyebrow">📂 Browse Ans Key app</div><h2>' + h(Core.courseTitle(course)) + '</h2>' +
+        '<div class="small muted" style="margin-top:4px">Pick worksheets from Ans Key, choose whether the class has had them or has them to come, and what comes with them.</div></div>' +
+        (ui.phase === 'adding' ? '' : '<button class="btn btn-ghost btn-icon" type="button" data-modal-close aria-label="Close">✕</button>') + '</div>';
+      if (ui.phase === 'adding') {
+        var pct = ui.picked.length ? Math.round(100 * (ui.done + ui.failed.length) / ui.picked.length) : 100;
+        return head + '<p><b>Adding ' + Math.min(ui.picked.length, ui.done + ui.failed.length + 1) + ' of ' + ui.picked.length + '…</b></p>' +
+          '<div class="progress" style="margin-top:10px"><div class="done" style="width:' + pct + '%"></div></div>' +
+          '<p class="small muted" style="margin-top:8px">Copies carry their PDF' + (ui.bring.answers ? ', answer key' : '') + (ui.bring.videos ? ' and videos' : '') + '. Keep this page open until it finishes.</p>';
+      }
       var body;
-      if (loading) body = '<div class="loader" style="padding:40px 0"><div class="spinner"></div><div>Finding ' + h(course.level) + ' ' + h(Core.subjectLabel(course.subject)) + ' worksheets…</div></div>';
-      else if (!candidates.length) body = '<div class="empty"><p>No other ' + h(course.level) + ' ' + h(Core.subjectLabel(course.subject)) + ' worksheets in Ans Key that are not already in a class.</p></div>';
-      else body = '<div class="pick-list">' + candidates.map(function (c) {
-        var at = picked.indexOf(c.id);
-        return '<label class="pick-row"><input type="checkbox" data-pick="' + h(c.id) + '"' + (at >= 0 ? ' checked' : '') + '><div><div style="font-weight:600">' + h(c.data.name || 'Untitled') + '</div>' +
-          '<div class="small muted">' + h([c.data.wsDay, c.data.wsDate, c.data.pageCount ? c.data.pageCount + ' pages' : ''].filter(Boolean).join(' · ')) + '</div></div>' +
-          (at >= 0 ? '<span class="ord">#' + (Core.courseIds(course).length + at + 1) + '</span>' : '') + '</label>';
-      }).join('') + '</div>';
-      return '<div class="modal-head"><div><div class="eyebrow">Add from Ans Key</div><h2>Worksheets already uploaded</h2><div class="small muted" style="margin-top:4px">They are added in the order you tick them.</div></div><button class="btn btn-ghost btn-icon" type="button" data-modal-close aria-label="Close">✕</button></div>' +
-        body + '<div class="modal-foot"><button class="btn btn-ghost" type="button" data-modal-close>Cancel</button><button class="btn btn-primary" type="button" data-m="add"' + (picked.length ? '' : ' disabled') + '>Add ' + (picked.length || '') + ' to the class</button></div>';
-    }, function (e, rerender, closeModal) {
+      if (ui.error) body = '<div class="empty"><p>' + h(ui.error) + '</p></div>';
+      else if (!library.items) body = '<div class="loader" style="padding:40px 0"><div class="spinner"></div><div>Opening the Ans Key library…</div></div>';
+      else {
+        var list = visible();
+        body = list.length ? '<div class="pick-list lib-list" id="libList">' + list.map(function (c) {
+          var info = Core.libraryInfo(c.data);
+          var at = ui.picked.indexOf(c.id);
+          return '<label class="pick-row lib-row' + (at >= 0 ? ' is-picked' : '') + '"><input type="checkbox" data-pick="' + h(c.id) + '"' + (at >= 0 ? ' checked' : '') + '>' +
+            '<div class="lib-text"><div class="lib-name">' + h(c.data.name || 'Untitled') + '</div>' +
+            '<div class="small muted">' + h(libraryMeta(c.data)) + '</div>' +
+            '<div class="lib-badges">' + libraryBadges(info) + '</div></div>' +
+            (at >= 0 ? '<span class="ord">' + (ui.mode === 'previous' ? 'Previous' : 'Future') + ' #' + (at + 1) + '</span>' : '') + '</label>';
+        }).join('') + '</div>'
+          : '<div class="empty"><p>' + (ui.query ? 'Nothing in Ans Key matches “' + h(ui.query) + '”.' : 'No other ' + (ui.all ? '' : h(course.level) + ' ' + h(Core.subjectLabel(course.subject)) + ' ') + 'worksheets in Ans Key.') + '</p></div>';
+      }
+      var controls = '<div class="lib-tools">' +
+        '<input id="libSearch" class="lib-search" type="search" placeholder="Search Ans Key by name, day or date" value="' + h(ui.query) + '" aria-label="Search Ans Key worksheets">' +
+        '<div class="choice-row lib-scope">' +
+          '<button type="button" class="choice" aria-pressed="' + (!ui.all ? 'true' : 'false') + '" data-m="scope" data-v="class">' + h(course.level) + ' ' + h(Core.subjectLabel(course.subject, true)) + '</button>' +
+          '<button type="button" class="choice" aria-pressed="' + (ui.all ? 'true' : 'false') + '" data-m="scope" data-v="all">All levels</button></div></div>';
+      var n = ui.picked.length;
+      var foot = '<div class="lib-options">' +
+        '<div class="field"><span class="label">Add them as</span><div class="choice-row">' +
+          '<button type="button" class="choice" aria-pressed="' + (ui.mode === 'previous' ? 'true' : 'false') + '" data-m="mode" data-v="previous">⏮ Previous worksheets</button>' +
+          '<button type="button" class="choice" aria-pressed="' + (ui.mode === 'future' ? 'true' : 'false') + '" data-m="mode" data-v="future">⏭ Future worksheets</button></div>' +
+          '<div class="small muted lib-where">' + h(whereText()) + '</div></div>' +
+        '<div class="field"><span class="label">Bring with each</span><div class="lib-bring">' +
+          '<label class="lib-check"><input type="checkbox" data-bring="answers"' + (ui.bring.answers ? ' checked' : '') + '><span><b>Answer key</b><small>The writing on it in Ans Key, and its answer key PDFs</small></span></label>' +
+          '<label class="lib-check"><input type="checkbox" data-bring="videos"' + (ui.bring.videos ? ' checked' : '') + '><span><b>Video recordings</b><small>The lessons recorded on it</small></span></label></div></div></div>';
+      return head + controls + body + foot +
+        '<div class="modal-foot"><button class="btn btn-ghost" type="button" data-modal-close>Cancel</button>' +
+        '<button class="btn btn-primary" type="button" data-m="add"' + (n ? '' : ' disabled') + '>' +
+          (n ? 'Add ' + n + ' as ' + (ui.mode === 'previous' ? 'previous' : 'future') + ' worksheet' + (n === 1 ? '' : 's') : 'Tick the worksheets to add') + '</button></div>';
+    }, function (e, rerender, close) {
+      if (ui.phase !== 'pick') return;
       var box = e.target.closest('[data-pick]');
       if (box) {
-        var id = box.dataset.pick, i = picked.indexOf(id);
-        if (box.checked && i < 0) picked.push(id);
-        if (!box.checked && i >= 0) picked.splice(i, 1);
-        rerender();
+        var id = box.dataset.pick, i = ui.picked.indexOf(id);
+        if (box.checked && i < 0) ui.picked.push(id);
+        if (!box.checked && i >= 0) ui.picked.splice(i, 1);
+        keepScroll(rerender);
         return;
       }
-      var t = e.target.closest('[data-m="add"]');
-      if (!t || !picked.length) return;
-      busy(t, true);
-      picked.forEach(function (id) { var c = candidates.find(function (x) { return x.id === id; }); if (c) state.docs[id] = c.data; });
-      saveOrder(course.id, function (ids) { return ids.concat(picked.filter(function (id) { return ids.indexOf(id) < 0; })); }, { quiet: true })
-        .then(function () { closeModal(); toast(picked.length + ' worksheet' + (picked.length === 1 ? '' : 's') + ' added.'); })
-        .catch(function (err) { busy(t, false); fail('Could not add them', err); });
+      var bringBox = e.target.closest('[data-bring]');
+      if (bringBox) { ui.bring[bringBox.dataset.bring] = !!bringBox.checked; keepScroll(rerender); return; }
+      var t = e.target.closest('[data-m]');
+      if (!t) return;
+      if (t.dataset.m === 'mode') { ui.mode = t.dataset.v === 'previous' ? 'previous' : 'future'; keepScroll(rerender); return; }
+      if (t.dataset.m === 'scope') {
+        ui.all = t.dataset.v === 'all';
+        if (library.key !== (ui.all ? 'all' : course.level)) library.items = null;
+        rerender();
+        loadLibrary(course, ui.all).then(function () { rerender(); }).catch(function (err) { ui.error = 'Ans Key could not be read: ' + ((err && err.message) || err); rerender(); });
+        return;
+      }
+      if (t.dataset.m === 'add' && ui.picked.length) run(rerender, close);
+    }, function () {
+      var input = $('libSearch');
+      if (input) {
+        input.addEventListener('input', function () {
+          ui.query = input.value;
+          // Redrawn as it is typed; the box gets its caret back at the end.
+          keepScroll(function () { modal.rerender(); });
+          var again = $('libSearch');
+          if (again) { again.focus(); try { again.setSelectionRange(again.value.length, again.value.length); } catch (err) {} }
+        });
+      }
     });
-    try {
-      var snap = await db.collection(WORKSHEETS).where('level', '==', course.level).limit(500).get();
-      snap.forEach(function (doc) {
-        var d = doc.data();
-        if (d.onlineCourseId) return;
-        if (d.subject !== course.subject && d.subject !== 'both') return;
-        candidates.push({ id: doc.id, data: d });
+    function keepScroll(rerender) {
+      var listEl = $('libList');
+      var top = listEl ? listEl.scrollTop : 0;
+      rerender();
+      var after = $('libList');
+      if (after) after.scrollTop = top;
+    }
+    async function run(rerender, close) {
+      var picks = ui.picked.slice();
+      var bring = { answers: !!ui.bring.answers, videos: !!ui.bring.videos };
+      var mode = ui.mode;
+      ui.phase = 'adding'; ui.done = 0; ui.failed = []; rerender();
+      // Each pick joins as it is, or as a copy: the order ticked is the order kept.
+      var made = new Array(picks.length), nextPick = 0;
+      var direct = [];
+      async function one(i) {
+        var c = itemById(picks[i]);
+        try {
+          if (!c) throw new Error('it is no longer in Ans Key');
+          if (Core.libraryNeedsCopy(c.data, bring, course.id)) {
+            made[i] = await copyWorksheet(c.id, course.id, course, Core.courseIds(course).length + i, bring);
+          } else {
+            made[i] = c.id;
+            direct.push(c.id);
+            state.docs[c.id] = c.data;
+          }
+          ui.done++;
+        } catch (err) {
+          ui.failed.push(((c && c.data && c.data.name) || 'A worksheet') + ': ' + ((err && err.message) || err));
+          console.error('Browse Ans Key: could not add', picks[i], err);
+        }
+        rerender();
+      }
+      async function worker() { while (nextPick < picks.length) await one(nextPick++); }
+      var workers = [];
+      for (var w = 0; w < Math.min(COPY_AT_ONCE, picks.length); w++) workers.push(worker());
+      await Promise.all(workers);
+      var added = made.filter(Boolean);
+      try {
+        // A worksheet joining as it is takes the class's lesson day and time in Ans Key.
+        if (direct.length) {
+          await Promise.all(Core.chunk(direct, 400).map(function (group) {
+            var batch = db.batch();
+            group.forEach(function (id) {
+              batch.set(db.collection(WORKSHEETS).doc(id), { wsDay: course.day || '', wsSlot: (course.slot === 0 || course.slot === 1 || course.slot === 2) ? course.slot : null, hidden: false }, { merge: true });
+            });
+            return batch.commit();
+          }));
+        }
+        if (added.length) {
+          await saveOrder(course.id, function (ids, live) {
+            return Core.placeWorksheets(live, added, mode).worksheetIds;
+          }, {
+            quiet: true,
+            progress: function (live) {
+              var plan = Core.placeWorksheets(live, added, mode);
+              var out = { currentIndex: plan.currentIndex, currentDocId: plan.currentDocId, releasedThrough: plan.releasedThrough };
+              if (mode === 'previous') { out.progressAt = FieldValue.serverTimestamp(); out.progressBy = state.user.email; }
+              return out;
+            }
+          });
+        }
+      } catch (err) { close(); fail('The worksheets were prepared, but the class list could not be saved', err); return; }
+      close();
+      if (ui.failed.length) toast(ui.failed.length + ' could not be added. ' + ui.failed[0], { error: true, ms: 9000 });
+      if (added.length) {
+        toast(added.length + ' ' + (mode === 'previous' ? 'previous' : 'future') + ' worksheet' + (added.length === 1 ? '' : 's') + ' added from Ans Key' +
+          (bring.answers || bring.videos ? ', with ' + (bring.answers && bring.videos ? 'answer keys and videos' : bring.answers ? 'answer keys' : 'videos') : '') +
+          (mode === 'previous' ? ', done and released to students.' : '.'), { ms: 6000 });
+      }
+    }
+    loadLibrary(course, false).then(function () { modal.rerender(); }).catch(function (err) {
+      ui.error = 'Ans Key could not be read: ' + ((err && err.message) || err);
+      modal.rerender();
+    });
+    return modal;
+  }
+
+  /* ---- 📂 One worksheet's answer key and videos, from another in Ans Key ----
+     For a worksheet already in the class (an upload with nothing written on
+     it, say): pick the Ans Key worksheet that has the answers and the
+     lessons, and choose what to take. The answer key REPLACES this
+     worksheet's writing; the videos are ADDED beside its own recordings.
+     Core.mergeAnnotations decides, and the answer key PDFs filed per lesson
+     day come too (this worksheet's own days win). */
+  async function writeAnnotationsFor(id, d, json) {
+    var data = { annotationsStamp: String(Date.now()), updatedAt: FieldValue.serverTimestamp() };
+    if (new Blob([json]).size <= ANN_INLINE_LIMIT) {
+      data.annotations = json;
+      if (d.annotationsPath) data.annotationsPath = FieldValue.delete();
+    } else {
+      var annPath = d.annotationsPath || (STORAGE_DIR + '/' + id + '.annotations.json');
+      await storage.ref(annPath).put(new Blob([json], { type: 'application/json' }), { contentType: 'application/json', cacheControl: 'no-cache' });
+      data.annotations = ''; data.annotationsPath = annPath;
+    }
+    return data;
+  }
+  async function linkFromAnsKey(targetId) {
+    var course = state.courses[state.courseId];
+    if (!course || !targetId) return;
+    var ui = { query: '', all: false, source: '', bring: { answers: true, videos: true }, phase: 'pick', error: '' };
+    var targetName = docName(targetId);
+    var seq = Core.courseIds(course).indexOf(targetId);
+    var modal = openModal(function () {
+      var head = '<div class="modal-head"><div><div class="eyebrow">📂 From Ans Key · worksheet ' + (seq + 1) + '</div><h2>' + h(targetName) + '</h2>' +
+        '<div class="small muted" style="margin-top:4px">Choose the Ans Key worksheet whose answer key and video recordings this one should use.</div></div>' +
+        (ui.phase === 'saving' ? '' : '<button class="btn btn-ghost btn-icon" type="button" data-modal-close aria-label="Close">✕</button>') + '</div>';
+      if (ui.phase === 'saving') return head + '<div class="loader" style="padding:30px 0"><div class="spinner"></div><div>Copying across…</div></div>';
+      var body;
+      if (ui.error) body = '<div class="empty"><p>' + h(ui.error) + '</p></div>';
+      else if (!library.items) body = '<div class="loader" style="padding:40px 0"><div class="spinner"></div><div>Opening the Ans Key library…</div></div>';
+      else {
+        var list = (library.items || []).filter(function (c) {
+          if (c.id === targetId) return false;
+          var info = Core.libraryInfo(c.data);
+          return (info.answers || info.videos || info.keys) && Core.libraryMatches(c.data, course, ui.all ? 'all' : 'class', ui.query);
+        });
+        body = list.length ? '<div class="pick-list lib-list" id="libList">' + list.map(function (c) {
+          var info = Core.libraryInfo(c.data);
+          return '<label class="pick-row lib-row' + (ui.source === c.id ? ' is-picked' : '') + '"><input type="radio" name="libSource" data-source="' + h(c.id) + '"' + (ui.source === c.id ? ' checked' : '') + '>' +
+            '<div class="lib-text"><div class="lib-name">' + h(c.data.name || 'Untitled') + '</div>' +
+            '<div class="small muted">' + h(libraryMeta(c.data)) + '</div>' +
+            '<div class="lib-badges">' + libraryBadges(info) + '</div></div></label>';
+        }).join('') + '</div>'
+          : '<div class="empty"><p>' + (ui.query ? 'Nothing in Ans Key matches “' + h(ui.query) + '”.' : 'No worksheet in Ans Key has an answer key or videos to take yet.') + '</p></div>';
+      }
+      var controls = '<div class="lib-tools">' +
+        '<input id="libSearch" class="lib-search" type="search" placeholder="Search Ans Key by name, day or date" value="' + h(ui.query) + '" aria-label="Search Ans Key worksheets">' +
+        '<div class="choice-row lib-scope">' +
+          '<button type="button" class="choice" aria-pressed="' + (!ui.all ? 'true' : 'false') + '" data-m="scope" data-v="class">' + h(course.level) + ' ' + h(Core.subjectLabel(course.subject, true)) + '</button>' +
+          '<button type="button" class="choice" aria-pressed="' + (ui.all ? 'true' : 'false') + '" data-m="scope" data-v="all">All levels</button></div></div>';
+      var src = ui.source ? (library.items || []).find(function (x) { return x.id === ui.source; }) : null;
+      var foot = '<div class="lib-options"><div class="field"><span class="label">Use from it</span><div class="lib-bring">' +
+        '<label class="lib-check"><input type="checkbox" data-bring="answers"' + (ui.bring.answers ? ' checked' : '') + '><span><b>As the answer key</b><small>Its writing replaces what is written on this worksheet, and its answer key PDFs come too</small></span></label>' +
+        '<label class="lib-check"><input type="checkbox" data-bring="videos"' + (ui.bring.videos ? ' checked' : '') + '><span><b>Its videos as the video recording</b><small>Added beside this worksheet\'s own recordings</small></span></label></div></div>' +
+        '<div class="small muted lib-where">If this worksheet is open in Ans Key, close it there first, or its next save puts the old answers back.</div></div>';
+      var ready = src && (ui.bring.answers || ui.bring.videos);
+      return head + controls + body + foot +
+        '<div class="modal-foot"><button class="btn btn-ghost" type="button" data-modal-close>Cancel</button>' +
+        '<button class="btn btn-primary" type="button" data-m="use"' + (ready ? '' : ' disabled') + '>' +
+          (src ? 'Use ' + h(Core.libraryBringLabel(Core.libraryInfo(src.data), ui.bring)) : 'Choose a worksheet') + '</button></div>';
+    }, function (e, rerender, close) {
+      if (ui.phase !== 'pick') return;
+      var radio = e.target.closest('[data-source]');
+      if (radio) { ui.source = radio.dataset.source; keepScroll(rerender); return; }
+      var bringBox = e.target.closest('[data-bring]');
+      if (bringBox) { ui.bring[bringBox.dataset.bring] = !!bringBox.checked; keepScroll(rerender); return; }
+      var t = e.target.closest('[data-m]');
+      if (!t) return;
+      if (t.dataset.m === 'scope') {
+        ui.all = t.dataset.v === 'all';
+        if (library.key !== (ui.all ? 'all' : course.level)) library.items = null;
+        rerender();
+        loadLibrary(course, ui.all).then(function () { rerender(); }).catch(function (err) { ui.error = 'Ans Key could not be read: ' + ((err && err.message) || err); rerender(); });
+        return;
+      }
+      if (t.dataset.m === 'use' && ui.source) run(rerender, close);
+    }, function () {
+      var input = $('libSearch');
+      if (input) input.addEventListener('input', function () {
+        ui.query = input.value;
+        keepScroll(function () { modal.rerender(); });
+        var again = $('libSearch');
+        if (again) { again.focus(); try { again.setSelectionRange(again.value.length, again.value.length); } catch (err) {} }
       });
-      candidates.sort(function (a, b) {
-        var da = a.data.wsDate || '', dbb = b.data.wsDate || '';
-        if (da !== dbb) return da < dbb ? -1 : 1;
-        return Core.naturalCompare(a.data.name, b.data.name);
-      });
-    } catch (err) { fail('Could not list the worksheets', err); }
-    loading = false;
-    close.rerender();
+    });
+    function keepScroll(rerender) {
+      var listEl = $('libList');
+      var top = listEl ? listEl.scrollTop : 0;
+      rerender();
+      var after = $('libList');
+      if (after) after.scrollTop = top;
+    }
+    async function run(rerender, close) {
+      var bring = { answers: !!ui.bring.answers, videos: !!ui.bring.videos };
+      ui.phase = 'saving'; rerender();
+      try {
+        var srcSnap = await db.collection(WORKSHEETS).doc(ui.source).get();
+        var tgtSnap = await db.collection(WORKSHEETS).doc(targetId).get();
+        if (!srcSnap.exists) throw new Error('that worksheet is no longer in Ans Key');
+        if (!tgtSnap.exists) throw new Error('this worksheet is no longer in Ans Key');
+        var src = srcSnap.data(), tgt = tgtSnap.data();
+        var merged = Core.mergeAnnotations(await readAnnotationsText(tgt), await readAnnotationsText(src), bring);
+        var data = await writeAnnotationsFor(targetId, tgt, merged.json);
+        if (bring.answers) {
+          var keys = Core.mergeAnswerKeyMaps(tgt, src);
+          if (Object.keys(keys).length) data.answerKeys = keys;
+        }
+        data.onlineAnswersFrom = bring.answers ? ui.source : (tgt.onlineAnswersFrom || '');
+        if (bring.videos) data.onlineVideosFrom = ui.source;
+        await db.collection(WORKSHEETS).doc(targetId).set(data, { merge: true });
+        close();
+        var bits = [];
+        if (bring.answers) bits.push(merged.answers ? 'its answer key' : 'its (empty) answer key');
+        if (bring.videos) bits.push(merged.videos ? merged.videos + ' video' + (merged.videos === 1 ? '' : 's') : 'no new videos');
+        toast('“' + targetName + '” now uses ' + bits.join(' and ') + ' from “' + (src.name || 'Untitled') + '”.', { ms: 6000 });
+      } catch (err) {
+        ui.phase = 'pick'; rerender();
+        fail('Could not copy across', err);
+      }
+    }
+    loadLibrary(course, false).then(function () { modal.rerender(); }).catch(function (err) {
+      ui.error = 'Ans Key could not be read: ' + ((err && err.message) || err);
+      modal.rerender();
+    });
+    return modal;
   }
 
   /* ================= Modal ================= */
@@ -2014,7 +2324,8 @@
       case 'delete-course': deleteCourse(state.courses[state.courseId]); break;
       case 'move': moveWorksheet(Number(el.dataset.index), Number(el.dataset.delta)); break;
       case 'remove-ws': removeWorksheet(Number(el.dataset.index)); break;
-      case 'add-existing': addExisting(); break;
+      case 'browse-anskey': browseAnsKey(); break;
+      case 'link-anskey': linkFromAnsKey(id); break;
       case 'step': {
         var input = $(el.dataset.target);
         if (input) input.value = Math.max(Number(input.min || 0), Math.min(Number(input.max || 999), Number(input.value || 0) + Number(el.dataset.delta)));
