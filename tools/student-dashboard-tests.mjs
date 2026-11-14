@@ -39,7 +39,8 @@ const EXPECTED = [
   { app: 'rewards', name: 'Rewards', href: APP_ORIGIN + '/rewards/', repo: 'rewards', address: SITE + '/rewards' },
   { app: 'online', name: 'Worksheets', href: 'https://' + SITE + '/online/', repo: null, address: 'Coming soon' },
   { app: 'chinese', name: 'Chinese', href: APP_ORIGIN + '/chinese/', repo: 'chinese', address: SITE + '/chinese' },
-  { app: 'english', name: 'English', href: APP_ORIGIN + '/english/', repo: 'english', address: SITE + '/english' }
+  { app: 'english', name: 'English', href: APP_ORIGIN + '/english/', repo: 'english', address: SITE + '/english' },
+  { app: 'mindmap', name: 'Mind Map', href: 'https://' + SITE + '/mindmap/', repo: null, address: SITE + '/mindmap' }
 ];
 
 // Apps not open to students yet: their tile has no href (nothing to follow, with or without script),
@@ -153,6 +154,15 @@ function landsOn(hostname, pathname, search = '', hash = '') {
 test('🖨 every short address on the printed sheet really opens its app (through 404.html, or math.html for /math)', () => {
   for (const tile of tiles().filter(tile => !tile.locked)) {
     const { hostname, pathname, search, hash } = parseAddress(tile.address);
+    // An app published on the website itself (Mind Map, v1.6.0) needs no forward: its folder IS the
+    // address, and GitHub Pages turns /mindmap into /mindmap/ by itself. Its index.html must be here.
+    if (!EXPECTED.find(row => row.app === tile.app).repo) {
+      const folder = pathname.replace(/^\/|\/$/g, '');
+      assert.equal(tile.href, 'https://' + hostname + '/' + folder + '/', tile.address + ' is the folder the tile opens');
+      assert.ok(fs.existsSync(path.join(root, folder, 'index.html')), folder + '/index.html is in this repo');
+      assert.equal(visit(hostname, pathname, search, hash).landed, null, '404.html does not send ' + tile.address + ' anywhere else');
+      continue;
+    }
     const forwarded = landsOn(hostname, pathname, search, hash);
     assert.equal(forwarded, tile.href, tile.address + ' lands on ' + tile.name);
     // …and typed with a trailing slash, as half the class will.
@@ -368,9 +378,9 @@ test('the greeting reads Singapore time, and the version is on the page', () => 
   };
   vm.runInNewContext(script[1], sandbox);
   const api = sandbox.window.MyPolymath;
-  assert.equal(api.version, 'v1.5.0');
-  assert.equal(elements.versionBadge.textContent, 'v1.5.0', 'the badge shows the version');
-  assert.ok(page.includes('id="versionBadge" aria-hidden="true">v1.5.0<'), 'the badge is right before script runs too');
+  assert.equal(api.version, 'v1.6.0');
+  assert.equal(elements.versionBadge.textContent, 'v1.6.0', 'the badge shows the version');
+  assert.ok(page.includes('id="versionBadge" aria-hidden="true">v1.6.0<'), 'the badge is right before script runs too');
   assert.equal(api.singaporeHour(new Date(Date.UTC(2026, 9, 25, 0, 0))), 8, '00:00 UTC is 8 am in Singapore');
   assert.equal(api.greetingFor(8), 'Good morning');
   assert.equal(api.greetingFor(14), 'Good afternoon');

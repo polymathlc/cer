@@ -133,7 +133,7 @@ const same = (actual, expected, message) => { assert.equal(actual, expected, mes
   const { context, page, errors } = await open();
   await page.goto(SITE + '/student/');
   await page.waitForSelector('#tileGrid .app-tile');
-  same(await page.textContent('#versionBadge'), 'v1.5.0', 'the dashboard is the new version');
+  same(await page.textContent('#versionBadge'), 'v1.6.0', 'the dashboard is the new version');
   await shot(page, 'dashboard-computer');
 
   const tiles = await page.$$eval('#tileGrid .app-tile', links => links.map(link => ({
@@ -142,14 +142,20 @@ const same = (actual, expected, message) => { assert.equal(actual, expected, mes
     href: link.getAttribute('href'),
     locked: link.classList.contains('is-locked')
   })));
-  same(tiles.length, 9, 'nine tiles');
+  same(tiles.length, 10, 'ten tiles (Mind Map joined in v1.6.0)');
 
   for (const tile of tiles.filter(tile => !tile.locked)) {
     const expectedRepo = new URL(tile.href).pathname.split('/')[1];
     await page.click(`.app-tile[data-app="${tile.app}"]`);
     await page.waitForURL(tile.href, { timeout: 10000 });
     same(page.url(), tile.href, tile.name + ' tile opens ' + tile.href);
-    same(await page.getAttribute('body', 'data-app-repo'), expectedRepo, tile.name + ' tile opens the ' + APP_REPOS[expectedRepo] + ' app, not GitHub\'s 404');
+    if (new URL(tile.href).origin === SITE) {
+      // Published on the website itself (Mind Map): the real page from this repo answers, not a stand-in.
+      ok(fs.existsSync(path.join(repoRoot, expectedRepo, 'index.html')), tile.name + ': ' + expectedRepo + '/index.html is in this repo');
+      ok(/Mind Map/.test(await page.title()), tile.name + ' tile opens the Mind Map page, not GitHub\'s 404');
+    } else {
+      same(await page.getAttribute('body', 'data-app-repo'), expectedRepo, tile.name + ' tile opens the ' + APP_REPOS[expectedRepo] + ' app, not GitHub\'s 404');
+    }
     ok(!(await page.content()).includes('File not found'), tile.name + ': no "File not found"');
     await page.goBack();
     await page.waitForURL(SITE + '/student/');
@@ -157,7 +163,8 @@ const same = (actual, expected, message) => { assert.equal(actual, expected, mes
 
   // The tile just opened is remembered and marked, so returning is one tap.
   await page.reload();
-  const lastBadge = await page.$eval('.app-tile[data-app="english"] .tile-badge', badge => !badge.hidden);
+  const lastApp = tiles.filter(tile => !tile.locked).slice(-1)[0].app;
+  const lastBadge = await page.$eval(`.app-tile[data-app="${lastApp}"] .tile-badge`, badge => !badge.hidden);
   ok(lastBadge, 'the last app opened wears "Last opened"');
 
   // 🔒 Worksheets: nothing to follow; it says why.
@@ -196,6 +203,12 @@ const same = (actual, expected, message) => { assert.equal(actual, expected, mes
   })));
   for (const row of sheet) {
     const typed = 'https://' + row.address;
+    if (new URL(row.href).origin === SITE) {
+      // Published on the website itself (Mind Map): no forward of ours is involved. GitHub Pages itself adds the
+      // trailing slash and drops www., and a stand-in 301 is not followed by Chromium here, so only the folder is typed.
+      same(await typeAddress(page, typed + '/', row.href), row.href, 'typing ' + row.address + '/ opens ' + row.name);
+      continue;
+    }
     same(await typeAddress(page, typed, row.href), row.href, 'typing ' + row.address + ' opens ' + row.name);
     if (!/[#?]/.test(row.address) && !row.address.endsWith('/')) {
       same(await typeAddress(page, typed + '/', row.href), row.href, 'typing ' + row.address + '/ opens ' + row.name + ' too');
