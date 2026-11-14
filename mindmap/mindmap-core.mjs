@@ -18,7 +18,7 @@
    `window`, `document` or the network.
    ===================================================================== */
 
-export const MINDMAP_VERSION = '1.2.0';
+export const MINDMAP_VERSION = '1.3.0';
 
 /* ------------------------------------------------------------------ */
 /*  Limits                                                              */
@@ -163,13 +163,31 @@ function normalizeQuestion(q) {
     blocks: Array.isArray(v.blocks) ? v.blocks.slice(0, 60).map(normalizeSnapshotBlock).filter(Boolean) : [],
     width: clamp(Math.round(num(v.width, 360)), 240, 900),
     // v1.1.0: a question card can be folded down to one line (its headline), so a map full of questions stays neat.
-    folded: v.folded === true
+    folded: v.folded === true,
+    // v1.3.0: the snapshot keeps parts, marks and answer spaces (cer's own fields). Older snapshots (1)
+    // are refreshed from the bank when their map is opened. mcqLabels is cer's per-question override.
+    snap: clamp(Math.round(num(v.snap, 1)), 1, 9),
+    mcqLabels: v.mcqLabels === 'letters' || v.mcqLabels === 'numbers' ? v.mcqLabels : ''
   };
 }
+export const SNAPSHOT_VERSION = 2;
 /** A stored question block: only what the node draws. Answers are kept, but only drawn for staff or on "Check". */
 export function normalizeSnapshotBlock(block) {
   if (!block || typeof block !== 'object') return null;
   const type = str(block.type);
+  const out = snapshotBlockBody(block, type);
+  if (!out) return null;
+  // v1.3.0 — cer's part fields, on any block: `part` (a letter, or "-" for "no part"), `subPart` (a roman)
+  // and `marks` ([2] at the end of the wording). They are what draws "(a)", "(b)(ii)" and the marks.
+  const part = str(block.part).trim().toLowerCase();
+  if (part === '-' || /^[a-z]$/.test(part.replace(/[()\s.]/g, ''))) out.part = part === '-' ? '-' : part.replace(/[()\s.]/g, '');
+  const sub = str(block.subPart).trim().toLowerCase().replace(/[()\s.]/g, '');
+  if (PART_ROMANS.includes(sub)) out.subPart = sub;
+  const marks = parseInt(block.marks, 10);
+  if (Number.isFinite(marks) && marks > 0 && marks < 100) out.marks = marks;
+  return out;
+}
+function snapshotBlockBody(block, type) {
   switch (type) {
     case 'text': case 'part': case 'explanation': case 'plainanswer':
       return { type, label: clip(block.label, 40), content: clip(block.content, 20000) };
@@ -192,6 +210,12 @@ export function normalizeSnapshotBlock(block) {
       return { type, title: clip(block.title, 80), text: clip(block.text, 4000) };
     case 'studentAnswer':
       return { type, label: clip(block.label, 80), answer: clip(block.answer, 4000) };
+    // v1.3.0 — the answer spaces the cer app gives a writing box: a working space / open lines
+    // (its model answer is `content`, or `answerKey` on an annotation area) and an answer line.
+    case 'workingSpace': case 'openLines':
+      return { type, content: clip(block.content || block.answerKey, 4000), lines: clamp(Math.round(num(block.lines, type === 'workingSpace' ? 6 : 4)), 1, 20) };
+    case 'answerLine':
+      return { type, label: clip(block.label, 120), content: clip(block.content || block.answer, 2000) };
     default:
       return null;
   }
@@ -853,7 +877,8 @@ export function questionSnapshot(q, topicLevels = TOPIC_LEVELS) {
   }).map(normalizeSnapshotBlock).filter(Boolean);
   return normalizeQuestion({
     qid: q.id, title: q.title || questionHeadline(q, 90), topic: q.topic || '', level: questionLevel(q, topicLevels),
-    category: q.category || '', marks: q.marks == null ? '' : String(q.marks), blocks, width: 380
+    category: q.category || '', marks: q.marks == null ? '' : String(q.marks), blocks, width: 380,
+    snap: SNAPSHOT_VERSION, mcqLabels: q.mcqLabels
   });
 }
 
@@ -1240,4 +1265,226 @@ export function importOutlineText(map, parentId, text) {
     stack.push({ indent, id: node.id });
   }
   return created;
+}
+
+
+/* ------------------------------------------------------------------ */
+/*  v1.3.0 — answering a question the way the cer app does              */
+/*  (parts (a)(b)(ii), [marks], numbered MCQ options, answer boxes,     */
+/*  fill-in-the-blanks and the marking prompts). Ported from cer app.js: */
+/*  qPartMap / qPartLabel / qPartBodyHtml / mcqLabelOf / _fbSegments /  */
+/*  buildOpenBody / markQuestionPart / fbCheck.                         */
+/* ------------------------------------------------------------------ */
+export const PART_ROMANS = ['i', 'ii', 'iii', 'iv', 'v', 'vi', 'vii', 'viii'];
+const PART_LETTERS = 'abcdefghjklmnopqrstuvwxyz';
+function partLetterNormalize(v) {
+  const s = str(v).trim().toLowerCase().replace(/[()\s.]/g, '');
+  return s.length === 1 && PART_LETTERS.includes(s) ? s : '';
+}
+function partSubNormalize(v) {
+  const s = str(v).trim().toLowerCase().replace(/[()\s.]/g, '');
+  return PART_ROMANS.includes(s) ? s : '';
+}
+/** The letter a block opens: its own `part`, or a legacy part block's label "(b)". */
+export function blockOpensPart(b) {
+  if (!b) return '';
+  const own = partLetterNormalize(b.part);
+  if (own) return own;
+  if (b.type === 'part') return partLetterNormalize(b.label);
+  return '';
+}
+export function blockOpensSub(b) { return b ? partSubNormalize(b.subPart) : ''; }
+export function questionHasParts(blocks) { return (blocks || []).some(b => blockOpensPart(b) || blockOpensSub(b)); }
+/** The part key ("a", "b.ii") each block belongs to, by index — cer's qPartMap. */
+export function questionPartKeys(blocks) {
+  let cur = '', sub = '';
+  return (blocks || []).map(b => {
+    if (!b) return '';
+    const opens = blockOpensPart(b), opensSub = blockOpensSub(b);
+    if (opens) { cur = opens; sub = opensSub; }
+    else if (opensSub) sub = opensSub;
+    else if (b.type === 'part') { cur = ''; sub = ''; }
+    if (str(b.part).trim() === '-') return '';
+    return cur && sub ? cur + '.' + sub : cur ? cur : sub ? '.' + sub : '';
+  });
+}
+/** "(a)", "(b)(ii)", "(iii)". */
+export function partLabel(key) {
+  const k = str(key);
+  if (!k) return '';
+  const dot = k.indexOf('.');
+  const L = dot < 0 ? k : k.slice(0, dot), S = dot < 0 ? '' : k.slice(dot + 1);
+  return (L ? '(' + L + ')' : '') + (S ? '(' + S + ')' : '');
+}
+/** The label a block wears beside itself, if it OPENS a part (only openers show the tag). */
+export function blockOpensLabel(blocks, keys, i) {
+  const b = blocks[i];
+  if (!b || !(blockOpensPart(b) || blockOpensSub(b))) return '';
+  // A block that names the same part as the block above continues that part; it does not open it again.
+  if (i > 0 && b.type !== 'part' && keys[i] && keys[i] === keys[i - 1]) return '';
+  return partLabel(keys[i] || ((blockOpensPart(b) || '') + (blockOpensSub(b) ? '.' + blockOpensSub(b) : '')));
+}
+/** The wording a block draws: a leading "(a)" that only repeats its own part is taken off, and [marks] added at the end. */
+export function partBodyHtml(b) {
+  let html = str(b && b.content);
+  const letter = b && b.type !== 'part' ? partLetterNormalize(b.part) : '';
+  if (letter && /^[a-h]$/.test(letter)) {
+    const L = '[' + letter + letter.toUpperCase() + ']';
+    const re = new RegExp('^(\\s*(?:<[^>]+>\\s*)*)(?:[(（]\\s*' + L + '\\s*[)）]|' + L + '\\s*[)）](?=\\s)|' + L + '\\s*[.．](?=\\s))\\s*');
+    const plainMarkers = htmlToText(html).split('\n').filter(l => /^\s*(?:[(（]\s*[a-hA-H]\s*[)）]|[a-hA-H]\s*[)）]\s|[a-h]\s*[.．]\s)/.test(l)).length;
+    if (plainMarkers === 1) html = html.replace(re, '$1');
+  }
+  const sub = b ? partSubNormalize(b.subPart) : '';
+  if (sub) {
+    const S = sub.split('').map(c => '[' + c + c.toUpperCase() + ']').join('');
+    html = html.replace(new RegExp('^(\\s*(?:<[^>]+>\\s*)*)(?:[(（]\\s*' + S + '\\s*[)）])\\s*'), '$1');
+  }
+  const n = parseInt(b && b.marks, 10);
+  if (Number.isFinite(n) && n > 0 && n < 100) {
+    html = html.replace(/(?:\s|&nbsp;)*\[\s*\d{1,2}\s*\](?=(?:\s|&nbsp;|<[^>]*>)*$)/, '');
+    const m = /(?:\s|<\/[^>]+>)*$/.exec(html);   // before the closing tags only, so it stays in the last paragraph
+    const at = m ? m.index : html.length;
+    html = html.slice(0, at) + ' <span class="q-marks">[' + n + ']</span>' + html.slice(at);
+  }
+  return html;
+}
+/** cer's MCQ labels: numbers for primary, letters when the question says so (Sec 1 is retired). */
+export function mcqLabelStyle(q) { return q && q.mcqLabels === 'letters' ? 'letters' : 'numbers'; }
+export function mcqLabelOf(i, style) {
+  const k = Math.max(0, i | 0);
+  return style === 'letters' && k < 26 ? String.fromCharCode(65 + k) : String(k + 1);
+}
+/** An option that is only its own bracketed marker ("(3)") is drawn with the question's label. */
+export function mcqOptionText(text, i, style) {
+  const raw = str(text);
+  const plain = raw.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+  const m = /^\s*\(\s*([1-9]|[A-Ha-h])\s*\)\s*$/.exec(plain);
+  if (m) {
+    const c = m[1];
+    const num = /\d/.test(c) ? c : String(c.toUpperCase().charCodeAt(0) - 64);
+    if (num === String((i | 0) + 1)) return '(' + mcqLabelOf(i, style) + ')';
+  }
+  return raw;
+}
+/** Fill-in-the-blanks: [[answer]] blanks, a run of adjacent blanks joined into one (cer's _fbSegments). */
+export function fillBlankSegments(text) {
+  const parts = []; const re = /\[\[([\s\S]+?)\]\]/g; let last = 0, m; const t = str(text);
+  while ((m = re.exec(t))) { if (m.index > last) parts.push({ type: 'text', text: t.slice(last, m.index) }); parts.push({ type: 'blank', answer: (m[1] || '').trim() }); last = m.index + m[0].length; }
+  if (last < t.length) parts.push({ type: 'text', text: t.slice(last) });
+  const out = [];
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i];
+    if (p.type !== 'blank') { out.push(p); continue; }
+    let answer = p.answer || '';
+    for (;;) {
+      const nxt = parts[i + 1];
+      if (nxt && nxt.type === 'blank') { answer += (nxt.answer || ''); i += 1; continue; }
+      if (nxt && nxt.type === 'text' && nxt.text.length && !nxt.text.trim() && parts[i + 2] && parts[i + 2].type === 'blank') { answer += ' ' + (parts[i + 2].answer || ''); i += 2; continue; }
+      break;
+    }
+    out.push({ type: 'blank', answer: answer.trim() });
+  }
+  return out;
+}
+export function normBlank(s) { return str(s).toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim(); }
+
+/**
+ * Everything on a question that is answered and marked, in order — the same list cer's buildOpenBody makes:
+ *   open  — one writing box (a CER answer is three: Claim, Evidence, Reasoning)
+ *   mcq   — one set of options
+ *   blank — one fill-in-the-blanks sentence (several blanks, marked together)
+ * Each has a stable key ("3:claim", "5:mcq", "7:blank"), the part label that names it to the marker, and its model answer.
+ */
+export function questionPracticeItems(q) {
+  const blocks = Array.isArray(q && q.blocks) ? q.blocks : [];
+  const keys = questionHasParts(blocks) ? questionPartKeys(blocks) : blocks.map(() => '');
+  const style = mcqLabelStyle(q);
+  const items = [];
+  blocks.forEach((b, i) => {
+    if (!b) return;
+    const part = partLabel(keys[i]);
+    const name = label => [part, label || (part ? 'Answer' : '')].filter(Boolean).join(' ') || 'Answer';
+    switch (b.type) {
+      case 'answer':
+        for (const [field, label] of [['claim', 'Claim'], ['evidence', 'Evidence'], ['reasoning', 'Reasoning']]) {
+          items.push({ key: i + ':' + field, kind: 'open', block: i, field, title: label, label: name(label), model: htmlToText(b[field]).trim(), part });
+        }
+        break;
+      case 'plainanswer': case 'workingSpace': case 'openLines': case 'answerLine':
+        items.push({ key: i + ':content', kind: 'open', block: i, field: 'content', title: b.type === 'answerLine' ? (b.label || '') : '', label: name(b.type === 'answerLine' ? b.label : ''), model: htmlToText(b.content).trim(), part, line: b.type === 'answerLine', rows: b.type === 'workingSpace' ? 4 : 3 });
+        break;
+      case 'mcq': {
+        const options = (b.options || []).map((o, k) => ({ id: str(o.id), num: String(k + 1), label: mcqLabelOf(k, style), text: htmlToText(mcqOptionText(o.text, k, style)).replace(/\s+/g, ' ').trim(), correct: !!b.correctId && b.correctId === o.id }));
+        if (options.length) items.push({ key: i + ':mcq', kind: 'mcq', block: i, label: name('Multiple choice'), options, part });
+        break;
+      }
+      case 'fillblank': {
+        const segs = fillBlankSegments(b.text);
+        const answers = segs.filter(x => x.type === 'blank').map(x => x.answer);
+        if (answers.length) items.push({ key: i + ':blank', kind: 'blank', block: i, label: name('Fill in the blanks'), answers, part });
+        break;
+      }
+      default: break;
+    }
+  });
+  return items;
+}
+/** The question as plain text, for the marker (cer's _questionContext, without pictures). */
+export function questionContextText(q, max = 3000) {
+  const blocks = Array.isArray(q && q.blocks) ? q.blocks : [];
+  const keys = questionHasParts(blocks) ? questionPartKeys(blocks) : blocks.map(() => '');
+  const lines = [];
+  blocks.forEach((b, i) => {
+    if (!b) return;
+    const lab = blockOpensLabel(blocks, keys, i);
+    if (b.type === 'text' || b.type === 'part') lines.push((lab ? lab + ' ' : '') + htmlToText(partBodyHtml(b)).replace(/\s+/g, ' ').trim());
+    else if (b.type === 'table') lines.push(tableRows(b.rows ? b.rows.map(r => r.c || []) : b.data).map(r => r.map(c => htmlToText(c)).join(' | ')).join('\n'));
+    else if (b.type === 'image' && b.caption) lines.push('[Picture: ' + b.caption + ']');
+    else if (b.type === 'image') lines.push('[Picture]');
+    else if (b.type === 'fillblank') lines.push(str(b.text).replace(/\[\[[\s\S]+?\]\]/g, '_____'));
+  });
+  return clip(lines.filter(Boolean).join('\n').replace(/\n{3,}/g, '\n\n'), max);
+}
+/** The prompt cer's markQuestionPart sends for ONE open-ended part. */
+export function openMarkingPrompt(q, item, student) {
+  return 'You are a science teacher marking ONE part of a student\'s answer to a question. ' +
+    'Use balanced, fair judgement, like a typical classroom teacher.\n' +
+    'Question context: "' + questionContextText(q) + '".\n' +
+    'Compare the student\'s answer to the expected model answer by meaning (ignore wording, grammar and spelling — focus on the science); verdict "correct", "partial" or "incorrect". ' +
+    'Give ONE short feedback sentence (max 22 words) addressed to the student. ' +
+    'Provide the full correct answer for THIS part as "modelAnswer" (use the expected answer if provided, otherwise generate the correct answer yourself). ' +
+    'Return ONLY JSON: {"verdict":"correct","feedback":"...","modelAnswer":"..."}.\n' +
+    'Part: [' + item.label + '] type=open expected="' + (item.model || '(none provided — work out the correct answer from the question context)') + '" student="' + clip(student, 3000) + '"';
+}
+/** cer's fbCheck prompt for the blanks that did not match exactly. */
+export function blankMarkingPrompt(q, pending) {
+  return 'You are marking fill-in-the-blank answers for a primary-school science quiz. Use balanced, fair judgement, like a typical classroom teacher.\n' +
+    'Question context: "' + questionContextText(q) + '".\n' +
+    'For EACH blank, decide whether the student\'s word means the same as the expected answer. ACCEPT synonyms, plurals, minor spelling slips and scientifically equivalent terms; only mark "incorrect" when the meaning is wrong. ' +
+    'Return ONLY a JSON array like [{"i":0,"verdict":"correct"}]:\n' + pending.map((r, k) => k + '. expected="' + r.model + '" student="' + r.student + '"').join('\n');
+}
+/** cer's hint prompt: a nudge that never gives the answer away. */
+export function hintPrompt(q, item) {
+  const part = item.kind === 'mcq'
+    ? 'The part is a multiple-choice question with options: ' + item.options.map(o => '(' + o.label + ') ' + o.text).join(' | ') + '. The correct option (do NOT reveal it or its number): ' + ((item.options.find(o => o.correct) || {}).label || '?') + '.'
+    : item.kind === 'blank'
+      ? 'The part is a fill-in-the-blanks sentence. The missing words (do NOT reveal them): ' + item.answers.join(', ') + '.'
+      : 'The part the student is stuck on: "' + item.label + '". The model answer (do NOT reveal it): "' + (item.model || '(none provided — infer the correct answer from the question context)') + '".';
+  return 'You are a science teacher. A student is stuck on ONE part of a question and asked for a hint.\n' +
+    'Question context: "' + questionContextText(q) + '".\n' + part + '\n' +
+    'Write ONE or TWO short sentences (max 35 words) that nudge the student towards the answer — a guiding question or the key idea to think about. NEVER state the answer. Return plain text only.';
+}
+/** Score a set of results the way cer does: correct 1, partial ½, incorrect 0; blanks count each blank. */
+export function practiceScore(items, results) {
+  let score = 0, total = 0, marked = 0;
+  for (const it of items) {
+    const r = results && results[it.key];
+    const weight = it.kind === 'blank' ? it.answers.length : 1;
+    total += weight;
+    if (!r) continue;
+    marked++;
+    if (it.kind === 'blank') score += (r.blanks || []).filter(v => v === 'correct').length;
+    else score += r.verdict === 'correct' ? 1 : r.verdict === 'partial' ? 0.5 : 0;
+  }
+  return { score, total, marked, done: items.length > 0 && marked === items.length };
 }

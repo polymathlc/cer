@@ -1,5 +1,5 @@
 /* =====================================================================
-   POLYMATH MIND MAP — the app (v1.2.0, November 2026)
+   POLYMATH MIND MAP — the app (v1.3.0, November 2026)
    ---------------------------------------------------------------------
    polymathlc.com.sg/mindmap. See index.html for the overview.
 
@@ -26,11 +26,12 @@ import {
   removeNode, reparent, isFree, detachNode, layoutMap, spotForNewChild, boundsOf, fitView, branchPath, linkPath, History,
   serializeMap, mapBytes, mapToOutline, nodeLabel, parseAiJson, extractHtmlDocument, buildSandboxDoc, SANDBOX_FLAGS,
   allowedBankLevels, BANK_LEVELS, voiceSystemPrompt, voiceUserPrompt, expandPrompt, mapFromTopicPrompt,
-  APP_SYSTEM, appBuildPrompt, appUpdatePrompt, imagePrompt, applyOps, buildFromOutline, importOutlineText
-} from './mindmap-core.mjs?v=1.2.0';
+  APP_SYSTEM, appBuildPrompt, appUpdatePrompt, imagePrompt, applyOps, buildFromOutline, importOutlineText,
+  questionPracticeItems, openMarkingPrompt, blankMarkingPrompt, hintPrompt, normBlank, SNAPSHOT_VERSION
+} from './mindmap-core.mjs?v=1.3.0';
 import {
-  renderQuestionHtml, questionHasAnswer, mountPicker, loadBank, findQuestions, snapshotOf, bankTopics, pickableQuestions, bankState
-} from './mindmap-questions.js?v=1.2.0';
+  renderQuestionHtml, renderQuestionPractice, questionHasAnswer, mountPicker, loadBank, findQuestions, snapshotOf, bankTopics, pickableQuestions, bankState
+} from './mindmap-questions.js?v=1.3.0';
 
 /* =====================================================================
    1. STATE AND HELPERS
@@ -44,6 +45,8 @@ const S = {
   user: null,
   staff: false,
   publisher: false,           // v1.2.0: may publish maps to every student (Mr Chung's Maps)
+  qState: new Map(),          // v1.3.0: nodeId → { answers, mcq, results, hints, busy, showKey, ver } (this visit only, never saved)
+  voiceOpen: false,           // v1.3.0: the voice panel is hidden until it is switched on
   published: false,           // the open map is published
   publishedAtMs: 0,
   levels: [],                 // Science levels the question picker may show
@@ -351,7 +354,7 @@ function nodeHash(n) {
   if (n.type === 'note') base.push(n.note);
   if (n.type === 'image') base.push(n.image.url, n.image.width, n.image.alt);
   if (n.type === 'code') base.push(n.code.title, n.code.width, n.code.height, !!(n.code.html || n.code.css || n.code.js));
-  if (n.type === 'question') base.push(n.question.qid, n.question.width, n.question.blocks.length, n.question.folded);
+  if (n.type === 'question') base.push(n.question.qid, n.question.width, n.question.blocks.length, n.question.folded, n.question.snap, (S.qState.get(n.id) || {}).ver || 0);
   base.push(isFree(S.map, n));
   if (n.type !== 'code') base.push(sideOf(S.map, n.id));
   return JSON.stringify(base);
@@ -426,8 +429,8 @@ function fillNodeEl(el, n) {
     }
     case 'question': {
       const q = n.question;
-      const reveal = el.dataset.reveal === '1';
-      const picked = el.dataset.picked || '';
+      const qs = qStateOf(n.id);
+      const anyResult = Object.keys(qs.results).length > 0;
       // v1.1.0: the ▾ / ▸ button folds the card down to its headline and opens it again (anyone may, even on a shared map).
       const foldBtn = `<button class="q-fold" type="button" data-act="q-fold" aria-expanded="${q.folded ? 'false' : 'true'}" title="${q.folded ? 'Open the question' : 'Fold the question away'}" aria-label="${q.folded ? 'Open the question' : 'Fold the question away'}">${q.folded ? '▸' : '▾'}</button>`;
       const freeTag = isFree(S.map, n) ? '<span class="q-badge q-free" title="Not attached to any topic">On its own</span>' : '';
@@ -436,8 +439,8 @@ function fillNodeEl(el, n) {
         el.innerHTML = `${head}<button class="q-mini" type="button" data-act="q-fold" style="width:${Math.min(q.width, 300)}px" title="Open the question">${escapeHtml(questionHeadlineOf(q))}</button>${addBtn}${fold}`;
       } else {
         el.innerHTML = `${head}
-        <div class="q-body" style="width:${q.width}px">${renderQuestionHtml(q, { showAnswers: S.staff && reveal, interactive: true, picked, reveal: reveal })}</div>
-        <div class="q-foot">${questionHasAnswer(q) && (S.staff || picked) ? `<button class="btn btn-small" type="button" data-act="q-reveal">${reveal ? 'Hide answer' : 'Show answer'}</button>` : ''}${picked ? '<button class="btn btn-small btn-ghost" type="button" data-act="q-reset">Try again</button>' : ''}<button class="btn btn-small btn-ghost" type="button" data-act="q-fold">▴ Fold</button></div>${addBtn}${fold}`;
+        <div class="q-body" style="width:${q.width}px">${renderQuestionPractice(q, { nodeId: n.id, state: qs, staff: S.staff })}</div>
+        <div class="q-foot">${S.staff && questionHasAnswer(q) ? `<button class="btn btn-small" type="button" data-act="q-reveal">${qs.showKey ? 'Hide answers' : 'Show answers'}</button>` : ''}${anyResult ? '<button class="btn btn-small btn-ghost" type="button" data-act="q-reset">↺ Try again</button>' : ''}<button class="btn btn-small btn-ghost" type="button" data-act="q-fold">▴ Fold</button></div>${addBtn}${fold}`;
       }
       break;
     }
@@ -510,6 +513,175 @@ function detachSelected(id) {
   }, { keepInspector: true });
   if (ok) toast(`“${nodeLabel(n).slice(0, 40)}” now stands on its own. Drag it onto a topic to attach it again.`, '', { action: 'Undo', onAction: undo });
   return ok && from;
+}
+
+/* ---------- v1.3.0: answering questions on the map, as in the cer app ---------- */
+function qStateOf(id) {
+  let st = S.qState.get(id);
+  if (!st) { st = { answers: {}, mcq: {}, results: {}, hints: {}, busy: {}, showKey: false, ver: 0 }; S.qState.set(id, st); }
+  return st;
+}
+/** Redraw one question card after its answers changed, keeping its top edge (and the edge facing its topic) still. */
+function rerenderQuestion(id) {
+  const n = nodeById(S.map, id);
+  const rec = els.get(id);
+  if (!n || !rec) return;
+  const st = qStateOf(id);
+  st.ver = (st.ver || 0) + 1;
+  const before = { left: n.x - (n.w || 0) / 2, right: n.x + (n.w || 0) / 2, top: n.y - (n.h || 0) / 2 };
+  // Keep the caret where it was if a box inside the card has focus.
+  const focus = document.activeElement && rec.el.contains(document.activeElement) ? document.activeElement : null;
+  const focusSel = focus ? (focus.dataset.qinput ? `[data-qinput="${focus.dataset.qinput}"]` : focus.dataset.qblank ? `[data-qblank="${focus.dataset.qblank}"][data-n="${focus.dataset.n}"]` : '') : '';
+  const scroll = $('.q-body', rec.el)?.scrollTop || 0;
+  rec.hash = '';
+  render();
+  if (n.w && n.h && before.top) {
+    const growsLeft = !isFree(S.map, n) && n.parentId && sideOf(S.map, n.id) === 'left';
+    n.x = Math.round(growsLeft ? before.right - n.w / 2 : before.left + n.w / 2);
+    n.y = Math.round(before.top + n.h / 2);
+    placeNodeEl(n);
+    renderEdges();
+  }
+  const body = $('.q-body', rec.el);
+  if (body) body.scrollTop = scroll;
+  if (focusSel) { const again = $(focusSel, rec.el); if (again) again.focus({ preventScroll: true }); }
+}
+function practiceItem(id, key) {
+  const n = nodeById(S.map, id);
+  if (!n || n.type !== 'question') return null;
+  return { n, q: n.question, it: questionPracticeItems(n.question).find(x => x.key === key) };
+}
+async function checkQuestionPart(id, key) {
+  const found = practiceItem(id, key);
+  if (!found || !found.it) return;
+  const { q, it } = found;
+  const st = qStateOf(id);
+  if (st.busy[key]) return;
+  // Multiple choice is marked on the spot, with no AI — exactly as the cer app does.
+  if (it.kind === 'mcq') {
+    const pick = st.mcq[key];
+    if (!pick) { toast('Choose an option first.'); return; }
+    const right = it.options.find(o => o.correct);
+    if (!right) { toast('This question has no answer set yet.'); return; }
+    st.results[key] = { verdict: pick === right.id ? 'correct' : 'incorrect' };
+    rerenderQuestion(id);
+    return;
+  }
+  if (it.kind === 'blank') {
+    const vals = (Array.isArray(st.answers[key]) ? st.answers[key] : []).map(v => String(v || '').trim());
+    if (!vals.some(Boolean)) { toast('Fill in the blanks first.'); return; }
+    const rows = it.answers.map((model, i) => ({ i, model, student: vals[i] || '' }));
+    const blanks = rows.map(r => r.student && normBlank(r.student) === normBlank(r.model) ? 'correct' : r.student ? '' : 'incorrect');
+    const pending = rows.filter((r, i) => !blanks[i]);
+    if (pending.length) {
+      st.busy[key] = 'check'; rerenderQuestion(id);
+      try {
+        const { text } = await aiText(blankMarkingPrompt(q, pending), { json: true, maxTokens: 300 + pending.length * 40, temperature: 0.1, order: ['gemini', 'openai-light', 'openai'] });
+        const parsed = parseAiJson(text);
+        const arr = Array.isArray(parsed) ? parsed : ((parsed && parsed.items) || []);
+        for (const v of arr) if (v && typeof v.i === 'number' && pending[v.i]) blanks[pending[v.i].i] = String(v.verdict || '').toLowerCase() === 'correct' ? 'correct' : 'incorrect';
+      } catch (e) { console.warn('[mindmap] blank marking', e); }
+      delete st.busy[key];
+    }
+    st.results[key] = { blanks: blanks.map(v => v || 'incorrect') };
+    rerenderQuestion(id);
+    return;
+  }
+  // An open-ended part: the AI marks it against the model answer, as cer's markQuestionPart does.
+  const student = String(st.answers[key] || '').trim();
+  if (!student) { toast('Type an answer for this part first.'); return; }
+  st.busy[key] = 'check';
+  rerenderQuestion(id);
+  try {
+    const { text } = await aiText(openMarkingPrompt(q, it, student), { json: true, maxTokens: 900, temperature: 0.2, order: ['gemini', 'openai-light', 'openai'] });
+    let parsed = parseAiJson(text);
+    if (Array.isArray(parsed)) parsed = parsed[0];
+    const v = String(parsed && parsed.verdict || '').toLowerCase();
+    st.results[key] = {
+      verdict: v === 'correct' ? 'correct' : v === 'partial' ? 'partial' : 'incorrect',
+      feedback: String(parsed && parsed.feedback || '').slice(0, 300),
+      model: it.model || String(parsed && parsed.modelAnswer || '').slice(0, 2000)
+    };
+  } catch (e) {
+    st.results[key] = { error: 'This answer could not be checked just now. ' + (e && e.message ? e.message : 'Please try again.') };
+  }
+  delete st.busy[key];
+  rerenderQuestion(id);
+}
+async function hintQuestionPart(id, key) {
+  const found = practiceItem(id, key);
+  if (!found || !found.it) return;
+  const st = qStateOf(id);
+  if (st.busy[key]) return;
+  st.busy[key] = 'hint';
+  rerenderQuestion(id);
+  try {
+    const { text } = await aiText(hintPrompt(found.q, found.it), { maxTokens: 300, temperature: 0.4, order: ['gemini', 'openai-light', 'openai'] });
+    st.hints[key] = String(text || '').replace(/^["'\s]+|["'\s]+$/g, '').slice(0, 400) || 'Read the question again slowly and underline the key words.';
+  } catch (e) {
+    st.hints[key] = 'No hint just now. Read the question again and look at the key words.';
+  }
+  delete st.busy[key];
+  rerenderQuestion(id);
+}
+// Typing and choosing inside a card is remembered for this visit (and never moves the map).
+ui.nodes.addEventListener('input', e => {
+  const t = e.target;
+  const nodeEl = t.closest && t.closest('.mm-node');
+  if (!nodeEl) return;
+  const st = qStateOf(nodeEl.dataset.id);
+  if (t.dataset.qinput) st.answers[t.dataset.qinput] = t.value.slice(0, 4000);
+  if (t.dataset.qblank) {
+    const arr = Array.isArray(st.answers[t.dataset.qblank]) ? st.answers[t.dataset.qblank] : [];
+    arr[Number(t.dataset.n) || 0] = t.value.slice(0, 200);
+    st.answers[t.dataset.qblank] = arr;
+  }
+});
+ui.nodes.addEventListener('change', e => {
+  const t = e.target;
+  if (!t.dataset || !t.dataset.qmcq) return;
+  const nodeEl = t.closest('.mm-node');
+  if (!nodeEl) return;
+  const st = qStateOf(nodeEl.dataset.id);
+  st.mcq[t.dataset.qmcq] = t.value;
+  delete st.results[t.dataset.qmcq];      // a new choice is checked again
+  rerenderQuestion(nodeEl.dataset.id);
+});
+// Enter in a one-line answer or a blank checks it.
+ui.nodes.addEventListener('keydown', e => {
+  const t = e.target;
+  if (e.key !== 'Enter' || !(t.dataset && (t.dataset.qblank || (t.dataset.qinput && t.tagName === 'INPUT')))) return;
+  const nodeEl = t.closest('.mm-node');
+  if (!nodeEl) return;
+  e.preventDefault();
+  checkQuestionPart(nodeEl.dataset.id, t.dataset.qblank || t.dataset.qinput);
+});
+
+/**
+ * Questions placed before v1.3.0 kept only part of the question (no parts, no answer spaces).
+ * When such a map opens, they are refreshed from the bank, keeping the card's size and fold.
+ */
+async function refreshOldQuestionSnapshots() {
+  const map = S.map;
+  const old = map ? map.nodes.filter(n => n.type === 'question' && (n.question.snap || 1) < SNAPSHOT_VERSION && n.question.qid) : [];
+  if (!old.length) return;
+  try { await loadBank(); } catch (e) { console.warn('[mindmap] refresh questions', e); return; }
+  if (S.map !== map) return;
+  const list = bankState().list || [];
+  let changed = 0;
+  for (const n of old) {
+    const q = list.find(x => x.id === n.question.qid);
+    if (!q) continue;
+    const snap = snapshotOf(q);
+    snap.folded = n.question.folded;
+    snap.width = n.question.width;
+    n.question = normalizeNode({ ...n, question: snap }).question;
+    S.qState.delete(n.id);
+    changed++;
+  }
+  if (!changed) return;
+  if (!S.readOnly) markDirty();
+  render();
 }
 
 function renderNodes() {
@@ -1030,6 +1202,13 @@ ui.nodes.addEventListener('click', e => {
   const id = nodeEl.dataset.id;
   const n = nodeById(S.map, id);
   if (!n) return;
+  const qact = e.target.closest('[data-qact]');
+  if (qact && n.type === 'question') {
+    e.stopPropagation();
+    if (qact.dataset.qact === 'check') checkQuestionPart(id, qact.dataset.qkey);
+    else if (qact.dataset.qact === 'hint') hintQuestionPart(id, qact.dataset.qkey);
+    return;
+  }
   const opt = e.target.closest('[data-option-id]');
   if (opt && n.type === 'question') {
     nodeEl.dataset.picked = opt.dataset.optionId;
@@ -1047,8 +1226,8 @@ ui.nodes.addEventListener('click', e => {
     case 'code-run': rerunCode(id); break;
     case 'code-edit': setSelected(id); S.codeTab = 'html'; S.inspectorFor = null; openInspector(); render(); break;
     case 'code-big': openCodeStudio(id); break;
-    case 'q-reveal': nodeEl.dataset.reveal = nodeEl.dataset.reveal === '1' ? '' : '1'; els.get(id).hash = ''; render(); break;
-    case 'q-reset': nodeEl.dataset.picked = ''; nodeEl.dataset.reveal = ''; els.get(id).hash = ''; render(); break;
+    case 'q-reveal': { const st = qStateOf(id); st.showKey = !st.showKey; rerenderQuestion(id); break; }
+    case 'q-reset': S.qState.delete(id); rerenderQuestion(id); break;
     case 'q-fold': toggleQuestionFold(id); break;
   }
 });
@@ -1100,6 +1279,7 @@ function updateTools() {
   $('#toolUndo').disabled = ro || !S.history.canUndo;
   $('#toolRedo').disabled = ro || !S.history.canRedo;
   $('#micBtn').disabled = ro;
+  $('#toolVoice').disabled = ro;
   $('#commandInput').disabled = ro;
 }
 const parentForNew = () => (S.selected && nodeById(S.map, S.selected) && nodeById(S.map, S.selected).type !== 'code') ? S.selected : (S.selected ? nodeById(S.map, S.selected)?.parentId || S.map.rootId : S.map.rootId);
@@ -1374,7 +1554,7 @@ function inspectMap() {
     </div>`}
     <h3>Tips</h3>
     <div class="card hint">
-      <div>🎙 Tap the mic and say things like “add three sub-topics to Roots”, “draw a labelled diagram of a flower”, “build an app where I drag a magnet”, or “add two P4 questions about light”.</div>
+      <div>🎙 Turn on the voice panel with 🎙 in the toolbar, then tap the mic and say things like “add three sub-topics to Roots”, “draw a labelled diagram of a flower”, “build an app where I drag a magnet”, or “add two P4 questions about light”.</div>
       <div>⌨️ Tab adds a sub-topic, Enter adds one beside it, double-click to rename, drag one topic onto another to move it. Press ? for all shortcuts.</div>
     </div>`;
 }
@@ -1977,6 +2157,27 @@ $('#voiceModeBtn').addEventListener('click', () => {
 });
 $('#micBtn').addEventListener('click', () => (voice.active ? stopVoice() : startVoice()));
 
+/**
+ * v1.3.0 — the voice panel is OFF and hidden until it is asked for: the 🎙 tool, or ⋯ → Voice panel.
+ * ⌄ on the panel folds it away again (and stops listening). The choice is remembered on this device.
+ */
+function setVoicePanel(open, { remember = true, focus = false } = {}) {
+  S.voiceOpen = !!open;
+  const dock = $('#voiceDock');
+  if (dock) dock.hidden = !S.voiceOpen;
+  $('#app').classList.toggle('voice-off', !S.voiceOpen);
+  const tool = $('#toolVoice');
+  if (tool) { tool.classList.toggle('is-on', S.voiceOpen); tool.setAttribute('aria-pressed', String(S.voiceOpen)); }
+  const state = $('#voicePanelState');
+  if (state) state.textContent = S.voiceOpen ? 'on' : 'off';
+  if (!S.voiceOpen && voice.active) stopVoice();
+  if (remember) local('mindmap-voice-panel', S.voiceOpen ? 'on' : 'off');
+  if (S.voiceOpen && focus) setTimeout(() => $('#commandInput')?.focus(), 60);
+}
+setVoicePanel(local('mindmap-voice-panel') === 'on', { remember: false });
+$('#toolVoice').addEventListener('click', () => setVoicePanel(!S.voiceOpen, { focus: true }));
+$('#voiceHideBtn').addEventListener('click', () => setVoicePanel(false));
+
 async function startVoice() {
   if (S.readOnly) return;
   voice.active = true;
@@ -2471,6 +2672,7 @@ function useMap(raw, { readOnly = false } = {}) {
   S.consoles.clear();
   S.jobs.clear();
   S.history.clear();
+  S.qState.clear();
   S.map = normalizeMap(raw);
   S.map._fresh = true;
   S.selected = '';
@@ -2502,6 +2704,7 @@ function useMap(raw, { readOnly = false } = {}) {
   if (!readOnly && S.user) local('polymath-mindmap:last:' + S.user.uid, S.map.id);
   updateUrl(readOnly ? S.map.id : '');
   onboarding();
+  refreshOldQuestionSnapshots();
 }
 function updateUrl(sharedId) {
   try {
@@ -2761,6 +2964,7 @@ $('#moreMenu').addEventListener('click', async e => {
     case 'export': download(safeName(S.map.title) + '.json', JSON.stringify(serializeMap(S.map), null, 2)); break;
     case 'import': $('#fileInput').click(); break;
     case 'print': printMap(); break;
+    case 'voice-panel': setVoicePanel(!S.voiceOpen, { focus: true }); break;
     case 'voice-speak': S.speak = !S.speak; local('mindmap-speak', S.speak ? 'on' : 'off'); toast(S.speak ? 'Replies will be read aloud while the mic is on.' : 'Replies will not be read aloud.'); break;
     case 'help': openHelp(); break;
     case 'signout': if (S.dirty) await saveNow(); stopVoice(); signOut(); break;
@@ -2803,7 +3007,7 @@ function openHelp() {
 function onboarding() {
   if (S.readOnly || local('mindmap-onboarded') || S.map.nodes.length > 1) return;
   local('mindmap-onboarded', '1');
-  setTimeout(() => toast('Welcome! Rename the centre, press Tab to add ideas, or tap 🎙 and say what your map is about.', '', { ms: 9000, action: 'Help', onAction: openHelp }), 900);
+  setTimeout(() => toast('Welcome! Rename the centre and press Tab to add ideas. For voice and AI commands, tap 🎙 in the toolbar.', '', { ms: 9000, action: 'Help', onAction: openHelp }), 900);
 }
 
 window.addEventListener('resize', () => { scheduleMinimap(); });

@@ -232,7 +232,7 @@ test('the page: noindex, the access gate last, the module, and no keys beyond th
   const page = read('mindmap/index.html');
   assert.match(page, /<meta name="robots" content="noindex">/);
   assert.ok(page.trimEnd().endsWith('<script defer src="../student/access-gate.js?v=1.1.0" data-app="mindmap"></script>\n</body>\n</html>'));
-  assert.ok(page.includes('<script type="module" src="mindmap-app.js?v=1.2.0"></script>'));
+  assert.ok(page.includes('<script type="module" src="mindmap-app.js?v=1.3.0"></script>'));
   const services = read('mindmap/mindmap-services.js');
   assert.ok(!/sk-[A-Za-z0-9]{10,}/.test(services + read('mindmap/mindmap-app.js')), 'no OpenAI key in page code');
   assert.ok(services.includes("httpsCallable(functions, 'askOpenAi'") && services.includes("httpsCallable(functions, 'openAiImage'"), 'ChatGPT goes through the server');
@@ -240,8 +240,8 @@ test('the page: noindex, the access gate last, the module, and no keys beyond th
   // Messages from code windows are trusted only from their own iframe.
   assert.ok(app.includes('e.source === frame.contentWindow'));
   // The same version everywhere.
-  assert.ok(read('mindmap/mindmap-core.mjs').includes(`MINDMAP_VERSION = '1.2.0'`));
-  assert.ok(page.includes('>v1.2.0<'));
+  assert.ok(read('mindmap/mindmap-core.mjs').includes(`MINDMAP_VERSION = '1.3.0'`));
+  assert.ok(page.includes('>v1.3.0<'));
 });
 
 test('the access lists match the gate', () => {
@@ -334,4 +334,85 @@ test('v1.1.0: "add questions on their own" by voice becomes a free questions job
   assert.equal(attached.jobs[0].free, false);
   assert.equal(attached.jobs[0].parentId, 'topicA');
   assert.match(core.voiceSystemPrompt({}), /on their own/);
+});
+
+// ───────────── v1.3.0: questions answered on the map as in the cer app ─────────────
+const cerQuestion = {
+  id: 'qParts', title: 'Magnets and iron', topic: 'Magnets', mcqLabels: '',
+  blocks: [
+    { type: 'text', content: '<p>Ali put a magnet near some objects.</p>' },
+    { type: 'image', url: 'https://example.com/m.png', caption: 'The set-up' },
+    { type: 'text', part: 'a', marks: 2, content: '<p>(a) Which object was attracted? [2]</p>' },
+    { type: 'mcq', correctId: 'o2', options: [{ id: 'o1', text: 'wood' }, { id: 'o2', text: 'iron nail' }, { id: 'o3', text: '(3)' }] },
+    { type: 'text', part: 'b', content: '<p>(b) Explain your answer.</p>' },
+    { type: 'answer', claim: 'The iron nail', evidence: 'It moved', reasoning: 'Iron is magnetic' },
+    { type: 'text', part: 'c', subPart: 'ii', content: '<p>(ii) Name it.</p>' },
+    { type: 'plainanswer', content: '<p>Magnetism</p>' },
+    { type: 'fillblank', text: 'A magnet attracts [[iron]] and [[steel]] [[objects]].' },
+    { type: 'workingSpace', content: 'Show your working', lines: 5, part: 'c' },
+    { type: 'explanation', content: 'Only magnetic materials are attracted.' }
+  ]
+};
+
+test('v1.3.0: a snapshot keeps parts, marks and answer spaces, and says which version it is', () => {
+  const snap = core.questionSnapshot(cerQuestion);
+  assert.equal(snap.snap, core.SNAPSHOT_VERSION);
+  assert.equal(snap.blocks.length, cerQuestion.blocks.length, 'no block is dropped (working space included)');
+  assert.equal(snap.blocks[2].part, 'a');
+  assert.equal(snap.blocks[2].marks, 2);
+  assert.equal(snap.blocks[6].subPart, 'ii');
+  assert.equal(snap.blocks[9].type, 'workingSpace');
+  assert.equal(snap.blocks[9].content, 'Show your working');
+  assert.equal(core.normalizeNode({ id: 'n1', type: 'question', question: { qid: 'x' } }).question.snap, 1, 'an old snapshot reads as version 1, to be refreshed');
+  assert.ok(!JSON.stringify(snap).includes('[['.repeat(2) + '['), 'still no arrays in arrays');
+});
+
+test('v1.3.0: parts are labelled (a), (b), (c)(ii) the way the cer app labels them', () => {
+  const blocks = core.questionSnapshot(cerQuestion).blocks;
+  const keys = core.questionPartKeys(blocks);
+  assert.deepEqual(keys.slice(0, 9), ['', '', 'a', 'a', 'b', 'b', 'c.ii', 'c.ii', 'c.ii']);
+  assert.equal(core.partLabel('c.ii'), '(c)(ii)');
+  assert.equal(core.blockOpensLabel(blocks, keys, 2), '(a)');
+  assert.equal(core.blockOpensLabel(blocks, keys, 3), '', 'only the block that opens a part wears the tag');
+  // The typed "(a)" that repeats the label comes off, and the [2] is drawn from the marks field.
+  assert.equal(core.partBodyHtml(blocks[2]), '<p>Which object was attracted? <span class="q-marks">[2]</span></p>');
+  assert.equal(core.partBodyHtml(blocks[6]), '<p>Name it.</p>');
+  assert.equal(core.questionHasParts([{ type: 'text', content: 'x' }]), false);
+});
+
+test('v1.3.0: every answer area becomes something to check, named by its part', () => {
+  const items = core.questionPracticeItems(core.questionSnapshot(cerQuestion));
+  assert.deepEqual(items.map(i => i.key), ['3:mcq', '5:claim', '5:evidence', '5:reasoning', '7:content', '8:blank', '9:content']);
+  assert.deepEqual(items.map(i => i.label), ['(a) Multiple choice', '(b) Claim', '(b) Evidence', '(b) Reasoning', '(c)(ii) Answer', '(c)(ii) Fill in the blanks', '(c) Answer']);
+  const mcq = items[0];
+  assert.deepEqual(mcq.options.map(o => o.label), ['1', '2', '3']);
+  assert.equal(mcq.options.find(o => o.correct).id, 'o2');
+  assert.equal(mcq.options[2].text, '(3)', 'a bare "(3)" option keeps its own label');
+  assert.equal(items[4].model, 'Magnetism');
+  assert.deepEqual(items[5].answers, ['iron', 'steel objects'], 'adjacent blanks join into one answer, as cer does');
+  const letters = core.questionPracticeItems({ ...core.questionSnapshot(cerQuestion), mcqLabels: 'letters' });
+  assert.deepEqual(letters[0].options.map(o => o.label), ['A', 'B', 'C']);
+});
+
+test('v1.3.0: marking prompts carry the question, the part, the model answer and the student answer', () => {
+  const q = core.questionSnapshot(cerQuestion);
+  const items = core.questionPracticeItems(q);
+  const p = core.openMarkingPrompt(q, items[1], 'the nail');
+  assert.match(p, /Part: \[\(b\) Claim\] type=open expected="The iron nail" student="the nail"/);
+  assert.match(p, /\(a\) Which object was attracted\? \[2\]/);
+  assert.match(p, /"verdict":"correct"/);
+  const b = core.blankMarkingPrompt(q, [{ model: 'iron', student: 'irn' }]);
+  assert.match(b, /0\. expected="iron" student="irn"/);
+  const h = core.hintPrompt(q, items[0]);
+  assert.match(h, /do NOT reveal/);
+  assert.equal(core.normBlank('  Iron! '), 'iron');
+});
+
+test('v1.3.0: the score counts correct 1, partly right ½, and each blank', () => {
+  const items = core.questionPracticeItems(core.questionSnapshot(cerQuestion));
+  const res = { '3:mcq': { verdict: 'correct' }, '5:claim': { verdict: 'partial' }, '8:blank': { blanks: ['correct', 'incorrect'] } };
+  const s = core.practiceScore(items, res);
+  assert.deepEqual(s, { score: 2.5, total: 8, marked: 3, done: false });
+  const all = Object.fromEntries(items.map(i => [i.key, i.kind === 'blank' ? { blanks: ['correct', 'correct'] } : { verdict: 'correct' }]));
+  assert.equal(core.practiceScore(items, all).done, true);
 });
