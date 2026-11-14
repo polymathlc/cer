@@ -1,0 +1,66 @@
+name: Employee account check
+
+# Is the employee account (Keertana) set up as an employee — able to add questions in
+# the Science, Math, English and Chinese portals, never an admin, never a student?
+# tools/staff-account.mjs prints yes/no answers and counts only (this log is public).
+#
+#   pull request        offline tests only
+#   push to main        offline tests, then the live check (changes nothing)
+#   Run workflow        the live check; with "fix" ticked it also marks the address
+#                       verified, sets the employee claim (never admin) and removes the
+#                       student request and the Online row the student approval made
+
+on:
+  pull_request:
+    paths: ['tools/staff-account*', '.github/workflows/staff-account.yml']
+  push:
+    branches: [main]
+    paths: ['tools/staff-account*', '.github/workflows/staff-account.yml']
+  workflow_dispatch:
+    inputs:
+      fix:
+        description: 'Set the account up as an employee (verified, employee claim, no student request)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staff-account
+  cancel-in-progress: false
+
+jobs:
+  staff-account:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Offline tests
+        run: |
+          node --check tools/staff-account.mjs
+          node --test tools/staff-account-tests.mjs
+
+      - name: Prepare the service-account key
+        if: github.repository == 'polymathlc/cer' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node tools/online-rules.mjs --setup
+
+      - name: Check (and fix when asked) the employee account
+        if: github.repository == 'polymathlc/cer' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/staff-deps" --no-save --no-audit --no-fund firebase-admin@12 >/dev/null
+          flag=""
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.fix }}" = "true" ]; then flag="--fix"; fi
+          out=$(STAFF_DEPS="$RUNNER_TEMP/staff-deps" node tools/staff-account.mjs $flag)
+          echo "$out"
+          echo "$out" >> "$GITHUB_STEP_SUMMARY"

@@ -572,6 +572,26 @@ await step('admin: filter by level and subjects, tap the "Students by level" gri
   for (const id of ['f1', 'f2', 'f3', 'f4']) db.studentAccess.delete(id);
 });
 
+/* ───────────── 11. staff are never students (v1.8.0) ───────────── */
+await step('admin: an employee\'s old request (Keertana) is listed apart under Staff accounts and can be removed', async () => {
+  db.studentAccess.set('emp1', { uid: 'emp1', email: 'pkeertana21@gmail.com', status: 'approved', enrolled: true, parentName: 'Polavarapu Keertana',
+    parentEmail: 'pkeertana21@gmail.com', childCount: 1, children: [{ name: 'keertana', level: 'P3', subjects: 'both' }],
+    submittedAt: '2026-11-14T07:15:00Z', app: 'english', submissions: 1 });
+  await adminPage.locator('.filter-chip[data-filter="all"]').click();
+  await adminPage.waitForSelector('#staffSection [data-staff="emp1"]');
+  assert.match(await adminPage.textContent('#staffSection'), /Employee/);
+  assert.match(await adminPage.textContent('#staffSection'), /Not an admin/);
+  assert.equal(await adminPage.locator('#adminList [data-record="emp1"]').count(), 0, 'never in the student list');
+  assert.doesNotMatch(await adminPage.textContent('#adminList'), /Polavarapu Keertana/);
+  assert.equal(db.onlineMembers.has('emp1'), false, 'no Online classes for staff');
+  if (shots) await adminPage.screenshot({ path: path.join(shots, 'admin-staff-section.png'), fullPage: true });
+  await adminPage.locator('#staffSection [data-admin="delete"][data-id="emp1"]').click();
+  await adminPage.locator('#staffSection [data-admin="delete"][data-id="emp1"]', { hasText: 'Tap again' }).click();
+  for (let i = 0; i < 50 && db.studentAccess.has('emp1'); i++) await adminPage.waitForTimeout(100);
+  assert.equal(db.studentAccess.has('emp1'), false, 'removed');
+  await adminPage.waitForFunction(() => !document.getElementById('staffSection'));
+});
+
 await step('admins and staff never get a subject lock', async () => {
   for (const who of [USERS.admin, USERS.staff]) {
     const page = await newPage(who);

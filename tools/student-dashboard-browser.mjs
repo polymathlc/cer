@@ -133,7 +133,7 @@ const same = (actual, expected, message) => { assert.equal(actual, expected, mes
   const { context, page, errors } = await open();
   await page.goto(SITE + '/student/');
   await page.waitForSelector('.tile-grid .app-tile');
-  same(await page.textContent('#versionBadge'), 'v1.7.0', 'the dashboard is the new version');
+  same(await page.textContent('#versionBadge'), 'v1.8.0', 'the dashboard is the new version');
   await shot(page, 'dashboard-computer');
 
   const tiles = await page.$$eval('.tile-grid .app-tile', links => links.map(link => ({

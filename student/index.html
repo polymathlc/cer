@@ -7,7 +7,7 @@
 <title>My Polymath — Student Dashboard | Polymath Learning Centre</title>
 <meta name="description" content="Every Polymath Learning Centre app in one place: Science, Science PSLE, Math, Answer Keys, Study Buddy, Rewards, Worksheets, Chinese, English and Mind Map.">
 <!--
-  MY POLYMATH — the student dashboard at polymathlc.com.sg/student  (v1.7.0)
+  MY POLYMATH — the student dashboard at polymathlc.com.sg/student  (v1.8.0)
   ------------------------------------------------------------------------
   One page of square tiles, one per student app. Each tile is a plain link to
   the app's own published address, so the tiles need no script to work.
@@ -603,6 +603,11 @@
   .edit-child { display: grid; gap: 6px; grid-template-columns: 2fr 1fr 1.4fr auto; align-items: center; }
   @media (max-width: 640px) { .edit-child { grid-template-columns: 1fr 1fr; } .edit-child input { grid-column: 1 / -1; } }
   .admin-foot { margin-top: var(--space-lg); }
+  /* Staff accounts (v1.8.0): an employee's or teacher's old request, kept apart from the students. */
+  .staff-section { margin-top: var(--space-lg); padding: var(--space-lg); border: 1px dashed var(--border-subtle); border-radius: var(--radius-lg); background: var(--bg-secondary, transparent); }
+  .staff-section h3 { margin: 0 0 var(--space-xs, 4px); font-size: 1.05rem; }
+  .staff-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md, 12px); flex-wrap: wrap; padding: var(--space-md, 12px) 0; border-top: 1px solid var(--border-subtle); }
+  .staff-badge { display: inline-block; margin-left: 6px; padding: 2px 10px; border-radius: 999px; font-size: 0.8rem; background: var(--bg-tertiary, #eef2f7); color: var(--text-secondary); }
   @media print { .account-card, .admin-view, #adminButton { display: none !important; } }
 
   /* ───────── Print: a sheet of every app and its address, for the fridge ───────── */
@@ -827,14 +832,14 @@
   © Polymath Learning Centre · polymathlc.com.sg
 </footer>
 
-<div class="version-badge" id="versionBadge" aria-hidden="true">v1.7.0</div>
+<div class="version-badge" id="versionBadge" aria-hidden="true">v1.8.0</div>
 
 <script>
   /* My Polymath — the little the page does with script. Everything works without it. */
   (function () {
     'use strict';
 
-    var DASHBOARD_VERSION = 'v1.7.0';
+    var DASHBOARD_VERSION = 'v1.8.0';
     var LAST_OPENED_KEY = 'polymath-dashboard-last-opened';
 
     var versionBadge = document.getElementById('versionBadge');
@@ -907,7 +912,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="student-account.js?v=1.6.0"></script>
+<script src="student-account.js?v=1.8.0"></script>
 <script defer src="access-gate.js?v=1.1.0" data-app="student"></script>
 <script defer src="pwa-install.js?v=2.0.0" data-app-name="My Polymath" data-app-key="hub" data-app-icon="assets/app-icons/icon-192.png" data-accent="#0B6B4F" data-sw="sw.js" data-floating="auto"></script>
 </body>
