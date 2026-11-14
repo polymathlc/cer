@@ -242,7 +242,8 @@ async function step(name, fn) {
   catch (error) { failures++; console.log('✗ ' + name + '\n   ' + String(error && error.stack || error).split('\n').slice(0, 6).join('\n   ')); }
 }
 async function newPage(who, viewport = { width: 1280, height: 860 }) {
-  const context = await browser.newContext({ viewport, deviceScaleFactor: shots ? 2 : 1 });
+  // No service workers: My Polymath's offline worker would answer a reload outside the test's routes.
+  const context = await browser.newContext({ viewport, deviceScaleFactor: shots ? 2 : 1, serviceWorkers: 'block' });
   await context.route('**/*', route);
   await context.addInitScript(user => { if (user) localStorage.setItem('fake-user', JSON.stringify(user)); }, who || null);
   const page = await context.newPage();
@@ -500,6 +501,75 @@ await step('the admin changes the child to Both Math and Science → the Math ti
   await page.locator('#appButton').click();
   assert.equal(await page.evaluate(() => window.__clicked), 1, 'the Math app works');
   await page.context().close();
+});
+
+/* ───────────── 10. classify and filter the accounts (v1.6.0) ───────────── */
+await step('admin: filter by level and subjects, tap the "Students by level" grid, group, sort and switch to the table', async () => {
+  const seed = (id, parentName, children, status = 'approved', at = '2026-11-12T02:00:00Z') => db.studentAccess.set(id, {
+    uid: id, email: id + '@gmail.com', status, enrolled: true, parentName, parentEmail: id + '.parent@gmail.com',
+    childCount: children.length, children, submittedAt: at, app: 'science', submissions: 1 });
+  seed('f1', 'Mdm Oh Thiam Leng', [{ name: 'Oh Xiu Zhe', level: 'P5', subjects: 'science' }]);
+  seed('f2', 'Diana Toh', [{ name: 'Dan Toh', level: 'P5', subjects: 'science' }]);
+  seed('f3', 'Mr Lee Kok Wai', [{ name: 'Lee Jia Hui', level: 'P6', subjects: 'math' }, { name: 'Lee Jia En', level: 'P3', subjects: 'science' }]);
+  seed('f4', 'Mrs Ng Bee Lian', [{ name: 'Ng Kai Xuan', level: 'P4', subjects: 'both' }], 'pending');
+  await adminPage.setViewportSize({ width: 1280, height: 900 });
+  await adminPage.locator('.filter-chip[data-filter="all"]').click();
+  await adminPage.waitForSelector('.class-filters');
+  await adminPage.waitForFunction(() => document.querySelectorAll('#adminList .record').length >= 6);
+  // Level P5 → only the two P5 families.
+  await adminPage.locator('.filter-chip[data-admin="level"][data-value="P5"]').click();
+  let names = await adminPage.$$eval('#adminList .record h3', els => els.map(e => e.textContent));
+  assert.ok(names.includes('Mdm Oh Thiam Leng') && names.includes('Diana Toh'), names.join(', '));
+  assert.ok(!names.includes('Mr Lee Kok Wai'), 'no P6 or P3 family');
+  // + Math only → the Science-only P5 families go.
+  await adminPage.locator('.filter-chip[data-admin="subject"][data-value="math"]').click();
+  names = await adminPage.$$eval('#adminList .record h3', els => els.map(e => e.textContent));
+  assert.ok(!names.includes('Mdm Oh Thiam Leng') && !names.includes('Diana Toh'), names.join(', '));
+  // P6 Math only → Mr Lee, whose P3 child is Science (one child must fit both).
+  await adminPage.locator('.filter-chip[data-admin="level"][data-value="P6"]').click();
+  names = await adminPage.$$eval('#adminList .record h3', els => els.map(e => e.textContent));
+  assert.deepEqual(names, ['Mr Lee Kok Wai']);
+  assert.match(await adminPage.textContent('#adminList .record .child-table tr.is-match'), /Lee Jia Hui/, 'the child that fits stands out');
+  // The grid: P5 × Science only → the two P5 Science families; a second tap clears it.
+  await adminPage.locator('.grid-cell[data-level="P5"][data-subject="science"]').click();
+  names = await adminPage.$$eval('#adminList .record h3', els => els.map(e => e.textContent));
+  assert.deepEqual(names.sort(), ['Diana Toh', 'Mdm Oh Thiam Leng']);
+  assert.match(await adminPage.textContent('#adminResultLine'), /Showing 2 families · 2 children/);
+  if (shots) await adminPage.screenshot({ path: path.join(shots, 'admin-filter-p5-science.png'), fullPage: false });
+  await adminPage.locator('.grid-cell[data-level="P5"][data-subject="science"]').click();
+  assert.equal(await adminPage.locator('.filter-chip[data-admin="level"][data-value="all"].is-active').count(), 1, 'a second tap clears the grid filter');
+  // Group by level, table view: one row per child, headed by level.
+  await adminPage.selectOption('select[data-admin-select="group"]', 'level');
+  await adminPage.locator('.filter-chip[data-admin="view"][data-value="table"]').click();
+  const heads = await adminPage.$$eval('.group-head', els => els.map(e => e.textContent));
+  assert.ok(/^Primary 3/.test(heads[0]), 'school order: ' + heads.join(' | '));
+  assert.ok(heads.some(h => /^Primary 5 · 3 children, 3 families/.test(h)), heads.join(' | '));
+  assert.equal(await adminPage.locator('.record-group', { hasText: 'Primary 3' }).locator('tr', { hasText: 'Tan Wei Ming' }).count(), 0, 'a P5 child is never listed under Primary 3');
+  assert.ok(await adminPage.locator('.account-table tbody tr').count() >= 5);
+  if (shots) await adminPage.screenshot({ path: path.join(shots, 'admin-table-by-level.png'), fullPage: true });
+  // Edit from the table opens that family's card with the form.
+  await adminPage.locator('.account-table tr', { hasText: 'Ng Kai Xuan' }).locator('[data-admin="open-card"]').click();
+  await adminPage.waitForSelector('[data-admin-form="f4"]');
+  assert.equal(await adminPage.locator('.filter-chip[data-admin="view"][data-value="cards"].is-active').count(), 1);
+  await adminPage.locator('[data-admin-form="f4"] [data-admin="cancel-edit"]').click();
+  // Remembered after a reload.
+  await adminPage.locator('.filter-chip[data-admin="subject"][data-value="has-math"]').click();
+  await adminPage.reload();
+  await adminPage.waitForSelector('.class-filters');
+  assert.equal(await adminPage.locator('.filter-chip[data-admin="subject"][data-value="has-math"].is-active').count(), 1, 'filters remembered');
+  assert.equal(await adminPage.$eval('select[data-admin-select="group"]', el => el.value), 'level');
+  // A phone: nothing wider than the screen.
+  await adminPage.setViewportSize({ width: 390, height: 844 });
+  await adminPage.locator('.filter-chip[data-admin="view"][data-value="table"]').click();
+  const width = await adminPage.evaluate(() => document.documentElement.scrollWidth);
+  assert.ok(width <= 390, 'no sideways scroll on a phone (' + width + ')');
+  if (shots) await adminPage.screenshot({ path: path.join(shots, 'admin-table-phone.png'), fullPage: false });
+  // Back to the defaults for the steps after this one.
+  await adminPage.locator('[data-admin="clear-class"]').click();
+  await adminPage.selectOption('select[data-admin-select="group"]', 'none');
+  await adminPage.locator('.filter-chip[data-admin="view"][data-value="cards"]').click();
+  await adminPage.setViewportSize({ width: 1280, height: 860 });
+  for (const id of ['f1', 'f2', 'f3', 'f4']) db.studentAccess.delete(id);
 });
 
 await step('admins and staff never get a subject lock', async () => {

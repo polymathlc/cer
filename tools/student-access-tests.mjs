@@ -372,7 +372,7 @@ test('dashboard helpers: usernames, sorting, search, counts and the admin edit',
 test('/student signs in, shows the admin dashboard and loads the very same gate as every app', () => {
   assert.ok(DASHBOARD.includes('<div class="account-card" id="accountCard" hidden aria-live="polite"></div>'));
   assert.ok(DASHBOARD.includes('<section class="admin-view" id="adminView" hidden aria-labelledby="adminTitle"></section>'));
-  assert.ok(DASHBOARD.includes('<script src="student-account.js?v=1.5.0"></script>'));
+  assert.ok(DASHBOARD.includes('<script src="student-account.js?v=1.6.0"></script>'));
   assert.ok(DASHBOARD.includes('<script defer src="access-gate.js?v=1.1.0" data-app="student"></script>'));
   const at = text => DASHBOARD.indexOf(text);
   assert.ok(at('<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js">') < at('<script src="student-account.js'), 'the SDK first');
@@ -536,4 +536,74 @@ test('the impact count: only approved accounts that used an app their subjects c
   assert.equal(report.accountsLosingSomething, 3, 'a, b and d');
   const text = reportLines(report).join('\n');
   assert.ok(!/@/.test(text), 'counts only: no email in a public log');
+});
+
+/* ───────────── classify and filter the accounts (My Polymath v1.6.0) ───────────── */
+const fam = (id, children, extra = {}) => ({ _id: id, status: 'approved', parentName: 'Parent ' + id, children, ...extra });
+const kid2 = (name, level, subjects) => ({ name, level, subjects });
+
+test('filters: a family fits when ONE child fits both the level and the subjects', () => {
+  const h = loadAccount().helpers;
+  const mixed = fam('m', [kid2('Ann', 'P5', 'science'), kid2('Ben', 'P3', 'math')]);
+  assert.equal(h.recordMatchesClass(mixed, 'P5', 'science'), true);
+  assert.equal(h.recordMatchesClass(mixed, 'P3', 'math'), true);
+  assert.equal(h.recordMatchesClass(mixed, 'P5', 'math'), false, 'never P5 from one child and Math from another');
+  assert.equal(h.recordMatchesClass(mixed, 'all', 'all'), true);
+  assert.equal(h.recordMatchesClass(mixed, 'P6', 'all'), false);
+  assert.equal(h.recordMatchesClass(fam('b', [kid2('Cat', 'P4', 'both')]), 'all', 'has-math'), true);
+  assert.equal(h.recordMatchesClass(fam('b', [kid2('Cat', 'P4', 'both')]), 'all', 'has-science'), true);
+  assert.equal(h.recordMatchesClass(fam('b', [kid2('Cat', 'P4', 'both')]), 'all', 'math'), false, 'Math only means only');
+  assert.equal(h.recordMatchesClass(fam('e', []), 'all', 'all'), true);
+  assert.equal(h.recordMatchesClass(fam('e', []), 'P5', 'all'), false);
+  assert.deepEqual(JSON.parse(JSON.stringify(h.matchingChildren(mixed, 'all', 'has-science'))).map(c => c.name), ['Ann']);
+});
+
+test('classify: children counted per level and subject, levels in school order', () => {
+  const h = loadAccount().helpers;
+  const grid = JSON.parse(JSON.stringify(h.classify([
+    fam('a', [kid2('A', 'P5', 'science'), kid2('B', 'S1', 'both')]),
+    fam('b', [kid2('C', 'P5', 'math')]),
+    fam('c', [kid2('D', 'P3', 'science'), kid2('E', '', '')])
+  ])));
+  assert.deepEqual(grid.rows.map(r => r.level), ['P3', 'P5', 'S1', '']);
+  assert.deepEqual(grid.rows[1], { level: 'P5', label: 'Primary 5', math: 1, science: 1, both: 0, none: 0, total: 2 });
+  assert.deepEqual(grid.total, { math: 1, science: 2, both: 1, none: 1, total: 5 });
+  const cc = JSON.parse(JSON.stringify(h.chipCounts([fam('a', [kid2('A', 'P5', 'science'), kid2('B', 'P5', 'both')]), fam('b', [kid2('C', 'P6', 'math')])], 'all', 'all')));
+  assert.equal(cc.levels.P5, 1, 'a family counts once per level chip');
+  assert.equal(cc.levels.P6, 1);
+  assert.equal(cc.levels.all, 2);
+  assert.equal(cc.subjects['has-science'], 1);
+  assert.equal(cc.subjects['has-math'], 2);
+});
+
+test('sort and group: by level, by subjects, by name; waiting first stays the default', () => {
+  const h = loadAccount().helpers;
+  const list = [
+    fam('p6', [kid2('Zoe', 'P6', 'math')], { parentName: 'Mdm Ang', submittedAt: '2026-11-10T00:00:00Z' }),
+    fam('p3', [kid2('Al', 'P3', 'science')], { parentName: 'Mr Yeo', submittedAt: '2026-11-12T00:00:00Z' }),
+    fam('mix', [kid2('Bo', 'P5', 'both'), kid2('Cy', 'P4', 'math')], { parentName: 'Mr Lim', submittedAt: '2026-11-11T00:00:00Z', status: 'pending' })
+  ];
+  const ids = l => l.map(r => r._id);
+  assert.deepEqual(ids(h.sortBy(list, 'newest')), ['mix', 'p3', 'p6'], 'waiting first, then newest');
+  assert.deepEqual(ids(h.sortBy(list, 'oldest')), ['p6', 'mix', 'p3']);
+  assert.deepEqual(ids(h.sortBy(list, 'level')), ['p3', 'mix', 'p6'], 'by the youngest child: P3, P4, P6');
+  assert.deepEqual(ids(h.sortBy(list, 'parent')), ['p6', 'mix', 'p3'], 'Mdm Ang, Mr Lim, Mr Yeo');
+  assert.deepEqual(ids(h.sortBy(list, 'child')), ['p3', 'mix', 'p6'], 'Al, Bo, Zoe');
+  const byLevel = h.groupRecords(list, 'level', 'all', 'all').map(g => [g.label, ids(g.records)]);
+  assert.deepEqual(JSON.parse(JSON.stringify(byLevel)), [['Primary 3', ['p3']], ['Primary 4', ['mix']], ['Primary 6', ['p6']]]);
+  // With a filter on, a family is filed under the child that fits it.
+  const both = list.filter(r => h.recordMatchesClass(r, 'all', 'both'));
+  assert.deepEqual(JSON.parse(JSON.stringify(h.groupRecords(both, 'level', 'all', 'both').map(g => g.label))), ['Primary 5'], 'not Primary 4');
+  const bySubject = h.groupRecords(list, 'subjects', 'all', 'all').map(g => [g.label, ids(g.records)]);
+  assert.deepEqual(JSON.parse(JSON.stringify(bySubject)), [['Math only', ['p6']], ['Science only', ['p3']], ['Children with different subjects', ['mix']]]);
+  assert.equal(h.groupRecords(list, 'none').length, 1);
+});
+
+test('saved filters: only known values come back; anything else is the default', () => {
+  const h = loadAccount().helpers;
+  assert.deepEqual(JSON.parse(JSON.stringify(h.cleanPrefs(null))), { filter: 'pending', level: 'all', subject: 'all', group: 'none', sort: 'newest', view: 'cards' });
+  assert.deepEqual(JSON.parse(JSON.stringify(h.cleanPrefs({ filter: 'approved', level: 'P5', subject: 'has-math', group: 'level', sort: 'child', view: 'table' }))),
+    { filter: 'approved', level: 'P5', subject: 'has-math', group: 'level', sort: 'child', view: 'table' });
+  assert.deepEqual(JSON.parse(JSON.stringify(h.cleanPrefs({ filter: 'x', level: '<img>', subject: 'english', group: 1, sort: null, view: 'grid' }))),
+    { filter: 'pending', level: 'all', subject: 'all', group: 'none', sort: 'newest', view: 'cards' });
 });
