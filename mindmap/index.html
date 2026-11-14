@@ -10,7 +10,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="../student/assets/app-icons/favicon-32.png">
 <link rel="apple-touch-icon" href="../student/assets/app-icons/apple-touch-icon.png">
 <!--
-  POLYMATH MIND MAP — polymathlc.com.sg/mindmap   (v1.0.0, November 2026)
+  POLYMATH MIND MAP — polymathlc.com.sg/mindmap   (v1.1.0, November 2026)
   ------------------------------------------------------------------------
   A mind-mapping tool for Polymath students and teachers, with four AI features:
 
@@ -275,6 +275,19 @@ button { cursor: pointer; }
 .q-head .q-badge { background: #fff; border-radius: var(--radius-full); padding: 1px 8px; }
 .q-body { padding: 10px 14px 12px; font-size: 0.9rem; line-height: 1.5; }
 .q-foot { display: flex; gap: 6px; padding: 0 12px 12px; flex-wrap: wrap; }
+/* v1.1.0: a question card folds down to one line, and can stand on its own (attached to no topic). */
+.q-fold { border: 0; background: #fff; color: var(--science-ink); width: 24px; height: 24px; border-radius: 8px; font-size: 0.8rem; line-height: 1; display: inline-grid; place-items: center; box-shadow: var(--shadow-xs); transition: transform 0.2s ease, background 0.2s ease; flex: none; }
+.q-fold:hover { background: #BBDEFB; transform: translateY(-1px); }
+.q-topic { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.q-mini { display: block; border: 0; background: #fff; text-align: left; padding: 9px 14px 11px; font: inherit; font-size: 0.86rem; line-height: 1.4; color: var(--text-primary); cursor: pointer; white-space: normal; }
+.q-mini:hover { background: #F5FAFF; }
+.mm-node.type-question.is-folded { border-style: solid; }
+.mm-node.type-question.is-folded .q-head { border-bottom-style: dashed; }
+.mm-node.is-free { box-shadow: 0 0 0 3px rgba(144, 202, 249, 0.35), var(--shadow-md, 0 4px 12px rgba(0,0,0,0.08)); }
+.q-badge.q-free { background: #FFF8E1; color: #8D6E00; }
+.pk-place { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-right: auto; }
+.pk-fold { display: inline-flex; align-items: center; gap: 6px; font-size: 0.82rem; color: var(--text-secondary); }
+@media print { .q-fold { display: none !important; } }
 
 /* question content (node, preview and picker share it) */
 .qc p { margin: 0 0 6px; }
@@ -560,7 +573,7 @@ button { cursor: pointer; }
         </div>
       </div>
       <button class="btn btn-small btn-icon" id="printBtn" type="button" aria-label="Print the map" data-tooltip="Print (A4)">🖨</button>
-      <span class="version-badge" id="versionBadge" hidden>v1.0.0</span>
+      <span class="version-badge" id="versionBadge" hidden>v1.1.0</span>
       <span class="user-chip" id="userChip"><span id="userName"></span><span class="avatar" id="userAvatar"></span></span>
     </div>
   </header>
@@ -629,7 +642,7 @@ button { cursor: pointer; }
 <input type="file" id="fileInput" accept=".json,.txt,.md,application/json,text/plain" hidden>
 <input type="file" id="imageFileInput" accept="image/*" hidden>
 
-<script type="module" src="mindmap-app.js?v=1.0.0"></script>
+<script type="module" src="mindmap-app.js?v=1.1.0"></script>
 <!-- 🔐 Student access gate (v1.1.0): students must be approved at polymathlc.com.sg/student/#admin before
      using this app, exactly as in every other student app. Source: polymathlc/cer student/access-gate.js -->
 <script defer src="../student/access-gate.js?v=1.1.0" data-app="mindmap"></script>

@@ -1,5 +1,5 @@
 /* =====================================================================
-   POLYMATH MIND MAP — the app (v1.0.0, November 2026)
+   POLYMATH MIND MAP — the app (v1.1.0, November 2026)
    ---------------------------------------------------------------------
    polymathlc.com.sg/mindmap. See index.html for the overview.
 
@@ -23,14 +23,14 @@ import {
 import {
   MINDMAP_VERSION, LIMITS, NODE_COLORS, SHAPES, colorOf, makeId, escapeHtml, htmlToText,
   newMap, normalizeMap, normalizeNode, nodeById, childrenOf, descendantsOf, depthOf, isHidden, sideOf, colorForNewChild,
-  removeNode, reparent, layoutMap, spotForNewChild, boundsOf, fitView, branchPath, linkPath, History,
+  removeNode, reparent, isFree, detachNode, layoutMap, spotForNewChild, boundsOf, fitView, branchPath, linkPath, History,
   serializeMap, mapBytes, mapToOutline, nodeLabel, parseAiJson, extractHtmlDocument, buildSandboxDoc, SANDBOX_FLAGS,
   allowedBankLevels, BANK_LEVELS, voiceSystemPrompt, voiceUserPrompt, expandPrompt, mapFromTopicPrompt,
   APP_SYSTEM, appBuildPrompt, appUpdatePrompt, imagePrompt, applyOps, buildFromOutline, importOutlineText
-} from './mindmap-core.mjs?v=1.0.0';
+} from './mindmap-core.mjs?v=1.1.0';
 import {
   renderQuestionHtml, questionHasAnswer, mountPicker, loadBank, findQuestions, snapshotOf, bankTopics, pickableQuestions, bankState
-} from './mindmap-questions.js?v=1.0.0';
+} from './mindmap-questions.js?v=1.1.0';
 
 /* =====================================================================
    1. STATE AND HELPERS
@@ -280,6 +280,19 @@ function fitAll(animate = true) {
   target.y += 0; // leave room for the voice dock at the bottom
   animateView(target, animate ? 320 : 0);
 }
+/** Bring a group of items into view, without zooming in past 100 %. */
+function fitTo(ids, animate = true) {
+  const r = ui.viewport.getBoundingClientRect();
+  const target = fitView(boundsOf(S.map, ids), r.width, r.height - 110, 80, 1);
+  if (target.zoom > view().zoom && view().zoom >= 0.6) {
+    // Already readable: only pan, so the cards are centred and nothing jumps in size.
+    const b = boundsOf(S.map, ids);
+    const v = view();
+    animateView({ zoom: v.zoom, x: r.width / 2 - ((b.minX + b.maxX) / 2) * v.zoom, y: (r.height - 110) / 2 - ((b.minY + b.maxY) / 2) * v.zoom }, animate ? 300 : 0);
+    return;
+  }
+  animateView(target, animate ? 320 : 0);
+}
 function centerOn(id, animate = true) {
   const n = nodeById(S.map, id);
   if (!n) return;
@@ -317,7 +330,8 @@ function nodeHash(n) {
   if (n.type === 'note') base.push(n.note);
   if (n.type === 'image') base.push(n.image.url, n.image.width, n.image.alt);
   if (n.type === 'code') base.push(n.code.title, n.code.width, n.code.height, !!(n.code.html || n.code.css || n.code.js));
-  if (n.type === 'question') base.push(n.question.qid, n.question.width, n.question.blocks.length);
+  if (n.type === 'question') base.push(n.question.qid, n.question.width, n.question.blocks.length, n.question.folded);
+  base.push(isFree(S.map, n));
   if (n.type !== 'code') base.push(sideOf(S.map, n.id));
   return JSON.stringify(base);
 }
@@ -336,7 +350,8 @@ function buildNodeEl(n) {
 }
 function fillNodeEl(el, n) {
   const isRoot = n.id === S.map.rootId;
-  el.className = 'mm-node type-' + n.type + ' shape-' + n.shape + (isRoot ? ' is-root' : '') + (el.classList.contains('is-new') ? ' is-new' : '');
+  el.className = 'mm-node type-' + n.type + ' shape-' + n.shape + (isRoot ? ' is-root' : '') + (isFree(S.map, n) ? ' is-free' : '') +
+    (n.type === 'question' && n.question.folded ? ' is-folded' : '') + (el.classList.contains('is-new') ? ' is-new' : '');
   nodeStyle(el, n);
   const side = isRoot ? 'right' : sideOf(S.map, n.id);
   const kids = childrenOf(S.map, n.id).length;
@@ -392,12 +407,88 @@ function fillNodeEl(el, n) {
       const q = n.question;
       const reveal = el.dataset.reveal === '1';
       const picked = el.dataset.picked || '';
-      el.innerHTML = `<div class="q-head" data-drag-handle>❓ <span>${escapeHtml(q.topic || 'Question')}</span>${q.level ? `<span class="q-badge">${escapeHtml(q.level)}</span>` : ''}${q.marks ? `<span class="q-badge">${escapeHtml(q.marks)}m</span>` : ''}</div>
+      // v1.1.0: the ▾ / ▸ button folds the card down to its headline and opens it again (anyone may, even on a shared map).
+      const foldBtn = `<button class="q-fold" type="button" data-act="q-fold" aria-expanded="${q.folded ? 'false' : 'true'}" title="${q.folded ? 'Open the question' : 'Fold the question away'}" aria-label="${q.folded ? 'Open the question' : 'Fold the question away'}">${q.folded ? '▸' : '▾'}</button>`;
+      const freeTag = isFree(S.map, n) ? '<span class="q-badge q-free" title="Not attached to any topic">On its own</span>' : '';
+      const head = `<div class="q-head" data-drag-handle>${foldBtn}❓ <span class="q-topic">${escapeHtml(q.topic || 'Question')}</span>${q.level ? `<span class="q-badge">${escapeHtml(q.level)}</span>` : ''}${q.marks ? `<span class="q-badge">${escapeHtml(q.marks)}m</span>` : ''}${freeTag}</div>`;
+      if (q.folded) {
+        el.innerHTML = `${head}<button class="q-mini" type="button" data-act="q-fold" style="width:${Math.min(q.width, 300)}px" title="Open the question">${escapeHtml(questionHeadlineOf(q))}</button>${addBtn}${fold}`;
+      } else {
+        el.innerHTML = `${head}
         <div class="q-body" style="width:${q.width}px">${renderQuestionHtml(q, { showAnswers: S.staff && reveal, interactive: true, picked, reveal: reveal })}</div>
-        <div class="q-foot">${questionHasAnswer(q) && (S.staff || picked) ? `<button class="btn btn-small" type="button" data-act="q-reveal">${reveal ? 'Hide answer' : 'Show answer'}</button>` : ''}${picked ? '<button class="btn btn-small btn-ghost" type="button" data-act="q-reset">Try again</button>' : ''}</div>${addBtn}${fold}`;
+        <div class="q-foot">${questionHasAnswer(q) && (S.staff || picked) ? `<button class="btn btn-small" type="button" data-act="q-reveal">${reveal ? 'Hide answer' : 'Show answer'}</button>` : ''}${picked ? '<button class="btn btn-small btn-ghost" type="button" data-act="q-reset">Try again</button>' : ''}<button class="btn btn-small btn-ghost" type="button" data-act="q-fold">▴ Fold</button></div>${addBtn}${fold}`;
+      }
       break;
     }
   }
+}
+
+/** One line that names a folded question: its title, else the start of its first text block. */
+function questionHeadlineOf(q) {
+  let text = String(q.title || '').trim();
+  if (!text) {
+    for (const b of q.blocks || []) {
+      const raw = b && (b.text || b.html || b.content || '');
+      const plain = htmlToText(String(raw || '')).replace(/\s+/g, ' ').trim();
+      if (plain) { text = plain; break; }
+    }
+  }
+  if (!text) text = 'Question';
+  return text.length > 110 ? text.slice(0, 107).trimEnd() + '…' : text;
+}
+
+/**
+ * Fold or open question cards. The card keeps its top edge and the edge that faces its topic,
+ * so opening one grows away from the branch instead of jumping. On a read-only (shared) map
+ * the change is only for this viewer and is not saved.
+ */
+function setQuestionsFolded(ids, folded) {
+  const list = ids.map(id => nodeById(S.map, id)).filter(n => n && n.type === 'question' && n.question.folded !== folded);
+  if (!list.length) return 0;
+  const before = new Map(list.map(n => [n.id, { left: n.x - (n.w || 0) / 2, right: n.x + (n.w || 0) / 2, top: n.y - (n.h || 0) / 2 }]));
+  const apply = () => { for (const n of list) n.question.folded = folded; };
+  if (S.readOnly) { apply(); render(); }
+  else if (!commit(apply, { keepInspector: true })) return 0;
+  // render() has measured the new sizes: move each card so its anchor edges stay put.
+  for (const n of list) {
+    const b = before.get(n.id);
+    if (!b || !n.w || !n.h) continue;
+    const growsLeft = !isFree(S.map, n) && n.parentId && sideOf(S.map, n.id) === 'left';
+    n.x = Math.round(growsLeft ? b.right - n.w / 2 : b.left + n.w / 2);
+    n.y = Math.round(b.top + n.h / 2);
+    placeNodeEl(n);
+  }
+  renderEdges();
+  drawMinimap();
+  if (S.readOnly) return list.length;
+  S.inspectorFor = null;
+  refreshInspector(true);
+  return list.length;
+}
+function toggleQuestionFold(id) {
+  const n = nodeById(S.map, id);
+  if (!n || n.type !== 'question') return;
+  setQuestionsFolded([id], !n.question.folded);
+}
+function foldAllQuestions(folded) {
+  const ids = S.map.nodes.filter(n => n.type === 'question').map(n => n.id);
+  if (!ids.length) { toast('There are no questions on this map yet.'); return; }
+  const changed = setQuestionsFolded(ids, folded);
+  toast(changed ? (folded ? 'Folded ' : 'Opened ') + changed + ' question' + (changed === 1 ? '' : 's') + '.' : (folded ? 'All questions are already folded.' : 'All questions are already open.'));
+}
+/** Take a question (or anything) off its branch so it stands on its own, where it is now. */
+function detachSelected(id) {
+  const n = nodeById(S.map, id);
+  if (!n || n.id === S.map.rootId) return;
+  if (!n.parentId) { toast('It is already on its own.'); return; }
+  const from = nodeById(S.map, n.parentId);
+  const ok = commit(() => {
+    if (!detachNode(S.map, n.id)) return false;
+    // Nudge it a little away from where the branch ended, so it visibly stands apart.
+    n.y += 30;
+  }, { keepInspector: true });
+  if (ok) toast(`“${nodeLabel(n).slice(0, 40)}” now stands on its own. Drag it onto a topic to attach it again.`, '', { action: 'Undo', onAction: undo });
+  return ok && from;
 }
 
 function renderNodes() {
@@ -937,6 +1028,7 @@ ui.nodes.addEventListener('click', e => {
     case 'code-big': openCodeStudio(id); break;
     case 'q-reveal': nodeEl.dataset.reveal = nodeEl.dataset.reveal === '1' ? '' : '1'; els.get(id).hash = ''; render(); break;
     case 'q-reset': nodeEl.dataset.picked = ''; nodeEl.dataset.reveal = ''; els.get(id).hash = ''; render(); break;
+    case 'q-fold': toggleQuestionFold(id); break;
   }
 });
 
@@ -1243,6 +1335,17 @@ function inspectMap() {
       <button class="btn btn-primary" type="button" data-i="ai-map">🪄 Build the branches</button>
       <p class="hint">Adds main branches and ideas around the centre. You can undo it.</p>
     </div>
+    <h3>❓ Questions</h3>
+    <div class="card">
+      <div class="row">
+        <button class="btn btn-small" type="button" data-i="add-free-question">❓ Add questions on their own</button>
+      </div>
+      ${S.map.nodes.some(n => n.type === 'question') ? `<div class="row">
+        <button class="btn btn-small" type="button" data-i="fold-all-q">▾ Fold all questions</button>
+        <button class="btn btn-small" type="button" data-i="open-all-q">▸ Open all questions</button>
+      </div>` : ''}
+      <p class="hint">Folded questions show one line each, so the map stays neat. A question “on its own” is its own container, attached to no topic.</p>
+    </div>
     <h3>Paste a list</h3>
     <div class="card">
       <textarea class="textarea" id="iOutline" placeholder="One idea per line. Indent with spaces for sub-ideas."></textarea>
@@ -1346,8 +1449,13 @@ function inspectQuestion(n) {
     <div class="row">${q.level ? `<span class="chip science is-on">${escapeHtml(q.level)}</span>` : ''}${q.topic ? `<span class="chip">${escapeHtml(q.topic)}</span>` : ''}${q.marks ? `<span class="chip">${escapeHtml(q.marks)} marks</span>` : ''}</div>
     <div class="card">${renderQuestionHtml(q, { showAnswers: S.staff })}</div>
     ${S.staff ? '' : '<p class="hint">Tap an option on the map to check your answer.</p>'}
-    ${S.readOnly ? '' : `
+    ${S.readOnly ? `<div class="row"><button class="btn btn-small" type="button" data-i="q-fold">${q.folded ? '▸ Open the card' : '▾ Fold the card'}</button></div>` : `
     <div class="range-row"><span class="hint">Width</span><input type="range" min="240" max="800" step="10" value="${q.width}" id="iQW"><output id="iQWOut">${q.width}</output></div>
+    <div class="row">
+      <button class="btn btn-small" type="button" data-i="q-fold">${q.folded ? '▸ Open the card' : '▾ Fold the card'}</button>
+      ${isFree(S.map, n) ? '' : '<button class="btn btn-small" type="button" data-i="detach">↗ Stand on its own</button>'}
+    </div>
+    <p class="hint">${isFree(S.map, n) ? '📦 This question stands on its own, attached to no topic. Drag it by its blue bar onto a topic to attach it.' : '🔗 Attached to “' + escapeHtml(nodeLabel(nodeById(S.map, n.parentId)).slice(0, 40)) + '”. “Stand on its own” unhooks it so it is its own container.'}</p>
     <div class="row">
       <button class="btn btn-small" type="button" data-i="more-questions">➕ More on ${escapeHtml(q.topic || 'this topic')}</button>
       <button class="btn btn-small btn-danger" type="button" data-i="delete">🗑 Remove</button>
@@ -1406,7 +1514,12 @@ function bindInspector(n, link) {
       case 'studio': openCodeStudio(n.id); break;
       case 'download-code': download(safeName(n.code.title) + '.html', buildSandboxDoc(n.code, { bridge: false }), 'text/html'); break;
       case 'copy-code': try { await navigator.clipboard.writeText(buildSandboxDoc(n.code, { bridge: false })); flashDone(b, '✓ Copied'); } catch (err) { toast('Could not copy. Use the big editor to select the code.'); } break;
-      case 'more-questions': openQuestionPicker(n.parentId || S.map.rootId, { topic: n.question.topic }); break;
+      case 'more-questions': openQuestionPicker(n.parentId || S.map.rootId, { topic: n.question.topic, free: isFree(S.map, n) }); break;
+      case 'q-fold': toggleQuestionFold(n.id); break;
+      case 'detach': detachSelected(n.id); break;
+      case 'fold-all-q': foldAllQuestions(true); break;
+      case 'open-all-q': foldAllQuestions(false); break;
+      case 'add-free-question': openQuestionPicker(S.map.rootId, { free: true }); break;
       case 'select-link': setSelected('', { link: b.dataset.link }); break;
       case 'swap-link': commit(() => { const t = link.from; link.from = link.to; link.to = t; }, { keepInspector: true }); break;
       case 'delete-link': deleteSelected(); break;
@@ -1571,7 +1684,7 @@ async function jobQuestions(job) {
   const onMap = S.map.nodes.filter(n => n.type === 'question').map(n => n.question.qid);
   const qs = findQuestions({ search: job.search, topic: job.topic, level: job.level, count: job.count, exclude: onMap, staff: S.staff, levels: S.levels });
   if (!qs.length) { toast('No questions matched “' + (job.topic || job.search) + '”. Try the ❓ button to browse.'); return; }
-  placeQuestions(qs, job.parentId);
+  placeQuestions(qs, job.parentId, { free: !!job.free || !job.parentId, folded: local('mindmap-q-folded') === 'on' });
 }
 
 /* ---------- AI ideas, notes and whole maps ---------- */
@@ -1707,7 +1820,7 @@ async function placeImageFile(file, parentId, nodeId) {
 }
 
 /* ---------- questions ---------- */
-function openQuestionPicker(parentId, { topic = '' } = {}) {
+function openQuestionPicker(parentId, { topic = '', free } = {}) {
   if (S.readOnly) return;
   readAccess();
   if (!S.levels.length) {
@@ -1724,29 +1837,75 @@ function openQuestionPicker(parentId, { topic = '' } = {}) {
     staff: S.staff, levels: S.levels,
     alreadyOnMap: S.map.nodes.filter(n => n.type === 'question').map(n => n.question.qid),
     notice: S.staff ? 'You are signed in as staff: every question is shown, with answers.' : 'Showing ' + S.levels.join(', ') + ' questions, from your Science approval.',
-    onPlace: qs => { closeModal(); placeQuestions(qs, parentId); }
+    // v1.1.0: where they go (under a topic, or each on its own) and whether they arrive folded.
+    placement: {
+      target: nodeLabel(nodeById(S.map, parentId) || nodeById(S.map, S.map.rootId)).slice(0, 40),
+      free: free === undefined ? local('mindmap-q-free') === 'on' : !!free,
+      folded: local('mindmap-q-folded') === 'on'
+    },
+    onPlace: (qs, how = {}) => {
+      local('mindmap-q-free', how.free ? 'on' : 'off');
+      local('mindmap-q-folded', how.folded ? 'on' : 'off');
+      closeModal();
+      placeQuestions(qs, parentId, how);
+    }
   });
   if (topic) setTimeout(() => { const sel = $('#pkTopic', m.body); if (sel) { const iv = setInterval(() => { if (sel.options.length > 1) { sel.value = topic; sel.dispatchEvent(new Event('change')); clearInterval(iv); } }, 200); setTimeout(() => clearInterval(iv), 15000); } }, 50);
 }
-function placeQuestions(qs, parentId) {
+/**
+ * Put bank questions on the map.
+ *   attached (default): each is a child of `parentId`, laid out with the branch;
+ *   free: each is its own container, attached to nothing, set out in a neat grid in the middle of the screen.
+ * folded: the cards arrive folded to one line each (tap ▸ to open one).
+ */
+function placeQuestions(qs, parentId, { free = false, folded = false } = {}) {
   let firstId = '';
+  const placed = [];
   commit(() => {
     const parent = nodeById(S.map, parentId) || nodeById(S.map, S.map.rootId);
-    for (const q of qs) {
-      if (S.map.nodes.length >= LIMITS.nodes) break;
-      const snap = snapshotOf(q);
-      const spot = spotForNewChild(S.map, parent.id, { w: 400, h: 280 });
-      const n = normalizeNode({ id: makeId('n'), type: 'question', parentId: parent.id, x: spot.x, y: spot.y, w: 400, h: 280, text: snap.title, color: 'blue', question: snap });
-      if (parent.id === S.map.rootId && spot.side) n.side = spot.side;
-      S.map.nodes.push(n);
-      if (!firstId) firstId = n.id;
+    const size = folded ? { w: 320, h: 86 } : { w: 400, h: 280 };
+    // Free cards: a grid of up to three across, starting at the centre of what is on screen, below anything already there.
+    const r = ui.viewport.getBoundingClientRect();
+    const centre = screenToWorld(r.left + r.width / 2, r.top + r.height / 2);
+    const cols = Math.min(3, Math.max(1, qs.length));
+    const gap = 36;
+    const startX = Math.round(centre.x - ((cols - 1) * (size.w + gap)) / 2);
+    let startY = Math.round(centre.y - size.h / 2);
+    if (free) {
+      // Do not land on top of another free card: step down until the spot is clear.
+      const clash = (x, y) => S.map.nodes.some(o => Math.abs(o.x - x) < (size.w + (o.w || 160)) / 2 && Math.abs(o.y - y) < (size.h + (o.h || 46)) / 2);
+      let guard = 0;
+      while (guard++ < 30 && qs.slice(0, cols).some((_, i) => clash(startX + i * (size.w + gap), startY))) startY += size.h + gap;
     }
-    parent.collapsed = false;
+    qs.forEach((q, i) => {
+      if (S.map.nodes.length >= LIMITS.nodes) return;
+      const snap = snapshotOf(q);
+      snap.folded = !!folded;
+      let n;
+      if (free) {
+        const x = startX + (i % cols) * (size.w + gap);
+        const y = startY + Math.floor(i / cols) * (size.h + gap);
+        n = normalizeNode({ id: makeId('n'), type: 'question', parentId: '', x, y, w: size.w, h: size.h, text: snap.title, color: 'blue', question: snap });
+      } else {
+        const spot = spotForNewChild(S.map, parent.id, size);
+        n = normalizeNode({ id: makeId('n'), type: 'question', parentId: parent.id, x: spot.x, y: spot.y, w: size.w, h: size.h, text: snap.title, color: 'blue', question: snap });
+        if (parent.id === S.map.rootId && spot.side) n.side = spot.side;
+      }
+      S.map.nodes.push(n);
+      placed.push(n.id);
+      if (!firstId) firstId = n.id;
+    });
+    if (!free) parent.collapsed = false;
     if (mapBytes(serializeMap(S.map)) > LIMITS.mapBytes) { toast('That is too much for one map. Try fewer questions.', 'error'); return false; }
   });
-  // Lay out once the cards have been measured.
-  requestAnimationFrame(() => { tidyUp(true); setTimeout(() => { if (firstId) centerOn(firstId); }, 400); });
-  toast(qs.length === 1 ? 'Placed 1 question.' : 'Placed ' + qs.length + ' questions.', 'good');
+  if (!placed.length) return;
+  // Lay out once the cards have been measured (free cards keep their places; the branch is tidied).
+  requestAnimationFrame(() => {
+    if (!free) tidyUp(true);
+    setTimeout(() => { if (placed.length > 1) fitTo(placed); else if (firstId) centerOn(firstId); }, 400);
+  });
+  const what = qs.length === 1 ? '1 question' : qs.length + ' questions';
+  toast('Placed ' + what + (free ? ' on ' + (qs.length === 1 ? 'its' : 'their') + ' own' : '') + (folded ? '. Tap ▸ to open one.' : '.'), 'good');
 }
 
 /* ---------- voice ---------- */

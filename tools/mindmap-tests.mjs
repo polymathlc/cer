@@ -232,7 +232,7 @@ test('the page: noindex, the access gate last, the module, and no keys beyond th
   const page = read('mindmap/index.html');
   assert.match(page, /<meta name="robots" content="noindex">/);
   assert.ok(page.trimEnd().endsWith('<script defer src="../student/access-gate.js?v=1.1.0" data-app="mindmap"></script>\n</body>\n</html>'));
-  assert.ok(page.includes('<script type="module" src="mindmap-app.js?v=1.0.0"></script>'));
+  assert.ok(page.includes('<script type="module" src="mindmap-app.js?v=1.1.0"></script>'));
   const services = read('mindmap/mindmap-services.js');
   assert.ok(!/sk-[A-Za-z0-9]{10,}/.test(services + read('mindmap/mindmap-app.js')), 'no OpenAI key in page code');
   assert.ok(services.includes("httpsCallable(functions, 'askOpenAi'") && services.includes("httpsCallable(functions, 'openAiImage'"), 'ChatGPT goes through the server');
@@ -240,8 +240,8 @@ test('the page: noindex, the access gate last, the module, and no keys beyond th
   // Messages from code windows are trusted only from their own iframe.
   assert.ok(app.includes('e.source === frame.contentWindow'));
   // The same version everywhere.
-  assert.ok(read('mindmap/mindmap-core.mjs').includes(`MINDMAP_VERSION = '1.0.0'`));
-  assert.ok(page.includes('>v1.0.0<'));
+  assert.ok(read('mindmap/mindmap-core.mjs').includes(`MINDMAP_VERSION = '1.1.0'`));
+  assert.ok(page.includes('>v1.1.0<'));
 });
 
 test('the access lists match the gate', () => {
@@ -250,4 +250,88 @@ test('the access lists match the gate', () => {
   const admins = /var ACCESS_ADMINS = (\[[^\]]+\])/.exec(gate)[1].replace(/'/g, '"');
   const mine = /export const ACCESS_ADMINS = (\[[^\]]+\])/.exec(services)[1].replace(/'/g, '"');
   assert.deepEqual(JSON.parse(mine), JSON.parse(admins));
+});
+
+// ───────────── v1.1.0: folded question cards and free-standing questions ─────────────
+function mapWithQuestions() {
+  const map = core.newMap({ title: 'Light' });
+  const branch = core.normalizeNode({ id: 'topicA', type: 'topic', parentId: map.rootId, x: 200, y: 0, text: 'Shadows' });
+  const attached = core.normalizeNode({ id: 'qAttached', type: 'question', parentId: 'topicA', x: 500, y: 0, w: 320, h: 90,
+    question: { qid: 'q1', title: 'Why does a shadow form?', topic: 'Light', level: 'P4', blocks: [], folded: true } });
+  const free = core.normalizeNode({ id: 'qFree', type: 'question', parentId: '', x: -900, y: 700, w: 400, h: 280,
+    question: { qid: 'q2', title: 'Which material lets light through?', topic: 'Light', level: 'P4', blocks: [] } });
+  map.nodes.push(branch, attached, free);
+  return map;
+}
+
+test('v1.1.0: a question card remembers whether it is folded, and old maps open unfolded', () => {
+  const map = core.normalizeMap(JSON.parse(JSON.stringify(mapWithQuestions())));
+  assert.equal(core.nodeById(map, 'qAttached').question.folded, true);
+  assert.equal(core.nodeById(map, 'qFree').question.folded, false);
+  const old = core.normalizeNode({ id: 'old1', type: 'question', parentId: 'x', question: { qid: 'q', title: 'Old' } });
+  assert.equal(old.question.folded, false, 'a map saved before v1.1.0 shows its questions open');
+  assert.equal(core.normalizeNode({ id: 'z1', type: 'question', question: { folded: 'yes' } }).question.folded, false, 'only true folds');
+});
+
+test('v1.1.0: a free-standing question survives saving, is not the centre, and grows to the right', () => {
+  const map = core.normalizeMap(JSON.parse(JSON.stringify(mapWithQuestions())));
+  assert.equal(map.nodes.length, 4);
+  assert.equal(core.nodeById(map, 'qFree').parentId, '', 'it stays attached to nothing');
+  assert.notEqual(map.rootId, 'qFree', 'the centre is still the centre');
+  assert.equal(core.isFree(map, 'qFree'), true);
+  assert.equal(core.isFree(map, 'qAttached'), false);
+  assert.equal(core.isFree(map, map.rootId), false, 'the centre is not "free"');
+  assert.equal(core.sideOf(map, 'qFree'), 'right');
+  assert.equal(core.depthOf(map, 'qFree'), 0);
+  assert.equal(core.isHidden(map, 'qFree'), false);
+  // Folding the centre's branches never hides a free card.
+  core.nodeById(map, map.rootId).collapsed = true;
+  assert.equal(core.isHidden(map, 'qFree'), false);
+  assert.equal(core.isHidden(map, 'qAttached'), true);
+});
+
+test('v1.1.0: tidy-up never moves a free-standing card, and tidies what hangs from it', () => {
+  const map = mapWithQuestions();
+  const child = core.normalizeNode({ id: 'freeKid', type: 'topic', parentId: 'qFree', x: 0, y: 0, w: 120, h: 40, text: 'Hint' });
+  map.nodes.push(child);
+  const pos = core.layoutMap(map);
+  assert.deepEqual(pos.get('qFree'), { x: -900, y: 700 }, 'the free card keeps its place');
+  const kid = pos.get('freeKid');
+  assert.ok(kid.x > -900, 'its own child grows to the right of it');
+  assert.equal(kid.y, 700, 'a single child lines up with it');
+  assert.equal(core.sideOf(map, 'freeKid'), 'right');
+  assert.ok(pos.has('qAttached'), 'attached questions are laid out with their branch');
+});
+
+test('v1.1.0: detachNode unhooks a branch (never the centre); reparent attaches it again', () => {
+  const map = mapWithQuestions();
+  assert.equal(core.detachNode(map, map.rootId), false, 'the centre cannot be detached');
+  assert.equal(core.detachNode(map, 'qFree'), false, 'already on its own');
+  assert.equal(core.detachNode(map, 'qAttached'), true);
+  assert.equal(core.isFree(map, 'qAttached'), true);
+  assert.equal(core.reparent(map, 'qAttached', 'topicA'), true);
+  assert.equal(core.nodeById(map, 'qAttached').parentId, 'topicA');
+  assert.equal(core.treeTopOf(map, 'qAttached').id, map.rootId);
+  assert.equal(core.treeTopOf(map, 'qFree').id, 'qFree');
+});
+
+test('v1.1.0: free cards are listed in the outline and in what the AI sees', () => {
+  const map = mapWithQuestions();
+  const outline = core.mapToOutline(map);
+  assert.match(outline, /## On their own\n- ❓ Which material lets light through\?/);
+  const seen = core.describeMapForAi(map);
+  assert.match(seen, /FREE-STANDING/);
+  assert.match(seen, /\(qFree\)/);
+});
+
+test('v1.1.0: "add questions on their own" by voice becomes a free questions job', () => {
+  const map = mapWithQuestions();
+  const out = core.applyOps(map, [{ op: 'add_questions', parent: 'none', topic: 'Light', count: 2 }], { selectedId: 'topicA' });
+  assert.equal(out.jobs.length, 1);
+  assert.equal(out.jobs[0].free, true);
+  assert.equal(out.jobs[0].parentId, '');
+  const attached = core.applyOps(map, [{ op: 'add_questions', parent: 'topicA', topic: 'Light' }]);
+  assert.equal(attached.jobs[0].free, false);
+  assert.equal(attached.jobs[0].parentId, 'topicA');
+  assert.match(core.voiceSystemPrompt({}), /on their own/);
 });

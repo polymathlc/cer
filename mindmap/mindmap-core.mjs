@@ -18,7 +18,7 @@
    `window`, `document` or the network.
    ===================================================================== */
 
-export const MINDMAP_VERSION = '1.0.0';
+export const MINDMAP_VERSION = '1.1.0';
 
 /* ------------------------------------------------------------------ */
 /*  Limits                                                              */
@@ -109,6 +109,9 @@ export function htmlToText(html) {
  *   { id, type, parentId, x, y, w, h, text, color, shape, collapsed, side,
  *     note, image: {url, prompt, alt}, code: {title, html, css, js, height, prompt},
  *     question: {qid, title, topic, level, category, marks, blocks, answer} }
+ * A node with no parentId that is not the root is FREE-STANDING (v1.1.0): it sits
+ * where it was put, on its own, with no branch to anything (a question as its own
+ * "container"). Tidy-up never moves it; its own children grow out of it to the right.
  * A link (a free connection, not the tree):
  *   { id, from, to, label }
  */
@@ -158,7 +161,9 @@ function normalizeQuestion(q) {
     category: clip(v.category, 120),
     marks: clip(v.marks, 12),
     blocks: Array.isArray(v.blocks) ? v.blocks.slice(0, 60).map(normalizeSnapshotBlock).filter(Boolean) : [],
-    width: clamp(Math.round(num(v.width, 360)), 240, 900)
+    width: clamp(Math.round(num(v.width, 360)), 240, 900),
+    // v1.1.0: a question card can be folded down to one line (its headline), so a map full of questions stays neat.
+    folded: v.folded === true
   };
 }
 /** A stored question block: only what the node draws. Answers are kept, but only drawn for staff or on "Check". */
@@ -311,6 +316,31 @@ export function ancestorsOf(map, id) {
   }
   return out;
 }
+/** A free-standing item: not the root, and not attached to any topic. */
+export function isFree(map, nodeOrId) {
+  const node = typeof nodeOrId === 'string' ? nodeById(map, nodeOrId) : nodeOrId;
+  return !!node && node.id !== map.rootId && !node.parentId;
+}
+/** The free-standing item (or the root) a node's branch hangs from. */
+export function treeTopOf(map, id) {
+  let node = nodeById(map, id);
+  let guard = 0;
+  while (node && node.parentId && guard++ < 500) {
+    const up = nodeById(map, node.parentId);
+    if (!up) break;
+    node = up;
+  }
+  return node;
+}
+/** Take a node (and everything under it) off its branch so it stands on its own. */
+export function detachNode(map, id) {
+  const node = nodeById(map, id);
+  if (!node || node.id === map.rootId || !node.parentId) return false;
+  node.parentId = '';
+  node.side = '';
+  node.pinned = false;
+  return true;
+}
 /** Hidden because an ancestor is collapsed. */
 export function isHidden(map, id) {
   return ancestorsOf(map, id).some(a => a.collapsed);
@@ -322,6 +352,8 @@ export function sideOf(map, id) {
   let cur = node;
   while (cur && cur.parentId && cur.parentId !== map.rootId) cur = nodeById(map, cur.parentId);
   if (!cur) return 'right';
+  // A free-standing item (or anything hanging from one) grows to the right.
+  if (!cur.parentId) return 'right';
   if (cur.side) return cur.side;
   const first = childrenOf(map, map.rootId);
   const index = first.findIndex(n => n.id === cur.id);
@@ -432,6 +464,11 @@ export function layoutMap(map, size = n => ({ w: n.w || LAYOUT.defaultW, h: n.h 
   };
   stack(right, 1);
   stack(left, -1);
+  // Free-standing items stay exactly where they were put; whatever hangs from one is tidied around it.
+  for (const n of map.nodes) {
+    if (!isFree(map, n)) continue;
+    place(n, num(n.x), num(n.y), 1);
+  }
   for (const n of map.nodes) if (n.pinned && out.has(n.id)) out.set(n.id, { x: n.x, y: n.y });
   return out;
 }
@@ -560,6 +597,11 @@ export function mapToOutline(map) {
   if (root) {
     lines.push('', '**' + nodeLabel(root) + '**', '');
     for (const child of childrenOf(map, root.id)) walk(child, 1);
+  }
+  const free = map.nodes.filter(n => isFree(map, n));
+  if (free.length) {
+    lines.push('', '## On their own');
+    for (const n of free) walk(n, 1);
   }
   if (map.links.length) {
     lines.push('', '## Connections');
@@ -883,6 +925,11 @@ export function describeMapForAi(map, selectedId = '', maxNodes = 160) {
   };
   const root = nodeById(map, map.rootId);
   if (root) walk(root, 0);
+  const free = map.nodes.filter(n => isFree(map, n));
+  if (free.length && count < maxNodes) {
+    lines.push('FREE-STANDING (not attached to any topic):');
+    for (const n of free) walk(n, 1);
+  }
   if (count >= maxNodes) lines.push('  … (' + (map.nodes.length - count) + ' more nodes not shown)');
   const links = map.links.slice(0, 40).map(l => '  ' + l.from + ' -> ' + l.to + (l.label ? ' "' + l.label + '"' : ''));
   return 'MAP TITLE: ' + map.title + '\nROOT: ' + map.rootId + '\nSELECTED: ' + (selectedId || 'none') +
@@ -912,7 +959,7 @@ export function voiceSystemPrompt({ topicNames = [], levels = BANK_LEVELS } = {}
     '{"op":"add_image","ref":"p1","parent":"<id or ref>","prompt":"<a clear description of a simple, child-friendly educational picture to draw>","caption":"<2-5 words>"}',
     '{"op":"build_app","ref":"c1","parent":"<id or ref>","title":"<app name>","description":"<what the interactive learning app should do, detailed enough for a developer>"}',
     '{"op":"update_app","node":"<id of an existing app node>","change":"<the change the person asked for, in detail>"}',
-    '{"op":"add_questions","parent":"<id or ref>","search":"<keywords>","topic":"<one of the topic names below, optional>","level":"<' + levels.join('|') + ', optional>","count":<1-6>}',
+    '{"op":"add_questions","parent":"<id or ref, or none to place them on their own>","search":"<keywords>","topic":"<one of the topic names below, optional>","level":"<' + levels.join('|') + ', optional>","count":<1-6>}',
     '{"op":"set_title","text":"<map title>"}',
     '{"op":"select","node":"<id or ref>"}',
     '{"op":"tidy"}  (re-arrange the whole map neatly)',
@@ -921,7 +968,7 @@ export function voiceSystemPrompt({ topicNames = [], levels = BANK_LEVELS } = {}
     '- Keep topic texts SHORT (2-6 words). Put longer explanations in add_note.',
     '- "Add three ideas about X" means three add_topic ops. Build whole branches at once when asked ("make a mind map about photosynthesis" → a central topic rename/set_title plus 4-6 branches with 2-4 children each).',
     '- If they ask for a picture / drawing / diagram / image, use add_image. If they ask for an app, game, simulation, quiz, interactive or "something I can play with", use build_app. If an app node is SELECTED and they ask to change it ("make it bigger", "add a reset button"), use update_app on it.',
-    '- If they ask for questions / practice / exam questions, use add_questions.',
+    '- If they ask for questions / practice / exam questions, use add_questions. If they want questions on their own (not under a topic), use "parent":"none".',
     '- "Here", "this", "it" usually mean the SELECTED node.',
     '- Science content must be correct for the Singapore primary science syllabus. Use British spelling.',
     '- Never more than ' + LIMITS.opsPerCommand + ' ops. If nothing should change (they were just thinking aloud), return "ops": [] and a short "say".',
@@ -1121,8 +1168,10 @@ export function applyOps(map, ops, { selectedId = '', size } = {}) {
           break;
         }
         case 'add_questions': {
-          const parent = resolve(raw.parent) || fallbackParent();
-          result.jobs.push({ kind: 'questions', parentId: parent, search: clip(raw.search, 200), topic: clip(raw.topic, 120),
+          // "on their own" / parent "none": free-standing question cards, attached to nothing.
+          const free = raw.free === true || /^(none|free|own|on their own|no parent)$/i.test(str(raw.parent).trim());
+          const parent = free ? '' : resolve(raw.parent) || fallbackParent();
+          result.jobs.push({ kind: 'questions', parentId: parent, free, search: clip(raw.search, 200), topic: clip(raw.topic, 120),
             level: clip(raw.level, 4).toUpperCase(), count: clamp(Math.round(num(raw.count, 3)), 1, 6) });
           break;
         }
