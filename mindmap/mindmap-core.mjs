@@ -18,7 +18,7 @@
    `window`, `document` or the network.
    ===================================================================== */
 
-export const MINDMAP_VERSION = '1.1.0';
+export const MINDMAP_VERSION = '1.2.0';
 
 /* ------------------------------------------------------------------ */
 /*  Limits                                                              */

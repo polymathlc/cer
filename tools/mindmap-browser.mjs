@@ -153,14 +153,63 @@ try {
     // It saved, to mindmaps/{id}, owned by this account.
     await page.waitForFunction(() => window.__saves >= 1);
     // The newest save (the page saves 1.4 s after the last change) holds the free-standing questions.
-    await page.waitForFunction(() => [...window.__store.entries()].some(([k, v]) => k.startsWith('mindmaps/') && v.nodes.filter(n => n.type === 'question' && !n.parentId).length >= 2), null, { timeout: 10000 });
-    const saved = await page.evaluate(() => [...window.__store.entries()].filter(([k]) => k.startsWith('mindmaps/')).map(([, v]) => v));
+    await page.waitForFunction(() => [...window.__store.entries()].some(([k, v]) => k.startsWith('mindmaps/') && v.ownerUid === 'student1' && v.nodes.filter(n => n.type === 'question' && !n.parentId).length >= 2), null, { timeout: 10000 });
+    const saved = await page.evaluate(() => [...window.__store.entries()].filter(([k, v]) => k.startsWith('mindmaps/') && v.ownerUid === 'student1').map(([, v]) => v));
     assert.equal(saved.length, 1);
     assert.equal(saved[0].ownerUid, 'student1');
     assert.ok(saved[0].nodes.length >= 10);
     const savedFree = saved[0].nodes.filter(n => n.type === 'question' && !n.parentId);
     assert.ok(savedFree.length >= 2, 'free-standing questions are saved with no parent');
     assert.ok(savedFree.every(n => n.question.folded === true || n.id === qid), 'and they were saved folded');
+    assert.deepEqual(errors, []);
+    await ctx.close();
+  }
+  // ── v1.2.0: a student sees Mr Chung's Maps above their own, read-only, and can make a copy ──
+  {
+    const { page, errors, ctx } = await open(browser);
+    await page.waitForSelector('.toast:has-text("Mr Chung")', { timeout: 10000 });
+    await page.click('#mapsBtn');
+    await page.waitForSelector('#mmPublished .map-card');
+    const sections = await page.$$eval('.maps-section h3', h => h.map(x => x.textContent.trim()));
+    assert.deepEqual(sections, ["📌 Mr Chung's Maps", '🗂 My maps'], 'Mr Chung\'s Maps come first, then the student\'s own');
+    const pubTitles = await page.$$eval('#mmPublished .map-card b', b => b.map(x => x.textContent));
+    assert.deepEqual(pubTitles, ['Forces (from class)'], 'only maps a publisher published are listed');
+    assert.equal(await page.$$eval('#mmPublished [data-del], #mmPublished [data-pub]', b => b.length), 0, 'a student cannot delete or unpublish them');
+    assert.ok(await page.$$eval('#mmList .map-card', c => c.length) >= 1, 'their own maps are below');
+    assert.equal(await page.$$eval('#mmList [data-pub]', b => b.length), 0, 'students have no publish button');
+    await shot(page, 'student-maps-modal');
+    await page.click('#mmPublished .map-card');
+    await page.waitForSelector('#readonlyBanner:not([hidden])');
+    assert.match(await page.textContent('#readonlyText'), /Mr Chung's Maps/);
+    assert.ok(await page.$eval('#publishMenuItem', e => e.hidden), 'no publish item for students');
+    assert.deepEqual(await page.$$eval('.mm-node .mm-text', n => n.map(x => x.textContent)), ['Forces', 'Friction']);
+    await page.click('#copySharedBtn');
+    await page.waitForSelector('#readonlyBanner[hidden]', { state: 'attached' });
+    await page.waitForFunction(() => [...window.__store.values()].some(v => v.ownerUid === 'student1' && v.title === 'Forces (from class)'));
+    const copy = await page.evaluate(() => [...window.__store.values()].find(v => v.ownerUid === 'student1' && v.title === 'Forces (from class)'));
+    assert.equal(copy.published, false, 'a student\'s copy is private');
+    assert.equal((await page.evaluate(() => window.__store.get('mindmaps/mPubChung1'))).nodes.length, 2, 'the original is untouched');
+    assert.deepEqual(errors, []);
+    await ctx.close();
+  }
+  // ── v1.2.0: Mr Chung chooses which of his maps are published ──
+  {
+    const { page, errors, ctx } = await open(browser, { staff: true });
+    await page.waitForFunction(() => [...window.__store.values()].some(v => v.ownerUid === 'student1'));
+    const myId = await page.evaluate(() => [...window.__store.values()].find(v => v.ownerUid === 'student1').id);
+    await page.click('#mapsBtn');
+    await page.waitForSelector(`#mmList [data-pub="${myId}"]`);
+    await page.click(`#mmList [data-pub="${myId}"]`);
+    await page.waitForFunction(id => window.__store.get('mindmaps/' + id).published === true, myId);
+    await page.waitForSelector(`#mmPublished [data-open="${myId}"]`);
+    await shot(page, 'staff-maps-modal');
+    assert.ok(await page.$eval('#publishChip', e => !e.hidden), 'the open map shows it is published');
+    await page.keyboard.press('Escape');
+    await page.click('#moreBtn');
+    assert.match(await page.textContent('#publishMenuItem'), /Unpublish/);
+    await page.click('#publishMenuItem');
+    await page.waitForFunction(id => window.__store.get('mindmaps/' + id).published === false, myId);
+    assert.ok(await page.$eval('#publishChip', e => e.hidden));
     assert.deepEqual(errors, []);
     await ctx.close();
   }

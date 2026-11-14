@@ -137,6 +137,17 @@ export function friendlyAuthError(e) {
   };
   return map[code] || (e && e.message) || 'Sign-in failed. Please try again.';
 }
+/**
+ * v1.2.0 — who may publish a map to every student ("Mr Chung's Maps"): the three access admins
+ * (Mr Chung's own account, admin@ and support@), with a verified email.
+ */
+export const PUBLISHER_EMAILS = ACCESS_ADMINS.slice();
+export function isPublisherEmail(user) {
+  return !!(user && user.email && user.emailVerified && PUBLISHER_EMAILS.includes(String(user.email).toLowerCase()));
+}
+export function isPublisherAddress(email) {
+  return PUBLISHER_EMAILS.includes(String(email || '').toLowerCase());
+}
 export function isStaffEmail(user) {
   return !!(user && user.email && user.emailVerified && STAFF_EMAILS.includes(String(user.email).toLowerCase()));
 }

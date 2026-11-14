@@ -14,6 +14,12 @@ for (let i = 0; i < 14; i++) {
   sampleQs.push({ id: 'q' + i, title: 'Q' + i, topic: t, category: 'Concept', marks: 2, blocks, createdAt: { seconds: 1700000000 + i }, holdBack: i === 13 });
 }
 store.set('config/admin', { uid: 'admin1' });
+// v1.2.0: one map Mr Chung published, and one a student marked "published" by hand (must NOT show).
+store.set('mindmaps/mPubChung1', { id: 'mPubChung1', title: 'Forces (from class)', rootId: 'rPub1', ownerUid: 'mrchung', ownerEmail: 'chungzhikai@gmail.com', ownerName: 'Mr Chung',
+  published: true, publishedAtMs: 1763000000000, updatedAtMs: 1763000000000, nodeCount: 2, links: [], view: { x: 0, y: 0, zoom: 1 },
+  nodes: [{ id: 'rPub1', type: 'topic', parentId: '', x: 0, y: 0, text: 'Forces', color: 'orange', shape: 'pill' }, { id: 'nPub1', type: 'topic', parentId: 'rPub1', x: 220, y: 0, text: 'Friction', color: 'blue' }] });
+store.set('mindmaps/mFake1', { id: 'mFake1', title: 'Not from Mr Chung', rootId: 'rF', ownerUid: 'kid2', ownerEmail: 'kid2@example.com', ownerName: 'Kid', published: true, publishedAtMs: 1763000000001,
+  nodes: [{ id: 'rF', type: 'topic', parentId: '', x: 0, y: 0, text: 'Fake' }], links: [] });
 store.set('users/admin1/settings/topics', { custom: {} });
 for (const q of sampleQs) store.set('users/admin1/questions/' + q.id, q);
 const snapOf = (path) => ({ id: path.split('/').pop(), exists: () => store.has(path), data: () => store.has(path) ? JSON.parse(JSON.stringify(store.get(path))) : undefined });
@@ -24,7 +30,7 @@ export const fb = {
   query: (col, ...conds) => ({ path: col.path, conds }),
   qLimit: n => ({ limit: n }),
   getDoc: async ref => snapOf(ref.path),
-  setDoc: async (ref, data) => { await new Promise(r => setTimeout(r, 30)); store.set(ref.path, JSON.parse(JSON.stringify(data))); window.__saves = (window.__saves || 0) + 1; },
+  setDoc: async (ref, data, opts = {}) => { await new Promise(r => setTimeout(r, 30)); const clean = JSON.parse(JSON.stringify(data)); store.set(ref.path, opts.merge && store.has(ref.path) ? { ...store.get(ref.path), ...clean } : clean); window.__saves = (window.__saves || 0) + 1; },
   deleteDoc: async ref => { store.delete(ref.path); },
   getDocs: async q => {
     const prefix = q.path + '/';
@@ -46,6 +52,9 @@ export async function signInUsername() {}
 export function signOut() {}
 export function friendlyAuthError(e) { return String(e); }
 export function isStaffEmail(u) { return !!(u && u.email === 'chungzhikai@gmail.com'); }
+export const PUBLISHER_EMAILS = ['chungzhikai@gmail.com', 'admin@polymathlc.com.sg', 'support@polymathlc.com.sg'];
+export function isPublisherEmail(u) { return !!(u && u.emailVerified && PUBLISHER_EMAILS.includes(String(u.email).toLowerCase())); }
+export function isPublisherAddress(e) { return PUBLISHER_EMAILS.includes(String(e || '').toLowerCase()); }
 export function loginCandidates(s) { return [s]; }
 window.__aiCalls = [];
 export async function aiText(prompt, opts = {}) {

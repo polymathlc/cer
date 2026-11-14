@@ -23,7 +23,7 @@ import { db, fb, BANK_ADMIN_EMAILS } from './mindmap-services.js';
 import {
   TOPIC_LEVELS, BANK_LEVELS, questionServable, questionLevel, filterQuestions, questionHeadline, questionFirstImage,
   questionIsMcq, questionSnapshot, questionSearchText, tableRows, escapeHtml, levelRank
-} from './mindmap-core.mjs?v=1.1.0';
+} from './mindmap-core.mjs?v=1.2.0';
 
 /* ------------------------------------------------------------------ */
 /*  Sanitising                                                          */
