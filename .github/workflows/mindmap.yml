@@ -1,0 +1,45 @@
+name: Mind map checks
+
+# polymathlc.com.sg/mindmap — the pure core (layout, voice operations, question gate,
+# sandbox document) and a real-browser run of the page with the Firebase / AI services
+# replaced by fixtures (tools/mindmap-fixtures/), so it needs no account and no network.
+on:
+  pull_request:
+    paths: ['mindmap/**', 'student/access-gate.js', 'tools/mindmap-*', 'tools/mindmap-fixtures/**', '.github/workflows/mindmap.yml']
+  push:
+    branches: [main]
+    paths: ['mindmap/**', 'student/access-gate.js', 'tools/mindmap-*', 'tools/mindmap-fixtures/**', '.github/workflows/mindmap.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mindmap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax
+        run: |
+          node --check mindmap/mindmap-app.js
+          node --check mindmap/mindmap-services.js
+          node --check mindmap/mindmap-questions.js
+          node --check mindmap/mindmap-core.mjs
+      - name: Core logic
+        run: node --test tools/mindmap-tests.mjs
+      - run: npm install --no-save --package-lock=false playwright@1.62.1
+      - run: npx playwright install --with-deps chromium
+      - name: The page in a real browser (desktop, staff and phone)
+        run: node tools/mindmap-browser.mjs
+        env:
+          MINDMAP_SCREENSHOTS: artifacts/mindmap
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mindmap-previews
+          path: artifacts/mindmap
+          if-no-files-found: ignore

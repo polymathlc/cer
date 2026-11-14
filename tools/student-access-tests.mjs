@@ -391,7 +391,8 @@ const SCIENCE_PAGES = {
   'fps.html': ['student/access-gate.js?v=1.1.0', 'science-strike', 'science'],
   'bar-model.html': ['student/access-gate.js?v=1.1.0', 'bar-model', 'math'],
   'video-review.html': ['student/access-gate.js?v=1.1.0', 'lesson-replay', ''],
-  'online/index.html': ['../student/access-gate.js?v=1.1.0', 'online', '']
+  'online/index.html': ['../student/access-gate.js?v=1.1.0', 'online', ''],
+  'mindmap/index.html': ['../student/access-gate.js?v=1.1.0', 'mindmap', '']
 };
 
 test('every student page here loads the gate, once, at the end of the page, with its subject', () => {
