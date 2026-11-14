@@ -31,24 +31,25 @@ const SITE = 'polymathlc.com.sg';
 // The apps, in the order the owner listed them, with Science PSLE beside Science.
 // `repo` is the repository that publishes the app; `address` is what the printed sheet tells a student to type.
 const EXPECTED = [
-  { app: 'science', name: 'Science', href: APP_ORIGIN + '/cer/', repo: 'cer', address: SITE + '/cer' },
-  { app: 'psle', name: 'Science PSLE', href: APP_ORIGIN + '/cer/#psle', repo: 'cer', address: SITE + '/cer/#psle' },
-  { app: 'math', name: 'Math', href: APP_ORIGIN + '/math/', repo: 'math', address: SITE + '/math' },
-  { app: 'anskey', name: 'Answer Keys', href: APP_ORIGIN + '/anskey/', repo: 'anskey', address: SITE + '/anskey' },
-  { app: 'tutor', name: 'Study Buddy', href: APP_ORIGIN + '/tutor/', repo: 'tutor', address: SITE + '/tutor' },
-  { app: 'rewards', name: 'Rewards', href: APP_ORIGIN + '/rewards/', repo: 'rewards', address: SITE + '/rewards' },
-  { app: 'online', name: 'Worksheets', href: 'https://' + SITE + '/online/', repo: null, address: 'Coming soon' },
-  { app: 'chinese', name: 'Chinese', href: APP_ORIGIN + '/chinese/', repo: 'chinese', address: SITE + '/chinese' },
-  { app: 'english', name: 'English', href: APP_ORIGIN + '/english/', repo: 'english', address: SITE + '/english' },
-  { app: 'mindmap', name: 'Mind Map', href: 'https://' + SITE + '/mindmap/', repo: null, address: SITE + '/mindmap' }
+  // v1.7.0: Worksheets first (its own group), then the learning portals, then the self learning apps.
+  { app: 'online', name: 'Worksheets', href: 'https://' + SITE + '/online/', repo: null, address: SITE + '/online', section: 'worksheets' },
+  { app: 'science', name: 'Science', href: APP_ORIGIN + '/cer/', repo: 'cer', address: SITE + '/cer', section: 'portals' },
+  { app: 'psle', name: 'Science PSLE', href: APP_ORIGIN + '/cer/#psle', repo: 'cer', address: SITE + '/cer/#psle', section: 'portals' },
+  { app: 'math', name: 'Math', href: APP_ORIGIN + '/math/', repo: 'math', address: SITE + '/math', section: 'portals' },
+  { app: 'english', name: 'English', href: APP_ORIGIN + '/english/', repo: 'english', address: SITE + '/english', section: 'portals' },
+  { app: 'chinese', name: 'Chinese', href: APP_ORIGIN + '/chinese/', repo: 'chinese', address: SITE + '/chinese', section: 'portals' },
+  { app: 'tutor', name: 'Study Buddy', href: APP_ORIGIN + '/tutor/', repo: 'tutor', address: SITE + '/tutor', section: 'self' },
+  { app: 'anskey', name: 'Answer Keys', href: APP_ORIGIN + '/anskey/', repo: 'anskey', address: SITE + '/anskey', section: 'self' },
+  { app: 'mindmap', name: 'Mind Map', href: 'https://' + SITE + '/mindmap/', repo: null, address: SITE + '/mindmap', section: 'self' },
+  { app: 'rewards', name: 'Rewards', href: APP_ORIGIN + '/rewards/', repo: 'rewards', address: SITE + '/rewards', section: 'self' }
 ];
 
 // Apps not open to students yet: their tile has no href (nothing to follow, with or without script),
 // keeps its address in data-href and says why when tapped. Opening one is a markup change.
-const LOCKED = ['online'];
+const LOCKED = [];   // v1.7.0: Worksheets opened (it was locked from v1.1.0)
 
 function tiles() {
-  return [...page.matchAll(/<a class="app-tile( is-locked)?" data-app="([^"]+)"(?: data-subject="(?:math|science)")? (?:href|data-href)="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g)].map(match => ({
+  return [...page.matchAll(/<a class="app-tile( is-locked)?(?: is-featured)?" data-app="([^"]+)"(?: data-subject="(?:math|science)")? (?:href|data-href)="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g)].map(match => ({
     locked: !!match[1],
     tag: match[0].slice(0, match[0].indexOf('>') + 1),
     app: match[2],
@@ -324,7 +325,7 @@ test('a tile is a plain link: the page works with no script at all', () => {
   assert.ok(/<link rel="preconnect" href="https:\/\/polymathlc\.github\.io">/.test(page), 'the apps\' origin is warmed up while the student picks a tile');
 });
 
-test('🔒 Worksheets is locked until every level\'s worksheets are uploaded', () => {
+test('🔒 no tile is locked: Worksheets opened in v1.7.0 (a lock is still a markup change)', () => {
   const found = tiles();
   assert.deepEqual(found.filter(tile => tile.locked).map(tile => tile.app), LOCKED, 'exactly these tiles are locked');
   for (const tile of found) {
@@ -378,9 +379,9 @@ test('the greeting reads Singapore time, and the version is on the page', () => 
   };
   vm.runInNewContext(script[1], sandbox);
   const api = sandbox.window.MyPolymath;
-  assert.equal(api.version, 'v1.6.0');
-  assert.equal(elements.versionBadge.textContent, 'v1.6.0', 'the badge shows the version');
-  assert.ok(page.includes('id="versionBadge" aria-hidden="true">v1.6.0<'), 'the badge is right before script runs too');
+  assert.equal(api.version, 'v1.7.0');
+  assert.equal(elements.versionBadge.textContent, 'v1.7.0', 'the badge shows the version');
+  assert.ok(page.includes('id="versionBadge" aria-hidden="true">v1.7.0<'), 'the badge is right before script runs too');
   assert.equal(api.singaporeHour(new Date(Date.UTC(2026, 9, 25, 0, 0))), 8, '00:00 UTC is 8 am in Singapore');
   assert.equal(api.greetingFor(8), 'Good morning');
   assert.equal(api.greetingFor(14), 'Good afternoon');
@@ -698,4 +699,20 @@ test('Worksheets\' offline page, manifest and worker carry the logo icon', () =>
   assert.deepEqual(manifest.icons.map(icon => icon.src).sort(), ['assets/app-icons/icon-192.png', 'assets/app-icons/icon-512.png', 'assets/app-icons/maskable-192.png', 'assets/app-icons/maskable-512.png']);
   assert.match(fs.readFileSync(path.join(ONLINE_DIR, 'sw.js'), 'utf8'), /^const SW_VERSION = '2\.0\.2';/m, 'the worker moved on, so installed copies re-cache the offline page');
   assert.match(GENERATOR, /\(ONLINE, WORKSHEETS_LIGHT, WORKSHEETS_DEEP\)/, 'the generator draws Worksheets too');
+});
+
+test('v1.7.0: three groups — Worksheets on top for parents, then learning portals, then self learning apps', () => {
+  const sections = [...page.matchAll(/<section class="app-section[^"]*" aria-labelledby="(\w+)">\s*<h2 class="section-title" id="\1">([\s\S]*?)<\/h2>[\s\S]*?<ul class="tile-grid[^"]*"(?: id="tileGrid")? data-section="(\w+)">([\s\S]*?)<\/ul>/g)]
+    .map(m => ({ title: m[2].replace(/<[^>]+>/g, '').trim(), key: m[3], apps: [...m[4].matchAll(/data-app="([^"]+)"/g)].map(a => a[1]) }));
+  assert.deepEqual(sections.map(x => x.key), ['worksheets', 'portals', 'self']);
+  assert.equal(sections[0].title, '📚 Worksheets, answer keys and lesson recordings');
+  assert.equal(sections[1].title, 'Learning portals');
+  assert.equal(sections[2].title, 'Self learning apps');
+  for (const section of sections) {
+    assert.deepEqual(section.apps, EXPECTED.filter(row => row.section === section.key).map(row => row.app), section.title);
+  }
+  const online = tiles().find(tile => tile.app === 'online');
+  assert.ok(/class="app-tile is-featured"/.test(online.tag), 'the Worksheets tile is the big one');
+  assert.ok(/\shref="https:\/\/polymathlc\.com\.sg\/online\/"/.test(online.tag), 'and a real link to polymathlc.com.sg/online/');
+  assert.ok(page.indexOf('data-app="online"') < page.indexOf('data-app="science"'), 'above every other tile');
 });
