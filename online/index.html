@@ -64,6 +64,17 @@
     presses "Finished" (in Ans Key under the Current card, or here in the
     class's "Class is on" card). Core.ansKeyState mirrors Ans Key's rule.
     The portal itself only ever READS releases for students.
+
+  📂 Browse Ans Key app (portal v1.10.0)
+    In a class, "Browse Ans Key app" lists every worksheet in Ans Key
+    (pdfAnnotator) to add without uploading again, as PREVIOUS worksheets
+    (before the one the class is on: done and released) or FUTURE worksheets
+    (at the end, queued), each with its answer key (the writing, plus the
+    answerKeys PDFs) and/or its video recordings (the lessonRecording
+    annotations). One in no class, taken whole, joins as it is; otherwise it
+    is copied. "From Ans Key" on a class worksheet's row takes the answer key
+    (replaces) and/or videos (added) from another Ans Key worksheet. Rules:
+    Core.placeWorksheets, libraryNeedsCopy, mergeAnnotations.
 -->
 <style>
   :root {
@@ -491,6 +502,32 @@
   .pick-row:hover { background: var(--bg-secondary); }
   .pick-row input { width: 18px; height: 18px; accent-color: var(--accent-dark); }
   .pick-row .ord { margin-left: auto; font-size: var(--font-size-xs); font-weight: 700; color: var(--accent-ink); }
+  /* 📂 Browse Ans Key app (v1.10.0) */
+  .btn-browse { border-color: var(--accent-dark); background: var(--accent-bg); color: var(--accent-ink); font-weight: 700; }
+  .btn-browse:hover { background: var(--accent-light); }
+  .lib-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 4px 0 12px; }
+  .lib-search { flex: 1 1 240px; min-width: 0; padding: 10px 14px; border: 1px solid var(--border-medium); border-radius: var(--radius-md); font: inherit; font-size: var(--font-size-sm); background: var(--bg-primary); }
+  .lib-search:focus { outline: none; border-color: var(--accent-dark); box-shadow: 0 0 0 4px var(--accent-bg); }
+  .lib-list { max-height: min(46vh, 440px); }
+  .lib-row { align-items: flex-start; }
+  .lib-row input { margin-top: 3px; flex: none; }
+  .lib-row.is-picked { background: var(--accent-bg); }
+  .lib-text { min-width: 0; flex: 1; }
+  .lib-name { font-weight: 600; overflow-wrap: anywhere; }
+  .lib-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .lib-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: var(--radius-full); background: var(--bg-tertiary); color: var(--text-secondary); font-size: 0.7rem; font-weight: 700; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .lib-badge.ok { background: var(--ok-bg); color: var(--ok-ink); }
+  .lib-badge.video { background: #F0F2FD; color: #3346A8; }
+  .lib-badge.class { background: var(--warn-bg); color: var(--warn-ink); }
+  .lib-options { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 20px; margin-top: 14px; padding: 14px; border-radius: var(--radius-md); background: var(--bg-secondary); border: 1px solid var(--border-subtle); }
+  .lib-options .field { margin: 0; }
+  .lib-where { margin-top: 8px; line-height: 1.5; grid-column: 1 / -1; }
+  .lib-options .field .lib-where { grid-column: auto; }
+  .lib-bring { display: flex; flex-direction: column; gap: 8px; }
+  .lib-check { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; font-size: var(--font-size-sm); }
+  .lib-check input { margin-top: 3px; width: 16px; height: 16px; padding: 0; border-radius: 3px; accent-color: var(--accent-dark); flex: none; }
+  .lib-check small { display: block; color: var(--text-tertiary); font-size: var(--font-size-xs); line-height: 1.4; margin-top: 2px; }
+  @media (max-width: 640px) { .lib-options { grid-template-columns: 1fr; } }
 
   /* ===== Student timeline ===== */
   .timeline { border-top: 1px solid var(--border-subtle); padding: var(--space-lg) var(--space-lg) var(--space-md); }
@@ -736,8 +773,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
-<script src="portal-core.js?v=1.9.0"></script>
-<script src="portal.js?v=1.9.0"></script>
+<script src="portal-core.js?v=1.10.0"></script>
+<script src="portal.js?v=1.10.0"></script>
 <script defer src="pwa-install.js?v=2.0.0" data-app-name="Polymath Worksheets" data-app-key="online" data-app-icon="assets/app-icons/icon-192.png" data-accent="#00695C" data-sw="sw.js" data-floating="auto"></script>
 <!-- 🔐 Polymath student access (v1.0.0): the enrolment pop-up every Polymath app shares. A signed-in student is
      blocked here until an admin approves them at polymathlc.com.sg/student/#admin. Source: polymathlc/cer student/access-gate.js -->
