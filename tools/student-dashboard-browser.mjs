@@ -132,17 +132,28 @@ const same = (actual, expected, message) => { assert.equal(actual, expected, mes
 {
   const { context, page, errors } = await open();
   await page.goto(SITE + '/student/');
-  await page.waitForSelector('#tileGrid .app-tile');
-  same(await page.textContent('#versionBadge'), 'v1.6.0', 'the dashboard is the new version');
+  await page.waitForSelector('.tile-grid .app-tile');
+  same(await page.textContent('#versionBadge'), 'v1.7.0', 'the dashboard is the new version');
   await shot(page, 'dashboard-computer');
 
-  const tiles = await page.$$eval('#tileGrid .app-tile', links => links.map(link => ({
+  const tiles = await page.$$eval('.tile-grid .app-tile', links => links.map(link => ({
     app: link.dataset.app,
     name: link.querySelector('.tile-name').textContent,
     href: link.getAttribute('href'),
     locked: link.classList.contains('is-locked')
   })));
   same(tiles.length, 10, 'ten tiles (Mind Map joined in v1.6.0)');
+  // v1.7.0: three groups — Worksheets on top, then the learning portals, then the self learning apps.
+  const sections = await page.$$eval('[data-section]', lists => lists.map(list => [list.dataset.section, [...list.querySelectorAll('.app-tile')].map(a => a.dataset.app)]));
+  same(JSON.stringify(sections), JSON.stringify([
+    ['worksheets', ['online']],
+    ['portals', ['science', 'psle', 'math', 'english', 'chinese']],
+    ['self', ['tutor', 'anskey', 'mindmap', 'rewards']]
+  ]), 'the three groups, in order');
+  const top = await page.$eval('.app-tile[data-app="online"]', el => el.getBoundingClientRect().top);
+  const firstPortal = await page.$eval('.app-tile[data-app="science"]', el => el.getBoundingClientRect().top);
+  ok(top < firstPortal, 'Worksheets sits above every other app');
+  same(await page.textContent('#sectionWorksheets'), '📚 Worksheets, answer keys and lesson recordings', 'the top group says what is in it');
 
   for (const tile of tiles.filter(tile => !tile.locked)) {
     const expectedRepo = new URL(tile.href).pathname.split('/')[1];
@@ -152,13 +163,15 @@ const same = (actual, expected, message) => { assert.equal(actual, expected, mes
     if (new URL(tile.href).origin === SITE) {
       // Published on the website itself (Mind Map): the real page from this repo answers, not a stand-in.
       ok(fs.existsSync(path.join(repoRoot, expectedRepo, 'index.html')), tile.name + ': ' + expectedRepo + '/index.html is in this repo');
-      ok(/Mind Map/.test(await page.title()), tile.name + ' tile opens the Mind Map page, not GitHub\'s 404');
+      ok(new RegExp(tile.app === 'online' ? 'Polymath Online|Worksheets' : 'Mind Map').test(await page.title()), tile.name + ' tile opens its own page, not GitHub\'s 404');
     } else {
       same(await page.getAttribute('body', 'data-app-repo'), expectedRepo, tile.name + ' tile opens the ' + APP_REPOS[expectedRepo] + ' app, not GitHub\'s 404');
     }
     ok(!(await page.content()).includes('File not found'), tile.name + ': no "File not found"');
     await page.goBack();
     await page.waitForURL(SITE + '/student/');
+    // Polymath Online needs the real Firebase SDK, which this test does not serve: its errors are not the dashboard's.
+    if (tile.app === 'online') errors.length = 0;
   }
 
   // The tile just opened is remembered and marked, so returning is one tap.
@@ -167,13 +180,8 @@ const same = (actual, expected, message) => { assert.equal(actual, expected, mes
   const lastBadge = await page.$eval(`.app-tile[data-app="${lastApp}"] .tile-badge`, badge => !badge.hidden);
   ok(lastBadge, 'the last app opened wears "Last opened"');
 
-  // 🔒 Worksheets: nothing to follow; it says why.
-  const before = page.url();
-  // force: Playwright will not click an aria-disabled element on its own, but a student's finger will.
-  await page.click('.app-tile[data-app="online"]', { force: true });
-  await page.waitForSelector('.locked-note');
-  same(page.url(), before, 'the locked Worksheets tile opens nothing');
-  ok(/Worksheets open soon/.test(await page.textContent('.locked-note')), 'and says why');
+  // v1.7.0: Worksheets is open (no tile is "Coming soon" any more).
+  same(await page.$$eval('.app-tile.is-locked', els => els.length), 0, 'no tile is locked for a signed-out visitor');
 
   same(errors.length, 0, 'no script errors on the dashboard: ' + errors.join(' | '));
   await context.close();
@@ -183,7 +191,7 @@ const same = (actual, expected, message) => { assert.equal(actual, expected, mes
 {
   const { context, page } = await open(PHONE);
   await page.goto(SITE + '/student/');
-  await page.waitForSelector('#tileGrid .app-tile');
+  await page.waitForSelector('.tile-grid .app-tile');
   await shot(page, 'dashboard-phone');
   ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'no sideways scroll on a phone');
   await page.tap('.app-tile[data-app="math"]');
@@ -196,7 +204,7 @@ const same = (actual, expected, message) => { assert.equal(actual, expected, mes
 {
   const { context, page } = await open();
   await page.goto(SITE + '/student/');
-  const sheet = await page.$$eval('#tileGrid .app-tile:not(.is-locked)', links => links.map(link => ({
+  const sheet = await page.$$eval('.tile-grid .app-tile:not(.is-locked)', links => links.map(link => ({
     name: link.querySelector('.tile-name').textContent,
     href: link.getAttribute('href'),
     address: link.querySelector('.print-address').textContent
@@ -236,7 +244,7 @@ const same = (actual, expected, message) => { assert.equal(actual, expected, mes
   for (const [typed, expected] of cases) same(await typeAddress(page, typed, expected), expected, typed + ' → ' + expected);
 
   same(await typeAddress(page, SITE + '/cer/student/', SITE + '/student/'), SITE + '/student/', '/cer/student/ steps over to the one dashboard');
-  await page.waitForSelector('#tileGrid .app-tile');
+  await page.waitForSelector('.tile-grid .app-tile');
   ok(true, 'and it is the dashboard');
   await context.close();
 }

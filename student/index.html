@@ -7,7 +7,7 @@
 <title>My Polymath — Student Dashboard | Polymath Learning Centre</title>
 <meta name="description" content="Every Polymath Learning Centre app in one place: Science, Science PSLE, Math, Answer Keys, Study Buddy, Rewards, Worksheets, Chinese, English and Mind Map.">
 <!--
-  MY POLYMATH — the student dashboard at polymathlc.com.sg/student  (v1.6.0)
+  MY POLYMATH — the student dashboard at polymathlc.com.sg/student  (v1.7.0)
   ------------------------------------------------------------------------
   One page of square tiles, one per student app. Each tile is a plain link to
   the app's own published address, so the tiles need no script to work.
@@ -267,6 +267,25 @@
     .tile-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
   }
   .tile-grid > li { display: flex; }
+
+  /* ───────── Three groups of apps (v1.7.0) ───────── */
+  .app-section + .app-section { margin-top: var(--space-xl); }
+  .section-title { font-size: var(--font-size-lg); font-weight: 700; margin: 0; letter-spacing: 0.01em; }
+  .section-hint { margin: 2px 0 var(--space-md); color: var(--text-secondary); font-size: var(--font-size-sm); }
+  .app-section.is-top { padding: var(--space-lg); border-radius: var(--radius-xl); background: linear-gradient(135deg, #E0F2F1 0%, #F1F8F5 100%); border: 1.5px solid #B2DFDB; }
+  .tile-grid-top { grid-template-columns: 1fr; }
+  .app-tile.is-featured { aspect-ratio: auto; min-height: 150px; flex-direction: row; align-items: center; justify-content: flex-start; gap: var(--space-lg); padding: 22px 24px; border-color: #80CBC4; }
+  .app-tile.is-featured .tile-icon { width: 96px; flex: none; }
+  .app-tile.is-featured .tile-name { font-size: clamp(1.3rem, 4.6vw, 1.6rem); }
+  .app-tile.is-featured .tile-blurb { font-size: var(--font-size-md); font-weight: 600; color: var(--tile-ink); }
+  .app-tile.is-featured::before { width: 45%; }
+  .tile-more { margin-top: 4px; font-size: var(--font-size-sm); color: var(--text-secondary); line-height: 1.4; max-width: 52ch; }
+  @media (max-width: 420px) {
+    .app-section.is-top { padding: 14px; }
+    .app-tile.is-featured { gap: 14px; padding: 16px; min-height: 0; }
+    .app-tile.is-featured .tile-icon { width: 64px; }
+    .tile-more { display: none; }
+  }
 
   .app-tile {
     --tile-wash: #EEEEEE;
@@ -640,8 +659,38 @@
 
   <nav aria-label="Polymath apps" data-apps-view>
     <p class="subjects-note" id="subjectsNote" hidden aria-live="polite"></p>
-    <ul class="tile-grid" id="tileGrid">
+    <!-- 🗂 Three groups (v1.7.0, Zhi Kai, 14 Nov 2026): Worksheets on top so parents find them at once;
+         then the learning portals; then the apps a student uses on their own. -->
+    <section class="app-section is-top" aria-labelledby="sectionWorksheets">
+      <h2 class="section-title" id="sectionWorksheets"><span aria-hidden="true">📚</span> Worksheets, answer keys and lesson recordings</h2>
+      <p class="section-hint">Start here for your class worksheets.</p>
+      <ul class="tile-grid tile-grid-top" data-section="worksheets">
       <li style="--order:0">
+        <!-- 📚 Worksheets first (v1.7.0): parents look here for the class worksheets, answer keys and
+             lesson recordings. Opened on 14 Nov 2026 (it was "Coming soon" since v1.1.0): who sees which
+             classes is decided by the approval at #admin (each child's level and subjects).
+             Its address is Polymath Online's published home, polymathlc.com.sg/online/ (the website sync
+             puts online/ at the domain root) — the address the class invitations send students to, so it
+             stays absolute and on that domain, unlike the other tiles. -->
+        <a class="app-tile is-featured" data-app="online" href="https://polymathlc.com.sg/online/" style="--tile-wash:#B2DFDB;--tile-ink:#00695C">
+          <img class="tile-icon" src="assets/apps/online.png" alt="" width="84" height="84">
+          <span class="tile-badge" hidden>Last opened</span>
+          <span class="tile-go" aria-hidden="true">→</span>
+          <span class="tile-words">
+            <span class="tile-name">Worksheets</span>
+            <span class="tile-blurb">Worksheets, answer keys and lesson videos</span>
+            <span class="tile-more">Your class worksheets appear here as each lesson goes, with the answer keys and the recording of the lesson.</span>
+            <span class="print-address">polymathlc.com.sg/online</span>
+          </span>
+        </a>
+      </li>
+      </ul>
+    </section>
+    <section class="app-section" aria-labelledby="sectionPortals">
+      <h2 class="section-title" id="sectionPortals">Learning portals</h2>
+      <p class="section-hint">Practice for each subject.</p>
+      <ul class="tile-grid" id="tileGrid" data-section="portals">
+      <li style="--order:1">
         <a class="app-tile" data-app="science" data-subject="science" href="https://polymathlc.github.io/cer/" style="--tile-wash:#BBDEFB;--tile-ink:#1565C0">
           <img class="tile-icon" src="assets/apps/science.png" alt="" width="84" height="84">
           <span class="tile-badge" hidden>Last opened</span>
@@ -653,7 +702,7 @@
           </span>
         </a>
       </li>
-      <li style="--order:1">
+      <li style="--order:2">
         <a class="app-tile" data-app="psle" data-subject="science" href="https://polymathlc.github.io/cer/#psle" style="--tile-wash:#C5CAE9;--tile-ink:#283593">
           <img class="tile-icon" src="assets/apps/psle.png" alt="" width="84" height="84">
           <span class="tile-badge" hidden>Last opened</span>
@@ -665,7 +714,7 @@
           </span>
         </a>
       </li>
-      <li style="--order:2">
+      <li style="--order:3">
         <a class="app-tile" data-app="math" data-subject="math" href="https://polymathlc.github.io/math/" style="--tile-wash:#C8E6C9;--tile-ink:#2E7D32">
           <img class="tile-icon" src="assets/apps/math.png" alt="" width="84" height="84">
           <span class="tile-badge" hidden>Last opened</span>
@@ -677,72 +726,7 @@
           </span>
         </a>
       </li>
-      <li style="--order:3">
-        <a class="app-tile" data-app="anskey" href="https://polymathlc.github.io/anskey/" style="--tile-wash:#FFE0B2;--tile-ink:#E65100">
-          <img class="tile-icon" src="assets/apps/anskey.png" alt="" width="84" height="84">
-          <span class="tile-badge" hidden>Last opened</span>
-          <span class="tile-go" aria-hidden="true">→</span>
-          <span class="tile-words">
-            <span class="tile-name">Answer Keys</span>
-            <span class="tile-blurb">Your worksheets and answer keys</span>
-            <span class="print-address">polymathlc.com.sg/anskey</span>
-          </span>
-        </a>
-      </li>
       <li style="--order:4">
-        <a class="app-tile" data-app="tutor" href="https://polymathlc.github.io/tutor/" style="--tile-wash:#D1C4E9;--tile-ink:#5E35B1">
-          <img class="tile-icon" src="assets/apps/tutor.png" alt="" width="84" height="84">
-          <span class="tile-badge" hidden>Last opened</span>
-          <span class="tile-go" aria-hidden="true">→</span>
-          <span class="tile-words">
-            <span class="tile-name">Study Buddy</span>
-            <span class="tile-blurb">Step-by-step help with problem sums</span>
-            <span class="print-address">polymathlc.com.sg/tutor</span>
-          </span>
-        </a>
-      </li>
-      <li style="--order:5">
-        <a class="app-tile" data-app="rewards" href="https://polymathlc.github.io/rewards/" style="--tile-wash:#FFF59D;--tile-ink:#B26A00">
-          <img class="tile-icon" src="assets/apps/rewards.png" alt="" width="84" height="84">
-          <span class="tile-badge" hidden>Last opened</span>
-          <span class="tile-go" aria-hidden="true">→</span>
-          <span class="tile-words">
-            <span class="tile-name">Rewards</span>
-            <span class="tile-blurb">Your points and rewards</span>
-            <span class="print-address">polymathlc.com.sg/rewards</span>
-          </span>
-        </a>
-      </li>
-      <li style="--order:6">
-        <!-- 🔒 LOCKED until Mr Chung has uploaded every level's worksheets (v1.1.0). To open it:
-             data-href → href, drop `is-locked`, data-locked, role, tabindex and aria-disabled,
-             and swap the 🔒 badge back for the two spans every other tile has.
-             Its address is Polymath Online's published home, polymathlc.com.sg/online/ (the
-             website sync puts online/ at the domain root) — the address the class invitations
-             send students to, so it stays absolute and on that domain, unlike the other tiles. -->
-        <a class="app-tile is-locked" data-app="online" data-href="https://polymathlc.com.sg/online/" data-locked="Worksheets open soon — your teacher is still adding them for every level." role="link" tabindex="0" aria-disabled="true" style="--tile-wash:#B2DFDB;--tile-ink:#00695C">
-          <img class="tile-icon" src="assets/apps/online.png" alt="" width="84" height="84">
-          <span class="tile-words">
-            <span class="tile-lock"><span aria-hidden="true">🔒</span> Coming soon</span>
-            <span class="tile-name">Worksheets</span>
-            <span class="tile-blurb">Released as your lessons go</span>
-            <span class="print-address">Coming soon</span>
-          </span>
-        </a>
-      </li>
-      <li style="--order:7">
-        <a class="app-tile" data-app="chinese" href="https://polymathlc.github.io/chinese/" style="--tile-wash:#FFCDD2;--tile-ink:#C62828">
-          <img class="tile-icon" src="assets/apps/chinese.png" alt="" width="84" height="84">
-          <span class="tile-badge" hidden>Last opened</span>
-          <span class="tile-go" aria-hidden="true">→</span>
-          <span class="tile-words">
-            <span class="tile-name">Chinese</span>
-            <span class="tile-blurb">华文 practice and worksheets</span>
-            <span class="print-address">polymathlc.com.sg/chinese</span>
-          </span>
-        </a>
-      </li>
-      <li style="--order:8">
         <a class="app-tile" data-app="english" href="https://polymathlc.github.io/english/" style="--tile-wash:#F8BBD0;--tile-ink:#AD1457">
           <img class="tile-icon" src="assets/apps/english.png" alt="" width="84" height="84">
           <span class="tile-badge" hidden>Last opened</span>
@@ -754,7 +738,49 @@
           </span>
         </a>
       </li>
-      <li style="--order:9">
+      <li style="--order:5">
+        <a class="app-tile" data-app="chinese" href="https://polymathlc.github.io/chinese/" style="--tile-wash:#FFCDD2;--tile-ink:#C62828">
+          <img class="tile-icon" src="assets/apps/chinese.png" alt="" width="84" height="84">
+          <span class="tile-badge" hidden>Last opened</span>
+          <span class="tile-go" aria-hidden="true">→</span>
+          <span class="tile-words">
+            <span class="tile-name">Chinese</span>
+            <span class="tile-blurb">华文 practice and worksheets</span>
+            <span class="print-address">polymathlc.com.sg/chinese</span>
+          </span>
+        </a>
+      </li>
+      </ul>
+    </section>
+    <section class="app-section" aria-labelledby="sectionSelf">
+      <h2 class="section-title" id="sectionSelf">Self learning apps</h2>
+      <p class="section-hint">Help, answers and tools to learn on your own.</p>
+      <ul class="tile-grid" data-section="self">
+      <li style="--order:6">
+        <a class="app-tile" data-app="tutor" href="https://polymathlc.github.io/tutor/" style="--tile-wash:#D1C4E9;--tile-ink:#5E35B1">
+          <img class="tile-icon" src="assets/apps/tutor.png" alt="" width="84" height="84">
+          <span class="tile-badge" hidden>Last opened</span>
+          <span class="tile-go" aria-hidden="true">→</span>
+          <span class="tile-words">
+            <span class="tile-name">Study Buddy</span>
+            <span class="tile-blurb">Step-by-step help with problem sums</span>
+            <span class="print-address">polymathlc.com.sg/tutor</span>
+          </span>
+        </a>
+      </li>
+      <li style="--order:7">
+        <a class="app-tile" data-app="anskey" href="https://polymathlc.github.io/anskey/" style="--tile-wash:#FFE0B2;--tile-ink:#E65100">
+          <img class="tile-icon" src="assets/apps/anskey.png" alt="" width="84" height="84">
+          <span class="tile-badge" hidden>Last opened</span>
+          <span class="tile-go" aria-hidden="true">→</span>
+          <span class="tile-words">
+            <span class="tile-name">Answer Keys</span>
+            <span class="tile-blurb">Your worksheets and answer keys</span>
+            <span class="print-address">polymathlc.com.sg/anskey</span>
+          </span>
+        </a>
+      </li>
+      <li style="--order:8">
         <!-- 🧠 Mind map (v1.6.0): polymathlc.com.sg/mindmap, published by the website sync from mindmap/ in this
              repo, so like Worksheets it links to the website itself. It loads the same access gate with no
              data-subject, so it opens for every approved account, like Study Buddy, Chinese and English. -->
@@ -769,7 +795,20 @@
           </span>
         </a>
       </li>
-    </ul>
+      <li style="--order:9">
+        <a class="app-tile" data-app="rewards" href="https://polymathlc.github.io/rewards/" style="--tile-wash:#FFF59D;--tile-ink:#B26A00">
+          <img class="tile-icon" src="assets/apps/rewards.png" alt="" width="84" height="84">
+          <span class="tile-badge" hidden>Last opened</span>
+          <span class="tile-go" aria-hidden="true">→</span>
+          <span class="tile-words">
+            <span class="tile-name">Rewards</span>
+            <span class="tile-blurb">Your points and rewards</span>
+            <span class="print-address">polymathlc.com.sg/rewards</span>
+          </span>
+        </a>
+      </li>
+      </ul>
+    </section>
   </nav>
 
   <section class="help-card reveal" aria-labelledby="installHelpTitle" style="animation-delay: 0.8s" data-apps-view>
@@ -788,14 +827,14 @@
   © Polymath Learning Centre · polymathlc.com.sg
 </footer>
 
-<div class="version-badge" id="versionBadge" aria-hidden="true">v1.6.0</div>
+<div class="version-badge" id="versionBadge" aria-hidden="true">v1.7.0</div>
 
 <script>
   /* My Polymath — the little the page does with script. Everything works without it. */
   (function () {
     'use strict';
 
-    var DASHBOARD_VERSION = 'v1.6.0';
+    var DASHBOARD_VERSION = 'v1.7.0';
     var LAST_OPENED_KEY = 'polymath-dashboard-last-opened';
 
     var versionBadge = document.getElementById('versionBadge');
