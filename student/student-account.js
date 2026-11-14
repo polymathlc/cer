@@ -1,5 +1,5 @@
 /*
-  MY POLYMATH — sign-in and the student access admin dashboard  (v1.5.0)
+  MY POLYMATH — sign-in and the student access admin dashboard  (v1.6.0)
   ======================================================================
   polymathlc.com.sg/student          a student / parent signs in here once; the
                                      enrolment pop-up (access-gate.js, the SAME
@@ -14,6 +14,15 @@
 
   The tiles stay plain links that work with no script: each app checks access
   itself, so the dashboard showing a tile never lets anybody past the gate.
+
+  CLASSIFY AND FILTER (v1.6.0) — at #admin the accounts can be narrowed by
+  status, by a child's LEVEL (P1–S5, Other) and by SUBJECTS (Math only, Science
+  only, Both, or any Math / any Science), grouped by level or by subjects,
+  sorted, and shown as cards or as a compact one-row-per-child table. The
+  "Students by level" grid counts children per level and subject; tapping a
+  number filters to exactly those. A family matches when ONE of its children
+  matches both the level and the subject chosen. The choices are remembered
+  on this device.
 
   SUBJECTS (v1.5.0) — this dashboard controls every app:
   • Each child is Math only, Science only or Both. The Science, Science PSLE and
@@ -31,7 +40,7 @@
 (function () {
   'use strict';
 
-  var VERSION = 'v1.5.0';
+  var VERSION = 'v1.6.0';
   var FIREBASE_CONFIG = {
     apiKey: 'AIzaSyAUSI3Uh28IeqASEp0JhH4QPaVt-O3meBo',
     authDomain: 'mathgen--app.firebaseapp.com',
@@ -242,11 +251,144 @@
     return { access: [], source: 'student-access', revoked: true, revokedAt: SERVER_TIME, syncedAt: SERVER_TIME };
   }
 
+  /* ---------------------- classify and filter (v1.6.0) ---------------------- */
+  // Subject filters: a child's own choice, or "takes Math / Science at all".
+  var SUBJECT_FILTERS = [
+    ['all', 'All subjects'], ['math', 'Math only'], ['science', 'Science only'], ['both', 'Both'],
+    ['has-math', 'Any Math'], ['has-science', 'Any Science']
+  ];
+  var GROUPS = [['none', 'No grouping'], ['level', 'Group by level'], ['subjects', 'Group by subjects']];
+  var SORTS = [['newest', 'Newest first'], ['oldest', 'Oldest first'], ['level', 'Level (P1 → S5)'], ['parent', 'Parent A–Z'], ['child', 'Child A–Z']];
+  var VIEWS = [['cards', 'Cards'], ['table', 'Table']];
+  function levelRank(level) {
+    for (var i = 0; i < LEVELS.length; i++) if (LEVELS[i][0] === level) return i;
+    return LEVELS.length;   // no level / unknown: last
+  }
+  function shortLevel(key) { return key && key !== 'Other' ? key : (key || '—'); }
+  /** Does this child fit a level ('all' or a key) and a subject filter? */
+  function childMatches(child, level, subject) {
+    if (!child) return false;
+    var lv = level || 'all', sub = subject || 'all';
+    if (lv !== 'all' && child.level !== lv) return false;
+    var choice = lower(child.subjects);
+    if (sub === 'all') return true;
+    if (sub === 'has-math') return choice === 'math' || choice === 'both';
+    if (sub === 'has-science') return choice === 'science' || choice === 'both';
+    return choice === sub;
+  }
+  /** A family fits when ONE of its children fits both the level and the subject. */
+  function recordMatchesClass(record, level, subject) {
+    if ((level || 'all') === 'all' && (subject || 'all') === 'all') return true;
+    return ((record && record.children) || []).some(function (child) { return childMatches(child, level, subject); });
+  }
+  /** The children of a family that fit (all of them when nothing is chosen). */
+  function matchingChildren(record, level, subject) {
+    return ((record && record.children) || []).filter(function (child) { return childMatches(child, level, subject); });
+  }
+  /**
+   * Children counted per level and subject choice:
+   * { rows: [{ level, label, math, science, both, total }], total: {...} } — levels in
+   * school order, only those with a child; families counted once per child.
+   */
+  function classify(records) {
+    var byLevel = {}, total = { math: 0, science: 0, both: 0, none: 0, total: 0 };
+    (records || []).forEach(function (record) {
+      ((record && record.children) || []).forEach(function (child) {
+        if (!child) return;
+        var level = child.level || '';
+        var row = byLevel[level] || (byLevel[level] = { level: level, label: level ? levelLabel(level) : 'No level', math: 0, science: 0, both: 0, none: 0, total: 0 });
+        var choice = lower(child.subjects);
+        var key = choice === 'math' || choice === 'science' || choice === 'both' ? choice : 'none';
+        row[key]++; row.total++; total[key]++; total.total++;
+      });
+    });
+    var rows = Object.keys(byLevel).map(function (k) { return byLevel[k]; })
+      .sort(function (a, b) { return levelRank(a.level) - levelRank(b.level); });
+    return { rows: rows, total: total };
+  }
+  /** Families per level / per subject choice, for the chip counts (a family counts once per chip). */
+  function chipCounts(records, level, subject) {
+    var levels = {}, subjects = {};
+    (records || []).forEach(function (record) {
+      LEVELS.forEach(function (pair) { if (recordMatchesClass(record, pair[0], subject)) levels[pair[0]] = (levels[pair[0]] || 0) + 1; });
+      SUBJECT_FILTERS.forEach(function (pair) { if (recordMatchesClass(record, level, pair[0])) subjects[pair[0]] = (subjects[pair[0]] || 0) + 1; });
+    });
+    levels.all = (records || []).filter(function (r) { return recordMatchesClass(r, 'all', subject); }).length;
+    return { levels: levels, subjects: subjects };
+  }
+  function firstChildName(record) {
+    var c = ((record && record.children) || [])[0];
+    return lower(c && c.name);
+  }
+  /** The lowest school level among the family's children that fit (for sorting and grouping). */
+  function recordLevel(record, level, subject) {
+    var kids = matchingChildren(record, level, subject);
+    if (!kids.length) kids = (record && record.children) || [];
+    var best = null;
+    kids.forEach(function (c) { if (c && (best === null || levelRank(c.level) < levelRank(best))) best = c.level || ''; });
+    return best === null ? '' : best;
+  }
+  /** The family's subject choice for grouping: one choice, or "Mixed" when its children differ. */
+  function recordSubjects(record, level, subject) {
+    var kids = matchingChildren(record, level, subject);
+    if (!kids.length) kids = (record && record.children) || [];
+    var seen = [];
+    kids.forEach(function (c) { var k = lower(c && c.subjects) || 'none'; if (seen.indexOf(k) < 0) seen.push(k); });
+    if (seen.length === 1) return seen[0];
+    return seen.length ? 'mixed' : 'none';
+  }
+  /** Sort a list by one of SORTS (waiting families always first, as before, for "newest"). */
+  function sortBy(list, mode, level, subject) {
+    var time = function (r) { var d = toDate(r.submittedAt); return d ? d.getTime() : 0; };
+    var text = function (a, b) { return a < b ? -1 : a > b ? 1 : 0; };
+    if (mode === 'oldest') return list.slice().sort(function (a, b) { return time(a) - time(b); });
+    if (mode === 'level') return list.slice().sort(function (a, b) {
+      return (levelRank(recordLevel(a, level, subject)) - levelRank(recordLevel(b, level, subject))) || text(lower(a.parentName), lower(b.parentName));
+    });
+    if (mode === 'parent') return list.slice().sort(function (a, b) { return text(lower(a.parentName), lower(b.parentName)) || time(b) - time(a); });
+    if (mode === 'child') return list.slice().sort(function (a, b) { return text(firstChildName(a), firstChildName(b)) || time(b) - time(a); });
+    return sortRecords(list);
+  }
+  var SUBJECT_GROUP_ORDER = ['math', 'science', 'both', 'mixed', 'none'];
+  var SUBJECT_GROUP_LABEL = { math: 'Math only', science: 'Science only', both: 'Both Math and Science', mixed: 'Children with different subjects', none: 'No subjects chosen' };
+  /** [{ key, label, records }] in school / subject order; one group when not grouping. */
+  function groupRecords(list, by, level, subject) {
+    if (by !== 'level' && by !== 'subjects') return [{ key: 'all', label: '', records: list.slice() }];
+    var groups = {}, order = [];
+    list.forEach(function (record) {
+      var key = by === 'level' ? recordLevel(record, level, subject) : recordSubjects(record, level, subject);
+      if (!groups[key]) { groups[key] = []; order.push(key); }
+      groups[key].push(record);
+    });
+    order.sort(function (a, b) {
+      return by === 'level' ? levelRank(a) - levelRank(b) : SUBJECT_GROUP_ORDER.indexOf(a) - SUBJECT_GROUP_ORDER.indexOf(b);
+    });
+    return order.map(function (key) {
+      return { key: key, label: by === 'level' ? (key ? levelLabel(key) : 'No level') : SUBJECT_GROUP_LABEL[key] || key, records: groups[key] };
+    });
+  }
+  /** Saved filters → only known values (a stale or tampered entry falls back to the default). */
+  function cleanPrefs(raw) {
+    var known = function (list, value, fallback) { for (var i = 0; i < list.length; i++) if (list[i][0] === value) return value; return fallback; };
+    raw = raw || {};
+    return {
+      filter: known([['pending'], ['approved'], ['revoked'], ['all']], raw.filter, 'pending'),
+      level: raw.level === 'all' ? 'all' : known(LEVELS, raw.level, 'all'),
+      subject: known(SUBJECT_FILTERS, raw.subject, 'all'),
+      group: known(GROUPS, raw.group, 'none'),
+      sort: known(SORTS, raw.sort, 'newest'),
+      view: known(VIEWS, raw.view, 'cards')
+    };
+  }
+
   var helpers = { esc: esc, isAdmin: isAdmin, statusOf: statusOf, loginCandidates: loginCandidates, accountLabel: accountLabel,
     toDate: toDate, sgTime: sgTime, matches: matches, sortRecords: sortRecords, counts: counts, editedRecord: editedRecord,
     subjectsOfChoice: subjectsOfChoice, approvedSubjects: approvedSubjects, appSubjectLabel: appSubjectLabel, subjectsWords: subjectsWords,
     tileSubjects: tileSubjects, tileLocked: tileLocked, onlineAccessFor: onlineAccessFor, onlineMemberPatch: onlineMemberPatch,
     SERVER_TIME: SERVER_TIME, DELETE_FIELD: DELETE_FIELD, ONLINE_LEVELS: ONLINE_LEVELS, APP_SUBJECTS: APP_SUBJECTS,
+    childMatches: childMatches, recordMatchesClass: recordMatchesClass, matchingChildren: matchingChildren, classify: classify,
+    chipCounts: chipCounts, recordLevel: recordLevel, recordSubjects: recordSubjects, sortBy: sortBy, groupRecords: groupRecords,
+    cleanPrefs: cleanPrefs, levelRank: levelRank, SUBJECT_FILTERS: SUBJECT_FILTERS, GROUPS: GROUPS, SORTS: SORTS, VIEWS: VIEWS,
     ACCESS_ADMINS: ACCESS_ADMINS, LEVELS: LEVELS, SUBJECTS: SUBJECTS };
   window.MyPolymathAccount = { version: VERSION, helpers: helpers };
 
@@ -471,7 +613,22 @@
   }
 
   /* ---------------------------- admin view ---------------------------- */
-  var admin = { records: [], filter: 'pending', query: '', editing: null, confirming: null, unsubscribe: null, error: '', notice: '', loaded: false, busy: {} };
+  var admin = { records: [], filter: 'pending', query: '', editing: null, confirming: null, unsubscribe: null, error: '', notice: '', loaded: false, busy: {},
+    level: 'all', subject: 'all', group: 'none', sort: 'newest', view: 'cards' };
+  // The admin's filters, remembered on this device only (storage may be refused: then the defaults).
+  var PREFS_KEY = 'polymath-access-admin-filters-v1';
+  (function loadPrefs() {
+    var saved = null;
+    try { saved = JSON.parse(window.localStorage.getItem(PREFS_KEY) || 'null'); } catch (error) { saved = null; }
+    var prefs = cleanPrefs(saved);
+    Object.keys(prefs).forEach(function (k) { admin[k] = prefs[k]; });
+  })();
+  function savePrefs() {
+    try {
+      window.localStorage.setItem(PREFS_KEY, JSON.stringify({ filter: admin.filter, level: admin.level, subject: admin.subject, group: admin.group, sort: admin.sort, view: admin.view }));
+    } catch (error) { /* not remembered: fine */ }
+  }
+  function classFiltered() { return admin.level !== 'all' || admin.subject !== 'all'; }
 
   function wantsAdmin() { return location.hash === '#admin'; }
 
@@ -538,10 +695,126 @@
 
   function childRows(children) {
     if (!children || !children.length) return '<p class="muted">No children listed.</p>';
+    var mark = classFiltered();
     return '<table class="child-table"><thead><tr><th>Child</th><th>Level</th><th>Subjects</th></tr></thead><tbody>' +
       children.map(function (c) {
-        return '<tr><td>' + esc(c && c.name) + '</td><td>' + esc(levelLabel(c && c.level)) + '</td><td>' + esc(subjectsLabel(c && c.subjects)) + '</td></tr>';
+        // With a level or subject filter on, the children that fit it stand out.
+        var hit = mark && childMatches(c, admin.level, admin.subject);
+        return '<tr' + (hit ? ' class="is-match"' : '') + '><td>' + esc(c && c.name) + '</td><td>' + esc(levelLabel(c && c.level)) + '</td><td>' + esc(subjectsLabel(c && c.subjects)) + '</td></tr>';
       }).join('') + '</tbody></table>';
+  }
+
+  /* ---------------- classify and filter: the controls (v1.6.0) ---------------- */
+  function chip(kind, value, label, count, active) {
+    return '<button type="button" class="filter-chip' + (active ? ' is-active' : '') + '" aria-pressed="' + active + '" data-admin="' + kind + '" data-value="' + esc(value) + '">' +
+      esc(label) + (count === null ? '' : ' <span>' + count + '</span>') + '</button>';
+  }
+  function optionsHtml(list, value) {
+    return list.map(function (p) { return '<option value="' + esc(p[0]) + '"' + (p[0] === value ? ' selected' : '') + '>' + esc(p[1]) + '</option>'; }).join('');
+  }
+  function classControls(base) {
+    var cc = chipCounts(base, admin.level, admin.subject);
+    var levels = [chip('level', 'all', 'All levels', cc.levels.all, admin.level === 'all')];
+    LEVELS.forEach(function (pair) {
+      var n = cc.levels[pair[0]] || 0;
+      if (n || admin.level === pair[0]) levels.push(chip('level', pair[0], pair[0] === 'Other' ? 'Other' : pair[0], n, admin.level === pair[0]));
+    });
+    var subjects = SUBJECT_FILTERS.map(function (pair) {
+      return chip('subject', pair[0], pair[1], cc.subjects[pair[0]] || 0, admin.subject === pair[0]);
+    });
+    return '<div class="class-filters" aria-label="Filter by level and subjects">' +
+      '<div class="class-row"><span class="class-label">Level</span><div class="filter-chips">' + levels.join('') + '</div></div>' +
+      '<div class="class-row"><span class="class-label">Subjects</span><div class="filter-chips">' + subjects.join('') + '</div></div>' +
+      '<div class="class-row class-arrange">' +
+        '<label class="class-select">Show<select data-admin-select="group">' + optionsHtml(GROUPS, admin.group) + '</select></label>' +
+        '<label class="class-select">Sort<select data-admin-select="sort">' + optionsHtml(SORTS, admin.sort) + '</select></label>' +
+        '<div class="view-toggle" role="group" aria-label="Layout">' + VIEWS.map(function (p) {
+          return '<button type="button" class="filter-chip' + (admin.view === p[0] ? ' is-active' : '') + '" aria-pressed="' + (admin.view === p[0]) + '" data-admin="view" data-value="' + p[0] + '">' + esc(p[1]) + '</button>';
+        }).join('') + '</div>' +
+        (classFiltered() || admin.query ? '<button type="button" class="button button-small" data-admin="clear-class">Clear filters</button>' : '') +
+      '</div>' +
+    '</div>';
+  }
+  /** "Students by level": children per level × subject choice; each number filters to exactly those. */
+  function classGrid(base) {
+    var grid = classify(base);
+    if (!grid.rows.length) return '';
+    var cell = function (level, subject, n) {
+      var active = admin.level === level && admin.subject === subject;
+      return n ? '<button type="button" class="grid-cell' + (active ? ' is-active' : '') + '" data-admin="cell" data-level="' + esc(level) + '" data-subject="' + esc(subject) + '" aria-label="' + n + ' ' + esc(level === 'all' ? 'children' : levelLabel(level)) + ' ' + esc(subject === 'all' ? '' : subjectsLabel(subject)) + '">' + n + '</button>'
+        : '<span class="grid-zero">·</span>';
+    };
+    var rows = grid.rows.map(function (r) {
+      var key = r.level || 'all';
+      return '<tr><th scope="row">' + esc(r.level ? levelLabel(r.level) : 'No level') + '</th>' +
+        '<td>' + cell(key, 'math', r.math) + '</td><td>' + cell(key, 'science', r.science) + '</td><td>' + cell(key, 'both', r.both) + '</td>' +
+        '<td class="grid-total">' + cell(key, 'all', r.total) + '</td></tr>';
+    }).join('');
+    var t = grid.total;
+    return '<details class="class-grid"' + (admin.gridClosed ? '' : ' open') + '><summary>Students by level <span class="muted">· ' + t.total + ' child' + (t.total === 1 ? '' : 'ren') + ' · tap a number to list them</span></summary>' +
+      '<div class="grid-scroll"><table><thead><tr><th scope="col">Level</th><th scope="col">Math only</th><th scope="col">Science only</th><th scope="col">Both</th><th scope="col">Total</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody>' +
+      '<tfoot><tr><th scope="row">All levels</th><td>' + cell('all', 'math', t.math) + '</td><td>' + cell('all', 'science', t.science) + '</td><td>' + cell('all', 'both', t.both) + '</td><td class="grid-total">' + cell('all', 'all', t.total) + '</td></tr></tfoot>' +
+      '</table></div></details>';
+  }
+  /** One row per child that fits, for scanning many families at once. */
+  /** Each family → its child rows (only the children that fit when a filter is on). */
+  function childRowsOf(list) {
+    var out = [];
+    list.forEach(function (record) {
+      var kids = classFiltered() ? matchingChildren(record, admin.level, admin.subject) : ((record.children && record.children.length) ? record.children : [null]);
+      kids.forEach(function (c) { out.push({ record: record, child: c }); });
+    });
+    return out;
+  }
+  function tableHtml(pairs) {
+    var rows = [];
+    pairs.forEach(function (pair) {
+      var record = pair.record, c = pair.child;
+      var status = statusOf(record);
+      (function () {
+        rows.push('<tr class="is-' + status + '">' +
+          '<td data-label="Child">' + esc(c ? c.name : '—') + '</td>' +
+          '<td data-label="Level">' + esc(c ? shortLevel(c.level) : '—') + '</td>' +
+          '<td data-label="Subjects">' + esc(c ? subjectsLabel(c.subjects) : '—') + '</td>' +
+          '<td data-label="Parent"><b>' + esc(record.parentName || '(no name)') + '</b><div class="muted">' + esc(record.parentEmail || '') + '</div></td>' +
+          '<td data-label="Status"><span class="status-chip is-' + status + '">' + esc(STATUS_LABEL[status]) + '</span></td>' +
+          '<td data-label="Sent" class="muted">' + esc(sgTime(record.submittedAt)) + '</td>' +
+          '<td class="row-actions">' +
+            (status !== 'approved' ? '<button type="button" class="button button-small button-accent" data-admin="approve" data-id="' + esc(record._id) + '"' + (admin.busy[record._id] ? ' disabled' : '') + '>✓ Approve</button>' : '') +
+            '<button type="button" class="button button-small" data-admin="open-card" data-id="' + esc(record._id) + '">Edit</button>' +
+          '</td></tr>');
+      })();
+    });
+    return '<div class="table-scroll"><table class="account-table"><thead><tr><th>Child</th><th>Level</th><th>Subjects</th><th>Parent</th><th>Status</th><th>Sent</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>' +
+      rows.join('') + '</tbody></table></div>';
+  }
+  function listHtml(shown) {
+    var sorted = sortBy(shown, admin.sort, admin.level, admin.subject);
+    if (admin.view === 'table' && (admin.group === 'level' || admin.group === 'subjects')) {
+      // In the table each CHILD goes under its own level / subjects (a P3 and a P5 sibling part ways).
+      var buckets = {}, keys = [];
+      childRowsOf(sorted).forEach(function (pair) {
+        var key = admin.group === 'level' ? ((pair.child && pair.child.level) || '') : ((pair.child && lower(pair.child.subjects)) || 'none');
+        if (!buckets[key]) { buckets[key] = []; keys.push(key); }
+        buckets[key].push(pair);
+      });
+      var subjectOrder = ['math', 'science', 'both', 'none'];
+      keys.sort(function (a, b) { return admin.group === 'level' ? levelRank(a) - levelRank(b) : subjectOrder.indexOf(a) - subjectOrder.indexOf(b); });
+      return keys.map(function (key) {
+        var pairs = buckets[key], fams = [];
+        pairs.forEach(function (p) { if (fams.indexOf(p.record._id) < 0) fams.push(p.record._id); });
+        var label = admin.group === 'level' ? (key ? levelLabel(key) : 'No level') : (key === 'none' ? 'No subjects chosen' : subjectsLabel(key));
+        return '<section class="record-group"><h3 class="group-head">' + esc(label) + ' <span class="muted">· ' + pairs.length + ' child' + (pairs.length === 1 ? '' : 'ren') + ', ' + fams.length + ' famil' + (fams.length === 1 ? 'y' : 'ies') + '</span></h3>' + tableHtml(pairs) + '</section>';
+      }).join('');
+    }
+    var groups = groupRecords(sorted, admin.group, admin.level, admin.subject);
+    return groups.map(function (g) {
+      var kids = 0;
+      g.records.forEach(function (r) { kids += classFiltered() ? matchingChildren(r, admin.level, admin.subject).length : ((r.children || []).length); });
+      var head = g.label ? '<h3 class="group-head">' + esc(g.label) + ' <span class="muted">· ' + g.records.length + ' famil' + (g.records.length === 1 ? 'y' : 'ies') + ', ' + kids + ' child' + (kids === 1 ? '' : 'ren') + '</span></h3>' : '';
+      return '<section class="record-group">' + head + (admin.view === 'table' ? tableHtml(childRowsOf(g.records)) : '<div class="record-list">' + g.records.map(recordHtml).join('') + '</div>') + '</section>';
+    }).join('');
   }
 
   /** Which subject apps this family opens, as the admin sees it on each request. */
@@ -655,9 +928,13 @@
     }
     var c = counts(admin.records);
     var filters = [['pending', 'Waiting', c.pending], ['approved', 'Approved', c.approved], ['revoked', 'Paused', c.revoked], ['all', 'All', c.all]];
-    var shown = sortRecords(admin.records).filter(function (r) {
+    // The status chips and the search narrow first; level and subjects then classify what is left.
+    var base = admin.records.filter(function (r) {
       return (admin.filter === 'all' || statusOf(r) === admin.filter) && matches(r, admin.query);
     });
+    var shown = base.filter(function (r) { return recordMatchesClass(r, admin.level, admin.subject); });
+    var shownKids = 0;
+    shown.forEach(function (r) { shownKids += classFiltered() ? matchingChildren(r, admin.level, admin.subject).length : (r.children || []).length; });
     // Keep the search box (and its caret) while the list below redraws.
     var existingSearch = adminView.querySelector('#adminSearch');
     var hadFocus = existingSearch && document.activeElement === existingSearch;
@@ -677,9 +954,11 @@
         }).join('') + '</div>' +
         '<input type="search" id="adminSearch" placeholder="Search parent, child or email" value="' + esc(admin.query) + '" aria-label="Search requests">' +
       '</div>' +
+      (admin.loaded ? classControls(base) + classGrid(base) : '') +
       (!admin.loaded && !admin.error ? '<p class="muted">Loading requests…</p>' : '') +
-      (admin.loaded && !shown.length ? '<div class="admin-empty">' + (admin.filter === 'pending' && !admin.query ? 'Nobody is waiting for approval. 🎉' : 'No requests match.') + '</div>' : '') +
-      '<div class="record-list">' + shown.map(recordHtml).join('') + '</div>' +
+      (admin.loaded && shown.length ? '<p class="muted result-line" id="adminResultLine">Showing ' + shown.length + ' famil' + (shown.length === 1 ? 'y' : 'ies') + ' · ' + shownKids + ' child' + (shownKids === 1 ? '' : 'ren') + '</p>' : '') +
+      (admin.loaded && !shown.length ? '<div class="admin-empty">' + (admin.filter === 'pending' && !admin.query && !classFiltered() ? 'Nobody is waiting for approval. 🎉' : 'No accounts match these filters.') + '</div>' : '') +
+      '<div id="adminList">' + listHtml(shown) + '</div>' +
       '<p class="muted admin-foot">Each child\'s subjects decide the apps: Math only opens Math, Science only opens Science and Science PSLE, Both opens all three. English, Chinese, Study Buddy, Answer Keys and Rewards open for every approved family, and the Worksheets portal shows each child\'s own level (P3 to P6) and subjects. Change them with Edit; every app follows. Staff and teacher accounts (the three admins, Elsie, Abigail and Keertana) are never asked. Anyone else who signs in to a Polymath app is asked once and waits here.</p>';
     if (hadFocus) {
       var search = adminView.querySelector('#adminSearch');
@@ -801,7 +1080,30 @@
       if (!target) return;
       var action = target.getAttribute('data-admin');
       var id = target.getAttribute('data-id');
-      if (action === 'filter') { admin.filter = target.getAttribute('data-filter'); renderAdmin(); return; }
+      if (action === 'filter') { admin.filter = target.getAttribute('data-filter'); savePrefs(); renderAdmin(); return; }
+      if (action === 'level' || action === 'subject' || action === 'view') {
+        admin[action] = target.getAttribute('data-value');
+        savePrefs(); renderAdmin(); return;
+      }
+      if (action === 'cell') {
+        var lv = target.getAttribute('data-level'), sb = target.getAttribute('data-subject');
+        var same = admin.level === lv && admin.subject === sb;
+        admin.level = same ? 'all' : lv; admin.subject = same ? 'all' : sb;   // a second tap clears it
+        savePrefs(); renderAdmin();
+        var list = adminView.querySelector('#adminResultLine');
+        if (list && list.scrollIntoView) { try { list.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (error) { /* fine */ } }
+        return;
+      }
+      if (action === 'clear-class') { admin.level = 'all'; admin.subject = 'all'; admin.query = ''; savePrefs(); renderAdmin(); return; }
+      if (action === 'open-card') {
+        var rec0 = findRecord(id);
+        admin.view = 'cards';
+        admin.editing = { id: id, children: ((rec0 && rec0.children) || []).map(function (c) { return { name: c.name || '', level: c.level || '', subjects: c.subjects || '' }; }) };
+        savePrefs(); renderAdmin();
+        var card0 = adminView.querySelector('[data-record="' + id + '"]');
+        if (card0 && card0.scrollIntoView) { try { card0.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (error) { /* fine */ } }
+        return;
+      }
       if (action === 'approve') { decide(id, 'approved'); return; }
       if (action === 'revoke' || action === 'delete') {
         if (admin.confirming && admin.confirming.id === id && admin.confirming.action === action) {
@@ -851,6 +1153,13 @@
       var form = event.target;
       if (form && form.hasAttribute('data-admin-form')) { event.preventDefault(); saveEdit(form); }
     });
+    adminView.addEventListener('change', function (event) {
+      var which = event.target && event.target.getAttribute && event.target.getAttribute('data-admin-select');
+      if (which === 'group' || which === 'sort') { admin[which] = event.target.value; savePrefs(); renderAdmin(); }
+    });
+    adminView.addEventListener('toggle', function (event) {
+      if (event.target && event.target.classList && event.target.classList.contains('class-grid')) admin.gridClosed = !event.target.open;
+    }, true);
     adminView.addEventListener('input', function (event) {
       if (event.target && event.target.id === 'adminSearch') { admin.query = event.target.value; renderAdmin(); }
     });

@@ -531,6 +531,53 @@
   .child-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
   .child-table th, .child-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border-subtle); }
   .child-table th { color: var(--text-secondary); font-weight: 600; }
+  /* ───────── Classify and filter the accounts (v1.6.0) ───────── */
+  .class-filters { display: grid; gap: 10px; margin-bottom: var(--space-md); padding: 14px; background: var(--bg-primary); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); }
+  .class-row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+  .class-label { font-size: var(--font-size-sm); font-weight: 700; color: var(--text-secondary); min-width: 64px; }
+  .class-arrange { border-top: 1px solid var(--border-subtle); padding-top: 10px; }
+  .class-select { display: inline-flex; align-items: center; gap: 6px; font-size: var(--font-size-sm); font-weight: 600; color: var(--text-secondary); }
+  .class-select select { font: inherit; font-weight: 400; color: var(--text-primary); border: 1.5px solid var(--border-medium); border-radius: var(--radius-full); padding: 6px 10px; background: #FFFFFF; }
+  .view-toggle { display: inline-flex; gap: 6px; }
+  .class-grid { margin-bottom: var(--space-md); background: var(--bg-primary); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 10px 14px; }
+  .class-grid summary { cursor: pointer; font-weight: 700; padding: 4px 0; }
+  .grid-scroll, .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .class-grid table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: var(--font-size-sm); min-width: 420px; }
+  .class-grid th, .class-grid td { padding: 6px 8px; border-bottom: 1px solid var(--border-subtle); text-align: center; }
+  .class-grid th[scope="row"], .class-grid thead th:first-child { text-align: left; }
+  .class-grid tfoot th, .class-grid tfoot td { border-bottom: 0; font-weight: 700; }
+  .grid-cell { font: inherit; font-weight: 700; min-width: 40px; min-height: 32px; border-radius: var(--radius-full); border: 1.5px solid var(--border-medium); background: #FFFFFF; cursor: pointer; color: var(--accent-dark); }
+  .grid-cell:hover { border-color: var(--accent-base); }
+  .grid-cell.is-active { background: var(--accent-dark); border-color: var(--accent-dark); color: #FFFFFF; }
+  .grid-zero { color: var(--text-tertiary); }
+  .grid-total .grid-cell { background: var(--accent-light); border-color: transparent; }
+  .result-line { margin: 0 0 var(--space-sm); }
+  .record-group + .record-group { margin-top: var(--space-lg); }
+  .group-head { margin: 0 0 var(--space-sm); font-size: var(--font-size-md); }
+  .child-table tr.is-match td { background: #F1F8F5; font-weight: 700; }
+  .account-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); background: var(--bg-primary); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); overflow: hidden; }
+  .account-table th, .account-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border-subtle); vertical-align: top; }
+  .account-table thead th { color: var(--text-secondary); font-weight: 600; background: var(--bg-tertiary); }
+  .account-table tr.is-pending td:first-child { box-shadow: inset 4px 0 0 #E0B341; }
+  .account-table tr.is-approved td:first-child { box-shadow: inset 4px 0 0 var(--accent-base); }
+  .account-table tr.is-revoked td:first-child { box-shadow: inset 4px 0 0 #D9534F; }
+  .row-actions { white-space: nowrap; text-align: right; }
+  .row-actions .button + .button { margin-left: 6px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  /* On a phone the table becomes one small card per child. */
+  @media (max-width: 640px) {
+    .account-table thead { display: none; }
+    .account-table, .account-table tbody, .account-table tr, .account-table td { display: block; width: 100%; }
+    .account-table tr { border-bottom: 1px solid var(--border-medium); padding: 6px 0; }
+    .account-table td { border: 0; padding: 3px 12px; }
+    .account-table td[data-label]::before { content: attr(data-label) ": "; color: var(--text-secondary); font-weight: 600; }
+    .account-table tr td:first-child { box-shadow: none !important; font-weight: 700; }
+    .row-actions { text-align: left; padding-bottom: 8px !important; }
+    .class-label { min-width: 0; width: 100%; }
+    .class-grid table { min-width: 0; }
+    .class-grid th, .class-grid td { padding: 5px 3px; }
+    .grid-cell { min-width: 30px; min-height: 30px; }
+  }
   .edit-form { display: grid; gap: var(--space-md); }
   .edit-grid { display: grid; gap: var(--space-sm); grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
   .edit-children { display: grid; gap: var(--space-sm); }
@@ -821,7 +868,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="student-account.js?v=1.5.0"></script>
+<script src="student-account.js?v=1.6.0"></script>
 <script defer src="access-gate.js?v=1.1.0" data-app="student"></script>
 <script defer src="pwa-install.js?v=2.0.0" data-app-name="My Polymath" data-app-key="hub" data-app-icon="assets/app-icons/icon-192.png" data-accent="#0B6B4F" data-sw="sw.js" data-floating="auto"></script>
 </body>
