@@ -1,0 +1,80 @@
+name: Trial lesson reminders
+
+# Every afternoon in Singapore: emails each parent whose /trial online lesson is
+# TOMORROW a reminder with the Zoom link, the time and the class's Current and
+# Next worksheets, from admin@polymathlc.com.sg (tools/trial-reminders.mjs).
+#
+#   06:07 UTC = 2:07 PM Singapore   the reminder run
+#   08:37 UTC = 4:37 PM Singapore   a second run for bookings made after the first
+#                                   and in case GitHub started the first one late
+# Each booking is reminded once only: the email and the booking's "reminded"
+# mark are written together in Firestore, so the second run (or an admin's
+# "Send reminder now") never sends it again.
+#
+# Run workflow by hand to send any that are due now; tick "dry run" to only count.
+# Needs the FIREBASE_SERVICE_ACCOUNT repository secret. The logs show counts only.
+
+on:
+  schedule:
+    - cron: '7 6 * * *'
+    - cron: '37 8 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run: count the reminders due, send nothing'
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - 'tools/trial-reminders.mjs'
+      - 'shop-function/functions/trial*.js'
+      - '.github/workflows/trial-reminders.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: polymath-trial-reminders
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check the reminder code
+        run: node --test tools/trial-tests.mjs
+
+  remind:
+    needs: test
+    if: github.repository == 'polymathlc/cer' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install the Admin SDK
+        run: npm install --prefix "$RUNNER_TEMP/trial-deps" --no-save --no-audit --no-fund firebase-admin@12
+      - name: Prepare the service-account key
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node tools/office-rules.mjs --setup
+      - name: Send the reminders that are due
+        env:
+          TRIAL_DEPS: ${{ runner.temp }}/trial-deps
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then node tools/trial-reminders.mjs --dry-run; else node tools/trial-reminders.mjs; fi
+      - name: Remove the key from the runner
+        if: always()
+        run: rm -f "$RUNNER_TEMP/firebase-sa.json"

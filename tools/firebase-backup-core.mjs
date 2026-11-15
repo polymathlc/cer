@@ -60,6 +60,7 @@ export const STORAGE_KEEP_HOURS = 48;
 export const ESSENTIAL_COLLECTIONS = Object.freeze([
   'officeFamilies', 'officeInvoices', 'officePayments', 'officeStatements', 'officeSettings', 'officeLinks',
   'schedule_config', 'schedule_bookings',
+  'trialSettings', 'trialBookings', 'trialCodes', 'trialLinks',
   'shop_orders', 'shop_checkouts', 'shop_products', 'shop_settings',
   'studentAccess', 'students', 'studentProfiles', 'userProfiles', 'enUserProfiles', 'zhUserProfiles',
   'polymathEnquiryRequests', 'csLeads', 'csGrants',
@@ -97,6 +98,10 @@ export const COLLECTION_LABELS = Object.freeze({
   officeLinks: 'Office — parent pay links',
   schedule_config: 'Class schedule',
   schedule_bookings: 'Trial, enrolment and diagnostic bookings',
+  trialSettings: 'Trial page — settings and Zoom links',
+  trialBookings: 'Trial page — bookings and class-link visits',
+  trialCodes: 'Trial page — one-time access codes',
+  trialLinks: 'Trial page — class links',
   shop_orders: 'Shop orders',
   shop_checkouts: 'Shop checkouts',
   shop_products: 'Shop products',
