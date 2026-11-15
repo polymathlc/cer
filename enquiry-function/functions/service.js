@@ -27,6 +27,8 @@ function line(value, max, min = 1) {
   return result;
 }
 const SUPPORT_EMAIL = 'support@polymathlc.com.sg';
+// Every Polymath email is sent as the centre, never as a personal account.
+const SENDER = 'Polymath Learning Centre <admin@polymathlc.com.sg>';
 // The support inbox is always copied too, on top of the two configured inboxes.
 function mailRecipients(recipients) {
   return recipients.some(address => address.toLowerCase() === SUPPORT_EMAIL) ? [...recipients] : [...recipients, SUPPORT_EMAIL];
@@ -75,7 +77,7 @@ function buildSubmission(enquiry, ip, now, recipients) {
       { id: 'global-' + day, maximum: LIMITS.globalDay, expiresAt: (day + 2) * DAY }
     ],
     mail: {
-      to: mailRecipients(recipients), replyTo: enquiry.email,
+      to: mailRecipients(recipients), from: SENDER, replyTo: enquiry.email,
       message: {
         subject: 'Polymath class enquiry — ' + enquiry.childLevel + ' ' + subjectNames,
         text: [
@@ -121,5 +123,5 @@ function createService({ repository, recipients, now = Date.now, report = () => 
   }
   return { handler, cleanup: () => repository.cleanup(now()) };
 }
-module.exports = { recipientConfiguration, mailRecipients, SUPPORT_EMAIL, ORIGINS, LIMITS, RETENTION_MS, MAIL_PREFIX, REQUEST_COLLECTION,
+module.exports = { recipientConfiguration, mailRecipients, SUPPORT_EMAIL, SENDER, ORIGINS, LIMITS, RETENTION_MS, MAIL_PREFIX, REQUEST_COLLECTION,
   LIMIT_COLLECTION, EnquiryError, validateEnquiry, buildSubmission, createService };

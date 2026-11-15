@@ -926,12 +926,15 @@ const auth = firebase.auth();
 
 // Shown to the signed-in teacher in the footer, so a deploy can be checked.
 // Bump it on every change to this page.
-const SCHEDULE_PAGE_VERSION = 'v1.6.2';
+const SCHEDULE_PAGE_VERSION = 'v1.6.3';
 
 const ADMIN_EMAIL = 'chungzhikai@gmail.com';
 // Every trial booking emails these addresses via the "Trigger Email"
 // extension (documents added to the `mail` collection are sent).
 const NOTIFICATION_EMAILS = ['chungzhikai@gmail.com', 'admin@polymathlc.com.sg', 'support@polymathlc.com.sg'];
+// Every email this page queues is sent as the centre, never a personal account.
+const MAIL_SENDER = 'Polymath Learning Centre <admin@polymathlc.com.sg>';
+const MAIL_REPLY_TO = 'admin@polymathlc.com.sg';
 
 // Card payments for trials and enrolments go through the products page's Stripe
 // account and functions (shop-function/functions/booking.js): the server prices the
@@ -2460,6 +2463,8 @@ async function sendBookingEmails(b, earliestKey) {
 
   await db.collection('mail').add({
     to: NOTIFICATION_EMAILS,
+    from: MAIL_SENDER,
+    replyTo: b.email || MAIL_REPLY_TO,
     message: {
       subject: (enrol ? (master ? 'New MASTER CLASS ENROLMENT: ' : 'New ENROLMENT: ') : (master ? 'New MASTER CLASS Trial: ' : 'New Trial Booking: '))
         + b.childName + ' — ' + b.slotLabel + ' (' + b.subject + ')',
@@ -2476,6 +2481,8 @@ async function sendBookingEmails(b, earliestKey) {
 
   await db.collection('mail').add({
     to: [b.email],
+    from: MAIL_SENDER,
+    replyTo: MAIL_REPLY_TO,
     message: {
       subject: (enrol ? 'Enrolment Received — ' : 'Trial Class Booking Received — ') + b.slotLabel,
       html: '<div style="font-family:Arial,sans-serif;color:#171717;max-width:640px;">'

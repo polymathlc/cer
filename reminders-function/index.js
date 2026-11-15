@@ -96,6 +96,8 @@ exports.practiceReminders = onSchedule(
       const { subject, text, html } = reminderEmail(s.name);
       await db.collection("mail").add({
         to: [s.email],
+        from: "Polymath Learning Centre <admin@polymathlc.com.sg>",
+        replyTo: "admin@polymathlc.com.sg",
         message: { subject, text, html },
       });
       queued++;
