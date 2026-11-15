@@ -397,6 +397,42 @@ try {
   await page.waitForSelector('text=/payments? recorded/');
   assert.equal(docsIn(await store(page), 'officeInvoices').find(i => i.parentName === 'Siti Rahman').status, 'paid');
 
+  // v1.14.0 — Siti pays January and February 2027 ahead in ONE transfer
+  // (December is paid with November). Both months are marked paid with the
+  // payment's id, the receipt lists both, and Undo takes both marks off.
+  const sitiCode = famBy('Siti Rahman').code;
+  const twoPath = join(OUT, 'statement-two-months.csv');
+  writeFileSync(twoPath, ['Account Details For:,POSB eSavings', '', 'Transaction Date,Reference,Debit Amount,Credit Amount,Transaction Ref1,Transaction Ref2,Transaction Ref3',
+    '12 Nov 2026,ICT,,' + (siti.total * 2).toFixed(2) + ',PAYNOW TRANSFER,OTHR PLC ' + sitiCode + ' JAN27 FEB27,SITI BTE RAHMAN'].join('\n'));
+  await page.setInputFiles('#file-statement', twoPath);
+  await page.waitForFunction(() => { const r = window.PolymathOffice.S.review; return r && r.stage === 'review'; }, null, { timeout: 20000 });
+  await page.waitForSelector('[data-act="rvApply"]');
+  const twoTx = await page.evaluate(() => window.PolymathOffice.S.review.txs.map(t => ({ tick: t.tick, how: t.match.how, periods: t.match.periods, plan: t.plan && { exact: t.plan.exact, how: t.plan.how, text: t.plan.text, periods: t.plan.periods } })));
+  assert.equal(twoTx.length, 1);
+  assert.deepEqual(twoTx[0].periods, ['2027-01', '2027-02'], 'both months are read from the reference');
+  assert.deepEqual(twoTx[0].plan, { exact: true, how: 'named', text: 'Jan 2027 (ahead) + Feb 2027 (ahead)', periods: ['2027-01', '2027-02'] });
+  assert.ok(twoTx[0].tick, 'a reference code is certain');
+  await page.waitForSelector('.why.plan >> text=Pays 2 months');
+  await shot(page, '15a-two-months-review');
+  await page.click('[data-act="rvApply"]');
+  await page.waitForSelector('text=/payments? recorded/');
+  all = await store(page);
+  const sitiFam = docsIn(all, 'officeFamilies').find(f => f.parentName === 'Siti Rahman');
+  const twoPay = docsIn(all, 'officePayments').find(p => p.familyId === sitiFam._id && p.amount === C.round2(siti.total * 2));
+  assert.ok(twoPay, 'the payment is recorded');
+  assert.deepEqual(twoPay.marks.map(m => m.period), ['2027-01', '2027-02']);
+  assert.deepEqual([twoPay.credit, twoPay.allocations.length], [0, 0], 'no credit: every dollar went to a month');
+  assert.deepEqual(sitiFam.paidMonths.filter(x => x.paymentId === twoPay._id).map(x => x.period), ['2027-01', '2027-02']);
+  assert.equal(sitiFam.credit || 0, 0);
+  assert.ok(C.monthPrepaid(sitiFam, '2027-01', {}) && C.monthPrepaid(sitiFam, '2027-02', {}) && !C.monthPrepaid(sitiFam, '2027-03', {}), 'January and February will not be invoiced');
+  const twoReceipt = docsIn(all, 'mail').find(m => m._id.startsWith('polymath-office-receipt-') && m.polymathOffice && m.polymathOffice.familyId === sitiFam._id && /January 2027/.test(m.message.text));
+  if (twoReceipt) assert.match(twoReceipt.message.text, /February 2027 fees \(paid ahead\)/);
+  // Undo it: both marks come off.
+  await page.click('[data-act="undoPayment"][data-id="' + twoPay._id + '"]');
+  await page.waitForFunction(id => !window.PolymathOffice.S.payments.some(p => p.id === id), twoPay._id, { timeout: 10000 });
+  const sitiAfter = docsIn(await store(page), 'officeFamilies').find(f => f.parentName === 'Siti Rahman');
+  assert.deepEqual((sitiAfter.paidMonths || []).filter(x => x.paymentId), [], 'undo takes the months off again');
+
   // Reminders: Wong (part paid) and Chen (unpaid) still owe.
   await page.click('[data-act="openReminders"]');
   await page.waitForSelector('text=Payment reminders');

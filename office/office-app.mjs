@@ -33,9 +33,9 @@
      mail/polymath-office-*    emails for the Trigger Email extension
    Reads: schedule_config/main (the /schedule page's own document).
    ═══════════════════════════════════════════════════════════════════════════ */
-import * as C from './office-core.mjs?v=1.13.0';
+import * as C from './office-core.mjs?v=1.14.0';
 
-const OFFICE_VERSION = 'v1.13.0';
+const OFFICE_VERSION = 'v1.14.0';
 
 /* ═══════════════ Firebase — the CER project ═══════════════ */
 firebase.initializeApp({
@@ -233,6 +233,7 @@ function famStateFor(f, period) {
   if (now === 'withdrawn') return { key: 'withdrawn', label: 'Withdrawn', tone: 'grey', icon: '👋' };
   if (now === 'paused') return { key: 'paused', label: 'Paused', tone: 'grey', icon: '⏸' };
   if (!C.familyIsBillable(f, period)) return C.packageCovers(f, period) ? { key: 'package', label: 'Package', tone: 'green', icon: '📦' } : { key: 'none', label: 'No active students', tone: 'grey', icon: '·' };
+  if (C.monthPrepaid(f, period, S.settings)) return { key: 'prepaid', label: 'Paid ahead', tone: 'green', icon: '✔︎' };
   return { key: 'noinv', label: 'Not invoiced', tone: 'grey', icon: '📝' };
 }
 function studentsWithoutClass() {
@@ -240,7 +241,8 @@ function studentsWithoutClass() {
 }
 function billableWithoutInvoice(period) {
   if (C.isCoveredMonth(period, S.settings)) return [];   // paid with the month before
-  return S.families.filter(f => C.familyIsBillable(f, period) && !invoiceFor(f.id, period));
+  // v1.14.0: a month already paid by one payment for several months is not invoiced.
+  return S.families.filter(f => C.familyIsBillable(f, period) && !invoiceFor(f.id, period) && !C.monthPrepaid(f, period, S.settings));
 }
 function allOwing() { return C.stillOwing(S.invoices, today()); }
 function overdueInvoices() { return S.invoices.filter(i => stateOf(i).key === 'overdue'); }
@@ -2319,6 +2321,11 @@ async function applyPayment(tx, opts) {
   const pRef = payRef(safeDocId(tx.key));
   const openIds = invoicesOf(fid).filter(i => C.invoiceOutstanding(i) > 0).map(i => i.id);
   const how = tx.how || (tx.match && tx.match.how) || 'manual';
+  // v1.14.0: the months this payment pays — the ones shown on the review screen
+  // (tx.plan), else the ones in the reference or from ChatGPT.
+  const m0 = tx.match || {};
+  const wanted = tx.plan && tx.plan.exact ? tx.plan.periods
+    : (m0.familyId === fid || !m0.familyId) ? ((m0.periods && m0.periods.length) ? m0.periods : (m0.period ? [m0.period] : [])) : [];
   const alias = o.remember ? C.payerAliasFor(tx) : '';
   return db.runTransaction(async t => {
     const pSnap = await t.get(pRef);
@@ -2327,7 +2334,15 @@ async function applyPayment(tx, opts) {
     if (!fSnap.exists) throw new Error('family not found');
     const snaps = await Promise.all(openIds.map(id => t.get(invRef(id))));
     const invs = snaps.filter(s => s.exists).map(s => Object.assign({}, s.data(), { id: s.id }));
-    const { allocations, credit } = C.allocatePayment(tx.amount, invs, (tx.match && tx.match.period) || '');
+    const fam = fSnap.data();
+    // Every invoice of the family, the open ones as they are right now.
+    const fresh = new Map(invs.map(i => [i.id, i]));
+    const famInvs = invoicesOf(fid).map(i => fresh.get(i.id) || i);
+    invs.forEach(i => { if (!famInvs.some(x => x.id === i.id)) famInvs.push(i); });
+    const plan = C.paymentPlan(tx.amount, Object.assign({}, fam, { id: fid }), famInvs, { today: today(), settings: S.settings, schedule: S.schedule, periods: wanted, preferPeriod: m0.period || '' });
+    const allocations = plan.allocations;
+    const credit = plan.credit;
+    const marks = C.planMarks(plan, { date: tx.date || today(), amount: tx.amount, reference: tx.reference || '', by: S.user.email, paymentId: pRef.id });
     const after = [];
     allocations.forEach(a => {
       const inv = invs.find(x => x.id === a.invoiceId);
@@ -2336,18 +2351,20 @@ async function applyPayment(tx, opts) {
       if (inv.linkToken) t.set(linkRef(inv.linkToken), Object.assign(C.publicInvoiceDoc(next, S.settings), { updatedAt: ts() }), { merge: true });
       after.push({ period: inv.period, amount: a.amount, left: C.invoiceOutstanding(next), title: inv.custom || inv.title ? C.invoiceTitle(inv, S.settings) : '' });
     });
-    const fam = fSnap.data();
+    plan.marks.forEach(mk => after.push({ period: mk.period, amount: mk.amount, left: 0, title: (mk.label || C.periodLabel(mk.period)) + ' fees' + (mk.ahead ? ' (paid ahead)' : '') }));
     const fu = { updatedAt: ts() };
     if (credit > 0) fu.credit = C.round2((Number(fam.credit) || 0) + credit);
+    if (marks.length) fu.paidMonths = C.withPlanMarks(fam.paidMonths, marks);
     if (alias && !(fam.payerNames || []).includes(alias)) fu.payerNames = FV.arrayUnion(alias);
     t.update(famRef(fid), fu);
     t.set(pRef, {
       key: tx.key, date: tx.date || today(), amount: C.round2(tx.amount), familyId: fid, parentName: fam.parentName || '',
       allocations, credit, how, why: (tx.match && tx.match.why) || tx.note || '', payer: tx.payer || '', reference: tx.reference || '',
+      marks: marks.map(mk => ({ period: mk.period, amount: mk.amount })), months: plan.text, monthCount: plan.monthCount,
       description: String(tx.description || '').slice(0, 400), statementId: o.statementId || '', method: tx.method || 'bank',
       appliedAt: ts(), appliedBy: S.user.email
     });
-    return { dup: false, fam: Object.assign({ id: fid }, fam), allocations: after, credit };
+    return { dup: false, fam: Object.assign({ id: fid }, fam), allocations: after, credit, plan };
   });
 }
 async function sendReceipt(res, tx) {
@@ -2360,7 +2377,7 @@ async function sendReceipt(res, tx) {
 async function undoPayment(id) {
   if (!requireProtected()) return;
   const p = S.payments.find(x => x.id === id);
-  if (!p || !confirm('Undo ' + money(p.amount) + ' from ' + (p.parentName || 'this family') + '? The invoices it paid become unpaid again.')) return;
+  if (!p || !confirm('Undo ' + money(p.amount) + ' from ' + (p.parentName || 'this family') + '? The ' + (p.marks && p.marks.length ? 'months' : 'invoices') + ' it paid become unpaid again.')) return;
   try {
     await db.runTransaction(async t => {
       const snap = await t.get(payRef(id));
@@ -2375,7 +2392,14 @@ async function undoPayment(id) {
         t.update(invRef(inv.id), { paid: next.paid, payments: next.payments, status: next.status, updatedAt: ts() });
         if (inv.linkToken) t.set(linkRef(inv.linkToken), Object.assign(C.publicInvoiceDoc(next, S.settings), { updatedAt: ts() }), { merge: true });
       });
-      if (fSnap.exists && pay.credit > 0) t.update(famRef(pay.familyId), { credit: Math.max(0, C.round2((Number(fSnap.data().credit) || 0) - pay.credit)), updatedAt: ts() });
+      if (fSnap.exists) {
+        const fu = {};
+        if (pay.credit > 0) fu.credit = Math.max(0, C.round2((Number(fSnap.data().credit) || 0) - pay.credit));
+        // v1.14.0: months this payment marked paid (no invoice) are unpaid again.
+        const pm = fSnap.data().paidMonths || [];
+        if (C.normalizePaidMonths(pm).some(x => x.paymentId === id)) fu.paidMonths = C.withoutPaymentMarks(pm, id);
+        if (Object.keys(fu).length) t.update(famRef(pay.familyId), Object.assign(fu, { updatedAt: ts() }));
+      }
       t.delete(payRef(id));
     });
     toast('Payment undone', 'ok');
@@ -2499,7 +2523,8 @@ async function handleStatementFile(file) {
     credits.forEach(t => { const n = (seen.get(t.key) || 0) + 1; seen.set(t.key, n); if (n > 1) t.key = t.key + '-' + n; });
     setStep('match', 'doing');
     const openInv = S.invoices.filter(i => C.invoiceOutstanding(i) > 0);
-    let txs = C.matchTransactions(credits, S.families, openInv);
+    const planCtx = { today: today(), settings: S.settings, schedule: S.schedule, payments: S.payments };
+    let txs = C.matchTransactions(credits, S.families, openInv, { allInvoices: S.invoices, schedule: S.schedule, settings: S.settings, today: today() });
     txs.forEach(t => { t.dup = IX.payByKey.has(safeDocId(t.key)); });
     const matchedN = txs.filter(t => !t.dup && t.match.familyId).length;
     setStep('match', 'done', matchedN + ' of ' + txs.filter(t => !t.dup).length + ' matched');
@@ -2509,7 +2534,7 @@ async function handleStatementFile(file) {
     if (useAi && loose.length && S.families.length) {
       setStep('aimatch', 'doing', C.plural(loose.length, 'credit'));
       try {
-        const { roster, ids } = C.rosterForAi(S.families, S.invoices);
+        const { roster, ids } = C.rosterForAi(S.families, S.invoices, planCtx);
         const txIds = new Map();
         const brief = loose.slice(0, 120).map((t, i) => { txIds.set('T' + (i + 1), t.key); return { id: 'T' + (i + 1), date: t.date, amount: t.amount, payer: t.payer, reference: t.reference, description: String(t.description).slice(0, 200) }; });
         const json = C.parseAiJson(await askChatGpt(C.aiMatchPrompt(brief, roster), { system: 'You match bank credits to tuition families and return strict JSON.', maxOutputTokens: 6000 }));
@@ -2518,7 +2543,12 @@ async function handleStatementFile(file) {
         setStep('aimatch', 'done', txs.filter(t => t.match && t.match.how === 'ai').length + ' suggested or confirmed');
       } catch (e) { setStep('aimatch', 'fail', friendlyError(e)); }
     } else if (useAi) setStep('aimatch', 'done', 'nothing left to ask about');
-    txs.forEach(t => { t.familyId = t.match.familyId || ''; t.tick = !t.dup && C.autoTick(t, S.invoices); });
+    txs.forEach(t => { t.familyId = t.match.familyId || ''; });
+    // v1.14.0: which months each payment covers — first as if every match were
+    // applied (to decide the ticks), then again with the real ticks.
+    C.planStatement(txs, S.families, S.invoices, Object.assign({ all: true }, planCtx)).forEach((p, i) => { txs[i].plan = p; });
+    txs.forEach(t => { t.tick = !t.dup && C.autoTick(t, S.invoices); });
+    refreshPlans(txs);
     const ref = db.collection(COL.statements).doc();
     S.review.statementId = ref.id;
     S.review.txs = txs;
@@ -2527,7 +2557,7 @@ async function handleStatementFile(file) {
     S.review.to = txs.map(t => t.date).filter(Boolean).sort().pop() || '';
     ref.set({ fileName: file.name, uploadedAt: ts(), uploadedBy: S.user.email, aiUsed: S.review.aiUsed, from: S.review.from, to: S.review.to,
       summary: { credits: txs.length, matched: matchedN, applied: 0, duplicates: txs.filter(t => t.dup).length },
-      transactions: txs.slice(0, 600).map(t => ({ key: t.key, date: t.date, amount: t.amount, payer: t.payer, reference: t.reference, description: String(t.description).slice(0, 300), familyId: t.familyId, how: t.match.how || '', dup: !!t.dup, unverified: !!t.unverified })) })
+      transactions: txs.slice(0, 600).map(t => ({ key: t.key, date: t.date, amount: t.amount, payer: t.payer, reference: t.reference, description: String(t.description).slice(0, 300), familyId: t.familyId, how: t.match.how || '', dup: !!t.dup, unverified: !!t.unverified, months: t.plan ? t.plan.text : '' })) })
       .catch(e => console.warn('statement not stored', e));
     render();
   } catch (e) {
@@ -2537,6 +2567,19 @@ async function handleStatementFile(file) {
     S.review.stage = 'failed';
     render();
   }
+}
+// The months each credit on the review screen pays, given what is ticked.
+function refreshPlans(txs) {
+  const list = txs || (S.review && S.review.txs) || [];
+  C.planStatement(list, S.families, S.invoices, { today: today(), settings: S.settings, schedule: S.schedule, payments: S.payments }).forEach((p, i) => { list[i].plan = p; });
+}
+function planHtml(t) {
+  const p = t.plan;
+  if (!p || !p.items.length || (!p.several && !p.marks.length)) return '';
+  const tone = p.exact ? 'ok-t' : 'warn-t';
+  return '<div class="why plan"><span class="' + tone + '">' + (p.exact ? '🗓 Pays ' + C.plural(p.items.length, 'month') : '🗓 Pays') + ':</span> ' + esc(p.text)
+    + (p.exact ? ' ✓ adds up exactly' : '') + (p.credit > 0 ? ' · ' + money(p.credit) + ' kept as credit' : '')
+    + (p.aheadCount ? '<br><span class="small muted">Months ahead are marked paid and will not be invoiced.</span>' : '') + '</div>';
 }
 function reviewHtml() {
   const r = S.review;
@@ -2561,7 +2604,7 @@ function reviewHtml() {
       + '<div class="desc">' + (t.payer ? '<b>' + esc(t.payer) + '</b><br>' : '') + esc([t.reference, t.description].filter(Boolean).join(' · ').slice(0, 220)) + '</div>'
       + '<div class="to">' + famSelect(t, i)
       + (t.match.how ? '<div class="why"><span class="how ' + esc(t.match.how.replace('+', '-')) + '">' + esc(howLabel(t.match.how)) + '</span> ' + esc(t.match.why || '') + '</div>' : '')
-      + (f ? '<div class="why">' + (owe > 0 ? 'Owes ' + money(owe) + (fits ? ' ✓ exact' : (t.amount > owe ? ' — ' + money(t.amount - owe) + ' becomes credit' : ' — part payment')) : 'Owes nothing — kept as credit') + '</div>' : '')
+      + (f ? (planHtml(t) || '<div class="why">' + (owe > 0 ? 'Owes ' + money(owe) + (fits ? ' ✓ exact' : (t.amount > owe ? ' — ' + money(t.amount - owe) + ' becomes credit' : ' — part payment')) : 'Owes nothing — kept as credit') + '</div>') : '')
       + '</div></div>';
   };
   const groups = [
@@ -2592,7 +2635,7 @@ function reviewHtml() {
 async function applyReview() {
   if (!requireProtected()) return;
   const r = S.review;
-  const picked = r.txs.filter(t => t.tick && t.familyId && !t.dup);
+  const picked = r.txs.filter(t => t.tick && t.familyId && !t.dup).slice().sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
   const receipts = r.receipts !== false && S.settings.receipts;
   let count = 0, total = 0, skipped = 0, sentReceipts = 0; const errs = [];
   openModal({ type: 'progress', title: 'Recording payments…', done: 0, total: picked.length });
@@ -3033,6 +3076,7 @@ const ACT = {
       const sure = t.match.confidence === 'high' && t.match.how !== 'manual';
       if ((el.dataset.g === 'sure') === sure) t.tick = on;
     });
+    refreshPlans();
     render();
   },
   rvApply: applyReview,
@@ -3351,12 +3395,13 @@ const CHG = {
   prepAll(el) { S.modal.items.forEach(x => { x.pick = el.checked; }); renderModal(); },
   remPick(el) { S.modal.items[+el.dataset.i].pick = el.checked; renderModal(); },
   remAll(el) { S.modal.items.forEach(x => { x.pick = el.checked; }); renderModal(); },
-  rvTick(el) { S.review.txs[+el.dataset.i].tick = el.checked; render(); },
+  rvTick(el) { S.review.txs[+el.dataset.i].tick = el.checked; refreshPlans(); render(); },
   rvFam(el) {
     const t = S.review.txs[+el.dataset.i];
     t.familyId = el.value;
     if (el.value && el.value !== t.match.familyId) t.match = Object.assign({}, t.match, { how: 'manual', confidence: 'medium', why: 'Chosen by you', candidates: t.match.candidates });
     t.tick = !!el.value;
+    refreshPlans();
     render();
   },
   rvReceipts(el) { S.review.receipts = el.checked; },
