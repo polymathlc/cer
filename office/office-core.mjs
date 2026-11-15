@@ -40,7 +40,7 @@
         payment, last PayNow screenshot the parent sent).
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export const OFFICE_CORE_VERSION = '1.13.0';
+export const OFFICE_CORE_VERSION = '1.14.0';
 // The centre's logo for emails: a small copy of assets/branding/polymath-learning-centre.png,
 // served from the website so Gmail and other mail apps can show it (v1.13.0).
 export const EMAIL_LOGO_URL = 'https://polymathlc.com.sg/assets/branding/polymath-logo-email.png';
@@ -428,15 +428,17 @@ export function invoiceDocId(familyId, period) { return familyId + '_' + period;
 // AND on whole tokens; only codes that belong to a family count.
 export function findCodes(text, knownCodes) {
   const known = knownCodes instanceof Set ? knownCodes : new Set(knownCodes || []);
-  const raw = String(text || '').toUpperCase();
+  // "OCT-DEC26" is a range: keep the dash as the word TO before it is squeezed out.
+  const raw = String(text || '').toUpperCase().replace(/(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{2})?\s*[-–]\s*(?=JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)/g, '$1$2 TO ');
   const compact = raw.replace(/[^A-Z0-9]/g, '');
   const found = new Map();
   const add = (code, after) => {
     if (!known.has(code)) return;
     const pm = String(after || '').match(/^(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{2})/);
-    const period = pm ? periodFromShort(pm[1], pm[2]) : '';
+    const periods = periodsAfterCode(after);
+    const period = pm ? periodFromShort(pm[1], pm[2]) : (periods[0] || '');
     const prev = found.get(code);
-    if (!prev || (!prev.period && period)) found.set(code, { code, period });
+    if (!prev || (!prev.period && period) || (periods.length > (prev.periods || []).length)) found.set(code, { code, period, periods });
   };
   const withPrefix = new RegExp(REF_PREFIX + '(' + CODE_RE_SRC + ')', 'g');
   let m;
@@ -444,12 +446,56 @@ export function findCodes(text, knownCodes) {
   // A bare code as its own word (the bank kept the code but dropped "PLC").
   const tokens = raw.split(/[^A-Z0-9]+/);
   tokens.forEach((t, i) => {
-    if (t.length === CODE_LENGTH && isCode(t)) add(t, (tokens[i + 1] || '') + (tokens[i + 2] || ''));
+    if (t.length === CODE_LENGTH && isCode(t)) add(t, tokens.slice(i + 1, i + 12).join(''));
     // "PLCK7M2QX" glued, or "K7M2QXNOV26" glued on the other side.
     if (t.length > CODE_LENGTH && t.startsWith(REF_PREFIX)) add(t.slice(3, 3 + CODE_LENGTH), t.slice(3 + CODE_LENGTH));
     if (t.length === CODE_LENGTH + 5 && isCode(t.slice(0, CODE_LENGTH))) add(t.slice(0, CODE_LENGTH), t.slice(CODE_LENGTH));
   });
   return Array.from(found.values());
+}
+// v1.14.0 — the months a parent typed after the family code when one transfer
+// pays several of them: "OCT26NOV26", "OCT NOV 26", "OCTNOVDEC26",
+// "OCT TO DEC 26", "NOV26 DEC26 JAN27". `after` is the text that follows the
+// code with the spaces taken out. The list has to END with a two-digit year
+// (so a stray "MAY" in a bank name is never read as a month); a month without
+// its own year takes the year of the month after it, stepping back a year
+// when the months wrap ("NOV DEC JAN27" = Nov 2026, Dec 2026, Jan 2027).
+// "TO" (or "TILL"/"UNTIL") between two months fills in the months between.
+const MONTH_WORD_RE = /^(?:AND|N|TO|TILL|UNTIL|&)?(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{2})?/;
+export function periodsAfterCode(after) {
+  let rest = String(after || '').toUpperCase().replace(/[^A-Z0-9&]/g, '');
+  const parts = [];
+  for (let guard = 0; guard < 24 && rest; guard++) {
+    const m = rest.match(MONTH_WORD_RE);
+    if (!m) break;
+    const range = /^(TO|TILL|UNTIL)/.test(m[0]);
+    parts.push({ mon: monthIndex(m[1]), yy: m[2] || '', range });
+    rest = rest.slice(m[0].length);
+    if (m[2] && !MONTH_WORD_RE.test(rest)) break;
+  }
+  // Only the run up to the last month that carries a year counts.
+  let last = -1;
+  parts.forEach((p, i) => { if (p.yy) last = i; });
+  if (last < 0) return [];
+  const run = parts.slice(0, last + 1);
+  // Years, filled in from the right.
+  let year = 2000 + Number(run[run.length - 1].yy);
+  let nextMon = run[run.length - 1].mon;
+  for (let i = run.length - 1; i >= 0; i--) {
+    const p = run[i];
+    if (p.yy) year = 2000 + Number(p.yy);
+    else if (p.mon > nextMon) year -= 1;
+    p.period = year + '-' + String(p.mon + 1).padStart(2, '0');
+    nextMon = p.mon;
+  }
+  const out = [];
+  run.forEach((p, i) => {
+    if (p.range && i > 0) {
+      for (let q = addMonths(run[i - 1].period, 1), n = 0; q < p.period && n < 24; q = addMonths(q, 1), n++) out.push(q);
+    }
+    out.push(p.period);
+  });
+  return [...new Set(out)].filter(isPeriod).sort().slice(0, 24);
 }
 
 /* ─────────────────────────── 3. PayNow SGQR ───────────────────────────
@@ -1387,12 +1433,28 @@ export function cleanAiTransactions(json, sourceText, opts) {
 }
 // The roster ChatGPT matches against: short ids, names and what is owed. No
 // emails, phone numbers or addresses ever leave the browser.
-export function rosterForAi(families, invoices) {
+// v1.14.0: with ctx ({ schedule, settings, today }) each family also carries
+// one month of its fees and its unpaid months, so ChatGPT can see that $660 is
+// October + November–December + January, not a stranger's payment.
+export function rosterForAi(families, invoices, ctx) {
+  const c = ctx || null;
   const owing = new Map();
   (invoices || []).forEach(inv => {
     const out = invoiceOutstanding(inv);
     if (out > 0) { const a = owing.get(inv.familyId) || []; a.push(out); owing.set(inv.familyId, a); }
   });
+  const invByFam = new Map();
+  if (c) (invoices || []).forEach(inv => { const a = invByFam.get(inv.familyId) || []; a.push(inv); invByFam.set(inv.familyId, a); });
+  const monthsFor = f => {
+    if (!c) return null;
+    const k = planCandidates(f, invByFam.get(f.id) || [], c);
+    const tag = x => x.periodTo ? x.period + '..' + x.periodTo : x.period;
+    return {
+      monthlyFee: k.fee || 0,
+      unpaid: [...k.invoiceItems, ...k.monthItems].slice(0, 12).map(x => x.custom ? { invoice: String(x.label).slice(0, 40), amount: x.amount } : { month: tag(x), amount: x.amount, invoiced: x.kind === 'invoice' }),
+      nextMonths: k.ahead.slice(0, 6).map(tag)
+    };
+  };
   const ids = new Map();
   const roster = (families || []).map((f, i) => {
     const sid = 'F' + (i + 1);
@@ -1401,7 +1463,8 @@ export function rosterForAi(families, invoices) {
       id: sid, parent: f.parentName, code: f.code,
       students: (f.students || []).map(s => s.name),
       bankNames: (f.payerNames || []).slice(0, 5),
-      owes: (owing.get(f.id) || []).map(round2)
+      owes: (owing.get(f.id) || []).map(round2),
+      ...(monthsFor(f) || {})
     };
   });
   return { roster, ids };
@@ -1414,7 +1477,10 @@ export function aiMatchPrompt(credits, roster) {
     'Credits not matched yet (id, date, amount, payer, reference, description):',
     JSON.stringify(credits),
     'Match a credit to a family only when the evidence is good: the payer\'s name is the parent, the other parent (same surname as a student), or a name that bank has shown before; the reference contains part of the family\'s code; or the payer name plus an exact owed amount agree.',
-    'Reply with JSON only: {"matches":[{"tx":"T1","family":"F3","confidence":0.0,"why":"one short reason"}]}',
+    'Parents often pay SEVERAL MONTHS in one transfer: an unpaid earlier month plus this month, or months ahead. "unpaid" lists each family\'s unpaid months (YYYY-MM, or YYYY-MM..YYYY-MM for two months billed as one) with the amount due; "monthlyFee" is one month of fees; "nextMonths" are the months after this one not paid yet.',
+    'So an amount is ALSO good evidence when it equals the sum of some of the family\'s unpaid amounts, or that plus a whole number of monthly fees for the next months (e.g. 3 x 220 = 660). Months written in the reference or description ("OCT NOV", "Oct-Dec", "3 months", "Term 1") tell you which months were meant.',
+    'Reply with JSON only: {"matches":[{"tx":"T1","family":"F3","confidence":0.0,"months":["YYYY-MM"],"why":"one short reason"}]}',
+    'months: every month the credit pays for, oldest first, as YYYY-MM (for a pair billed as one, its first month). Only months from that family\'s "unpaid" or "nextMonths". Use [] when you cannot tell.',
     'confidence is 0 to 1. Leave a credit out entirely when you are not at least 0.5 sure. Use only ids from the lists above; never invent one.'
   ].join('\n');
 }
@@ -1438,9 +1504,26 @@ export function matchTransactions(transactions, families, invoices, opts) {
     if (out > 0) { const a = owing.get(inv.familyId) || []; a.push({ inv, out }); owing.set(inv.familyId, a); }
   });
   const totalOwed = id => round2((owing.get(id) || []).reduce((s, x) => s + x.out, 0));
-  const amountFits = (id, amount) => {
+  // v1.14.0: with o.allInvoices (and o.schedule/o.settings/o.today) an amount
+  // also fits when it pays several months exactly — see paymentPlan(). For the
+  // amount ALONE (step 4) only months owed count, never months ahead, or every
+  // family paying the same fee would "fit" a 2-month payment.
+  const planCtx = o.allInvoices ? { schedule: o.schedule, settings: o.settings, today: o.today } : null;
+  const invByFam = new Map();
+  if (planCtx) o.allInvoices.forEach(inv => { const a = invByFam.get(inv.familyId) || []; a.push(inv); invByFam.set(inv.familyId, a); });
+  const famById = new Map(fams.map(f => [f.id, f]));
+  const plans = new Map();
+  const planFor = (id, amount) => {
+    if (!planCtx || !famById.has(id)) return null;
+    const key = id + '|' + round2(amount);
+    if (!plans.has(key)) plans.set(key, paymentPlan(amount, famById.get(id), invByFam.get(id) || [], planCtx));
+    return plans.get(key);
+  };
+  const amountFits = (id, amount, owedOnly) => {
     const list = owing.get(id) || [];
-    return list.some(x => sameMoney(x.out, amount)) || sameMoney(totalOwed(id), amount);
+    if (list.some(x => sameMoney(x.out, amount)) || sameMoney(totalOwed(id), amount)) return true;
+    const p = planFor(id, amount);
+    return !!(p && p.exact && (!owedOnly || p.owedOnly));
   };
   const aliasIndex = [];
   fams.forEach(f => (f.payerNames || []).forEach(a => { if (a.length >= 4) aliasIndex.push({ alias: a, fam: f }); }));
@@ -1455,7 +1538,8 @@ export function matchTransactions(transactions, families, invoices, opts) {
     const famHits = [...new Set(hits.map(h => h.code))].map(c => byCode.get(c)).filter(Boolean);
     if (famHits.length === 1) {
       const h = hits.find(x => x.code === famHits[0].code);
-      tx.match = { familyId: famHits[0].id, how: 'reference', confidence: 'high', period: h.period || '', why: 'Reference ' + familyReference(h.code) + (h.period ? ' ' + periodShort(h.period) : '') + ' is in the bank line', candidates: [] };
+      const ps = h.periods && h.periods.length ? h.periods : (h.period ? [h.period] : []);
+      tx.match = { familyId: famHits[0].id, how: 'reference', confidence: 'high', period: h.period || '', periods: ps, why: 'Reference ' + familyReference(h.code) + (ps.length ? ' ' + ps.map(periodShort).join(' ') : '') + ' is in the bank line', candidates: [] };
       return tx;
     }
     // 2. A payer name this family's bank has shown before.
@@ -1484,17 +1568,26 @@ export function matchTransactions(transactions, families, invoices, opts) {
     if (top.length === 1) {
       const f = top[0].f;
       const fits = amountFits(f.id, tx.amount);
+      // Several months: say which; months AHEAD are for a person to confirm.
+      const list = owing.get(f.id) || [];
+      const single = list.some(x => sameMoney(x.out, tx.amount)) || sameMoney(totalOwed(f.id), tx.amount);
+      const plan = fits && !single ? planFor(f.id, tx.amount) : null;
+      const sure = fits && top[0].score === 3 && (!plan || plan.owedOnly);
       tx.match = {
-        familyId: f.id, how: fits ? 'name+amount' : 'name', confidence: fits && top[0].score === 3 ? 'high' : 'medium', period: '',
-        why: 'Name of ' + top[0].whose + (fits ? ', and the amount is what they owe' : ''), candidates: []
+        familyId: f.id, how: fits ? 'name+amount' : 'name', confidence: sure ? 'high' : 'medium', period: '',
+        ...(plan && plan.exact ? { periods: plan.periods } : {}),
+        why: 'Name of ' + top[0].whose + (fits ? (plan && plan.several ? ', and the amount pays ' + plan.text : ', and the amount is what they owe') : ''), candidates: []
       };
       return tx;
     }
     // 4. Exactly one family owes exactly this amount.
-    const byAmount = fams.filter(f => amountFits(f.id, tx.amount));
+    const byAmount = fams.filter(f => amountFits(f.id, tx.amount, true));
     const pool = top.length > 1 ? top.map(x => x.f).filter(f => byAmount.includes(f)) : byAmount;
     if (pool.length === 1) {
-      tx.match = { familyId: pool[0].id, how: 'amount', confidence: top.length > 1 ? 'medium' : 'low', period: '', why: 'Only family that owes exactly ' + money(tx.amount), candidates: [] };
+      const plan = planFor(pool[0].id, tx.amount);
+      const several = plan && plan.exact && plan.several;
+      tx.match = { familyId: pool[0].id, how: 'amount', confidence: top.length > 1 ? 'medium' : 'low', period: '', ...(several ? { periods: plan.periods } : {}),
+        why: several ? 'Only family whose unpaid months add up to ' + money(tx.amount) + ' (' + plan.text + ')' : 'Only family that owes exactly ' + money(tx.amount), candidates: [] };
       return tx;
     }
     tx.match = { familyId: '', how: '', confidence: '', period: '', why: '', candidates: (top.length ? top.map(x => x.f.id) : byAmount.map(f => f.id)).slice(0, 6) };
@@ -1514,8 +1607,9 @@ export function applyAiMatches(transactions, aiJson, idMaps) {
     const fid = famIds.get(String(m && m.family));
     const conf = Number(m && m.confidence);
     if (!key || !fid || !(conf >= 0.5)) return;
+    const months = (Array.isArray(m.months) ? m.months : []).map(x => String(x || '').slice(0, 7)).filter(isPeriod);
     const prev = byTx.get(key);
-    if (!prev || conf > prev.conf) byTx.set(key, { fid, conf, why: String(m.why || '').slice(0, 140) });
+    if (!prev || conf > prev.conf) byTx.set(key, { fid, conf, why: String(m.why || '').slice(0, 140), periods: [...new Set(months)].sort().slice(0, 24) });
   });
   return transactions.map(tx => {
     const m = tx.match || {};
@@ -1525,7 +1619,8 @@ export function applyAiMatches(transactions, aiJson, idMaps) {
     const agrees = !!m.familyId && m.familyId === hit.fid;
     const candidates = [m.familyId, ...(m.candidates || [])].filter(Boolean).filter((id, i, a) => id !== hit.fid && a.indexOf(id) === i).slice(0, 6);
     return Object.assign({}, tx, { match: {
-      familyId: hit.fid, how: 'ai', confidence: hit.conf >= 0.85 ? 'medium' : 'low', aiConfidence: hit.conf, period: m.period || '',
+      familyId: hit.fid, how: 'ai', confidence: hit.conf >= 0.85 ? 'medium' : 'low', aiConfidence: hit.conf, period: m.period || hit.periods[0] || '',
+      periods: hit.periods.length ? hit.periods : (agrees ? (m.periods || []) : []),
       why: 'ChatGPT' + (agrees ? ' agrees' : '') + ': ' + (hit.why || 'likely match') + (agrees && m.why ? ' · ' + m.why : ''), candidates
     } });
   });
@@ -1533,11 +1628,15 @@ export function applyAiMatches(transactions, aiJson, idMaps) {
 // Whether the review screen ticks a credit for applying. Certain matches are
 // ticked; a sure ChatGPT match with the exact amount owed is ticked; an
 // unverified amount (not printed in the statement) never is.
+// v1.14.0: a sure ChatGPT match is also ticked when the amount pays several
+// months exactly (tx.plan, from paymentPlan), as long as no month is AHEAD —
+// paying ahead is for a person to confirm.
 export function autoTick(tx, invoices) {
   const m = tx && tx.match;
   if (!m || !m.familyId || tx.unverified) return false;
   if (m.confidence === 'high') return true;
   if (m.how === 'ai' && (m.aiConfidence || 0) >= 0.85) {
+    if (tx.plan && tx.plan.exact && tx.plan.owedOnly && tx.familyId === m.familyId) return true;
     return (invoices || []).some(inv => inv.familyId === m.familyId && sameMoney(invoiceOutstanding(inv), tx.amount));
   }
   return false;
@@ -1545,10 +1644,17 @@ export function autoTick(tx, invoices) {
 // How a payment is spread over a family's unpaid invoices: the month named in
 // the reference first, then the OLDEST unpaid month, and anything left over is
 // credit that the next invoice uses up.
+// `preferPeriod` may also be a list (a reference naming several months).
 export function allocatePayment(amount, familyInvoices, preferPeriod) {
   let left = round2(amount);
+  const prefer = (Array.isArray(preferPeriod) ? preferPeriod : [preferPeriod]).filter(isPeriod);
+  const rank = inv => { const i = prefer.indexOf(inv.period); return i < 0 && inv.periodTo ? prefer.indexOf(inv.periodTo) : i; };
   const open = (familyInvoices || []).filter(inv => invoiceOutstanding(inv) > 0)
-    .sort((a, b) => (a.period === preferPeriod ? -1 : b.period === preferPeriod ? 1 : String(a.period).localeCompare(String(b.period))));
+    .sort((a, b) => {
+      const ra = rank(a), rb = rank(b);
+      if (ra >= 0 || rb >= 0) { if (ra < 0) return 1; if (rb < 0) return -1; if (ra !== rb) return ra - rb; }
+      return String(a.period).localeCompare(String(b.period));
+    });
   const allocations = [];
   open.forEach(inv => {
     if (left <= 0) return;
@@ -1576,6 +1682,214 @@ export function payerAliasFor(tx) {
   if (p && p.length >= 4 && nameTokens(p).length >= 1 && !/^(paynow|transfer|fast|giro|ibg|inward|payment)/.test(p)) return p;
   return '';
 }
+/* ─────────── 6b. One payment for several months (v1.14.0) ───────────
+   Parents often pay two or three months in one PayNow: an unpaid October plus
+   November, or the rest of the term ahead. paymentPlan() works out WHICH months
+   a payment covers, so the review screen can say "Covers Oct, Nov–Dec 2026"
+   and Apply records every one of them — not one month and a pile of credit.
+
+   The months it can use, in this order:
+     1. the family's unpaid invoices, oldest first (custom invoices included);
+     2. due months with NO invoice yet (an unpaid October nobody invoiced),
+        at one month of the family's fees (familyMonthlyAmount);
+     3. months AHEAD — after this month, not invoiced yet, the family active
+        then and not on a package — also at one month of fees (up to 12).
+   A combined pair (November–December 2026) is one month here, as everywhere.
+
+   It looks for an EXACT fit, in this order:
+     'named'  — the months the parent typed after the code ("PLC K7M2QX OCT26
+                NOV26") or that ChatGPT read, when they add up to the amount;
+     'oldest' — the months above, taken in order, until they add up;
+     'some'   — any few of the unpaid ones (plus months ahead) that add up,
+                preferring the fewest months ahead and the oldest months.
+   With no exact fit the old rule stands: invoices, the month in the reference
+   first and then the oldest, and anything left over is credit — except that a
+   left-over that pays one or more WHOLE months marks those months too.
+
+   Invoices get the money as before; months without an invoice get a mark in
+   the family's payment record (paidMonths, with the payment's id, so undoing
+   the payment takes it off again). A month marked this way is not invoiced by
+   Prepare or by the autopilot (monthPrepaid). */
+export const PLAN_AHEAD_MAX = 12;
+const PLAN_SUBSET_MAX = 12;
+function planItemShort(x) {
+  if (x.kind === 'invoice' && x.custom) return x.label;
+  return periodRangeShort(x.period, x.periodTo) + (x.kind === 'ahead' ? ' (ahead)' : '');
+}
+// "Oct 2026 + Nov–Dec 2026 + Jan 2027 (ahead)"
+export function planText(items) {
+  return (items || []).map(planItemShort).filter(Boolean).join(' + ');
+}
+// The months (and custom invoices) one payment can go to, see above.
+export function planCandidates(family, invoices, ctx) {
+  const c = ctx || {};
+  const st = normalizeSettings(c.settings);
+  const f = normalizeFamily(family);
+  const today = isDayKey(c.today) ? c.today : sgDayKey();
+  const thisMonth = today.slice(0, 7);
+  const invs = (invoices || []).filter(i => i && i.familyId === f.id && i.status !== 'void');
+  const fee = c.schedule ? familyMonthlyAmount(f, c.schedule, st) : feeNum(c.monthlyFee);
+  const rec = familyPaymentRecord(f, invs, c.payments || [], { today, settings: st });
+  const invoiceItems = invs.filter(i => invoiceOutstanding(i) > 0).map(inv => {
+    const period = isPeriod(inv.period) ? inv.period : isDayKey(inv.issueDate) ? inv.issueDate.slice(0, 7) : thisMonth;
+    const j = !inv.custom && isPeriod(inv.period) ? jointMonth(inv.period, st) : null;
+    return {
+      kind: 'invoice', invoiceId: inv.id, custom: !!inv.custom, period,
+      periodTo: inv.periodTo || (j && j.lead === inv.period ? j.covered : ''),
+      amount: invoiceOutstanding(inv), label: inv.custom ? invoiceTitle(inv, st) : billingPeriodLabel(inv.period, st)
+    };
+  }).sort((a, b) => a.period.localeCompare(b.period) || Number(a.custom) - Number(b.custom));
+  const monthItems = fee > 0 ? rec.unpaid.filter(u => u.key === 'none' && !u.invoiceId).map(u => ({
+    kind: 'month', invoiceId: '', custom: false, period: u.period, periodTo: u.periodTo || '', amount: fee, label: billingPeriodLabel(u.period, st)
+  })) : [];
+  const taken = new Set();
+  [...invoiceItems, ...monthItems].forEach(x => { if (!x.custom) { taken.add(x.period); if (x.periodTo) taken.add(x.periodTo); } });
+  const recBy = new Map(rec.months.map(m => [m.period, m]));
+  const ahead = [];
+  if (fee > 0 && activeStudents(f).length) {
+    for (let p = addMonths(thisMonth, 1), n = 0; ahead.length < PLAN_AHEAD_MAX && n < 36; p = addMonths(p, 1), n++) {
+      if (taken.has(p) || isCoveredMonth(p, st)) continue;
+      const m = recBy.get(p);
+      if (m && m.key !== 'none') continue;            // invoiced, paid, marked, package, paused or gone
+      if (familyStateIn(f, p) !== 'active' || packageCovers(f, p)) continue;
+      const j = jointMonth(p, st);
+      ahead.push({ kind: 'ahead', invoiceId: '', custom: false, period: p, periodTo: j && j.lead === p ? j.covered : '', amount: fee, label: billingPeriodLabel(p, st) });
+    }
+  }
+  return { fee, invoiceItems, monthItems, ahead, thisMonth };
+}
+export function paymentPlan(amount, family, invoices, ctx) {
+  const c = ctx || {};
+  const amt = round2(amount);
+  const cand = planCandidates(family, invoices, c);
+  const { fee, invoiceItems, monthItems, ahead } = cand;
+  const owed = [...invoiceItems, ...monthItems.slice().sort((a, b) => a.period.localeCompare(b.period))];
+  const all = [...owed, ...ahead];
+  const sum = list => round2(list.reduce((n, x) => n + x.amount, 0));
+  const want = [...new Set((c.periods || []).filter(isPeriod))];
+  const finish = (chosen, how, exact, credit) => {
+    const allocations = chosen.filter(x => x.kind === 'invoice').map(x => ({ invoiceId: x.invoiceId, period: x.period, amount: x.amount }));
+    const marks = chosen.filter(x => x.kind !== 'invoice').map(x => ({ period: x.period, periodTo: x.periodTo, amount: x.amount, ahead: x.kind === 'ahead', label: x.label }));
+    const items = chosen.map(x => Object.assign({}, x)).sort((a, b) => a.period.localeCompare(b.period) || Number(a.custom) - Number(b.custom));
+    const months = items.filter(x => !x.custom);
+    return {
+      exact, how, amount: amt, fee, items, allocations, marks, credit: round2(Math.max(0, credit || 0)),
+      periods: months.map(x => x.period), monthCount: months.length,
+      aheadCount: items.filter(x => x.kind === 'ahead').length, owedOnly: !items.some(x => x.kind === 'ahead'),
+      several: items.length > 1, text: planText(items)
+    };
+  };
+  if (!(amt > 0)) return finish([], '', false, 0);
+  // 1. The months the parent (or ChatGPT) named.
+  if (want.length) {
+    const hit = all.filter(x => !x.custom && (want.includes(x.period) || (x.periodTo && want.includes(x.periodTo))));
+    if (hit.length && sameMoney(sum(hit), amt)) return finish(hit, 'named', true, 0);
+  }
+  // 2. Oldest first: invoices, then months with no invoice, then months ahead.
+  let run = 0;
+  for (let i = 0; i < all.length; i++) {
+    run = round2(run + all[i].amount);
+    if (sameMoney(run, amt)) return finish(all.slice(0, i + 1), 'oldest', true, 0);
+    if (run > amt) break;
+  }
+  // 3. Any few unpaid ones, plus months ahead, that add up exactly.
+  if (owed.length && owed.length <= PLAN_SUBSET_MAX) {
+    let best = null;
+    const n = owed.length;
+    for (let mask = 1; mask < (1 << n); mask++) {
+      const pick = owed.filter((_, i) => mask & (1 << i));
+      const base = sum(pick);
+      if (base > amt + 0.005) continue;
+      for (let k = 0; k <= ahead.length; k++) {
+        const total = round2(base + sum(ahead.slice(0, k)));
+        if (total > amt + 0.005) break;
+        if (!sameMoney(total, amt)) continue;
+        // Fewest months ahead, then the oldest months (smallest index sum).
+        const score = k * 1000 + owed.reduce((s, _, i) => s + (mask & (1 << i) ? i : 0), 0);
+        if (!best || score < best.score) best = { score, chosen: [...pick, ...ahead.slice(0, k)] };
+        break;
+      }
+    }
+    if (best) return finish(best.chosen, 'some', true, 0);
+  }
+  // 4. No exact fit: the invoices as before, then whole months, then credit.
+  const opened = (invoices || []).filter(i => i && i.familyId === (family && family.id) && i.status !== 'void' && invoiceOutstanding(i) > 0);
+  const prefer = want.length ? want : (isPeriod(c.preferPeriod) ? [c.preferPeriod] : []);
+  const a = allocatePayment(amt, opened, prefer);
+  const chosen = a.allocations.map(al => {
+    const it = invoiceItems.find(x => x.invoiceId === al.invoiceId);
+    return Object.assign({}, it || { kind: 'invoice', invoiceId: al.invoiceId, period: al.period, periodTo: '', custom: false, label: periodLabel(al.period) }, { amount: al.amount });
+  });
+  let left = a.credit;
+  if (fee > 0 && left >= fee - 0.005) {
+    const extra = [...monthItems.slice().sort((x, y) => x.period.localeCompare(y.period)), ...ahead];
+    for (const x of extra) {
+      if (left < fee - 0.005) break;
+      chosen.push(x);
+      left = round2(left - fee);
+    }
+  }
+  return finish(chosen, chosen.length ? 'partly' : '', false, left);
+}
+// The plan for every credit on a statement, in date order, each one seeing the
+// months the credits before it already paid (only TICKED credits count as paid,
+// unless ctx.all). Returns one plan (or null) per credit, in the same order.
+export function planStatement(txs, families, invoices, ctx) {
+  const c = ctx || {};
+  let invs = (invoices || []).map(i => Object.assign({}, i));
+  const fams = new Map((families || []).map(f => [f.id, Object.assign({}, f)]));
+  const plans = (txs || []).map(() => null);
+  const order = (txs || []).map((t, i) => [t, i])
+    .filter(([t]) => t && t.familyId && !t.dup && fams.has(t.familyId))
+    .sort((a, b) => String(a[0].date || '').localeCompare(String(b[0].date || '')) || a[1] - b[1]);
+  order.forEach(([t, i]) => {
+    const f = fams.get(t.familyId);
+    const m = t.match || {};
+    const periods = m.familyId === t.familyId ? (m.periods && m.periods.length ? m.periods : (m.period ? [m.period] : [])) : [];
+    const plan = paymentPlan(t.amount, f, invs, Object.assign({}, c, { periods }));
+    plans[i] = plan;
+    if (!(c.all || t.tick)) return;
+    invs = invs.map(inv => {
+      const al = plan.allocations.find(x => x.invoiceId === inv.id);
+      return al ? invoiceWithPayment(inv, al.amount, { paymentId: 'plan-' + i, amount: al.amount, date: t.date || '' }) : inv;
+    });
+    if (plan.marks.length) {
+      f.paidMonths = normalizePaidMonths([...(f.paidMonths || []), ...plan.marks.map(mk => ({ period: mk.period, amount: mk.amount, date: isDayKey(t.date) ? t.date : '', paymentId: 'plan-' + i }))]);
+    }
+    if (plan.credit > 0) f.credit = round2((Number(f.credit) || 0) + plan.credit);
+  });
+  return plans;
+}
+// The marks a payment leaves in the family's payment record.
+export function planMarks(plan, entry) {
+  const e = entry || {};
+  return ((plan && plan.marks) || []).map(mk => ({
+    period: mk.period, date: isDayKey(e.date) ? e.date : '', amount: mk.amount,
+    note: (mk.ahead ? 'Paid ahead' : 'Paid') + (e.amount ? ' with ' + money(e.amount) + (isDayKey(e.date) ? ' on ' + prettyDateShort(e.date) : '') : '')
+      + (e.reference ? ' · ' + String(e.reference).slice(0, 60) : ''),
+    by: String(e.by || 'bank').slice(0, 120), paymentId: String(e.paymentId || '')
+  }));
+}
+// The family's paidMonths with a payment's marks added, or taken off again.
+export function withPlanMarks(paidMonths, marks) {
+  const have = new Set(normalizePaidMonths(paidMonths).map(p => p.period));
+  return normalizePaidMonths([...normalizePaidMonths(paidMonths), ...(marks || []).filter(m => !have.has(m.period))]);
+}
+export function withoutPaymentMarks(paidMonths, paymentId) {
+  return normalizePaidMonths(paidMonths).filter(p => !(paymentId && p.paymentId === paymentId));
+}
+// A month already paid by a bank payment that covered it (so nobody invoices it).
+export function monthPrepaid(family, period, settings) {
+  if (!isPeriod(period)) return false;
+  const st = normalizeSettings(settings);
+  const lead = billingPeriodOf(period, st);
+  return normalizePaidMonths(family && family.paidMonths).some(p => p.paymentId && (p.period === period || billingPeriodOf(p.period, st) === lead));
+}
+// What the receipt says for each month a payment covered.
+export function planReceiptLines(plan) {
+  return ((plan && plan.marks) || []).map(mk => ({ period: mk.period, amount: mk.amount, left: 0, title: (mk.label || billingPeriodLabel(mk.period)) + ' fees' + (mk.ahead ? ' (paid ahead)' : '') }));
+}
+
 // Families that still owe after a statement has been applied, for the reminder button.
 export function stillOwing(invoices, todayKey, opts) {
   const o = opts || {};
@@ -2241,7 +2555,10 @@ export function normalizePaidMonths(list) {
     if (!isPeriod(e.period)) return;
     seen.set(e.period, {
       period: e.period, date: isDayKey(e.date) ? e.date : '', amount: feeNum(e.amount) || '',
-      note: String(e.note || '').trim().slice(0, 200), by: String(e.by || '').slice(0, 120)
+      note: String(e.note || '').trim().slice(0, 200), by: String(e.by || '').slice(0, 120),
+      // v1.14.0: a month paid by a bank payment that covered several months
+      // carries that payment's id, so undoing the payment takes the mark off.
+      ...(e.paymentId ? { paymentId: String(e.paymentId).slice(0, 160) } : {})
     });
   });
   return [...seen.values()].sort((a, b) => a.period.localeCompare(b.period));
@@ -2366,7 +2683,8 @@ export function familyPaymentRecord(family, invoices, payments, opts) {
     const j = joint(p);
     months.push({
       period: p, label: monthShort(p), year: p.slice(0, 4), key: s.key,
-      stateLabel: meta.label + (j ? ' · ' + periodRangeShort(j.lead, j.covered) + ' paid as one' : ''), tone: meta.tone, icon: meta.icon,
+      stateLabel: (s.key === 'hand' && s.hand && s.hand.paymentId ? 'Paid (one payment for several months)' : meta.label) + (j ? ' · ' + periodRangeShort(j.lead, j.covered) + ' paid as one' : ''), tone: meta.tone, icon: meta.icon,
+      byPayment: !!(s.hand && s.hand.paymentId),
       joint: j ? (j.lead === p ? 'lead' : 'covered') : '', jointWith: j ? (j.lead === p ? j.covered : j.lead) : '',
       viaLine: !!(s.inv && !(monthly.get(p) === s.inv)),
       invoiceId: s.inv ? s.inv.id : '', total: s.inv ? round2(s.inv.total) : 0, paid: s.inv ? round2(s.inv.paid) : 0,

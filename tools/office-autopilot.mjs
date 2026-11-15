@@ -75,7 +75,8 @@ export async function runAutopilot({ db, FieldValue, now = Date.now(), dryRun = 
   const period = plan.period;
   const famSnap = await db.collection(COL.families).get();
   const families = famSnap.docs.map(d => C.normalizeFamily(Object.assign({}, d.data(), { id: d.id })));
-  const billable = families.filter(f => C.familyIsBillable(f, period));
+  // A month already paid by one payment for several months (v1.14.0) is not invoiced.
+  const billable = families.filter(f => C.familyIsBillable(f, period) && !C.monthPrepaid(f, period, settings));
   const created = [], skipped = [], issues = [];
   for (const fam of billable) {
     const ref = db.collection(COL.invoices).doc(C.invoiceDocId(fam.id, period));

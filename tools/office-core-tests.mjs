@@ -571,7 +571,7 @@ test('a custom invoice: its own tag, number and reference, and the family code w
   assert.equal(C.customInvoiceReference('AB3CD', ''), 'PLC AB3CD');
   assert.equal(C.customInvoiceReference('AB3CD', 'K7M2QX'), 'PLC K7M2QX AB3CD');
   const found = C.findCodes('OTHR PLC K7M2QX AB3CD', ['K7M2QX']);
-  assert.deepEqual(found, [{ code: 'K7M2QX', period: '' }], 'a payment is matched to the family, not pulled to a month');
+  assert.deepEqual(found, [{ code: 'K7M2QX', period: '', periods: [] }], 'a payment is matched to the family, not pulled to a month');
   const taken = new Set([tag]);
   let call = 0;
   const stepping = n => Array.from({ length: n }, (_, i) => [0, 26, 1, 27, 2][i % 5] + (call++ >= n ? 3 : 0));
@@ -1478,4 +1478,173 @@ test('every office email shows the Polymath logo and goes out from admin@polymat
   const doc = C.officeMail(['p@x.com'], mails[0], { kind: 'invoice' }, {});
   assert.equal(doc.from, 'Polymath Learning Centre <admin@polymathlc.com.sg>');
   assert.equal(doc.replyTo, 'admin@polymathlc.com.sg');
+});
+
+/* ───────── one payment for several months (v1.14.0) ───────── */
+// Kok paid September by hand; October was never invoiced; the November
+// invoice (November–December 2026, paid as one) is open. $220 a month.
+const MM_CTX = { today: '2026-11-20', settings: {}, schedule: REC_SCHEDULE };
+const MM_FAM = { id: 'k', code: 'K7M2QX', parentName: 'Kok Mei Ling', status: 'active', paidMonths: ['2026-09'], payerNames: [],
+  students: [{ id: 'k1', name: 'Kai Kok', status: 'active', classes: [{ slotId: 'FRI-2', mode: 'Physical' }] }] };
+const mmNov = () => Object.assign(C.buildInvoice(MM_FAM, '2026-11', { schedule: REC_SCHEDULE, settings: {}, today: '2026-11-01' }), { status: 'sent', sentAt: 1 });
+
+test('months typed after the code are all read: lists, ranges and wrapped years', () => {
+  assert.deepEqual(C.periodsAfterCode('OCT26NOV26'), ['2026-10', '2026-11']);
+  assert.deepEqual(C.periodsAfterCode('OCTNOV26'), ['2026-10', '2026-11']);
+  assert.deepEqual(C.periodsAfterCode('NOVDECJAN27'), ['2026-11', '2026-12', '2027-01']);
+  assert.deepEqual(C.periodsAfterCode('OCTTODEC26'), ['2026-10', '2026-11', '2026-12']);
+  assert.deepEqual(C.periodsAfterCode('MAYBANK'), [], 'a month word with no year after it is not trusted');
+  assert.deepEqual(C.periodsAfterCode('NOV26TANAHKOW'), ['2026-11']);
+  const k = new Set(['K7M2QX']);
+  assert.deepEqual(C.findCodes('PLC K7M2QX OCT-DEC26', k)[0].periods, ['2026-10', '2026-11', '2026-12']);
+  assert.deepEqual(C.findCodes('PAYNOW OTHR PLC K7M2QX OCT26 NOV26 FROM KOK', k)[0].periods, ['2026-10', '2026-11']);
+  assert.deepEqual(C.findCodes('PLCK7M2QXNOV26DEC26JAN27', k)[0].periods, ['2026-11', '2026-12', '2027-01']);
+  assert.equal(C.findCodes('PLC K7M2QX OCT26 NOV26', k)[0].period, '2026-10', 'the first month is still `period`');
+});
+
+test('a payment for several months is split over them: invoices, months with no invoice, months ahead', () => {
+  const nov = mmNov();
+  assert.equal(nov.total, 220);
+  const cand = C.planCandidates(MM_FAM, [nov], MM_CTX);
+  assert.equal(cand.fee, 220);
+  assert.deepEqual(cand.invoiceItems.map(x => [x.period, x.periodTo]), [['2026-11', '2026-12']]);
+  assert.deepEqual(cand.monthItems.map(x => x.period), ['2026-10'], 'October was never invoiced');
+  assert.equal(cand.ahead[0].period, '2027-01', 'December is paid with November, so the next month ahead is January');
+  // One month: the invoice they were sent, as before.
+  let p = C.paymentPlan(220, MM_FAM, [nov], MM_CTX);
+  assert.ok(p.exact); assert.equal(p.how, 'oldest');
+  assert.deepEqual(p.allocations, [{ invoiceId: nov.id, period: '2026-11', amount: 220 }]);
+  assert.deepEqual(p.marks, []); assert.ok(!p.several);
+  // Two months: the November invoice AND the unpaid October.
+  p = C.paymentPlan(440, MM_FAM, [nov], MM_CTX);
+  assert.ok(p.exact && p.owedOnly && p.several);
+  assert.deepEqual(p.allocations.map(a => a.period), ['2026-11']);
+  assert.deepEqual(p.marks.map(m => [m.period, m.amount, m.ahead]), [['2026-10', 220, false]]);
+  assert.equal(p.text, 'Oct 2026 + Nov–Dec 2026');
+  assert.equal(p.credit, 0);
+  // Three: plus January ahead.
+  p = C.paymentPlan(660, MM_FAM, [nov], MM_CTX);
+  assert.ok(p.exact && !p.owedOnly);
+  assert.deepEqual(p.periods, ['2026-10', '2026-11', '2027-01']);
+  assert.equal(p.aheadCount, 1);
+  assert.equal(p.text, 'Oct 2026 + Nov–Dec 2026 + Jan 2027 (ahead)');
+  // The months the parent named win when they add up.
+  p = C.paymentPlan(440, MM_FAM, [nov], Object.assign({ periods: ['2026-11', '2027-01'] }, MM_CTX));
+  assert.equal(p.how, 'named');
+  assert.deepEqual(p.periods, ['2026-11', '2027-01'], 'November and January, October left unpaid as typed');
+  // …and are ignored when they do not.
+  p = C.paymentPlan(440, MM_FAM, [nov], Object.assign({ periods: ['2027-01'] }, MM_CTX));
+  assert.equal(p.how, 'oldest');
+  // No exact fit: the invoice, then whole months, then credit.
+  p = C.paymentPlan(500, MM_FAM, [nov], MM_CTX);
+  assert.ok(!p.exact);
+  assert.deepEqual(p.allocations.map(a => a.amount), [220]);
+  assert.deepEqual(p.marks.map(m => m.period), ['2026-10']);
+  assert.equal(p.credit, 60);
+  // Less than a month: a part payment, as before.
+  p = C.paymentPlan(100, MM_FAM, [nov], MM_CTX);
+  assert.ok(!p.exact); assert.deepEqual(p.allocations.map(a => a.amount), [100]); assert.equal(p.credit, 0);
+});
+
+test('some of the unpaid months can be skipped when only they add up (a custom invoice left for later)', () => {
+  const nov = mmNov();
+  const books = { id: 'custom_BK2', custom: true, familyId: 'k', title: 'Assessment books', period: '2026-10', issueDate: '2026-10-10', total: 35, paid: 0, status: 'sent', sentAt: 1 };
+  const fam = Object.assign({}, MM_FAM, { paidMonths: ['2026-09', '2026-10'] });
+  const p = C.paymentPlan(440, fam, [nov, books], MM_CTX);
+  assert.ok(p.exact); assert.equal(p.how, 'some');
+  assert.deepEqual(p.periods, ['2026-11', '2027-01'], 'November plus January ahead; the $35 books invoice stays open');
+  assert.ok(!p.allocations.some(a => a.invoiceId === 'custom_BK2'));
+  const q = C.paymentPlan(255, fam, [nov, books], MM_CTX);
+  assert.ok(q.exact && q.owedOnly); assert.equal(q.text, 'Assessment books + Nov–Dec 2026');
+});
+
+test('matching knows a payment can cover several months; ChatGPT is told and its months are kept', () => {
+  const nov = mmNov();
+  const other = { id: 'z', code: 'AB3CD4', parentName: 'Zara Lim', status: 'active', paidMonths: ['2026-09', '2026-10'],
+    students: [{ id: 'z1', name: 'Zed Lim', status: 'active', classes: [{ slotId: 'FRI-2', mode: 'Physical' }] }] };
+  const zNov = Object.assign(C.buildInvoice(other, '2026-11', { schedule: REC_SCHEDULE, settings: {}, today: '2026-11-01' }), { status: 'sent', sentAt: 1 });
+  const invs = [nov, zNov];
+  const opts = { allInvoices: invs, schedule: REC_SCHEDULE, settings: {}, today: '2026-11-20' };
+  const txs = [
+    { key: 'r', date: '2026-11-18', amount: 440, description: 'PAYNOW OTHR PLC K7M2QX OCT26 NOV26', payer: 'SOMEONE' },
+    { key: 'n', date: '2026-11-18', amount: 440, description: 'PAYNOW TRANSFER', payer: 'KOK MEI LING' },
+    { key: 'a', date: '2026-11-18', amount: 660, description: 'PAYNOW TRANSFER', payer: 'KOK MEI LING' },
+    { key: 'x', date: '2026-11-18', amount: 440, description: 'PAYNOW TRANSFER', payer: 'MR X' }
+  ];
+  const out = C.matchTransactions(txs, [MM_FAM, other], invs, opts);
+  const m = k => out.find(t => t.key === k).match;
+  assert.deepEqual([m('r').how, m('r').periods], ['reference', ['2026-10', '2026-11']]);
+  assert.match(m('r').why, /OCT26 NOV26/);
+  assert.deepEqual([m('n').familyId, m('n').how, m('n').confidence], ['k', 'name+amount', 'high'], 'name + two owed months is certain');
+  assert.match(m('n').why, /pays Oct 2026 \+ Nov–Dec 2026/);
+  assert.deepEqual([m('a').how, m('a').confidence], ['name+amount', 'medium'], 'a month ahead is for a person to confirm');
+  assert.deepEqual([m('x').familyId, m('x').how], ['k', 'amount'], 'only Kok owes two months adding up to $440 (Zara owes one)');
+  assert.deepEqual(m('x').periods, ['2026-10', '2026-11']);
+  // Without the extra context nothing changes from before.
+  assert.equal(C.matchTransactions([txs[3]], [MM_FAM, other], invs)[0].match.familyId, '');
+
+  // ChatGPT sees one month's fees and the unpaid months, and is asked which months.
+  const { roster, ids } = C.rosterForAi([MM_FAM, other], invs, { schedule: REC_SCHEDULE, settings: {}, today: '2026-11-20' });
+  assert.equal(roster[0].monthlyFee, 220);
+  assert.deepEqual(roster[0].unpaid, [{ month: '2026-11..2026-12', amount: 220, invoiced: true }, { month: '2026-10', amount: 220, invoiced: false }]);
+  assert.equal(roster[0].nextMonths[0], '2027-01');
+  assert.ok(!('email' in roster[0]) && !('whatsapp' in roster[0]), 'no contact details leave the browser');
+  const prompt = C.aiMatchPrompt([], roster);
+  assert.match(prompt, /SEVERAL MONTHS/); assert.match(prompt, /"months":\["YYYY-MM"\]/);
+  // Without ctx the roster is as before.
+  assert.ok(!('monthlyFee' in C.rosterForAi([MM_FAM], invs).roster[0]));
+
+  const loose = [{ key: 'q', date: '2026-11-18', amount: 440, payer: 'K M L', match: { familyId: '' } }];
+  const res = C.applyAiMatches(loose, { matches: [{ tx: 'T1', family: 'F1', confidence: 0.9, months: ['2026-10', '2026-11', 'junk', '2026-13'], why: 'initials, two months' }] },
+    { families: ids, transactions: new Map([['T1', 'q']]) });
+  assert.deepEqual([res[0].match.familyId, res[0].match.periods], ['k', ['2026-10', '2026-11']], 'only real months are kept');
+  const t = Object.assign({}, res[0], { familyId: 'k' });
+  t.plan = C.paymentPlan(t.amount, MM_FAM, invs.filter(i => i.familyId === 'k'), Object.assign({ periods: t.match.periods }, MM_CTX));
+  assert.ok(t.plan.exact && t.plan.how === 'named');
+  assert.ok(C.autoTick(t, invs), 'a sure ChatGPT match that pays owed months exactly is ticked');
+  const ahead = Object.assign({}, t, { amount: 660 });
+  ahead.plan = C.paymentPlan(660, MM_FAM, invs.filter(i => i.familyId === 'k'), MM_CTX);
+  assert.ok(!C.autoTick(ahead, invs), 'paying ahead is never ticked by itself');
+});
+
+test('a statement with two payments from one family: the earlier one takes the earlier month', () => {
+  const nov = mmNov();
+  const txs = [
+    { key: 'b', date: '2026-11-19', amount: 220, familyId: 'k', tick: true, match: { familyId: 'k', how: 'alias' } },
+    { key: 'a', date: '2026-11-05', amount: 220, familyId: 'k', tick: true, match: { familyId: 'k', how: 'alias' } },
+    { key: 'c', date: '2026-11-20', amount: 220, familyId: 'k', tick: false, match: { familyId: 'k', how: 'alias' } },
+    { key: 'd', date: '2026-11-20', amount: 99, familyId: '', match: { familyId: '' } }
+  ];
+  const plans = C.planStatement(txs, [MM_FAM], [nov], MM_CTX);
+  assert.equal(plans[1].allocations[0].period, '2026-11', '5 Nov pays the invoice');
+  assert.deepEqual(plans[0].marks.map(m => m.period), ['2026-10'], '19 Nov then pays October');
+  assert.deepEqual(plans[2].marks.map(m => m.period), ['2027-01'], 'an unticked one is planned after the ticked ones, but changes nothing');
+  assert.equal(plans[3], null);
+  const all = C.planStatement(txs, [MM_FAM], [nov], Object.assign({ all: true }, MM_CTX));
+  assert.deepEqual(all[2].marks.map(m => m.period), ['2027-01']);
+});
+
+test('months paid by one payment are marked with its id, are not invoiced, and come off again on undo', () => {
+  const plan = C.paymentPlan(660, MM_FAM, [mmNov()], MM_CTX);
+  const marks = C.planMarks(plan, { date: '2026-11-18', amount: 660, reference: 'PLC K7M2QX', by: 'admin@x', paymentId: 'pay1' });
+  assert.deepEqual(marks.map(m => [m.period, m.amount, m.paymentId]), [['2026-10', 220, 'pay1'], ['2027-01', 220, 'pay1']]);
+  assert.match(marks[1].note, /^Paid ahead with \$660\.00 on/);
+  const paidMonths = C.withPlanMarks(MM_FAM.paidMonths, marks);
+  assert.deepEqual(paidMonths.map(p => p.period), ['2026-09', '2026-10', '2027-01']);
+  assert.equal(paidMonths[1].paymentId, 'pay1', 'the id survives normalizing');
+  const fam = Object.assign({}, MM_FAM, { paidMonths });
+  assert.ok(C.monthPrepaid(fam, '2027-01', {}));
+  assert.ok(!C.monthPrepaid(fam, '2027-02', {}));
+  assert.ok(!C.monthPrepaid(fam, '2026-09', {}), 'a month marked by hand is left as it always was');
+  const rec = C.familyPaymentRecord(fam, [], [], { today: '2026-11-20', settings: {} });
+  const jan = rec.months.find(m => m.period === '2027-01');
+  assert.equal(jan.key, 'hand'); assert.ok(jan.byPayment); assert.match(jan.stateLabel, /one payment for several months/);
+  assert.deepEqual(C.withoutPaymentMarks(paidMonths, 'pay1').map(p => p.period), ['2026-09']);
+  assert.deepEqual(C.planReceiptLines(plan).map(l => l.title), ['October 2026 fees', 'January 2027 fees (paid ahead)']);
+  // A combined pair paid ahead: a mark on November covers December too.
+  const pair = Object.assign({}, MM_FAM, { paidMonths: [{ period: '2026-11', paymentId: 'p2' }] });
+  assert.ok(C.monthPrepaid(pair, '2026-12', {}));
+  // allocatePayment still takes a single month, and now a list.
+  const invs = [{ id: 'a', period: '2026-09', total: 100, paid: 0, sentAt: 1 }, { id: 'b', period: '2026-10', total: 100, paid: 0, sentAt: 1 }, { id: 'c', period: '2026-11', total: 100, paid: 0, sentAt: 1 }];
+  assert.deepEqual(C.allocatePayment(200, invs, ['2026-11', '2026-10']).allocations.map(a => a.period), ['2026-11', '2026-10']);
 });
