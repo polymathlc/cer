@@ -357,6 +357,13 @@ try {
   assert.deepEqual([rv(invBy('Lim Wei Ming').total).fam, rv(invBy('Lim Wei Ming').total).how, rv(invBy('Lim Wei Ming').total).tick], [famIdOf('Lim Wei Ming'), 'name+amount', true]);
   assert.deepEqual([rv(invBy('Rajesh Kumar').total).fam, rv(invBy('Rajesh Kumar').total).how, rv(invBy('Rajesh Kumar').total).tick], [famIdOf('Rajesh Kumar'), 'ai', true], 'ChatGPT\'s sure match for the exact amount is ticked');
   assert.deepEqual([rv(0.12).fam, rv(0.12).tick], ['', false], 'interest is left alone');
+  // v1.14.1: nothing is emailed unless asked for, and the screen says so.
+  assert.match(await page.locator('[data-act="rvApply"]').innerText(), /Apply payments \(no emails\)/);
+  assert.match(await page.locator('.applybar').innerText(), /Nothing is emailed to parents/);
+  await page.check('[data-ch="rvReceipts"]');
+  await page.waitForSelector('[data-act="rvApply"] >> text=/Apply and email/');
+  assert.match(await page.locator('[data-act="rvApply"]').innerText(), /Apply and email 4 receipts/);
+  assert.match(await page.locator('.applybar').innerText(), /A receipt will be emailed to .*Tan Mei Ling/);
   await shot(page, '13-statement-review');
   await page.click('[data-act="rvApply"]');
   await page.waitForSelector('text=/payments? recorded/');
@@ -396,6 +403,8 @@ try {
   await page.click('[data-act="rvApply"]');
   await page.waitForSelector('text=/payments? recorded/');
   assert.equal(docsIn(await store(page), 'officeInvoices').find(i => i.parentName === 'Siti Rahman').status, 'paid');
+  assert.equal(docsIn(await store(page), 'mail').filter(m => m._id.startsWith('polymath-office-receipt-')).length, 4, 'left unticked, applying emails nobody');
+  await page.waitForSelector('text=No emails were sent');
 
   // v1.14.0 — Siti pays January and February 2027 ahead in ONE transfer
   // (December is paid with November). Both months are marked paid with the
@@ -426,7 +435,7 @@ try {
   assert.equal(sitiFam.credit || 0, 0);
   assert.ok(C.monthPrepaid(sitiFam, '2027-01', {}) && C.monthPrepaid(sitiFam, '2027-02', {}) && !C.monthPrepaid(sitiFam, '2027-03', {}), 'January and February will not be invoiced');
   const twoReceipt = docsIn(all, 'mail').find(m => m._id.startsWith('polymath-office-receipt-') && m.polymathOffice && m.polymathOffice.familyId === sitiFam._id && /January 2027/.test(m.message.text));
-  if (twoReceipt) assert.match(twoReceipt.message.text, /February 2027 fees \(paid ahead\)/);
+  assert.ok(!twoReceipt, 'no receipt unless ticked');
   // Undo it: both marks come off.
   await page.click('[data-act="undoPayment"][data-id="' + twoPay._id + '"]');
   await page.waitForFunction(id => !window.PolymathOffice.S.payments.some(p => p.id === id), twoPay._id, { timeout: 10000 });

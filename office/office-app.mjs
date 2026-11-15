@@ -33,9 +33,9 @@
      mail/polymath-office-*    emails for the Trigger Email extension
    Reads: schedule_config/main (the /schedule page's own document).
    ═══════════════════════════════════════════════════════════════════════════ */
-import * as C from './office-core.mjs?v=1.14.0';
+import * as C from './office-core.mjs?v=1.14.1';
 
-const OFFICE_VERSION = 'v1.14.0';
+const OFFICE_VERSION = 'v1.14.1';
 
 /* ═══════════════ Firebase — the CER project ═══════════════ */
 firebase.initializeApp({
@@ -1234,7 +1234,7 @@ VIEWS.payments = function () {
     const owing = allOwing();
     const fams = new Set(owing.map(i => i.familyId)).size;
     h += '<div class="banner green"><div class="big">✅</div><div style="flex:1"><b>' + C.plural(la.count, 'payment') + ' recorded · ' + money(la.total) + '</b>'
-      + (la.receipts ? C.plural(la.receipts, 'receipt') + ' emailed. ' : '') + (la.skipped ? la.skipped + ' were already recorded and were skipped. ' : '')
+      + (la.receipts ? C.plural(la.receipts, 'receipt') + ' emailed' + (la.emailed && la.emailed.length ? ' (to ' + esc(C.listJoin(la.emailed)) + ')' : '') + '. ' : 'No emails were sent. ') + (la.skipped ? la.skipped + ' were already recorded and were skipped. ' : '')
       + (fams ? '<b style="display:inline">' + C.plural(fams, 'family still owes', 'families still owe') + ' ' + money(owing.reduce((s, i) => s + C.invoiceOutstanding(i), 0)) + '.</b>' : 'Nobody owes anything. 🎉') + '</div>'
       + (fams ? '<div class="actions"><button class="btn" data-act="openReminders">🔔 Send reminders</button></div>' : '') + '<button class="iconbtn" data-act="dismissApply" aria-label="Dismiss">✕</button></div>';
   }
@@ -1288,7 +1288,7 @@ VIEWS.settings = function () {
     + '<div class="card"><h2>✉ Emails</h2><div class="sub">Sent from admin@polymathlc.com.sg through the centre\'s mail setup.</div><div class="form">'
     + f('fromName', 'Sender name') + f('replyTo', 'Replies go to', 'email')
     + '<div class="field full"><label class="check"><input type="checkbox" data-ch="settingBool" data-k="copyAdmin" ' + (s.copyAdmin ? 'checked' : '') + '> Send me a copy of every email (bcc)</label></div>'
-    + '<div class="field full"><label class="check"><input type="checkbox" data-ch="settingBool" data-k="receipts" ' + (s.receipts ? 'checked' : '') + '> Email a receipt when a payment is recorded</label></div>'
+    + '<div class="field full"><label class="check"><input type="checkbox" data-ch="settingBool" data-k="receipts" ' + (s.receipts ? 'checked' : '') + '> Offer to email receipts when payments are recorded</label><div class="small muted">Receipts are never sent by themselves: you tick "Also email each family a receipt" each time.</div></div>'
     + '<div class="full">' + f('invoiceNote', 'Line at the end of every invoice', 'textarea') + '</div>'
     + '<div class="full">' + f('reminderNote', 'Line at the end of every reminder', 'textarea') + '</div>'
     + '<div class="full">' + f('signature', 'Signature', 'textarea') + '</div></div></div>'
@@ -1913,6 +1913,7 @@ MODALS.pay = function (m) {
       + '<div class="field"><label>Date</label><input type="date" value="' + esc(m.date) + '" data-in="payM" data-k="date"></div>'
       + '<div class="field"><label>How</label><select data-ch="payM" data-k="method">' + [['cash', 'Cash'], ['bank', 'Bank transfer'], ['other', 'Other']].map(([v, l]) => '<option value="' + v + '" ' + (m.method === v ? 'selected' : '') + '>' + l + '</option>').join('') + '</select></div>'
       + '<div class="field"><label>Note <span class="opt">(optional)</span></label><input type="text" value="' + esc(m.note || '') + '" data-in="payM" data-k="note" data-keep="pnote"></div></div>'
+      + (S.settings.receipts && f && C.familyEmails(C.normalizeFamily(f)).length ? '<label class="check" style="margin-top:12px;"><input type="checkbox" data-ch="payReceipt" ' + (m.receipt ? 'checked' : '') + '> Email ' + esc(f.parentName || 'the family') + ' a receipt (' + esc(C.familyEmails(C.normalizeFamily(f)).join(', ')) + ')</label>' : '')
       + (f ? '<div class="small muted" style="margin-top:12px;">' + (open.length ? 'It pays ' + open.sort(by('period')).map(i => esc(C.invoicePeriodLabel(i, S.settings)) + ' (' + money(C.invoiceOutstanding(i)) + ')').join(', then ') + '; anything extra is kept as credit.' : 'Nothing is owed, so it is kept as credit for the next invoice.') + '</div>' : ''),
     foot: '<button class="btn ghost" data-act="closeModal">Cancel</button><button class="btn" data-act="payCommit" ' + (f && Number(m.amount) > 0 ? '' : 'disabled') + '>Record ' + (Number(m.amount) > 0 ? money(m.amount) : 'payment') + '</button>'
   };
@@ -2616,7 +2617,8 @@ function reviewHtml() {
   const picked = r.txs.filter(t => t.tick && t.familyId && !t.dup);
   const sum = C.round2(picked.reduce((s, t) => s + t.amount, 0));
   const all = r.txs.filter(t => !t.dup);
-  return '<div class="page-head"><div><h1>Check the payments</h1><p>' + esc(r.fileName) + (r.from ? ' · ' + esc(C.prettyDate(r.from)) + ' – ' + esc(C.prettyDate(r.to)) : '') + (r.aiUsed ? ' · read with ChatGPT' : '') + '</p></div>'
+  return '<div class="banner blue"><div class="big">ℹ️</div><div><b>Nothing has been recorded or sent yet.</b>Check who paid below, then press the green button. Parents are only emailed if you tick "Also email each family a receipt".</div></div>'
+    + '<div class="page-head"><div><h1>Check the payments</h1><p>' + esc(r.fileName) + (r.from ? ' · ' + esc(C.prettyDate(r.from)) + ' – ' + esc(C.prettyDate(r.to)) : '') + (r.aiUsed ? ' · read with ChatGPT' : '') + '</p></div>'
     + '<div class="actions"><button class="btn ghost" data-act="cancelReview">Cancel</button></div></div>'
     + '<div class="stats"><div class="stat"><div class="label">Money in</div><div class="value">' + all.length + '</div><div class="hint">' + money(all.reduce((s, t) => s + t.amount, 0)) + '</div></div>'
     + '<div class="stat green"><div class="label">Matched</div><div class="value">' + r.txs.filter(groups[0].test).length + '</div></div>'
@@ -2627,17 +2629,46 @@ function reviewHtml() {
       return '<div class="rv-group"><h3>' + g.title + ' <span class="pill grey">' + items.length + '</span></h3><div class="small muted" style="margin:-4px 0 10px;">' + g.note + '</div>'
         + (g.k === 'check' || g.k === 'sure' ? '<div class="actions" style="margin-bottom:8px;"><button class="btn xs ghost" data-act="rvTickGroup" data-g="' + g.k + '" data-on="1">Tick all</button><button class="btn xs ghost" data-act="rvTickGroup" data-g="' + g.k + '" data-on="0">Untick all</button></div>' : '')
         + (g.k === 'dup' ? '<details><summary class="small muted" style="cursor:pointer;margin-bottom:8px;">Show them</summary>' + items.map(([t, i]) => row(t, i)).join('') + '</details>' : items.map(([t, i]) => row(t, i)).join('')) + '</div>'; }).join('')
-    + '<div class="applybar"><div class="txt"><b>Apply ' + C.plural(picked.length, 'payment') + ' · ' + money(sum) + '</b></div>'
-    + '<label><input type="checkbox" data-ch="rvReceipts" ' + (r.receipts !== false && S.settings.receipts ? 'checked' : '') + '> Email receipts</label>'
+    + '<div class="applybar"><div class="txt"><b>Apply ' + C.plural(picked.length, 'payment') + ' · ' + money(sum) + '</b>'
+    + '<span class="small">' + receiptLine(r, picked) + '</span></div>'
+    + (S.settings.receipts ? '<label><input type="checkbox" data-ch="rvReceipts" ' + (r.receipts === true ? 'checked' : '') + '> Also email each family a receipt</label>' : '')
     + '<label><input type="checkbox" data-ch="rvRemember" ' + (r.remember !== false ? 'checked' : '') + '> Remember payer names</label>'
-    + '<button class="btn big" style="background:#22c55e;border-color:#22c55e;" data-act="rvApply" ' + (picked.length ? '' : 'disabled') + '>Apply payments</button></div>';
+    + '<button class="btn big" style="background:#22c55e;border-color:#22c55e;" data-act="rvApply" ' + (picked.length ? '' : 'disabled') + '>'
+    + (reviewSendsReceipts(r) && receiptFamilies(picked).length ? 'Apply and email ' + C.plural(receiptFamilies(picked).length, 'receipt') : 'Apply payments (no emails)') + '</button></div>';
+}
+// v1.14.1 — applying a statement never emails a parent unless the person at
+// the screen ticks "Also email each family a receipt" for THIS statement, and
+// the screen names every family that will get one before anything is sent.
+function reviewSendsReceipts(r) { return !!(S.settings.receipts && r && r.receipts === true); }
+// The families (with an email address) a receipt would go to, once each.
+function receiptFamilies(picked) {
+  const seen = new Set(), out = [];
+  (picked || []).forEach(t => {
+    const f = famById(t.familyId);
+    if (!f || seen.has(f.id)) return;
+    seen.add(f.id);
+    const to = C.familyEmails(C.normalizeFamily(f));
+    if (to.length) out.push({ name: f.parentName || C.familyDisplayName(f), to });
+  });
+  return out;
+}
+function receiptLine(r, picked) {
+  if (!reviewSendsReceipts(r)) return '✉️ Nothing is emailed to parents. Only the payment records are updated.';
+  const fams = receiptFamilies(picked);
+  if (!fams.length) return '✉️ None of these families has an email address, so nothing is emailed.';
+  return '✉️ A receipt will be emailed to ' + esc(C.listJoin(fams.map(f => f.name))) + '.';
 }
 async function applyReview() {
   if (!requireProtected()) return;
   const r = S.review;
   const picked = r.txs.filter(t => t.tick && t.familyId && !t.dup).slice().sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
-  const receipts = r.receipts !== false && S.settings.receipts;
-  let count = 0, total = 0, skipped = 0, sentReceipts = 0; const errs = [];
+  const receipts = reviewSendsReceipts(r);
+  if (receipts) {
+    const fams = receiptFamilies(picked);
+    if (fams.length && !confirm('Record ' + C.plural(picked.length, 'payment') + ' and EMAIL a receipt to ' + C.plural(fams.length, 'family', 'families') + ':\n\n'
+      + fams.map(f => '• ' + f.name + ' (' + f.to.join(', ') + ')').join('\n') + '\n\nPress Cancel to go back (nothing is recorded or sent).')) return;
+  }
+  let count = 0, total = 0, skipped = 0, sentReceipts = 0; const errs = [], emailed = [];
   openModal({ type: 'progress', title: 'Recording payments…', done: 0, total: picked.length });
   for (let i = 0; i < picked.length; i++) {
     const t = picked[i];
@@ -2646,14 +2677,14 @@ async function applyReview() {
       if (res.dup) skipped++;
       else {
         count++; total = C.round2(total + t.amount);
-        if (receipts) { try { if (await sendReceipt(res, t)) sentReceipts++; } catch (e) { console.warn('receipt', e); } }
+        if (receipts) { try { if (await sendReceipt(res, t)) { sentReceipts++; emailed.push(res.fam.parentName || ''); } } catch (e) { console.warn('receipt', e); } }
       }
     } catch (e) { console.error(e); errs.push(money(t.amount) + ': ' + friendlyError(e)); }
     S.modal.done = i + 1; renderModal();
   }
   if (r.statementId) db.collection(COL.statements).doc(r.statementId).set({ appliedAt: ts(), summary: { applied: count } }, { merge: true }).catch(() => {});
   S.review = null;
-  S.lastApply = { count, total, skipped, receipts: sentReceipts };
+  S.lastApply = { count, total, skipped, receipts: sentReceipts, emailed: [...new Set(emailed.filter(Boolean))] };
   closeModal();
   if (errs.length) openModal({ type: 'result', title: '⚠️ Some payments were not recorded', body: errs.map(esc).join('<br>') });
   go('payments');
@@ -3092,7 +3123,7 @@ const ACT = {
     const tx = { key: 'manual-' + Date.now() + '-' + C.newToken(rnd, 5), familyId: m.familyId, amount: C.round2(m.amount), date: m.date || today(), method: m.method, how: m.method === 'cash' ? 'cash' : 'manual', description: (m.method === 'cash' ? 'Cash' : m.method === 'bank' ? 'Bank transfer' : 'Other') + (m.note ? ' — ' + m.note : ''), note: m.note, match: { familyId: m.familyId, how: 'manual', period: '' } };
     try {
       const res = await applyPayment(tx, {});
-      if (S.settings.receipts) { try { await sendReceipt(res, tx); } catch (e) { console.warn(e); } }
+      if (S.settings.receipts && m.receipt === true && !res.dup) { try { await sendReceipt(res, tx); } catch (e) { console.warn(e); } }
       toast(money(tx.amount) + ' recorded', 'ok'); closeModal();
     } catch (e) { fail('Could not record', e); busy(btn, false); }
   },
@@ -3404,7 +3435,7 @@ const CHG = {
     refreshPlans();
     render();
   },
-  rvReceipts(el) { S.review.receipts = el.checked; },
+  rvReceipts(el) { S.review.receipts = el.checked; render(); },
   rvRemember(el) { S.review.remember = el.checked; },
   edFamily(el) { editorLinkFamily(el.value); },
   edPeriod(el) { S.modal.draft.period = el.value; renderModal(); },
@@ -3412,6 +3443,7 @@ const CHG = {
   invQrMode(el) { setInvoiceQrMode(S.modal.id, el.value); },
   payFam(el) { S.modal.familyId = el.value; if (!S.modal.amount && el.value) S.modal.amount = familyOwing(el.value) || ''; renderModal(); },
   payM(el) { S.modal[el.dataset.k] = el.value; },
+  payReceipt(el) { S.modal.receipt = el.checked; },
   useAi(el) { S.settings.useAi = el.checked; db.collection(COL.settings).doc('config').set({ useAi: el.checked }, { merge: true }).catch(() => {}); },
   setAutopilot(el) { const d = S.settingsDraft || (S.settingsDraft = clone(S.settings)); d.autopilot = el.value; render(); },
   settingBool(el) { const d = S.settingsDraft || (S.settingsDraft = clone(S.settings)); d[el.dataset.k] = el.checked; }
