@@ -18,17 +18,35 @@ test('nothing is released until the class starts or an admin releases it', () =>
   assert.equal(Core.lockedCount(c), 10);
 });
 
-test('on worksheet 3, worksheets 1 to 8 are out and 4, 5 are next', () => {
+test('on worksheet 3, worksheets 1 to 6 are out (3 ahead) and 4, 5 are next', () => {
+  assert.equal(Core.RELEASE_AHEAD, 3);
   const update = Core.progressUpdate(course(), 2);
-  assert.deepEqual(update, { currentIndex: 2, currentDocId: 'c', releasedThrough: 7 });
+  assert.deepEqual(update, { currentIndex: 2, currentDocId: 'c', releasedThrough: 5 });
   const c = course(update);
-  assert.deepEqual(Core.releasedWorksheets(c).map((w) => w.id), ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']);
+  assert.deepEqual(Core.releasedWorksheets(c).map((w) => w.id), ['a', 'b', 'c', 'd', 'e', 'f']);
   assert.deepEqual(Core.nextWorksheets(c).map((w) => w.id), ['d', 'e']);
   assert.equal(Core.worksheetState(c, 2), 'current');
   assert.equal(Core.worksheetState(c, 3), 'next');
   assert.equal(Core.worksheetState(c, 5), 'released');
-  assert.equal(Core.worksheetState(c, 8), 'locked');
-  assert.equal(Core.lockedCount(c), 2);
+  assert.equal(Core.worksheetState(c, 6), 'locked');
+  assert.equal(Core.lockedCount(c), 4);
+});
+
+test('always 3 ahead: a class whose stored release lags behind still has the next 3 out', () => {
+  // Worksheet 2 is current but only 1 and 2 were ever stored as released
+  // (the two after were added to the list later): the next 3 are out anyway.
+  const c = course({ worksheetIds: ['a', 'b', 'c', 'd'], currentIndex: 1, releasedThrough: 1 });
+  assert.equal(Core.releasedThrough(c), 3);
+  assert.deepEqual(Core.releasedWorksheets(c).map((w) => w.id), ['a', 'b', 'c', 'd']);
+  assert.equal(Core.lockedCount(c), 0);
+  // Worksheets added to the end later come out as soon as they are within 3.
+  const longer = course({ worksheetIds: ['a', 'b', 'c', 'd', 'e', 'f', 'g'], currentIndex: 1, releasedThrough: 1 });
+  assert.deepEqual(Core.releasedWorksheets(longer).map((w) => w.id), ['a', 'b', 'c', 'd', 'e']);
+  assert.equal(Core.lockedCount(longer), 2);
+  // Released further by hand stays released; a class not started yet waits.
+  assert.equal(Core.releasedThrough(course({ currentIndex: 1, releasedThrough: 8 })), 8);
+  assert.equal(Core.releasedThrough(course({ currentIndex: -1, releasedThrough: -1 })), -1);
+  assert.equal(Core.releasedThrough(course({ currentIndex: 9, releasedThrough: 2 })), 9, 'never past the end of the list');
 });
 
 test('progress never goes backwards, except when an admin forces the position â€” and releases stay out', () => {
@@ -40,7 +58,7 @@ test('progress never goes backwards, except when an admin forces the position â€
 });
 
 test('the next two never name a worksheet that is not released', () => {
-  const c = course({ currentIndex: 2, releasedThrough: 3 });
+  const c = course({ worksheetIds: ['a', 'b', 'c', 'd'], currentIndex: 2, releasedThrough: 3 });
   assert.deepEqual(Core.nextWorksheets(c).map((w) => w.id), ['d']);
   const end = course({ currentIndex: 9, releasedThrough: 9 });
   assert.deepEqual(Core.nextWorksheets(end), []);
@@ -113,7 +131,7 @@ test('emails are checked and normalised', () => {
 
 
 test('timeline: worksheets in teaching order, with their Ans Key edit date and recorded lessons', () => {
-  const course = { worksheetIds: ['a', 'b', 'c', 'd', 'e', 'f'], currentIndex: 2, releasedThrough: 4 };
+  const course = { worksheetIds: ['a', 'b', 'c', 'd', 'e', 'f', 'g'], currentIndex: 2, releasedThrough: 4 };
   const docs = {
     a: { name: 'WS A', updatedAt: { seconds: 1760256300, nanoseconds: 0 }, pageCount: 2 },
     b: { name: 'WS B', updatedAt: { toMillis: () => 1760342700000 } },
@@ -121,8 +139,8 @@ test('timeline: worksheets in teaching order, with their Ans Key edit date and r
   };
   const recordings = { c: Core.lessonRecordings(JSON.stringify([{ id: 'r', type: 'video', url: 'u', ts: 5, lessonRecording: { version: 1, duration: 90000 } }])) };
   const items = plainList(Core.timelineItems(course, docs, recordings));
-  assert.deepEqual(items.map((i) => i.id), ['a', 'b', 'c', 'd', 'e']);
-  assert.deepEqual(items.map((i) => i.state), ['released', 'released', 'current', 'next', 'next']);
+  assert.deepEqual(items.map((i) => i.id), ['a', 'b', 'c', 'd', 'e', 'f'], 'on worksheet 3, up to 3 ahead (6) is out');
+  assert.deepEqual(items.map((i) => i.state), ['released', 'released', 'current', 'next', 'next', 'released']);
   assert.equal(items[0].edited, 1760256300000);
   assert.equal(items[1].edited, 1760342700000);
   assert.equal(items[2].edited, 1760000000000, 'falls back to when it was uploaded');
@@ -220,9 +238,9 @@ test('on worksheet 3: 1 and 2 are done, 3 is current, 4 is next, the rest are qu
 
 test('Finished moves the class one step and releases like opening the next sheet', () => {
   const c = course({ currentIndex: 2, releasedThrough: 7 });
-  assert.deepEqual(Core.finishUpdate(c), { currentIndex: 3, currentDocId: 'd', releasedThrough: 8, lastFinishedIndex: 2, lastFinishedDocId: 'c' });
+  assert.deepEqual(Core.finishUpdate(c), { currentIndex: 3, currentDocId: 'd', releasedThrough: 7, lastFinishedIndex: 2, lastFinishedDocId: 'c' });
   const fresh = course();
-  assert.deepEqual(Core.finishUpdate(fresh), { currentIndex: 1, currentDocId: 'b', releasedThrough: 6, lastFinishedIndex: 0, lastFinishedDocId: 'a' },
+  assert.deepEqual(Core.finishUpdate(fresh), { currentIndex: 1, currentDocId: 'b', releasedThrough: 4, lastFinishedIndex: 0, lastFinishedDocId: 'a' },
     'finishing worksheet 1 before the class opened anything');
   assert.equal(Core.finishUpdate(course({ currentIndex: 9, releasedThrough: 9 })), null, 'nothing after the last one');
   assert.equal(Core.finishUpdate(course({ worksheetIds: [] })), null);
@@ -794,6 +812,10 @@ test('watch: a worksheet plays for a class it is released to, and nowhere else',
   assert.equal(W.releasedTo([k], 'c').length, 0, 'not released yet');
   assert.equal(W.releasedTo([k], 'zz').length, 0);
   assert.equal(W.placeText(W.releasedTo([k], 'b')[0]), 'Worksheet 2 of 3');
+  // Always 3 ahead (v1.12.0): on worksheet 2, worksheets up to 5 play even
+  // when the stored release lags behind; 6 waits.
+  const on2 = course({ id: 'k6', worksheetIds: ['a', 'b', 'c', 'd', 'e', 'f'], currentIndex: 1, releasedThrough: 1 });
+  assert.deepEqual(['c', 'd', 'e', 'f'].map((id) => W.releasedTo([on2], id).length), [1, 1, 1, 0]);
   const segs = W.strip([{ durationMs: 1000 }, { durationMs: 3000 }], [0, 0]);
   assert.deepEqual(segs.map((s) => s.width), [25, 75]);
   assert.match(W.captionsVtt({ cues: [{ t: 'Hello', s: 0, e: 1200 }, { t: 'x', s: 5, e: 2 }] }), /^WEBVTT\n\n00:00:00\.000 --> 00:00:01\.200\nHello/);

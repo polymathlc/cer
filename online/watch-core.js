@@ -490,11 +490,16 @@
      The admins watch anything. Anyone else watches a worksheet that is
      released in one of the classes they see in Polymath Online — the same
      rule as the class timeline, so the page never shows more than it. */
+  var RELEASE_AHEAD = 3;   // on worksheet n, students have up to n + 3
   function releasedTo(courses, wsId) {
     var out = [];
     (courses || []).forEach(function (c) {
       var ids = c && Array.isArray(c.worksheetIds) ? c.worksheetIds : [];
       var rel = c && typeof c.releasedThrough === 'number' && isFinite(c.releasedThrough) ? Math.floor(c.releasedThrough) : -1;
+      // v1.12.0: a class is always RELEASE_AHEAD worksheets ahead of the one
+      // it is on (portal-core.js `releasedThrough`, the same rule).
+      var cur = c && typeof c.currentIndex === 'number' && isFinite(c.currentIndex) ? Math.floor(c.currentIndex) : -1;
+      if (cur >= 0) rel = Math.max(rel, cur + RELEASE_AHEAD);
       var at = ids.indexOf(wsId);
       if (at >= 0 && at <= rel) out.push({ course: c, seq: at });
     });

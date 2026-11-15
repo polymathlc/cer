@@ -393,6 +393,101 @@
   .empty h3 { color: var(--text-primary); margin-top: var(--space-sm); font-size: 1.1rem; }
   .empty p { margin-top: 6px; line-height: 1.6; }
 
+  /* ===== 🗂 Student tabs (v1.12.0) =====
+     Plain and obvious for primary school children: four big buttons, then
+     rows with one name and two or three large buttons each. */
+  .st-tabs {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+    padding: 6px; margin-top: var(--space-lg);
+    border-radius: 18px; background: var(--bg-tertiary);
+    position: sticky; top: 72px; z-index: 5;
+  }
+  .st-tab {
+    position: relative; display: flex; align-items: center; justify-content: center; gap: 8px;
+    min-height: 54px; padding: 10px 12px; border: 0; border-radius: 13px; cursor: pointer;
+    background: transparent; color: var(--text-secondary);
+    font: inherit; font-weight: 700; font-size: 1rem;
+    transition: background var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+  }
+  .st-tab:hover { color: var(--text-primary); background: rgba(255,255,255,0.55); }
+  .st-tab:focus-visible { outline: 3px solid var(--accent-base); outline-offset: 1px; }
+  .st-tab[aria-selected="true"] { background: #fff; color: var(--text-primary); box-shadow: var(--shadow-sm); }
+  .st-tab[aria-selected="true"]::after {
+    content: ""; position: absolute; left: 22%; right: 22%; bottom: 5px; height: 3px; border-radius: 3px; background: var(--accent-base);
+  }
+  .st-tab-icon { font-size: 1.15rem; line-height: 1; }
+  .st-tab-count {
+    min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; display: inline-grid; place-items: center;
+    background: var(--accent-bg); color: var(--accent-ink); font-size: 0.75rem; font-variant-numeric: tabular-nums;
+  }
+  .st-tab[aria-selected="true"] .st-tab-count { background: var(--accent-light); }
+  .st-panel { margin-top: var(--space-md); }
+  .st-card { padding: var(--space-sm) 0 var(--space-sm); overflow: hidden; }
+  .st-card + .st-card { margin-top: var(--space-lg); }
+  .st-class-head {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+    padding: var(--space-md) var(--space-lg) var(--space-sm);
+  }
+  .st-class-name { font-size: 1.15rem; font-weight: 700; }
+  .st-class-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .st-group {
+    margin: var(--space-md) var(--space-lg) 6px; font-size: 0.78rem; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-tertiary);
+  }
+  .st-rows { list-style: none; margin: 0; padding: 0; }
+  .st-row {
+    display: grid; grid-template-columns: 48px 1fr auto; gap: var(--space-md); align-items: center;
+    padding: 16px var(--space-lg); border-top: 1px solid var(--border-subtle);
+  }
+  .st-rows .st-row:first-child { border-top: 0; }
+  .st-row.is-now { background: linear-gradient(90deg, var(--accent-bg), #fff 85%); box-shadow: inset 4px 0 0 var(--accent-base); }
+  .st-num {
+    width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center;
+    background: var(--bg-tertiary); color: var(--text-secondary); font-weight: 700; font-size: 1.05rem;
+  }
+  .st-row.is-now .st-num { background: var(--accent-base); color: #fff; }
+  .st-row.is-done .st-num { background: var(--ok-bg); color: var(--ok-ink); }
+  .st-main { min-width: 0; }
+  .st-name { font-weight: 700; font-size: 1.05rem; line-height: 1.35; overflow-wrap: anywhere; }
+  .st-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 4px; color: var(--text-tertiary); font-size: var(--font-size-sm); }
+  .st-tag {
+    display: inline-flex; align-items: center; padding: 2px 10px; border-radius: var(--radius-full);
+    background: var(--bg-tertiary); color: var(--text-secondary); font-size: 0.75rem; font-weight: 700;
+  }
+  .st-tag-now { background: var(--accent-base); color: #3d2a08; }
+  .st-tag-next { background: var(--accent-light); color: var(--accent-ink); }
+  .st-acts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+  .st-btn { min-height: 46px; padding: 10px 18px; font-size: 0.98rem; font-weight: 700; border-radius: 12px; text-decoration: none; white-space: nowrap; }
+  .st-btn-main { background: var(--accent-light); border-color: var(--accent-base); color: #3d2a08; }
+  .st-btn-play { background: #1A1A1A; border-color: #1A1A1A; color: #fff; }
+  .st-btn-play:hover { background: #333; color: #fff; }
+  .st-btn-quiet { background: transparent; box-shadow: none; }
+  .st-wait { color: var(--text-tertiary); font-size: var(--font-size-sm); padding: 0 6px; }
+  .st-more { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 8px; font-size: var(--font-size-sm); color: var(--text-tertiary); }
+  .st-more a { color: var(--text-secondary); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; padding: 4px 0; }
+  .st-more a:hover { color: var(--text-primary); }
+  .st-empty { text-align: center; padding: var(--space-xl) var(--space-lg); color: var(--text-tertiary); }
+  .st-empty-icon { font-size: 2rem; margin-bottom: 6px; }
+  .st-empty b { display: block; color: var(--text-primary); font-size: 1.1rem; }
+  .st-empty p { margin-top: 6px; line-height: 1.6; }
+  .st-foot { margin: 0; padding: 14px var(--space-lg); border-top: 1px solid var(--border-subtle); color: var(--text-tertiary); font-size: var(--font-size-sm); }
+  @media (max-width: 640px) {
+    .st-tabs { top: 60px; gap: 4px; padding: 4px; margin-top: var(--space-md); border-radius: 16px; }
+    .st-tab { flex-direction: column; gap: 3px; min-height: 62px; padding: 8px 2px 10px; font-size: 0.8rem; line-height: 1.15; text-align: center; }
+    .st-tab-icon { font-size: 1.35rem; }
+    .st-tab-count { position: absolute; top: 4px; right: 4px; min-width: 18px; height: 18px; font-size: 0.66rem; padding: 0 4px; }
+    .st-tab[aria-selected="true"]::after { bottom: 3px; }
+    .st-row { grid-template-columns: 40px 1fr; gap: 12px; padding: 14px var(--space-md); }
+    .st-num { width: 40px; height: 40px; border-radius: 12px; font-size: 0.95rem; }
+    .st-acts { grid-column: 1 / -1; justify-content: stretch; }
+    .st-acts .st-btn { flex: 1 1 0; justify-content: center; padding: 10px 8px; }
+    .st-wait { grid-column: 1 / -1; }
+    .st-group { margin: var(--space-md) var(--space-md) 4px; }
+    .st-class-head { padding: var(--space-md) var(--space-md) var(--space-sm); }
+    .st-foot { padding: 12px var(--space-md); }
+  }
+  @media print { .st-tabs, .st-acts { display: none !important; } }
+
   /* ===== Admin ===== */
   .tabs { display: inline-flex; gap: 4px; padding: 4px; border-radius: 14px; background: var(--bg-tertiary); margin-top: var(--space-lg); flex-wrap: wrap; }
   .tab {
@@ -764,7 +859,7 @@
 
 <footer class="site-footer">
   <span>© Polymath Learning Centre</span>
-  <span>Worksheets are released as your class goes. Answer keys open in the Ans Key app.</span>
+  <span>Worksheets are released as your class goes. Answer keys and lesson videos appear after each lesson.</span>
 </footer>
 
 <div class="toasts" id="toasts" role="status" aria-live="polite"></div>

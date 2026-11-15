@@ -93,11 +93,11 @@ let db;
   await page.click('.seq-row:nth-child(3) [data-action="move"][data-delta="-1"]');
   await page.waitForFunction(() => document.querySelector('.seq-row:nth-child(2) .name-edit').value === 'Worksheet 2');
 
-  // Class is on worksheet 3 → up to 8 released.
+  // Class is on worksheet 3 → always 3 ahead: up to 6 released (v1.12.0).
   await page.fill('#currentInput', '3');
   await page.click('[data-action="set-current"]');
-  await page.waitForFunction(() => /Up to 8/.test(document.querySelector('.control-strip').textContent));
-  check('admin: putting the class on worksheet 3 releases up to 8', true);
+  await page.waitForFunction(() => /Up to 6/.test(document.querySelector('.control-strip').textContent));
+  check('admin: putting the class on worksheet 3 releases up to 6 (the next one and the two after it)', true);
 
   // 📌 What Ans Key shows: worksheet 3 is current, 4 is loaded as next, the rest queued.
   const chips = () => page.$$eval('.seq-row .seq-status', (els) => els.map((e) => e.textContent.trim()));
@@ -114,7 +114,7 @@ let db;
   check('admin: after Finished, 4 is current and 5 is loaded as next', labels[2] === '✓ Done' && labels[3] === '▶ Current worksheet' && labels[4] === '⏭ Next worksheet');
   db = await page.evaluate(() => window.__fake.db);
   const classAfterFinish = Object.entries(db).find(([p]) => p.startsWith('onlineCourses/'))[1];
-  check('admin: Finished saves the move and what was finished', classAfterFinish.currentIndex === 3 && classAfterFinish.releasedThrough === 8 && classAfterFinish.lastFinishedIndex === 2);
+  check('admin: Finished saves the move and what was finished', classAfterFinish.currentIndex === 3 && classAfterFinish.releasedThrough === 6 && classAfterFinish.lastFinishedIndex === 2);
   // Back to worksheet 3, released up to 8, for the student checks below.
   await page.fill('#currentInput', '3');
   await page.click('[data-action="set-current"]');
@@ -160,8 +160,10 @@ let studentDb = null;
     { id: 'rec-old', type: 'video', page: 1, url: 'https://firebasestorage.googleapis.com/v0/b/mathgen--app/o/pdf-annotator%2Flesson-a.m4a', ts: edited - 86400000, label: 'Play lesson · 41:00', lessonRecording: { version: 1, duration: 2460000 } },
     { id: 'rec-new', type: 'video', page: 2, url: 'https://firebasestorage.googleapis.com/v0/b/mathgen--app/o/pdf-annotator%2Flesson-b.webm', ts: edited, label: 'Q5 · video lesson · 12:04', lessonRecording: { version: 1, duration: 724000, video: true, title: 'Q5' } }
   ]);
-  const { page, context, errors } = await open({ user: student, docs: db, query: '?invite=' + inviteId, width: 1100 });
+  const { page, context, errors } = await open({ user: student, docs: db, query: '?invite=' + inviteId + '#timeline', width: 1100 });
   await page.waitForSelector('.class-card', { timeout: 10000 });
+  check('student tabs: Worksheets, Answer keys, Videos and Timeline', (await page.$$eval('.st-tab .st-tab-label', (els) => els.map((e) => e.textContent))).join('|') === 'Worksheets|Answer keys|Videos|Timeline');
+  check('student tabs: #timeline in the address opens the Timeline tab', (await page.getAttribute('#st-tab-timeline', 'aria-selected')) === 'true');
   const after = await page.evaluate(() => window.__fake.db);
   check('student: joining with a different Google address works through the link', after['onlineMembers/stu-1'] && after['onlineMembers/stu-1'].level === 'P5');
   check('student: the invitation is marked joined', after['onlineInvites/' + inviteId].status === 'joined' && after['onlineInvites/' + inviteId].joinedUid === 'stu-1');
@@ -257,6 +259,44 @@ let studentDb = null;
     (await page.$$eval('.tl-item a, .class-cta a', (els) => els.filter((a) => /\/anskey\/\?ws=/.test(a.getAttribute('href') || '')).length)) === 0);
   await page.locator('.tl-item.is-current').screenshot({ path: path.join(shots, '04g-student-answer-keys.png') });
 
+  /* 🗂 v1.12.0: the three plain tabs for students. */
+  await page.click('#st-tab-worksheets');
+  await page.waitForSelector('.st-card .st-row');
+  const wsRows = await page.$$eval('.st-row .st-name', (els) => els.map((e) => e.textContent));
+  check('worksheets tab: this lesson and the ones out ahead first, then the earlier ones, latest first',
+    wsRows.join('|') === 'Worksheet 3|Worksheet 4|Worksheet 5|Worksheet 6|Worksheet 7|Worksheet 8|Worksheet 2|Worksheet 1', wsRows.join('|'));
+  check('worksheets tab: every row has Download and Print', (await page.locator('.st-row [data-action="download"]').count()) === 8 && (await page.locator('.st-row [data-action="print"]').count()) === 8);
+  check('worksheets tab: only worksheets, no videos or answer keys in it',
+    (await page.$$eval('#studentPanel a', (els) => els.filter((a) => /watch\.html|lesson-key-/.test(a.getAttribute('href') || '')).length)) === 0 && (await page.locator('.tl-item').count()) === 0);
+  check('worksheets tab: this lesson is marked, and the next one says so',
+    (await page.textContent('.st-row.is-now .st-name')) === 'Worksheet 3' && /This lesson/.test(await page.textContent('.st-row.is-now')) &&
+    /Next lesson/.test(await page.textContent('.st-rows .st-row:nth-child(2)')));
+  check('worksheets tab: the locked ones are counted, not named', /2 more worksheets/.test(await page.textContent('.st-foot')) && !(await page.textContent('body')).includes('Worksheet 9'));
+  check('worksheets tab: the address goes back to plain /online', (await page.evaluate(() => location.hash)) === '');
+  await page.screenshot({ path: path.join(shots, '04h-tab-worksheets.png'), fullPage: true });
+
+  await page.click('#st-tab-answers');
+  await page.waitForFunction(() => document.querySelector('#st-tab-answers[aria-selected="true"]') && document.querySelector('.st-row'));
+  const akRows = await page.$$eval('.st-row', (els) => els.map((e) => ({ name: e.querySelector('.st-name').textContent, main: (e.querySelector('a.st-btn-main') || {}).href || '', more: [...e.querySelectorAll('.st-more a')].map((a) => a.href) })));
+  check('answer keys tab: one row per worksheet with a key, opening the newest PDF, earlier days under it',
+    akRows.length === 1 && akRows[0].name === 'Worksheet 3' && akRows[0].main === KEY_NEW && akRows[0].more.join() === KEY_OLD, JSON.stringify(akRows));
+  check('answer keys tab: the key opens in a new tab, never the Ans Key app',
+    (await page.getAttribute('a.st-btn-main', 'target')) === '_blank' && (await page.$$eval('#studentPanel a', (els) => els.filter((a) => /\/anskey\//.test(a.getAttribute('href') || '')).length)) === 0);
+  check('answer keys tab: no Download or Print buttons for worksheets here', (await page.locator('#studentPanel [data-action="download"], #studentPanel [data-action="print"]').count()) === 0);
+  check('answer keys tab: kept in the address', (await page.evaluate(() => location.hash)) === '#answers');
+  await page.screenshot({ path: path.join(shots, '04i-tab-answer-keys.png'), fullPage: true });
+
+  await page.click('#st-tab-videos');
+  await page.waitForFunction(() => document.querySelector('#st-tab-videos[aria-selected="true"]') && document.querySelector('.st-row'));
+  const vRows = await page.$$eval('.st-row', (els) => els.map((e) => ({ name: e.querySelector('.st-name').textContent, sub: e.querySelector('.st-sub').textContent, watch: e.querySelector('a.st-btn-play').getAttribute('href'), days: e.querySelectorAll('.st-more a').length })));
+  check('videos tab: one row per worksheet with videos, Watch opens the lesson video page',
+    vRows.length === 1 && vRows[0].name === 'Worksheet 3' && /3 videos/.test(vRows[0].sub) && vRows[0].watch.startsWith('watch.html?ws=' + encodeURIComponent(ws3Id)) && !/anskey/.test(vRows[0].watch), JSON.stringify(vRows));
+  check('videos tab: each class day can be started from', vRows[0].days === 2);
+  await page.screenshot({ path: path.join(shots, '04j-tab-videos.png'), fullPage: true });
+  await page.click('#st-tab-timeline');
+  await page.waitForFunction(() => document.querySelectorAll('.tl-item').length === 8);
+  check('timeline tab: the full timeline is still there', true);
+
   // The teacher opens worksheet 5 in Ans Key: the class moves and 9, 10 come out live.
   await page.evaluate(() => {
     const course = Object.entries(window.__fake.db).find(([p]) => p.startsWith('onlineCourses/'));
@@ -274,6 +314,22 @@ let studentDb = null;
 /* ---- The same student on a phone ---- */
 {
   const { page, context, errors } = await open({ user: { uid: 'stu-1', email: 'ethan.t@gmail.com', displayName: 'Ethan Tan' }, docs: studentDb, width: 390 });
+  // 🗂 A student lands on the Worksheets tab.
+  await page.waitForSelector('.st-row.is-now');
+  check('student phone: lands on the Worksheets tab', (await page.getAttribute('#st-tab-worksheets', 'aria-selected')) === 'true');
+  check('student phone: the four tabs fit across the screen', (await page.$$eval('.st-tab', (els) => els.every((e) => { const b = e.getBoundingClientRect(); return b.left >= 0 && b.right <= innerWidth && b.height >= 44; }))));
+  check('student phone: Download and Print are big and on the screen', (await page.$$eval('.st-row .st-btn', (els) => els.every((e) => { const b = e.getBoundingClientRect(); return b.left >= 0 && b.right <= innerWidth + 0.5 && b.height >= 44; }))));
+  check('student phone: the worksheets fit with no sideways scroll', !(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)));
+  await page.screenshot({ path: path.join(shots, '04k-phone-worksheets.png'), fullPage: true });
+  await page.click('#st-tab-answers');
+  await page.waitForSelector('#st-tab-answers[aria-selected="true"]');
+  check('student phone: answer keys fit with no sideways scroll', !(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)));
+  await page.screenshot({ path: path.join(shots, '04l-phone-answer-keys.png'), fullPage: true });
+  await page.click('#st-tab-videos');
+  await page.waitForSelector('#st-tab-videos[aria-selected="true"]');
+  check('student phone: videos fit with no sideways scroll', !(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)));
+  await page.screenshot({ path: path.join(shots, '04m-phone-videos.png'), fullPage: true });
+  await page.click('#st-tab-timeline');
   await page.waitForSelector('.tl-item.is-current');
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   check('student phone: the timeline fits with no sideways scroll', !overflow);
@@ -288,7 +344,7 @@ let studentDb = null;
 {
   const { page, context, errors } = await open({ user: { uid: 'x', email: 'stranger@example.com', displayName: 'Stranger' }, docs: db, width: 390 });
   await page.waitForSelector('.state-card');
-  check('stranger: told they have not been invited, nothing else', /not been invited/.test(await page.textContent('.state-card')) && (await page.locator('.class-card').count()) === 0);
+  check('stranger: told they have not been invited, nothing else', /not been invited/.test(await page.textContent('.state-card')) && (await page.locator('.class-card, .st-card').count()) === 0);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   check('stranger: no sideways scroll at phone width', !overflow);
   await page.screenshot({ path: path.join(shots, '05-no-access-phone.png') });
@@ -302,7 +358,7 @@ let studentDb = null;
   docs['onlineMembers/p6'] = { level: 'P6', subjects: ['science'], role: 'student', name: 'Mei', email: 'mei@example.com' };
   const { page, context, errors } = await open({ user: { uid: 'p6', email: 'mei@example.com', displayName: 'Mei' }, docs, width: 390 });
   await page.waitForSelector('.empty');
-  check('another level: no classes, and no worksheet names leak', (await page.locator('.class-card').count()) === 0 && !(await page.textContent('body')).includes('Worksheet 1'));
+  check('another level: no classes, and no worksheet names leak', (await page.locator('.class-card, .st-card').count()) === 0 && !(await page.textContent('body')).includes('Worksheet 1'));
   check('another level: no script errors', errors.length === 0);
   await context.close();
 }
@@ -315,9 +371,9 @@ let studentDb = null;
   docs['studentAccess/fam'] = { uid: 'fam', status: 'approved', parentName: 'Mdm Lim', parentEmail: 'lim@example.com', childCount: 2,
     children: [{ name: 'Lim Wei', level: 'P5', subjects: 'math' }, { name: 'Lim Jun', level: 'S1', subjects: 'both' }] };
   const { page, context, errors } = await open({ user: { uid: 'fam', email: 'fam@example.com', displayName: 'Wei' }, docs, width: 390 });
-  await page.waitForSelector('.class-card');
+  await page.waitForSelector('.st-card');
   const text = await page.textContent('body');
-  check('/student approval: P5 Maths opens although the old invitation said P6 Science', (await page.locator('.class-card').count()) >= 1 && /P5/.test(await page.textContent('.welcome .chips')));
+  check('/student approval: P5 Maths opens although the old invitation said P6 Science', (await page.locator('.st-card').count()) >= 1 && /P5/.test(await page.textContent('.welcome .chips')));
   check('/student approval: no P6 Science chip from the old invitation', !/P6/.test(await page.textContent('.welcome .chips')));
   check('/student approval: no script errors', errors.length === 0 && text.length > 0);
   await context.close();
@@ -329,7 +385,7 @@ let studentDb = null;
   docs['studentAccess/sci'] = { uid: 'sci', status: 'approved', childCount: 1, children: [{ name: 'Ana Goh', level: 'P5', subjects: 'science' }] };
   const { page, context, errors } = await open({ user: { uid: 'sci', email: 'sci@example.com', displayName: 'Ana' }, docs, width: 390 });
   await page.waitForSelector('.empty');
-  check('/student approval: a Science-only account no longer sees the P5 Maths class', (await page.locator('.class-card').count()) === 0);
+  check('/student approval: a Science-only account no longer sees the P5 Maths class', (await page.locator('.class-card, .st-card').count()) === 0);
   check('/student approval (science only): no script errors', errors.length === 0);
   await context.close();
 }
@@ -339,7 +395,7 @@ let studentDb = null;
   docs['studentAccess/wait'] = { uid: 'wait', status: 'pending', childCount: 1, children: [{ name: 'Kai Ong', level: 'P5', subjects: 'math' }] };
   const { page, context, errors } = await open({ user: { uid: 'wait', email: 'wait@example.com', displayName: 'Kai' }, docs, width: 390 });
   await page.waitForSelector('.state-card');
-  check('/student approval: an account still waiting sees no classes, and is told why', /Waiting for approval/.test(await page.textContent('.state-card')) && (await page.locator('.class-card').count()) === 0);
+  check('/student approval: an account still waiting sees no classes, and is told why', /Waiting for approval/.test(await page.textContent('.state-card')) && (await page.locator('.class-card, .st-card').count()) === 0);
   check('/student approval (waiting): no script errors', errors.length === 0);
   await context.close();
 }
