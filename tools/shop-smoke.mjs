@@ -22,6 +22,11 @@ export const SCHEDULE_CHECKOUT_ENDPOINT = BASE + 'createScheduleCheckout';
 export const SCHEDULE_STATUS_ENDPOINT = BASE + 'scheduleCheckoutStatus';
 // Free diagnostic test bookings on /diagnostic, served from the same origins.
 export const DIAGNOSTIC_ENDPOINT = BASE + 'bookDiagnostic';
+// The /trial page: booking with a one-time code or a class link, and its admin panel.
+export const TRIAL_ENDPOINT = BASE + 'trialBooking';
+export const TRIAL_ADMIN_ENDPOINT = BASE + 'trialAdmin';
+// Streams a class's worksheet to someone holding a booking's key (opened as a plain link).
+export const TRIAL_MATERIAL_ENDPOINT = BASE + 'trialMaterial';
 export const REFUSED_PROBE = 'https://shop-smoke.invalid';
 export const SMOKE_ATTEMPTS = 6;
 export const SMOKE_WAIT_MS = 10000;
@@ -35,15 +40,15 @@ async function preflight(endpoint, origin, fetchImpl) {
 
 export async function smokeProblems({ webhookExpected = true, fetchImpl = globalThis.fetch } = {}) {
   const problems = [];
-  for (const endpoint of [CHECKOUT_ENDPOINT, STATUS_ENDPOINT, RECEIPT_ENDPOINT, SCHEDULE_CHECKOUT_ENDPOINT, SCHEDULE_STATUS_ENDPOINT, DIAGNOSTIC_ENDPOINT]) {
+  for (const endpoint of [CHECKOUT_ENDPOINT, STATUS_ENDPOINT, RECEIPT_ENDPOINT, SCHEDULE_CHECKOUT_ENDPOINT, SCHEDULE_STATUS_ENDPOINT, DIAGNOSTIC_ENDPOINT, TRIAL_ENDPOINT, TRIAL_ADMIN_ENDPOINT]) {
     const name = endpoint.slice(BASE.length);
     for (const origin of ORIGINS) {
       try {
         const seen = await preflight(endpoint, origin, fetchImpl);
         if (seen.status !== 204) problems.push(`${name} from ${origin}: expected 204 to the preflight, got ${seen.status}.`);
         if (seen.allowOrigin !== origin) problems.push(`${name} from ${origin}: no matching Access-Control-Allow-Origin, so the page could not reach it.`);
-        else if (endpoint === RECEIPT_ENDPOINT && !seen.allowHeaders.includes('authorization'))
-          problems.push(`${name} from ${origin}: the admin's sign-in header is not allowed, so receipts could not be sent.`);
+        else if ((endpoint === RECEIPT_ENDPOINT || endpoint === TRIAL_ADMIN_ENDPOINT) && !seen.allowHeaders.includes('authorization'))
+          problems.push(`${name} from ${origin}: the admin's sign-in header is not allowed, so the admin page could not use it.`);
       } catch (error) { problems.push(`${name} from ${origin}: the preflight did not complete (${error?.message || error}).`); }
     }
     try {
@@ -51,6 +56,13 @@ export async function smokeProblems({ webhookExpected = true, fetchImpl = global
       if (refused.status !== 403 || refused.allowOrigin) problems.push(`${name}: an unlisted origin was not refused (got ${refused.status}).`);
     } catch (error) { problems.push(`${name}: the unlisted-origin preflight did not complete (${error?.message || error}).`); }
   }
+  try {
+    // Without a booking's key the worksheet address must answer with its own
+    // "not available" page, never a file.
+    const response = await fetchImpl(TRIAL_MATERIAL_ENDPOINT + '?a=AAAAAA-smoke&w=current', { method: 'GET', redirect: 'manual' });
+    const type = response.headers.get('content-type') || '';
+    if (response.status !== 404 || type.includes('pdf')) problems.push(`trialMaterial: a call with no valid key got ${response.status}; expected 404.`);
+  } catch (error) { problems.push(`trialMaterial: the call did not complete (${error?.message || error}).`); }
   try {
     const response = await fetchImpl(WEBHOOK_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"type":"smoke"}' });
     const want = webhookExpected ? 400 : 503;

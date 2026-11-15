@@ -2,11 +2,14 @@
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, Timestamp } = require('firebase-admin/firestore');
 const { getAuth } = require('firebase-admin/auth');
+const { getStorage } = require('firebase-admin/storage');
 const { onRequest } = require('firebase-functions/v2/https');
 const logger = require('firebase-functions/logger');
 const { createService, createHttp, hash } = require('./service');
 const { createBookingService, BOOKING_SOURCE } = require('./booking');
 const { createDiagnosticService } = require('./diagnostic');
+const { createTrialService } = require('./trial');
+const { createTrialStore } = require('./trial-store');
 const { createRepository } = require('./repository');
 const { createStripe } = require('./stripe');
 initializeApp();
@@ -22,6 +25,11 @@ const report = code => logger.warn(code);
 const bookings = createBookingService({ repository, stripe, http: createHttp(report), hashIp: hash, report });
 // Free diagnostic tests on /diagnostic, at the Master Class sessions on /schedule.
 const diagnostics = createDiagnosticService({ repository, http: createHttp(report), hashIp: hash, report });
+// Online trial lessons on /trial: one-time codes, class links, live Zoom link and worksheets.
+const trials = createTrialService({
+  store: createTrialStore(getFirestore(), Timestamp, { bucket: getStorage().bucket('mathgen--app.firebasestorage.app') }),
+  http: createHttp(report), hashIp: hash, verifyIdToken: token => getAuth().verifyIdToken(token), report
+});
 const service = createService({
   repository, stripe,
   webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
@@ -38,3 +46,6 @@ exports.sendShopReceipt = onRequest(web, service.sendReceipt);
 exports.createScheduleCheckout = onRequest(web, bookings.createCheckout);
 exports.scheduleCheckoutStatus = onRequest(web, bookings.checkoutStatus);
 exports.bookDiagnostic = onRequest(web, diagnostics.bookDiagnostic);
+exports.trialBooking = onRequest(web, trials.trialBooking);
+exports.trialAdmin = onRequest(web, trials.trialAdmin);
+exports.trialMaterial = onRequest(Object.assign({}, web, { timeoutSeconds: 120, concurrency: 10 }), trials.trialMaterial);

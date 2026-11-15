@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { readStripeKey, readWebhookSecret, envFileText, prepare, STRIPE_ACCOUNT, ENV_FILE } from './shop-deploy-setup.mjs';
 import { smokeProblems, CHECKOUT_ENDPOINT, STATUS_ENDPOINT, WEBHOOK_ENDPOINT, RECEIPT_ENDPOINT, SCHEDULE_CHECKOUT_ENDPOINT, SCHEDULE_STATUS_ENDPOINT,
-  DIAGNOSTIC_ENDPOINT, REFUSED_PROBE } from './shop-smoke.mjs';
+  DIAGNOSTIC_ENDPOINT, TRIAL_ENDPOINT, TRIAL_ADMIN_ENDPOINT, TRIAL_MATERIAL_ENDPOINT, REFUSED_PROBE } from './shop-smoke.mjs';
 import { SetupError } from './enquiry-deploy-setup.mjs';
 
 const LIVE = 'sk_live_' + 'A1b2C3d4E5'.repeat(4);
@@ -70,7 +70,8 @@ function liveService({ webhookStatus = 400, breakOrigin = '', noAuthHeader = fal
   const calls = [];
   const fetchImpl = async (url, init) => {
     calls.push([url, init.method]);
-    const origin = init.headers.Origin;
+    const origin = init.headers ? init.headers.Origin : undefined;
+    if (url.startsWith(TRIAL_MATERIAL_ENDPOINT + '?')) { assert.equal(init.method, 'GET'); return { status: 404, headers: new Headers({ 'content-type': 'text/html' }) }; }
     if (url === WEBHOOK_ENDPOINT) { assert.equal(init.method, 'POST'); assert.ok(!init.headers['Stripe-Signature']); return { status: webhookStatus, headers: new Headers() }; }
     assert.equal(init.method, 'OPTIONS', 'the smoke test never posts a checkout');
     if (origin === REFUSED_PROBE || origin === breakOrigin) return { status: 403, headers: new Headers() };
@@ -83,7 +84,8 @@ function liveService({ webhookStatus = 400, breakOrigin = '', noAuthHeader = fal
 await check('the smoke test passes a healthy service and only sends preflights', async () => {
   const live = liveService();
   assert.deepEqual(await smokeProblems({ fetchImpl: live.fetchImpl }), []);
-  assert.ok([CHECKOUT_ENDPOINT, STATUS_ENDPOINT, RECEIPT_ENDPOINT, SCHEDULE_CHECKOUT_ENDPOINT, SCHEDULE_STATUS_ENDPOINT, DIAGNOSTIC_ENDPOINT].every(endpoint => live.calls.some(([url]) => url === endpoint)));
+  assert.ok([CHECKOUT_ENDPOINT, STATUS_ENDPOINT, RECEIPT_ENDPOINT, SCHEDULE_CHECKOUT_ENDPOINT, SCHEDULE_STATUS_ENDPOINT, DIAGNOSTIC_ENDPOINT, TRIAL_ENDPOINT, TRIAL_ADMIN_ENDPOINT, TRIAL_MATERIAL_ENDPOINT].every(endpoint => live.calls.some(([url]) => url.startsWith(endpoint))));
+  assert.ok([CHECKOUT_ENDPOINT].every(endpoint => live.calls.some(([url]) => url === endpoint)));
   assert.deepEqual(await smokeProblems({ webhookExpected: false, fetchImpl: liveService({ webhookStatus: 503 }).fetchImpl }), []);
 });
 
@@ -94,7 +96,7 @@ await check('the smoke test names an origin the service refuses', async () => {
 
 await check('the smoke test notices a receipt endpoint that refuses the sign-in header', async () => {
   const problems = await smokeProblems({ fetchImpl: liveService({ noAuthHeader: true }).fetchImpl });
-  assert.ok(problems.length === 3 && problems.every(problem => problem.startsWith('sendShopReceipt') && problem.includes('sign-in')));
+  assert.ok(problems.length === 6 && problems.every(problem => /^(sendShopReceipt|trialAdmin) /.test(problem) && problem.includes('sign-in')));
 });
 
 await check('the deploy names every exported function, and only those', async () => {

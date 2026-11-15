@@ -1,0 +1,1313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<script>/* HTTPS UPGRADE — a page opened over plain http:// on the custom domain moves to https://, but only after a probe proves the secure address answers. If https is broken the page stays put. */(function(){var l=location;if(l.protocol!=='http:'||!/(^|\.)polymathlc\.com\.sg$/i.test(l.hostname))return;try{fetch('https://'+l.host+'/?https-check='+Date.now(),{mode:'no-cors',cache:'no-store'}).then(function(){l.replace('https://'+l.host+l.pathname+l.search+l.hash)},function(){})}catch(e){}})();</script>
+<title>Online Trial Lesson | Polymath Learning Centre</title>
+<!-- 🎥 Online trial lessons (Nov 2026). Not linked from the site and kept out of search:
+     the page opens with a one-time access code an admin made, or with a one-week class
+     link. Parents pick a level, date and time from the /schedule timetable; the page then
+     shows the class's Zoom link and its Current and Next worksheets, live from Polymath
+     Online / Ans Key. Admins: /trial/#admin. Server: shop-function/functions/trial.js. -->
+<meta name="description" content="Polymath Learning Centre online trial lesson.">
+<link rel="icon" href="../assets/branding/polymath-learning-centre.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://us-central1-mathgen--app.cloudfunctions.net" crossorigin>
+<script>try{if(window.fetch){window.__scheduleEarly=fetch('https://firestore.googleapis.com/v1/projects/mathgen--app/databases/(default)/documents/schedule_config/main',{cache:'no-store'}).then(function(r){return r.ok?r.json():null}).catch(function(){return null})}}catch(e){}</script>
+<style>
+  *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+  :root {
+    --white:#fff; --gray-50:#fafafa; --gray-100:#f5f5f5; --gray-200:#e5e5e5; --gray-300:#d4d4d4; --gray-400:#a3a3a3;
+    --gray-500:#737373; --gray-600:#525252; --gray-700:#404040; --gray-900:#171717;
+    --success:#16a34a; --success-bg:#f0fdf4; --success-border:#bbf7d0;
+    --danger:#dc2626; --danger-bg:#fef2f2; --danger-border:#fecaca;
+    --warn:#b45309; --warn-bg:#fffbeb; --warn-border:#fde68a;
+    --ink:#10303a; --teal:#2e9ca6; --deep:#056c76; --aqua:#56c4d0; --pink:#ec008c; --plum:#b51f6b; --paper:#f2f9fa; --line:#d1eaee;
+    --zoom:#0b5cff;
+    --font:'DM Sans',system-ui,sans-serif;
+    --radius:14px; --radius-sm:9px;
+  }
+  body { font-family:var(--font); background:var(--paper); color:var(--ink); line-height:1.6; -webkit-font-smoothing:antialiased; }
+  button, input, select, textarea { font-family:inherit; font-size:15px; }
+  a { color:var(--deep); }
+  .hidden { display:none !important; }
+  .mono { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; letter-spacing:.04em; }
+
+  /* ─── Top bar ─── */
+  .topbar { position:sticky; top:0; z-index:50; background:var(--white); box-shadow:0 2px 14px rgba(5,108,118,.08);
+    border-bottom:3px solid transparent; border-image:linear-gradient(90deg,var(--teal),var(--aqua),var(--pink)) 1; }
+  .topbar-inner { max-width:980px; margin:0 auto; padding:0 16px; display:flex; align-items:center; gap:16px; min-height:62px; }
+  .brand { display:flex; align-items:center; gap:10px; text-decoration:none; color:var(--ink); }
+  .brand img { width:52px; height:40px; object-fit:contain; }
+  .brand-name { font-size:14px; line-height:1.25; font-weight:700; }
+  .brand-name span { display:block; font-size:11px; font-weight:400; color:#5e6d6f; letter-spacing:.3px; }
+  .topbar-contact { display:flex; align-items:center; gap:10px; margin-left:auto; }
+  .wa-btn { display:inline-flex; align-items:center; gap:7px; background:#25d366; color:#fff; border-radius:999px; padding:8px 14px;
+    font-weight:700; font-size:14px; text-decoration:none; white-space:nowrap; box-shadow:0 2px 8px rgba(37,211,102,.28); }
+  .wa-btn:hover { background:#1ebe5b; }
+  .wa-btn svg { width:18px; height:18px; fill:currentColor; flex:0 0 auto; }
+
+  .wrap { max-width:980px; margin:0 auto; padding:24px 16px 80px; }
+
+  /* ─── Hero ─── */
+  .hero { position:relative; overflow:hidden; color:#fff; border-radius:20px; padding:40px 34px; margin-bottom:22px;
+    background:radial-gradient(circle at 92% 8%,rgba(236,0,140,.38),transparent 46%),linear-gradient(135deg,var(--deep),var(--teal) 60%,var(--aqua));
+    box-shadow:0 14px 34px rgba(5,108,118,.24); }
+  .hero::after { content:""; position:absolute; right:-50px; bottom:-70px; width:240px; height:240px; border-radius:50%; background:rgba(255,255,255,.08); }
+  .hero .eyebrow { display:inline-block; font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; background:rgba(255,255,255,.16);
+    border:1px solid rgba(255,255,255,.3); border-radius:999px; padding:4px 12px; margin-bottom:14px; }
+  .hero h1 { font-size:34px; line-height:1.15; letter-spacing:-.6px; margin-bottom:10px; max-width:640px; position:relative; z-index:1; }
+  .hero p { color:rgba(255,255,255,.92); max-width:600px; font-size:16px; position:relative; z-index:1; }
+
+  /* ─── Cards ─── */
+  .card { background:var(--white); border:1px solid var(--line); border-radius:var(--radius); padding:24px; margin-bottom:20px; box-shadow:0 2px 10px rgba(5,108,118,.05); }
+  .card h2 { font-size:20px; color:var(--deep); margin-bottom:6px; letter-spacing:-.2px; }
+  .card .lead { color:var(--gray-600); font-size:14px; margin-bottom:16px; }
+  .narrow { max-width:480px; margin-left:auto; margin-right:auto; }
+
+  /* ─── Gate ─── */
+  .gate { text-align:center; padding:34px 24px; }
+  .gate .lock { width:64px; height:64px; border-radius:50%; background:#fdf2f8; color:var(--pink); font-size:30px; display:flex; align-items:center; justify-content:center; margin:0 auto 14px; border:2px solid #fbcfe8; }
+  .gate h2 { font-size:22px; }
+  .gate form { display:flex; gap:10px; margin-top:18px; }
+  .gate input { flex:1; padding:13px 14px; border:1.5px solid var(--gray-300); border-radius:var(--radius-sm); font-size:18px; text-align:center; text-transform:uppercase; letter-spacing:.12em; min-width:0; }
+  .gate input:focus { outline:none; border-color:var(--deep); box-shadow:0 0 0 3px rgba(5,108,118,.12); }
+  .gate .err { color:var(--danger); font-size:14px; margin-top:10px; min-height:22px; }
+
+  /* ─── Booking steps ─── */
+  .book-step { border-top:1px solid var(--line); padding-top:18px; margin-top:18px; }
+  .book-step:first-of-type { border-top:none; padding-top:0; margin-top:0; }
+  .step-title { display:flex; align-items:center; gap:10px; font-size:16px; font-weight:700; margin-bottom:12px; }
+  .step-num { width:26px; height:26px; border-radius:50%; background:var(--pink); color:#fff; font-size:13px; display:flex; align-items:center; justify-content:center; flex:0 0 auto; }
+  .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .field label { display:block; font-size:13px; font-weight:700; color:var(--gray-700); margin-bottom:5px; }
+  .field input, .field select, .field textarea { width:100%; padding:11px 12px; border:1px solid var(--gray-300); border-radius:var(--radius-sm); background:var(--white); color:var(--gray-900); }
+  .field input:focus, .field select:focus { outline:none; border-color:var(--deep); box-shadow:0 0 0 3px rgba(5,108,118,.12); }
+  .field .hint { font-size:12px; color:var(--gray-500); margin-top:4px; }
+  .req { color:var(--danger); }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; }
+  .chip { border:1px solid var(--gray-300); background:#fff; color:var(--ink); border-radius:999px; padding:9px 18px; cursor:pointer; font-weight:600; font-size:14px; }
+  .chip:hover { border-color:var(--deep); }
+  .chip.on { background:var(--deep); border-color:var(--deep); color:#fff; }
+  .chip:disabled { opacity:.45; cursor:not-allowed; }
+  .chip:focus-visible { outline:2px solid var(--pink); outline-offset:2px; }
+  .month-tabs { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+  .month-tab { border:1px solid var(--line); background:#fff; color:var(--deep); border-radius:999px; padding:6px 14px; cursor:pointer; font-weight:700; font-size:13px; }
+  .month-tab.on { background:var(--deep); color:#fff; border-color:var(--deep); }
+  .session-day { margin-bottom:14px; }
+  .session-day h4 { font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--deep); margin-bottom:8px; display:flex; align-items:center; gap:8px; }
+  .session-day h4::before { content:""; width:8px; height:8px; border-radius:50%; background:var(--pink); }
+  .session-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:10px; }
+  .session { text-align:left; border:1.5px solid var(--line); border-top:4px solid var(--aqua); background:#fff; border-radius:12px; padding:12px 14px; cursor:pointer;
+    display:flex; flex-direction:column; gap:4px; transition:transform .12s, box-shadow .12s, border-color .12s; color:var(--ink); }
+  .session:hover { transform:translateY(-1px); box-shadow:0 6px 16px rgba(5,108,118,.12); }
+  .session.on { border-color:var(--pink); border-top-color:var(--pink); box-shadow:0 0 0 3px rgba(236,0,140,.14); }
+  .session .time { font-weight:700; font-size:15px; }
+  .session .what { font-size:13px; color:var(--gray-600); }
+  .tag { display:inline-block; font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px; background:var(--gray-100); border:1px solid var(--gray-200); color:var(--gray-700); margin-right:4px; }
+  .tag.math { background:#eff6ff; border-color:#bfdbfe; color:#1d4ed8; }
+  .tag.sci { background:#f0fdf4; border-color:#bbf7d0; color:#15803d; }
+  .tag.zoom { background:#eef4ff; border-color:#c7d7fe; color:var(--zoom); }
+  .more-row { text-align:center; margin-top:6px; }
+  .state { text-align:center; color:var(--gray-500); padding:28px 12px; font-size:14px; border:1px dashed var(--line); border-radius:12px; }
+  .spin { display:inline-block; width:20px; height:20px; border:3px solid var(--line); border-top-color:var(--deep); border-radius:50%; animation:spin .8s linear infinite; vertical-align:middle; margin-right:8px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .chosen { display:flex; align-items:center; gap:10px; background:#fdf2f8; border:1px solid #fbcfe8; color:var(--plum); border-radius:10px; padding:10px 14px; font-weight:700; font-size:14px; margin-bottom:14px; }
+
+  .btn { display:inline-flex; justify-content:center; align-items:center; gap:6px; background:var(--deep); color:#fff; border:1px solid var(--deep); padding:11px 16px;
+    border-radius:var(--radius-sm); font-weight:700; cursor:pointer; text-decoration:none; font-size:15px; }
+  .btn:hover { background:#04565e; }
+  .btn:disabled { opacity:.55; cursor:not-allowed; }
+  .btn.big { width:100%; padding:15px; font-size:16px; background:var(--pink); border-color:var(--pink); }
+  .btn.big:hover { background:var(--plum); border-color:var(--plum); }
+  .btn.ghost { background:#fff; color:var(--deep); border-color:var(--gray-300); }
+  .btn.ghost:hover { background:var(--gray-100); }
+  .btn.danger { background:#fff; color:var(--danger); border-color:var(--danger-border); }
+  .btn.small { padding:6px 10px; font-size:12px; }
+  .btn.zoom { background:var(--zoom); border-color:var(--zoom); }
+  .btn.zoom:hover { background:#0848c9; }
+  .fineprint { font-size:12px; color:var(--gray-500); margin-top:10px; text-align:center; }
+
+  /* ─── The lesson: Zoom and worksheets ─── */
+  .lesson-head { display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; }
+  .lesson-date { flex:0 0 auto; width:84px; border-radius:14px; overflow:hidden; text-align:center; border:1px solid var(--line); background:#fff; }
+  .lesson-date .m { background:var(--pink); color:#fff; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; padding:3px 0; }
+  .lesson-date .d { font-size:32px; font-weight:700; line-height:1.2; padding-top:4px; }
+  .lesson-date .w { font-size:12px; color:var(--gray-600); padding-bottom:6px; }
+  .lesson-info { flex:1; min-width:220px; }
+  .lesson-info h2 { margin-bottom:2px; }
+  .lesson-info .sub { color:var(--gray-600); font-size:14px; }
+  .zoom-box { margin-top:18px; border:1px solid #c7d7fe; background:linear-gradient(180deg,#f5f8ff,#fff); border-radius:12px; padding:16px; display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
+  .zoom-box .icon { width:44px; height:44px; border-radius:12px; background:var(--zoom); color:#fff; display:flex; align-items:center; justify-content:center; font-size:22px; flex:0 0 auto; }
+  .zoom-box .txt { flex:1; min-width:200px; font-size:14px; }
+  .zoom-box .txt b { display:block; font-size:15px; }
+  .zoom-box .url { word-break:break-all; color:var(--gray-600); font-size:12px; }
+  .sheets { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px; }
+  .sheet { border:1px solid var(--line); border-radius:12px; padding:16px; background:#fff; display:flex; flex-direction:column; gap:8px; position:relative; }
+  .sheet .kind { font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--plum); }
+  .sheet.next .kind { color:var(--deep); }
+  .sheet .name { font-weight:700; font-size:16px; line-height:1.35; }
+  .sheet .meta { font-size:13px; color:var(--gray-600); }
+  .sheet .acts { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; padding-top:6px; }
+  .sheet .doc { width:40px; height:50px; border-radius:6px; background:linear-gradient(180deg,#fff,#f2f9fa); border:1px solid var(--line); position:absolute; right:16px; top:16px;
+    box-shadow:3px 3px 0 var(--line); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:var(--danger); }
+  .notice { border-radius:10px; padding:12px 14px; font-size:14px; margin-top:14px; }
+  .notice.info { background:var(--paper); border:1px solid var(--line); color:var(--gray-700); }
+  .notice.warn { background:var(--warn-bg); border:1px solid var(--warn-border); color:var(--warn); }
+  .notice.ok { background:var(--success-bg); border:1px solid var(--success-border); color:#166534; }
+  .summary { text-align:left; border:1px solid var(--line); border-radius:12px; overflow:hidden; font-size:14px; margin-top:16px; }
+  .summary div { display:grid; grid-template-columns:150px 1fr; border-top:1px solid var(--line); }
+  .summary div:first-child { border-top:none; }
+  .summary dt { background:var(--paper); padding:8px 12px; font-weight:700; color:var(--gray-700); }
+  .summary dd { padding:8px 12px; word-break:break-word; }
+  .row-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:16px; }
+
+  /* ─── Admin ─── */
+  .admin-banner { background:var(--warn-bg); border:1px solid var(--warn-border); color:var(--warn); padding:10px 14px; border-radius:var(--radius-sm); font-size:13px; margin-bottom:16px;
+    display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+  .tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px; }
+  .tab { border:1px solid var(--line); background:#fff; color:var(--deep); border-radius:10px; padding:9px 14px; cursor:pointer; font-weight:700; font-size:14px; }
+  .tab.on { background:var(--deep); color:#fff; border-color:var(--deep); }
+  .tab .count { display:inline-block; min-width:20px; padding:0 6px; margin-left:6px; border-radius:999px; background:rgba(0,0,0,.08); font-size:12px; }
+  .tab.on .count { background:rgba(255,255,255,.2); }
+  .admin-tools { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:12px; }
+  .admin-tools input[type=search], .admin-tools input[type=text], .admin-tools select { padding:8px 10px; border:1px solid var(--gray-300); border-radius:8px; font-size:14px; }
+  .admin-tools input[type=search] { min-width:220px; }
+  .admin-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px; }
+  .stat { background:var(--paper); border-radius:10px; padding:12px; }
+  .stat b { display:block; font-size:22px; color:var(--deep); }
+  .stat span { font-size:12px; color:var(--gray-600); }
+  .table-wrap { overflow-x:auto; border:1px solid var(--line); border-radius:12px; }
+  table.list { width:100%; border-collapse:collapse; font-size:13px; }
+  table.list th { text-align:left; background:var(--paper); padding:9px 10px; font-size:12px; color:var(--gray-700); white-space:nowrap; position:sticky; top:0; }
+  table.list td { padding:9px 10px; border-top:1px solid var(--line); vertical-align:top; }
+  table.list td.mono, table.list .mono { white-space:nowrap; }
+  table.list td .muted, .muted { color:var(--gray-500); font-size:12px; }
+  table.list input[type=url], table.list input[type=text], table.list select { width:100%; min-width:160px; padding:7px 8px; border:1px solid var(--gray-300); border-radius:7px; font-size:13px; }
+  .badge { display:inline-block; font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px; border:1px solid; white-space:nowrap; }
+  .badge.active, .badge.booked { background:var(--success-bg); color:var(--success); border-color:var(--success-border); }
+  .badge.used, .badge.attended { background:#eef2ff; color:#4338ca; border-color:#c7d2fe; }
+  .badge.expired, .badge.revoked, .badge.cancelled { background:var(--gray-100); color:var(--gray-500); border-color:var(--gray-200); }
+  .badge.no-show { background:var(--danger-bg); color:var(--danger); border-color:var(--danger-border); }
+  .badge.link { background:#fdf2f8; color:var(--plum); border-color:#fbcfe8; }
+  .acts-cell { display:flex; gap:6px; flex-wrap:wrap; }
+  .new-codes { border:2px dashed var(--pink); border-radius:12px; padding:14px; margin-bottom:14px; background:#fffafd; }
+  .new-codes .codes { display:flex; flex-wrap:wrap; gap:8px; margin:8px 0; }
+  .new-codes .codes span { background:#fff; border:1px solid #fbcfe8; border-radius:8px; padding:6px 10px; font-weight:700; font-size:16px; }
+  .switch { display:flex; align-items:center; gap:10px; cursor:pointer; font-weight:600; font-size:14px; }
+  .switch input { width:18px; height:18px; accent-color:var(--deep); }
+
+  .toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(140px); background:var(--deep); color:#fff; padding:12px 18px; border-radius:var(--radius-sm);
+    font-size:14px; transition:transform .25s ease, opacity .25s ease; z-index:200; max-width:92vw; box-shadow:0 8px 20px rgba(0,0,0,.18); opacity:0; pointer-events:none; }
+  .toast.show { transform:translateX(-50%) translateY(0); opacity:1; }
+  .toast.err { background:var(--danger); }
+  .footer { text-align:center; font-size:12px; color:var(--gray-500); margin-top:32px; padding-top:20px; border-top:1px solid var(--line); }
+  .link-btn { background:none; border:none; color:var(--gray-600); text-decoration:underline; cursor:pointer; font-size:12px; }
+  .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; z-index:150; padding:16px; }
+  .modal { background:#fff; border-radius:var(--radius); max-width:380px; width:100%; padding:24px; text-align:center; }
+  .modal h2 { font-size:18px; margin-bottom:6px; }
+  .modal p { color:var(--gray-600); font-size:14px; margin-bottom:14px; }
+
+  @media (max-width:760px) {
+    .grid-2, .sheets { grid-template-columns:1fr; }
+    .admin-stats { grid-template-columns:1fr 1fr; }
+    .hero { padding:28px 22px; }
+    .hero h1 { font-size:26px; }
+    .brand-name { display:none; }
+    .card { padding:18px; }
+    .summary div { grid-template-columns:110px 1fr; }
+    .gate form { flex-direction:column; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="../"><img src="../assets/branding/polymath-learning-centre.png" alt="Polymath Learning Centre logo"><div class="brand-name">Polymath<span>Learning Centre</span></div></a>
+    <div class="topbar-contact">
+      <a class="wa-btn" href="https://wa.me/6596450588" target="_blank" rel="noopener" aria-label="WhatsApp us at +65 9645 0588" title="WhatsApp +65 9645 0588">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.47 14.38c-.3-.15-1.75-.86-2.02-.96-.27-.1-.47-.15-.67.15-.2.3-.77.96-.94 1.16-.17.2-.35.22-.64.07-.3-.15-1.25-.46-2.38-1.47-.88-.79-1.47-1.76-1.65-2.06-.17-.3-.02-.46.13-.6.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.03-.52-.07-.15-.67-1.61-.92-2.2-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.79.37-.27.3-1.04 1.02-1.04 2.48s1.07 2.88 1.21 3.08c.15.2 2.1 3.2 5.08 4.49.71.31 1.26.49 1.69.63.71.23 1.36.2 1.87.12.57-.09 1.75-.72 2-1.41.25-.69.25-1.29.17-1.41-.07-.12-.27-.2-.57-.35zM12.04 21.5h-.01a9.46 9.46 0 0 1-4.82-1.32l-.35-.21-3.58.94.96-3.49-.23-.36a9.44 9.44 0 0 1-1.45-5.03c0-5.22 4.25-9.47 9.49-9.47a9.4 9.4 0 0 1 6.7 2.78 9.41 9.41 0 0 1 2.77 6.7c0 5.23-4.25 9.47-9.48 9.47zm8.06-17.53A11.33 11.33 0 0 0 12.04.63C5.76.63.65 5.74.65 12.02c0 2 .52 3.96 1.52 5.69L.55 23.6l6.04-1.58a11.36 11.36 0 0 0 5.44 1.39h.01c6.28 0 11.39-5.11 11.39-11.39 0-3.04-1.18-5.9-3.33-8.05z"/></svg>
+        <span>WhatsApp</span>
+      </a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ═════════════════ ADMIN (signed-in admins only) ═════════════════ -->
+  <section id="admin-section" class="hidden">
+    <div class="admin-banner">
+      <span id="admin-who">Admin</span>
+      <span>
+        <button class="btn small ghost" onclick="adminLoad()">Refresh</button>
+        <button class="btn small ghost" onclick="adminSignOut()">Sign out</button>
+      </span>
+    </div>
+    <div class="tabs" id="admin-tabs" role="tablist">
+      <button class="tab on" data-tab="bookings">Bookings &amp; visits<span class="count" id="count-bookings">0</span></button>
+      <button class="tab" data-tab="codes">Access codes<span class="count" id="count-codes">0</span></button>
+      <button class="tab" data-tab="links">Class links<span class="count" id="count-links">0</span></button>
+      <button class="tab" data-tab="classes">Classes &amp; Zoom</button>
+      <button class="tab" data-tab="password">Password</button>
+    </div>
+
+    <div class="card admin-pane" id="pane-bookings">
+      <h2>Bookings and class-link visits</h2>
+      <p class="lead">Everyone who booked a date with a code, and everyone who opened a class link. Check the level, the class and the month each parent chose.</p>
+      <div class="admin-stats" id="admin-stats"></div>
+      <div class="admin-tools">
+        <div class="chips" id="booking-filter">
+          <button class="chip on" data-filter="upcoming">Upcoming</button>
+          <button class="chip" data-filter="past">Past</button>
+          <button class="chip" data-filter="links">Class-link visits</button>
+          <button class="chip" data-filter="all">All</button>
+        </div>
+        <select id="booking-month" aria-label="Month"><option value="">Every month</option></select>
+        <input type="search" id="booking-search" placeholder="Search name, email, phone or code">
+        <button class="btn small ghost" onclick="downloadCsv()">Download CSV</button>
+      </div>
+      <div id="booking-list"><div class="state"><span class="spin"></span>Loading…</div></div>
+    </div>
+
+    <div class="card admin-pane hidden" id="pane-codes">
+      <h2>One-time access codes</h2>
+      <p class="lead">Give each parent their own code. A code opens the booking page and is used up by the one booking made with it. Unused codes stop working after 60 days.</p>
+      <div class="admin-tools">
+        <label class="muted" for="code-count">Make</label>
+        <select id="code-count"><option>1</option><option>3</option><option>5</option><option>10</option><option>20</option><option>30</option></select>
+        <input type="text" id="code-label" maxlength="80" placeholder="Who is it for? (optional)">
+        <button class="btn small" onclick="createCodes()">Make codes</button>
+      </div>
+      <div id="new-codes"></div>
+      <div class="admin-tools">
+        <div class="chips" id="code-filter">
+          <button class="chip on" data-filter="active">Unused</button>
+          <button class="chip" data-filter="used">Used</button>
+          <button class="chip" data-filter="all">All</button>
+        </div>
+      </div>
+      <div id="code-list"></div>
+    </div>
+
+    <div class="card admin-pane hidden" id="pane-links">
+      <h2>Class links (one week)</h2>
+      <p class="lead">A link for one class opens its Zoom link and its Current and Next worksheets straight away, after asking for an email and WhatsApp number. Each link stops working 7 days after you make it.</p>
+      <div class="admin-tools">
+        <select id="link-slot" aria-label="Class"></select>
+        <input type="text" id="link-label" maxlength="80" placeholder="Note, e.g. who you are sending it to">
+        <button class="btn small" onclick="createLink()">Make link</button>
+      </div>
+      <div id="link-list"></div>
+    </div>
+
+    <div class="card admin-pane hidden" id="pane-classes">
+      <h2>Classes, Zoom links and worksheets</h2>
+      <p class="lead">Only open classes that run online (Online or Both on the <a href="../schedule/">schedule</a>) can be booked. Each class follows its Polymath Online class for the Current and Next worksheets; change the match if it is wrong.</p>
+      <div class="grid-2" style="margin-bottom:14px">
+        <div class="field"><label for="zoom-default">Default Zoom link (any class without its own)</label><input id="zoom-default" type="url" placeholder="https://us02web.zoom.us/j/…"></div>
+        <div class="field"><label for="zoom-default-note">Meeting ID / passcode note</label><input id="zoom-default-note" type="text" maxlength="200" placeholder="e.g. Passcode 1234"></div>
+      </div>
+      <div class="table-wrap"><table class="list" id="class-table"></table></div>
+      <div class="row-actions"><button class="btn" onclick="saveClasses()">Save classes and Zoom links</button></div>
+    </div>
+
+    <div class="card admin-pane hidden" id="pane-password">
+      <h2>Shared password (optional)</h2>
+      <p class="lead">One-time codes are the way in. If you also want one shared password to open the booking page, switch it on here. Bookings made with it show "password" instead of a code.</p>
+      <label class="switch"><input type="checkbox" id="password-enabled"> Let the shared password open the booking page too</label>
+      <p class="muted" id="password-state" style="margin:8px 0 14px"></p>
+      <div class="admin-tools">
+        <input type="text" id="password-new" maxlength="64" placeholder="New password (not case-sensitive)" autocomplete="off">
+        <button class="btn small" onclick="savePassword()">Change password</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═════════════════ PARENTS ═════════════════ -->
+  <section id="public-section">
+    <div class="hero">
+      <span class="eyebrow" id="hero-eyebrow">Online trial lesson · Zoom</span>
+      <h1 id="hero-title">Join a Polymath class online</h1>
+      <p id="hero-text">Choose your child's level and a lesson that suits you. You get the Zoom link and the worksheets the class is using, so your child can join straight in.</p>
+    </div>
+
+    <!-- 1. Enter the access code -->
+    <div class="card narrow gate hidden" id="gate-view">
+      <div class="lock">🔒</div>
+      <h2>Enter your access code</h2>
+      <p class="lead">This page is for families we have invited. Enter the code we sent you.</p>
+      <form id="gate-form" autocomplete="off">
+        <input id="gate-code" maxlength="40" placeholder="ABCD-2345" aria-label="Access code" autocapitalize="characters" spellcheck="false">
+        <button class="btn" id="gate-btn" type="submit">Continue</button>
+      </form>
+      <div class="err" id="gate-err" role="alert"></div>
+      <p class="fineprint">No code? WhatsApp us at <a href="https://wa.me/6596450588" target="_blank" rel="noopener">+65 9645 0588</a>.</p>
+      <p class="fineprint hidden" id="gate-last"><button class="link-btn" type="button" onclick="openSavedBooking()">Open my booked lesson</button></p>
+    </div>
+
+    <!-- 2. Book a date -->
+    <div class="card hidden" id="book-view">
+      <h2>Book an online trial lesson</h2>
+      <p class="lead">Pick your child's level, then a lesson. All lessons are live on Zoom.</p>
+      <div id="book-form">
+        <div class="book-step">
+          <div class="step-title"><span class="step-num">1</span>Your child's level</div>
+          <div class="chips" id="level-chips" role="radiogroup" aria-label="Level"></div>
+        </div>
+        <div class="book-step hidden" id="subject-step">
+          <div class="step-title"><span class="step-num">2</span>Subject</div>
+          <div class="chips" id="subject-chips" role="radiogroup" aria-label="Subject"></div>
+        </div>
+        <div class="book-step">
+          <div class="step-title"><span class="step-num" id="session-num">2</span>Choose a date and time</div>
+          <div class="month-tabs" id="month-tabs"></div>
+          <div id="sessions"><div class="state"><span class="spin"></span>Loading lessons…</div></div>
+        </div>
+        <div class="book-step">
+          <div class="step-title"><span class="step-num" id="details-num">3</span>Your details</div>
+          <div class="chosen hidden" id="chosen"></div>
+          <div class="grid-2">
+            <div class="field"><label for="f-student">Student's name <span class="req">*</span></label><input id="f-student" maxlength="80" autocomplete="off"></div>
+            <div class="field"><label for="f-parent">Parent's name <span class="req">*</span></label><input id="f-parent" maxlength="80" autocomplete="name"></div>
+            <div class="field"><label for="f-email">Email <span class="req">*</span></label><input id="f-email" type="email" maxlength="120" autocomplete="email" inputmode="email"><div class="hint">We send the Zoom link and a reminder the afternoon before.</div></div>
+            <div class="field"><label for="f-whatsapp">WhatsApp number</label><input id="f-whatsapp" type="tel" maxlength="24" autocomplete="tel" inputmode="tel" placeholder="9123 4567"><div class="hint">Optional, in case we need to reach you quickly.</div></div>
+          </div>
+          <div style="margin-top:16px">
+            <button class="btn big" id="submit-btn" onclick="submitBooking()">Book trial lesson</button>
+            <p class="fineprint">Your access code is used up by this booking. Questions? WhatsApp <a href="https://wa.me/6596450588" target="_blank" rel="noopener">+65 9645 0588</a>.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. A class link: email and WhatsApp first -->
+    <div class="card narrow hidden" id="link-view">
+      <div id="link-loading" class="state"><span class="spin"></span>Opening your class…</div>
+      <div id="link-form" class="hidden">
+        <h2 id="link-title">Your class</h2>
+        <p class="lead" id="link-lead">Tell us how to reach you, and the Zoom link and worksheets open straight away.</p>
+        <div class="field" style="margin-bottom:12px"><label for="l-email">Email <span class="req">*</span></label><input id="l-email" type="email" maxlength="120" autocomplete="email" inputmode="email"></div>
+        <div class="field" style="margin-bottom:12px"><label for="l-whatsapp">WhatsApp number <span class="req">*</span></label><input id="l-whatsapp" type="tel" maxlength="24" autocomplete="tel" inputmode="tel" placeholder="9123 4567"><div class="hint">Singapore number, or include your country code (e.g. +60…).</div></div>
+        <div class="field" style="margin-bottom:16px"><label for="l-student">Student's name</label><input id="l-student" maxlength="80" autocomplete="off"></div>
+        <button class="btn big" id="link-btn" onclick="submitLink()">Open the class</button>
+        <p class="fineprint" id="link-expiry"></p>
+      </div>
+      <div id="link-error" class="hidden" style="text-align:center"></div>
+    </div>
+
+    <!-- 4. The lesson: Zoom link and worksheets -->
+    <div class="hidden" id="lesson-view">
+      <div class="card">
+        <div class="notice ok hidden" id="lesson-booked" style="margin:0 0 16px"></div>
+        <div class="lesson-head">
+          <div class="lesson-date" id="lesson-date"></div>
+          <div class="lesson-info">
+            <h2 id="lesson-title"></h2>
+            <div class="sub" id="lesson-sub"></div>
+          </div>
+        </div>
+        <div class="zoom-box" id="zoom-box"></div>
+        <div class="row-actions" id="lesson-actions"></div>
+      </div>
+      <div class="card">
+        <h2>Worksheets for the lesson</h2>
+        <p class="lead" id="sheets-lead">These follow the class: the worksheet the class is on now, and the one after it. Open this page again the day before, print them or have them ready on a tablet.</p>
+        <div class="sheets" id="sheets"></div>
+      </div>
+      <div class="card">
+        <h2>Your details</h2>
+        <dl class="summary" id="lesson-summary"></dl>
+        <div class="row-actions">
+          <button class="btn ghost small" onclick="copyText(currentLesson && currentLesson.pageUrl, 'Page link copied')">Copy this page's link</button>
+          <button class="btn ghost small hidden" id="book-another" onclick="bookAnother()">Book with another code</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="footer">
+    Polymath Learning Centre · Clementi · WhatsApp +65 9645 0588 ·
+    <button class="link-btn" id="admin-login-link" onclick="adminSignIn()">Teacher login</button>
+    <span class="hidden" id="page-version"></span>
+  </div>
+</main>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════════
+// 🎥 Online trial lessons — polymathlc.com.sg/trial
+// ═══════════════════════════════════════════════════════════
+// Three ways this page opens:
+//   (no hash)  → enter a one-time access code (or the shared password if the
+//                admins switched it on) → pick level, date and time → book. The
+//                trialBooking function checks the code, uses it up, writes the
+//                booking and emails the centre and the parent.
+//   #l=<link>  → an admin's one-week class link: email + WhatsApp, then the
+//                class's Zoom link and worksheets straight away.
+//   #b=<key>   → a booked lesson's own page (from the emails), live.
+//   #admin     → the admins' panel (Google sign-in; checked again on the server).
+// Nothing private is in this page or readable from the browser: the codes, links,
+// Zoom links and bookings live in Firestore collections only the functions use.
+
+// Shown to the signed-in admin in the footer, so a deploy can be checked.
+// Bump it on every change to this page.
+const TRIAL_PAGE_VERSION = 'v1.0.0';
+const API = 'https://us-central1-mathgen--app.cloudfunctions.net/';
+const BOOK_URL = API + 'trialBooking';
+const ADMIN_URL = API + 'trialAdmin';
+const CONFIG_CACHE_KEY = 'pl_trial_schedule_v1';
+const CODE_KEY = 'pl_trial_code_v1';
+const LAST_KEY = 'pl_trial_last_v1';
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const LEVELS = ['P3', 'P4', 'P5', 'P6'];
+
+// BEGIN TRIAL DATES — pure date maths, a copy of shop-function/functions/trial.js,
+// cut out and checked against it by tools/trial-tests.mjs
+const TRIAL_HORIZON_DAYS = 56;
+const SG_PUBLIC_HOLIDAYS = {
+  2026: ['2026-01-01', '2026-02-17', '2026-02-18', '2026-03-21', '2026-04-03', '2026-05-01', '2026-05-27',
+         '2026-05-31', '2026-06-01', '2026-08-09', '2026-08-10', '2026-11-08', '2026-11-09', '2026-12-25'],
+  2027: ['2027-01-01', '2027-02-06', '2027-02-07', '2027-02-08', '2027-03-10', '2027-03-26', '2027-05-01',
+         '2027-05-17', '2027-05-20', '2027-08-09', '2027-10-28', '2027-12-25']
+};
+const WEEKDAY_OF_CODE = { SUN: 0, MON: 1, TUE: 2, WED: 3, THU: 4, FRI: 5, SAT: 6 };
+const WEEKDAY_TIMES = ['3:00pm – 4:45pm', '5:00pm – 6:45pm', '7:00pm – 8:45pm'];
+const SATURDAY_TIMES = ['9:00am – 10:45am', '11:00am – 12:45pm', '1:00pm – 2:45pm'];
+const DAY_NAMES = { MON: 'Monday', TUE: 'Tuesday', WED: 'Wednesday', THU: 'Thursday', FRI: 'Friday', SAT: 'Saturday' };
+const WD_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTH_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const SLOT_RE = /^(MON|TUE|WED|THU|FRI|SAT)-([123])$/;
+const DAY_MS = 86400000, SG_OFFSET_MS = 8 * 3600000;
+
+function sgDayKey(ms) { return new Date((ms == null ? Date.now() : ms) + SG_OFFSET_MS).toISOString().slice(0, 10); }
+function dayKeyTime(key) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key || '');
+  if (!m) return NaN;
+  const t = Date.UTC(+m[1], +m[2] - 1, +m[3]);
+  const d = new Date(t);
+  return d.getUTCFullYear() === +m[1] && d.getUTCMonth() === +m[2] - 1 && d.getUTCDate() === +m[3] ? t : NaN;
+}
+function addDays(key, n) { return new Date(dayKeyTime(key) + n * DAY_MS).toISOString().slice(0, 10); }
+function weekdayOfKey(key) { return new Date(dayKeyTime(key)).getUTCDay(); }
+function isPublicHoliday(key) { const l = SG_PUBLIC_HOLIDAYS[String(key).slice(0, 4)]; return !!l && l.indexOf(key) > -1; }
+function fmtDayKey(key) {
+  if (!isFinite(dayKeyTime(key))) return '';
+  const p = key.split('-').map(Number);
+  return WD_LONG[weekdayOfKey(key)] + ' ' + p[2] + ' ' + MONTH_LONG[p[1] - 1] + ' ' + p[0];
+}
+function slotTime(id) {
+  const m = SLOT_RE.exec(id);
+  return m ? (m[1] === 'SAT' ? SATURDAY_TIMES : WEEKDAY_TIMES)[Number(m[2]) - 1] : '';
+}
+function slotLabel(id) { const m = SLOT_RE.exec(id); return m ? DAY_NAMES[m[1]] + ' ' + slotTime(id) : id; }
+function sessionLabel(slot, date) { return fmtDayKey(date) + ', ' + slotTime(slot); }
+function bookingWindow(now) {
+  const today = sgDayKey(now);
+  return { today, first: addDays(today, 1), last: addDays(today, TRIAL_HORIZON_DAYS) };
+}
+function readSlot(config, id) {
+  const slots = config && config.slots && typeof config.slots === 'object' ? config.slots : {};
+  return Object.assign({ level: '', subject: '', mode: 'Both', status: 'closed', note: '', type: 'regular' }, slots[id] || {});
+}
+function slotRunsOnline(s) {
+  if (s.type === 'master') return false;
+  return s.mode === 'Both' || s.mode === 'Online';
+}
+function trialSlot(config, id) {
+  if (!SLOT_RE.test(id || '')) return null;
+  const s = readSlot(config, id);
+  if (s.type === 'master' || s.status !== 'open' || LEVELS.indexOf(s.level) < 0 || !s.subject) return null;
+  return slotRunsOnline(s) ? s : null;
+}
+function trialSlotIds(config) {
+  const slots = config && config.slots && typeof config.slots === 'object' ? Object.keys(config.slots) : [];
+  return slots.filter(id => trialSlot(config, id)).sort((a, b) =>
+    (WEEKDAY_OF_CODE[a.split('-')[0]] - WEEKDAY_OF_CODE[b.split('-')[0]]) || a.localeCompare(b));
+}
+function trialSessions(config, from, to) {
+  const ids = trialSlotIds(config);
+  const out = [];
+  if (!isFinite(dayKeyTime(from)) || !isFinite(dayKeyTime(to)) || from > to) return out;
+  for (let key = from; key <= to; key = addDays(key, 1)) {
+    if (isPublicHoliday(key)) continue;
+    const wd = weekdayOfKey(key);
+    for (const id of ids) {
+      if (WEEKDAY_OF_CODE[id.split('-')[0]] !== wd) continue;
+      const s = readSlot(config, id);
+      out.push({ slot: id, date: key, label: sessionLabel(id, key), level: s.level, subject: s.subject });
+    }
+  }
+  return out;
+}
+// END TRIAL DATES
+
+// ─── Helpers ───
+function $(id) { return document.getElementById(id); }
+function escapeHtml(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function toast(msg, isErr) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isErr ? ' err' : '');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 4200);
+}
+function levelName(code) { return String(code || '').replace(/^P(\d)$/, 'Primary $1'); }
+function subjectName(s) { return s === 'Math' ? 'Maths' : String(s || ''); }
+function monthKey(key) { return String(key || '').slice(0, 7); }
+function monthName(mk) { const p = mk.split('-').map(Number); return p[1] ? MONTH_LONG[p[1] - 1] + ' ' + p[0] : ''; }
+function storageGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function storageSet(k, v) { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} }
+function fmtMs(ms, withTime) {
+  if (!ms) return '';
+  const opts = { timeZone: 'Asia/Singapore', day: 'numeric', month: 'short', year: 'numeric' };
+  if (withTime) { opts.hour = 'numeric'; opts.minute = '2-digit'; }
+  return new Date(ms).toLocaleString('en-SG', opts);
+}
+function daysLeft(ms) {
+  const d = Math.ceil((ms - Date.now()) / DAY_MS);
+  return d <= 0 ? 'expired' : d === 1 ? '1 day left' : d + ' days left';
+}
+async function copyText(text, done) {
+  if (!text) return;
+  try { await navigator.clipboard.writeText(text); toast(done || 'Copied'); }
+  catch (e) { window.prompt('Copy this:', text); }
+}
+async function post(url, body, token) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = 'Bearer ' + token;
+  let res;
+  try { res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) }); }
+  catch (e) { return { ok: false, status: 0, error: 'offline' }; }
+  const data = await res.json().catch(() => null);
+  return Object.assign({ status: res.status }, data || { ok: false, error: 'temporarily-unavailable' });
+}
+function fromRest(v) {
+  if (!v || typeof v !== 'object') return null;
+  if ('stringValue' in v) return v.stringValue;
+  if ('integerValue' in v) return Number(v.integerValue);
+  if ('doubleValue' in v) return v.doubleValue;
+  if ('booleanValue' in v) return v.booleanValue;
+  if ('nullValue' in v) return null;
+  if ('timestampValue' in v) return v.timestampValue;
+  if ('mapValue' in v) { const o = {}; const f = v.mapValue.fields || {}; for (const k in f) o[k] = fromRest(f[k]); return o; }
+  if ('arrayValue' in v) return (v.arrayValue.values || []).map(fromRest);
+  return null;
+}
+function configFromRest(doc) {
+  if (!doc || !doc.fields) return null;
+  const o = {}; for (const k in doc.fields) o[k] = fromRest(doc.fields[k]);
+  return { slots: o.slots || {} };
+}
+
+const ERRORS = {
+  'wrong-code': 'That code did not work. Please check it and try again.',
+  'code-used': 'That code has already been used for a booking. Each code books one lesson.',
+  'code-expired': 'That code has expired. Please WhatsApp us for a new one.',
+  'code-revoked': 'That code is no longer valid. Please WhatsApp us for a new one.',
+  'too-many-attempts': 'Too many tries from this connection. Please try again in an hour, or WhatsApp us.',
+  'session-unavailable': 'Sorry, that lesson is no longer available. Please choose another one.',
+  'too-soon': 'That lesson is too soon to book. Please choose a later date.',
+  'too-far': 'That lesson is too far ahead to book yet. Please choose an earlier date.',
+  'public-holiday': 'There is no class on that day (public holiday). Please choose another date.',
+  'unknown-session': 'Please choose a lesson.',
+  'invalid-email': 'Please enter a valid email.',
+  'invalid-whatsapp': 'Please enter a valid WhatsApp number (8 digits for Singapore, or + and your country code).',
+  'too-many-bookings': 'Too many bookings from this connection. Please try again later, or WhatsApp us.',
+  'link-expired': 'This class link has expired. Links last one week. Please ask us for a new one.',
+  'link-revoked': 'This class link is no longer active. Please ask us for a new one.',
+  'link-unknown': 'This class link is not valid. Please check you copied all of it.',
+  'booking-not-found': 'We could not find that booking. Please use the link in your email.',
+  'booking-cancelled': 'This trial lesson was cancelled. WhatsApp us if that is a mistake.',
+  'booking-ended': 'This trial lesson has ended. WhatsApp us to book another one.',
+  'origin-not-allowed': 'Please open this page at polymathlc.com.sg/trial.',
+  'offline': 'Could not reach us. Please check your connection and try again.'
+};
+function errorText(r, fallback) {
+  return ERRORS[r && r.error] || fallback || 'Something went wrong. Please try again, or WhatsApp us at +65 9645 0588.';
+}
+
+// ═══════════════════════════════════════════════════════════
+// Views
+// ═══════════════════════════════════════════════════════════
+const VIEWS = ['gate-view', 'book-view', 'link-view', 'lesson-view'];
+function show(view) {
+  VIEWS.forEach(v => $(v).classList.toggle('hidden', v !== view));
+  const heroes = {
+    'gate-view': ['Online trial lesson · Zoom', 'Join a Polymath class online', "Choose your child's level and a lesson that suits you. You get the Zoom link and the worksheets the class is using, so your child can join straight in."],
+    'book-view': ['Online trial lesson · Zoom', 'Book your online trial lesson', 'Lessons follow our weekly class timetable. Pick the one that suits you.'],
+    'link-view': ['Your class · Zoom', 'Your Polymath class', 'Everything your child needs for the lesson: the Zoom link and the worksheets.'],
+    'lesson-view': ['Your trial lesson', 'See you on Zoom!', 'The Zoom link and worksheets are below. They follow the class, so check this page again the day before.']
+  }[view];
+  if (heroes) { $('hero-eyebrow').textContent = heroes[0]; $('hero-title').textContent = heroes[1]; $('hero-text').textContent = heroes[2]; }
+}
+
+// ─── 1. The access code ───
+let accessCode = '';
+$('gate-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const value = $('gate-code').value.trim();
+  if (!value) { $('gate-err').textContent = 'Please enter your access code.'; return; }
+  $('gate-btn').disabled = true; $('gate-btn').textContent = 'Checking…'; $('gate-err').textContent = '';
+  const r = await post(BOOK_URL, { action: 'unlock', code: value });
+  $('gate-btn').disabled = false; $('gate-btn').textContent = 'Continue';
+  if (r.ok) { accessCode = value; storageSet(CODE_KEY, value); openBooking(); return; }
+  $('gate-err').textContent = errorText(r);
+});
+function openGate() {
+  show('gate-view');
+  $('gate-last').classList.toggle('hidden', !storageGet(LAST_KEY));
+  setTimeout(() => $('gate-code').focus({ preventScroll: true }), 50);
+}
+function openSavedBooking() { const a = storageGet(LAST_KEY); if (a) { location.hash = 'b=' + a; } }
+
+// ─── 2. Booking a date ───
+let config = null, configState = 'loading';
+let chosenLevel = '', chosenSubject = '', chosenSession = null, activeMonth = '';
+let submitting = false;
+
+function openBooking() { show('book-view'); renderBooking(); }
+function levelsOnOffer() { return LEVELS.filter(l => config && trialSlotIds(config).some(id => readSlot(config, id).level === l)); }
+function subjectsFor(level) {
+  const out = [];
+  if (config) trialSlotIds(config).forEach(id => { const s = readSlot(config, id); if (s.level === level && out.indexOf(s.subject) < 0) out.push(s.subject); });
+  return out.sort();
+}
+function renderBooking() {
+  const levels = levelsOnOffer();
+  $('level-chips').innerHTML = config ? (levels.length ? levels.map(l => '<button type="button" class="chip' + (l === chosenLevel ? ' on' : '') + '" data-level="' + l + '" role="radio" aria-checked="' + (l === chosenLevel) + '">' + escapeHtml(levelName(l)) + '</button>').join('')
+    : '<span class="muted">No classes are open for trials right now. Please WhatsApp us.</span>') : '<span class="muted">Loading…</span>';
+  const subjects = chosenLevel ? subjectsFor(chosenLevel) : [];
+  if (subjects.length === 1) chosenSubject = subjects[0];
+  if (chosenSubject && subjects.indexOf(chosenSubject) < 0) chosenSubject = '';
+  const many = subjects.length > 1;
+  $('subject-step').classList.toggle('hidden', !many);
+  $('session-num').textContent = many ? '3' : '2';
+  $('details-num').textContent = many ? '4' : '3';
+  $('subject-chips').innerHTML = subjects.map(s => '<button type="button" class="chip' + (s === chosenSubject ? ' on' : '') + '" data-subject="' + escapeHtml(s) + '" role="radio" aria-checked="' + (s === chosenSubject) + '">' + escapeHtml(subjectName(s)) + '</button>').join('');
+  renderSessions();
+  renderChosen();
+}
+function renderSessions() {
+  const box = $('sessions'), tabs = $('month-tabs');
+  if (!config) {
+    box.innerHTML = configState === 'error'
+      ? '<div class="state">We could not load the lessons just now. <button class="btn small ghost" onclick="loadConfig(true)">Try again</button></div>'
+      : '<div class="state"><span class="spin"></span>Loading lessons…</div>';
+    tabs.innerHTML = ''; return;
+  }
+  if (!chosenLevel || !chosenSubject) {
+    box.innerHTML = '<div class="state">' + (chosenLevel ? 'Choose a subject to see the lessons.' : "Choose your child's level to see the lessons.") + '</div>';
+    tabs.innerHTML = ''; return;
+  }
+  const w = bookingWindow(Date.now());
+  const sessions = trialSessions(config, w.first, w.last).filter(s => s.level === chosenLevel && s.subject === chosenSubject);
+  if (!sessions.length) {
+    box.innerHTML = '<div class="state">No ' + escapeHtml(levelName(chosenLevel) + ' ' + subjectName(chosenSubject)) + ' lessons are open right now. Please WhatsApp us at '
+      + '<a href="https://wa.me/6596450588" target="_blank" rel="noopener">+65 9645 0588</a>.</div>';
+    tabs.innerHTML = ''; return;
+  }
+  const months = [...new Set(sessions.map(s => monthKey(s.date)))];
+  if (months.indexOf(activeMonth) < 0) activeMonth = chosenSession && months.indexOf(monthKey(chosenSession.date)) > -1 ? monthKey(chosenSession.date) : months[0];
+  tabs.innerHTML = months.map(mk => '<button type="button" class="month-tab' + (mk === activeMonth ? ' on' : '') + '" data-month="' + mk + '">' + escapeHtml(monthName(mk)) + '</button>').join('');
+  const byDay = new Map();
+  sessions.filter(s => monthKey(s.date) === activeMonth).forEach(s => { if (!byDay.has(s.date)) byDay.set(s.date, []); byDay.get(s.date).push(s); });
+  let html = '';
+  byDay.forEach((list, date) => {
+    html += '<div class="session-day"><h4>' + escapeHtml(fmtDayKey(date)) + '</h4><div class="session-list">'
+      + list.map(s => {
+        const on = chosenSession && chosenSession.slot === s.slot && chosenSession.date === s.date;
+        return '<button type="button" class="session' + (on ? ' on' : '') + '" data-slot="' + s.slot + '" data-date="' + s.date + '" aria-pressed="' + on + '">'
+          + '<span class="time">' + escapeHtml(slotTime(s.slot)) + '</span>'
+          + '<span class="what">' + escapeHtml(levelName(s.level) + ' ' + subjectName(s.subject)) + ' class</span>'
+          + '<span><span class="tag ' + (s.subject === 'Math' ? 'math' : 'sci') + '">' + escapeHtml(subjectName(s.subject)) + '</span><span class="tag zoom">Zoom</span></span>'
+          + '</button>';
+      }).join('') + '</div></div>';
+  });
+  box.innerHTML = html;
+}
+function renderChosen() {
+  const el = $('chosen');
+  if (!chosenSession) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  el.innerHTML = '📅 ' + escapeHtml(chosenSession.label) + ' · ' + escapeHtml(levelName(chosenSession.level) + ' ' + subjectName(chosenSession.subject))
+    + ' <button type="button" class="link-btn" style="margin-left:auto" onclick="clearSession()">Change</button>';
+}
+function clearSession() { chosenSession = null; renderChosen(); renderSessions(); $('sessions').scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+
+$('level-chips').addEventListener('click', e => {
+  const b = e.target.closest('[data-level]'); if (!b) return;
+  chosenLevel = b.dataset.level; chosenSubject = ''; chosenSession = null; activeMonth = '';
+  renderBooking();
+});
+$('subject-chips').addEventListener('click', e => {
+  const b = e.target.closest('[data-subject]'); if (!b) return;
+  chosenSubject = b.dataset.subject; chosenSession = null; activeMonth = '';
+  renderBooking();
+});
+$('month-tabs').addEventListener('click', e => {
+  const b = e.target.closest('[data-month]'); if (!b) return;
+  activeMonth = b.dataset.month; renderSessions();
+});
+$('sessions').addEventListener('click', e => {
+  const b = e.target.closest('.session'); if (!b) return;
+  const s = trialSessions(config, b.dataset.date, b.dataset.date).find(x => x.slot === b.dataset.slot);
+  if (!s || s.date < bookingWindow(Date.now()).first) return;
+  chosenSession = s;
+  renderSessions(); renderChosen();
+  if (!$('f-student').value) $('f-student').focus({ preventScroll: true });
+  $('chosen').scrollIntoView({ behavior: 'smooth', block: 'center' });
+});
+
+async function fetchConfig() {
+  const r = await fetch('https://firestore.googleapis.com/v1/projects/mathgen--app/databases/(default)/documents/schedule_config/main', { cache: 'no-store' });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return configFromRest(await r.json());
+}
+async function loadConfig(retry) {
+  if (retry) { configState = 'loading'; renderSessions(); }
+  let fresh = null;
+  try {
+    const early = !retry && window.__scheduleEarly ? await window.__scheduleEarly : null;
+    fresh = early ? configFromRest(early) : await fetchConfig();
+  } catch (e) { console.error('Schedule load failed', e); }
+  if (fresh) { config = fresh; configState = 'ready'; storageSet(CONFIG_CACHE_KEY, JSON.stringify({ at: Date.now(), config: fresh })); }
+  else if (!config) configState = 'error';
+  if (chosenSession && config && !trialSlot(config, chosenSession.slot)) chosenSession = null;
+  if (!$('book-view').classList.contains('hidden')) renderBooking();
+}
+(function useCachedConfig() {
+  const raw = storageGet(CONFIG_CACHE_KEY);
+  if (!raw) return;
+  try { const c = JSON.parse(raw); if (c && c.config && c.config.slots) config = c.config; } catch (e) {}
+})();
+
+async function submitBooking() {
+  if (submitting) return;
+  const studentName = $('f-student').value.trim(), parentName = $('f-parent').value.trim();
+  const email = $('f-email').value.trim(), whatsapp = $('f-whatsapp').value.trim();
+  if (!chosenLevel) { toast("Please choose your child's level", true); $('level-chips').scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+  if (!chosenSession) { toast('Please choose a date and time', true); $('sessions').scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+  if (!studentName) { toast("Please enter the student's name", true); $('f-student').focus(); return; }
+  if (!parentName) { toast("Please enter the parent's name", true); $('f-parent').focus(); return; }
+  if (!EMAIL_RE.test(email)) { toast('Please enter a valid email', true); $('f-email').focus(); return; }
+  if (!accessCode) { openGate(); return; }
+  submitting = true;
+  const btn = $('submit-btn');
+  btn.disabled = true; btn.textContent = 'Booking…';
+  const r = await post(BOOK_URL, { action: 'book', code: accessCode, slot: chosenSession.slot, date: chosenSession.date,
+    parentName, email, studentName, whatsapp, pageVersion: TRIAL_PAGE_VERSION });
+  submitting = false;
+  btn.disabled = false; btn.textContent = 'Book trial lesson';
+  if (r.ok && r.booking) {
+    storageSet(CODE_KEY, null); accessCode = '';
+    storageSet(LAST_KEY, r.booking.access);
+    history.replaceState(null, '', location.pathname + '#b=' + r.booking.access);
+    showLesson(r.booking, r.already ? 'You were already booked for this lesson, so nothing more is needed.' : null, true);
+    return;
+  }
+  if (['code-used', 'code-expired', 'code-revoked', 'wrong-code'].indexOf(r.error) > -1) {
+    storageSet(CODE_KEY, null); accessCode = '';
+    openGate(); $('gate-err').textContent = errorText(r); return;
+  }
+  if (r.error === 'session-unavailable' || r.error === 'public-holiday') { chosenSession = null; renderChosen(); loadConfig(true); }
+  toast(errorText(r), true);
+}
+function bookAnother() {
+  chosenSession = null;
+  $('f-student').value = '';
+  location.hash = '';
+  history.replaceState(null, '', location.pathname);
+  openGate();
+}
+
+// ─── 3. A class link ───
+let linkToken = '';
+async function openLink(token) {
+  linkToken = token;
+  show('link-view');
+  $('link-loading').classList.remove('hidden'); $('link-form').classList.add('hidden'); $('link-error').classList.add('hidden');
+  const r = await post(BOOK_URL, { action: 'linkInfo', link: token });
+  $('link-loading').classList.add('hidden');
+  if (!r.ok) {
+    $('link-error').classList.remove('hidden');
+    $('link-error').innerHTML = '<div class="gate"><div class="lock">⏳</div><h2>This link cannot be opened</h2><p class="lead">' + escapeHtml(errorText(r)) + '</p>'
+      + '<a class="btn" href="https://wa.me/6596450588" target="_blank" rel="noopener">WhatsApp us</a></div>';
+    return;
+  }
+  const l = r.link;
+  $('link-title').textContent = l.className + ' · ' + l.slotLabel;
+  $('link-expiry').textContent = 'This link works until ' + fmtMs(l.expiresAtMs, true) + '.';
+  $('link-form').classList.remove('hidden');
+  const saved = storageGet('pl_trial_contact_v1');
+  if (saved) { try { const c = JSON.parse(saved); if (!$('l-email').value) $('l-email').value = c.email || ''; if (!$('l-whatsapp').value) $('l-whatsapp').value = c.whatsapp || ''; } catch (e) {} }
+  setTimeout(() => $('l-email').focus({ preventScroll: true }), 50);
+}
+async function submitLink() {
+  const email = $('l-email').value.trim(), whatsapp = $('l-whatsapp').value.trim(), studentName = $('l-student').value.trim();
+  if (!EMAIL_RE.test(email)) { toast('Please enter a valid email', true); $('l-email').focus(); return; }
+  if (!whatsapp) { toast('Please enter your WhatsApp number', true); $('l-whatsapp').focus(); return; }
+  const btn = $('link-btn');
+  btn.disabled = true; btn.textContent = 'Opening…';
+  const r = await post(BOOK_URL, { action: 'linkOpen', link: linkToken, email, whatsapp, studentName, pageVersion: TRIAL_PAGE_VERSION });
+  btn.disabled = false; btn.textContent = 'Open the class';
+  if (r.ok && r.booking) {
+    storageSet('pl_trial_contact_v1', JSON.stringify({ email, whatsapp }));
+    storageSet(LAST_KEY, r.booking.access);
+    history.replaceState(null, '', location.pathname + '#b=' + r.booking.access);
+    showLesson(r.booking, null, false);
+    return;
+  }
+  toast(errorText(r), true);
+}
+
+// ─── 4. The lesson ───
+let currentLesson = null;
+async function openLesson(access) {
+  show('lesson-view');
+  $('lesson-title').textContent = 'Loading your lesson…';
+  $('lesson-sub').textContent = ''; $('zoom-box').innerHTML = '<span class="spin"></span>'; $('sheets').innerHTML = '';
+  const r = await post(BOOK_URL, { action: 'view', access });
+  if (r.ok && r.booking) { storageSet(LAST_KEY, access); showLesson(r.booking, null, false); return; }
+  if (storageGet(LAST_KEY) === access) storageSet(LAST_KEY, null);
+  show('gate-view');
+  $('gate-err').textContent = errorText(r);
+}
+function sheetCard(info, kind) {
+  const label = kind === 'current' ? 'Current worksheet' : 'Next worksheet';
+  if (!info) return '<div class="sheet ' + kind + '"><span class="kind">' + label + '</span><div class="meta">'
+    + (kind === 'current' ? 'The teacher has not set a worksheet for this class yet.' : 'There is no next worksheet queued yet.') + '</div></div>';
+  return '<div class="sheet ' + kind + '"><span class="doc">PDF</span><span class="kind">' + label + '</span>'
+    + '<div class="name" style="padding-right:52px">' + escapeHtml(info.name) + '</div>'
+    + '<div class="meta">' + (info.pages ? info.pages + ' pages' : '') + '</div>'
+    + '<div class="acts">' + (info.url
+      ? '<a class="btn small" href="' + escapeHtml(info.url) + '" target="_blank" rel="noopener">Open</a>'
+        + '<a class="btn small ghost" href="' + escapeHtml(info.url) + '" download>Download</a>'
+      : '<span class="muted">The file is not ready yet. Check again later.</span>') + '</div></div>';
+}
+function showLesson(b, note, justBooked) {
+  currentLesson = b;
+  show('lesson-view');
+  const dated = !!b.date;
+  const booked = $('lesson-booked');
+  booked.classList.toggle('hidden', !(justBooked || note));
+  booked.textContent = note || (justBooked ? 'You are booked! ' + (b.confirmationSent ? 'We have emailed the details to ' + b.email + '. ' : '')
+    + 'Bookmark this page: it always has the latest Zoom link and worksheets.' : '');
+  if (dated) {
+    const p = b.date.split('-').map(Number);
+    $('lesson-date').innerHTML = '<div class="m">' + MONTH_LONG[p[1] - 1].slice(0, 3) + '</div><div class="d">' + p[2] + '</div><div class="w">' + WD_LONG[weekdayOfKey(b.date)].slice(0, 3) + '</div>';
+    $('lesson-date').classList.remove('hidden');
+    $('lesson-title').textContent = b.className + ' trial lesson';
+    $('lesson-sub').textContent = fmtDayKey(b.date) + ', ' + b.time + ' (Singapore time) · Online on Zoom';
+  } else {
+    $('lesson-date').classList.add('hidden');
+    $('lesson-title').textContent = b.className + ' class';
+    $('lesson-sub').textContent = slotLabel(b.slot) + ' (Singapore time) · Online on Zoom'
+      + (b.accessUntil ? ' · this page works until ' + fmtMs(b.accessUntil, true) : '');
+  }
+  $('zoom-box').innerHTML = b.zoomUrl
+    ? '<div class="icon">🎥</div><div class="txt"><b>Join on Zoom</b>' + (b.zoomNote ? escapeHtml(b.zoomNote) + '<br>' : '')
+      + 'Join a few minutes before the lesson starts.<div class="url">' + escapeHtml(b.zoomUrl) + '</div></div>'
+      + '<a class="btn zoom" href="' + escapeHtml(b.zoomUrl) + '" target="_blank" rel="noopener">Open Zoom</a>'
+      + '<button class="btn ghost small" onclick="copyText(currentLesson.zoomUrl, \'Zoom link copied\')">Copy link</button>'
+    : '<div class="icon">🎥</div><div class="txt"><b>Zoom link coming soon</b>We will put it here and email it to you before the lesson.</div>';
+  const actions = [];
+  if (dated) actions.push('<button class="btn ghost small" onclick="downloadIcs()">Add to calendar</button>');
+  actions.push('<a class="btn ghost small" href="https://wa.me/6596450588" target="_blank" rel="noopener">WhatsApp us</a>');
+  $('lesson-actions').innerHTML = actions.join('');
+  const m = b.materials || {};
+  $('sheets-lead').textContent = m.linked
+    ? 'These follow the class (' + (m.className || b.className) + '): the worksheet the class is on now, and the one after it. Open this page again the day before, then print them or have them ready on a tablet.'
+    : 'The worksheets for this lesson will appear here before the lesson.';
+  $('sheets').innerHTML = m.linked ? sheetCard(m.current, 'current') + sheetCard(m.next, 'next') : '<div class="state" style="grid-column:1/-1">Worksheets coming soon.</div>';
+  const rows = [['Booking code', b.code]];
+  if (dated) rows.push(['Lesson', b.sessionLabel]); else rows.push(['Class', slotLabel(b.slot)]);
+  rows.push(['Class', b.className]);
+  if (b.studentName) rows.push(['Student', b.studentName]);
+  if (b.parentName) rows.push(['Parent', b.parentName]);
+  rows.push(['Email', b.email]);
+  $('lesson-summary').innerHTML = rows.map(([k, v]) => '<div><dt>' + escapeHtml(k) + '</dt><dd>' + escapeHtml(v) + '</dd></div>').join('');
+  $('book-another').classList.toggle('hidden', !dated);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+// A calendar entry for the lesson (Singapore time, written in UTC).
+function downloadIcs() {
+  const b = currentLesson; if (!b || !b.date) return;
+  const m = /^(\d{1,2}):(\d{2})(am|pm)/.exec(b.time || '');
+  if (!m) return;
+  let h = Number(m[1]) % 12; if (m[3] === 'pm') h += 12;
+  const start = dayKeyTime(b.date) - SG_OFFSET_MS + h * 3600000 + Number(m[2]) * 60000;
+  const end = start + 105 * 60000;
+  const stamp = ms => new Date(ms).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const esc = s => String(s || '').replace(/([,;\\])/g, '\\$1').replace(/\n/g, '\\n');
+  const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Polymath Learning Centre//Trial//EN', 'BEGIN:VEVENT',
+    'UID:trial-' + b.code + '@polymathlc.com.sg', 'DTSTAMP:' + stamp(Date.now()), 'DTSTART:' + stamp(start), 'DTEND:' + stamp(end),
+    'SUMMARY:' + esc('Polymath trial lesson: ' + b.className), 'LOCATION:' + esc(b.zoomUrl || 'Zoom'),
+    'DESCRIPTION:' + esc((b.zoomUrl ? 'Zoom: ' + b.zoomUrl + '\n' : '') + 'Worksheets: ' + b.pageUrl),
+    'BEGIN:VALARM', 'TRIGGER:-PT30M', 'ACTION:DISPLAY', 'DESCRIPTION:Trial lesson in 30 minutes', 'END:VALARM',
+    'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' }));
+  a.download = 'polymath-trial-lesson.ics';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+// ═══════════════════════════════════════════════════════════
+// Admin: /trial/#admin (Google sign-in; the server checks the account again)
+// ═══════════════════════════════════════════════════════════
+const ADMIN_EMAILS = ['chungzhikai@gmail.com', 'admin@polymathlc.com.sg', 'elsielcr@gmail.com', 'support@polymathlc.com.sg'];
+let auth = null, adminData = null, adminTab = 'bookings', bookingFilter = 'upcoming', codeFilter = 'active', freshCodes = [];
+function firebaseReady() {
+  if (auth) return true;
+  if (!window.firebase || !firebase.initializeApp) return false;
+  firebase.initializeApp({
+    apiKey: "AIzaSyAUSI3Uh28IeqASEp0JhH4QPaVt-O3meBo",
+    authDomain: "mathgen--app.firebaseapp.com",
+    projectId: "mathgen--app",
+    storageBucket: "mathgen--app.firebasestorage.app",
+    messagingSenderId: "165654161198",
+    appId: "1:165654161198:web:16c8bd60eb3a2aa7edbcbf"
+  });
+  auth = firebase.auth();
+  auth.onAuthStateChanged(onAuth);
+  return true;
+}
+function isAdminUser(u) { return !!(u && u.email && ADMIN_EMAILS.indexOf(u.email.toLowerCase()) > -1); }
+async function adminSignIn() {
+  if (!firebaseReady()) { toast('Sign-in is still loading. Please try again in a moment.', true); return; }
+  try {
+    const res = await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+    if (!isAdminUser(res.user)) {
+      const who = res.user ? res.user.email : 'unknown';
+      await auth.signOut();
+      toast('Access denied. ' + who + ' is not an admin account.', true);
+    }
+  } catch (e) {
+    if (e && (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request')) return;
+    if (e && e.code === 'auth/popup-blocked') { showAdminPrompt(); return; }
+    toast('Sign-in failed: ' + (e.message || e), true);
+  }
+}
+function showAdminPrompt() {
+  if ($('admin-prompt')) return;
+  const d = document.createElement('div');
+  d.id = 'admin-prompt'; d.className = 'modal-bg';
+  d.innerHTML = '<div class="modal"><h2>Teacher login</h2><p>Sign in with your Google account to manage trial lessons.</p>'
+    + '<button class="btn" id="admin-prompt-go">Continue with Google</button> <button class="btn ghost" id="admin-prompt-x">Cancel</button></div>';
+  document.body.appendChild(d);
+  d.querySelector('#admin-prompt-go').onclick = () => { d.remove(); adminSignIn(); };
+  d.querySelector('#admin-prompt-x').onclick = () => d.remove();
+}
+async function adminSignOut() { if (auth) await auth.signOut(); }
+function onAuth(user) {
+  const admin = isAdminUser(user);
+  $('admin-section').classList.toggle('hidden', !admin);
+  // The admin works in the panel; the parents' page is hidden while signed in.
+  $('public-section').classList.toggle('hidden', admin);
+  $('admin-login-link').classList.toggle('hidden', admin);
+  $('page-version').textContent = 'Trial page ' + TRIAL_PAGE_VERSION;
+  $('page-version').classList.toggle('hidden', !admin);
+  $('admin-who').textContent = admin ? 'Admin: ' + user.email : '';
+  adminData = null;
+  if (admin) adminLoad();
+}
+async function adminCall(body) {
+  if (!auth || !isAdminUser(auth.currentUser)) { toast('Admin sign-in required.', true); return { ok: false, error: 'sign-in-required' }; }
+  const token = await auth.currentUser.getIdToken();
+  const r = await post(ADMIN_URL, body, token);
+  if (!r.ok) {
+    const words = { 'admin-only': 'This account is not a trial admin.', 'sign-in-required': 'Please sign in again.', 'invalid-zoom-link': 'A Zoom link must start with https://',
+      'weak-password': 'The password needs 4 to 64 characters.', 'invalid-count': 'Make between 1 and 30 codes at a time.',
+      'session-unavailable': 'That class is not open for online trials on the schedule.', 'reminder-just-sent': 'A reminder was just sent. Try again in a minute.' };
+    toast(words[r.error] || ('Failed: ' + (r.error || 'error')), true);
+  }
+  return r;
+}
+async function adminLoad() {
+  const r = await adminCall({ action: 'load' });
+  if (!r.ok) { $('booking-list').innerHTML = '<div class="state">Could not load: ' + escapeHtml(r.error || '') + '</div>'; return; }
+  adminData = r;
+  renderAdmin();
+}
+async function maybeAdminFromHash() {
+  if (!firebaseReady()) return;
+  await new Promise(res => { const off = auth.onAuthStateChanged(() => { off(); res(); }); });
+  if (!isAdminUser(auth.currentUser)) adminSignIn();
+}
+$('admin-tabs').addEventListener('click', e => {
+  const b = e.target.closest('[data-tab]'); if (!b) return;
+  adminTab = b.dataset.tab;
+  document.querySelectorAll('#admin-tabs .tab').forEach(t => t.classList.toggle('on', t === b));
+  document.querySelectorAll('.admin-pane').forEach(p => p.classList.toggle('hidden', p.id !== 'pane-' + adminTab));
+});
+function renderAdmin() {
+  if (!adminData) return;
+  $('count-bookings').textContent = adminData.bookings.length;
+  $('count-codes').textContent = adminData.codes.filter(c => c.state === 'active').length;
+  $('count-links').textContent = adminData.links.filter(l => l.state === 'active').length;
+  renderBookings(); renderCodes(); renderLinks(); renderClasses(); renderPassword();
+}
+
+// ─── Bookings and visits ───
+function bookingMonth(b) { return b.lessonDate ? monthKey(b.lessonDate) : monthKey(sgDayKey(b.createdAtMs)); }
+function filteredBookings() {
+  const today = sgDayKey();
+  const q = $('booking-search').value.trim().toLowerCase();
+  const month = $('booking-month').value;
+  return adminData.bookings.filter(b => {
+    if (bookingFilter === 'upcoming' && !(b.kind === 'booking' && b.lessonDate >= today)) return false;
+    if (bookingFilter === 'past' && !(b.kind === 'booking' && b.lessonDate < today)) return false;
+    if (bookingFilter === 'links' && b.kind !== 'link') return false;
+    if (month && bookingMonth(b) !== month) return false;
+    if (!q) return true;
+    return [b.studentName, b.parentName, b.email, b.whatsapp, b.code, b.accessCode, b.linkLabel, b.classLevel, b.classSubject]
+      .some(x => String(x || '').toLowerCase().indexOf(q) > -1);
+  }).sort((a, b) => bookingFilter === 'upcoming'
+    ? (a.lessonDate || '').localeCompare(b.lessonDate || '') || (a.slot || '').localeCompare(b.slot || '')
+    : (b.lessonDate || sgDayKey(b.createdAtMs)).localeCompare(a.lessonDate || sgDayKey(a.createdAtMs)) || (b.createdAtMs - a.createdAtMs));
+}
+function renderBookings() {
+  const all = adminData.bookings, today = sgDayKey();
+  const dated = all.filter(b => b.kind === 'booking');
+  const stats = [
+    [dated.filter(b => b.lessonDate >= today && b.status !== 'cancelled').length, 'upcoming lessons'],
+    [dated.length, 'bookings in all'],
+    [all.filter(b => b.kind === 'link').length, 'class-link visits'],
+    [adminData.codes.filter(c => c.state === 'active').length, 'unused codes']
+  ];
+  $('admin-stats').innerHTML = stats.map(([n, l]) => '<div class="stat"><b>' + n + '</b><span>' + l + '</span></div>').join('');
+  const months = [...new Set(all.map(bookingMonth))].filter(Boolean).sort();
+  const sel = $('booking-month'), keep = sel.value;
+  sel.innerHTML = '<option value="">Every month</option>' + months.map(m => '<option value="' + m + '">' + escapeHtml(monthName(m)) + '</option>').join('');
+  sel.value = months.indexOf(keep) > -1 ? keep : '';
+  const rows = filteredBookings();
+  if (!rows.length) { $('booking-list').innerHTML = '<div class="state">Nothing here yet.</div>'; return; }
+  $('booking-list').innerHTML = '<div class="table-wrap"><table class="list"><thead><tr><th>Student</th><th>Level &amp; class</th><th>Lesson / month</th><th>Contact</th><th>Way in</th><th>Status</th><th></th></tr></thead><tbody>'
+    + rows.map(b => {
+      const link = b.kind === 'link';
+      const status = b.status || 'booked';
+      const lesson = link ? '<span class="badge link">Class link</span><div>' + escapeHtml(b.slotLabel || '') + '</div><div class="muted">first opened ' + escapeHtml(fmtMs(b.createdAtMs, true)) + (b.opens > 1 ? ' · opened ' + b.opens + '×' : '') + '</div>'
+        : '<b>' + escapeHtml(monthName(monthKey(b.lessonDate))) + '</b><div>' + escapeHtml(b.sessionLabel || '') + '</div><div class="muted">booked ' + escapeHtml(fmtMs(b.createdAtMs, true)) + '</div>';
+      const way = link ? 'Link' + (b.linkLabel ? ': ' + escapeHtml(b.linkLabel) : '') : (b.via === 'password' ? 'Shared password' : '<span class="mono">' + escapeHtml(b.accessCode ? b.accessCode.slice(0, 4) + '-' + b.accessCode.slice(4) : '') + '</span>');
+      const reminder = link ? '' : (b.reminderSentAtMs ? '<div class="muted">reminder sent ' + escapeHtml(fmtMs(b.reminderSentAtMs, true)) + '</div>' : '<div class="muted">reminder not sent yet</div>');
+      const act = (s, label) => status === s ? '' : '<button class="btn small ghost" onclick="setStatus(\'' + b.code + '\',\'' + s + '\')">' + label + '</button>';
+      return '<tr><td><b>' + escapeHtml(b.studentName || '—') + '</b>' + (b.parentName ? '<div class="muted">Parent: ' + escapeHtml(b.parentName) + '</div>' : '') + '<div class="muted mono">' + escapeHtml(b.code) + '</div></td>'
+        + '<td><b>' + escapeHtml(b.classLevel || '') + '</b> ' + escapeHtml(subjectName(b.classSubject)) + '</td>'
+        + '<td>' + lesson + '</td>'
+        + '<td><a href="mailto:' + escapeHtml(b.email) + '">' + escapeHtml(b.email) + '</a>' + (b.whatsapp ? '<div><a href="https://wa.me/' + escapeHtml(String(b.whatsapp).replace(/^\+/, '').replace(/^(?=[89]\d{7}$)/, '65')) + '" target="_blank" rel="noopener">' + escapeHtml(b.whatsapp) + '</a></div>' : '') + '</td>'
+        + '<td>' + way + '</td>'
+        + '<td><span class="badge ' + escapeHtml(status) + '">' + escapeHtml(status) + '</span>' + reminder + '</td>'
+        + '<td><div class="acts-cell">'
+        + (b.pageUrl ? '<button class="btn small ghost" onclick="copyText(\'' + escapeHtml(b.pageUrl) + '\', \'Their page link copied\')">Page link</button>' : '')
+        + (link ? '' : act('attended', 'Attended') + act('no-show', 'No-show') + act('booked', 'Booked') + act('cancelled', 'Cancel')
+          + (status !== 'cancelled' ? '<button class="btn small ghost" onclick="sendReminder(\'' + b.code + '\')">' + (b.reminderSentAtMs ? 'Resend' : 'Send') + ' reminder</button>' : ''))
+        + '<button class="btn small danger" onclick="deleteBooking(\'' + b.code + '\')">Delete</button></div></td></tr>';
+    }).join('') + '</tbody></table></div>';
+}
+$('booking-filter').addEventListener('click', e => {
+  const b = e.target.closest('[data-filter]'); if (!b) return;
+  bookingFilter = b.dataset.filter;
+  document.querySelectorAll('#booking-filter .chip').forEach(c => c.classList.toggle('on', c === b));
+  renderBookings();
+});
+$('booking-month').addEventListener('change', renderBookings);
+$('booking-search').addEventListener('input', renderBookings);
+async function setStatus(code, status) {
+  const r = await adminCall({ action: 'setStatus', code, status });
+  if (r.ok) { const b = adminData.bookings.find(x => x.code === code); if (b) b.status = status; renderBookings(); toast('Marked ' + status); }
+}
+async function sendReminder(code) {
+  const b = adminData.bookings.find(x => x.code === code);
+  if (!b || !confirm('Email the reminder (Zoom link, time and worksheets) to ' + b.email + ' now?')) return;
+  const r = await adminCall({ action: 'sendReminder', code });
+  if (r.ok) { toast('Reminder sent to ' + r.to); adminLoad(); }
+}
+async function deleteBooking(code) {
+  const b = adminData.bookings.find(x => x.code === code);
+  if (!b || !confirm('Delete ' + (b.studentName || b.email) + (b.sessionLabel ? ' (' + b.sessionLabel + ')' : '') + '? This cannot be undone.')) return;
+  const r = await adminCall({ action: 'deleteBooking', code });
+  if (r.ok) { adminData.bookings = adminData.bookings.filter(x => x.code !== code); renderAdmin(); toast('Deleted'); }
+}
+function downloadCsv() {
+  const head = ['Code', 'Kind', 'Student', 'Parent', 'Email', 'WhatsApp', 'Level', 'Subject', 'Lesson date', 'Month', 'Lesson', 'Way in', 'Status', 'Booked / first opened', 'Reminder sent', 'Page link'];
+  const cell = v => { const s = String(v == null ? '' : v); return /[",\n]/.test(s) || /^[=+\-@]/.test(s) ? '"' + s.replace(/^([=+\-@])/, "'$1").replace(/"/g, '""') + '"' : s; };
+  const rows = filteredBookings().map(b => [b.code, b.kind === 'link' ? 'Class link' : 'Booking', b.studentName, b.parentName, b.email, b.whatsapp,
+    b.classLevel, subjectName(b.classSubject), b.lessonDate, monthName(bookingMonth(b)), b.sessionLabel || b.slotLabel,
+    b.kind === 'link' ? 'Link ' + (b.linkLabel || '') : (b.via === 'password' ? 'Password' : b.accessCode), b.status,
+    fmtMs(b.createdAtMs, true), fmtMs(b.reminderSentAtMs, true), b.pageUrl]);
+  const csv = [head].concat(rows).map(r => r.map(cell).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv' }));
+  a.download = 'trial-bookings-' + sgDayKey() + '.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+// ─── Access codes ───
+function codeMessage(display) {
+  return 'Book your Polymath online trial lesson at https://polymathlc.com.sg/trial/ with your access code ' + display + ' (it works for one booking).';
+}
+async function createCodes() {
+  const count = Number($('code-count').value), label = $('code-label').value.trim();
+  const r = await adminCall({ action: 'createCodes', count, label });
+  if (!r.ok) return;
+  freshCodes = r.codes;
+  $('code-label').value = '';
+  toast(r.codes.length === 1 ? 'Code made' : r.codes.length + ' codes made');
+  await adminLoad();
+}
+function renderCodes() {
+  $('new-codes').innerHTML = freshCodes.length ? '<div class="new-codes"><b>New codes' + (freshCodes[0].label ? ' for ' + escapeHtml(freshCodes[0].label) : '') + '</b>'
+    + '<div class="codes">' + freshCodes.map(c => '<span class="mono">' + escapeHtml(c.display) + '</span>').join('') + '</div>'
+    + '<button class="btn small" onclick="copyText(freshCodes.map(c => c.display).join(\'\\n\'), \'Codes copied\')">Copy codes</button> '
+    + (freshCodes.length === 1 ? '<button class="btn small ghost" onclick="copyText(codeMessage(freshCodes[0].display), \'Message copied\')">Copy WhatsApp message</button>' : '')
+    + '</div>' : '';
+  const now = Date.now();
+  const list = adminData.codes.filter(c => codeFilter === 'all' || (codeFilter === 'active' ? c.state === 'active' : c.state === 'used'));
+  if (!list.length) { $('code-list').innerHTML = '<div class="state">No ' + (codeFilter === 'all' ? '' : codeFilter === 'active' ? 'unused ' : 'used ') + 'codes.</div>'; return; }
+  $('code-list').innerHTML = '<div class="table-wrap"><table class="list"><thead><tr><th>Code</th><th>For</th><th>Status</th><th>Made</th><th>Entered on the page</th><th>Used for</th><th></th></tr></thead><tbody>'
+    + list.map(c => '<tr><td class="mono"><b>' + escapeHtml(c.display) + '</b></td>'
+      + '<td>' + escapeHtml(c.label || '—') + '</td>'
+      + '<td><span class="badge ' + c.state + '">' + (c.state === 'active' ? 'unused' : c.state) + '</span>' + (c.state === 'active' && c.expiresAtMs ? '<div class="muted">' + daysLeft(c.expiresAtMs) + '</div>' : '') + '</td>'
+      + '<td>' + escapeHtml(fmtMs(c.createdAtMs)) + '<div class="muted">' + escapeHtml(c.createdBy) + '</div></td>'
+      + '<td>' + (c.checks ? c.checks + '× · last ' + escapeHtml(fmtMs(c.lastCheckedAtMs, true)) : '<span class="muted">not yet</span>') + '</td>'
+      + '<td>' + (c.usedAtMs ? escapeHtml(c.usedSummary) + '<div class="muted">' + escapeHtml(fmtMs(c.usedAtMs, true)) + ' · ' + escapeHtml(c.usedFor) + '</div>' : '—') + '</td>'
+      + '<td><div class="acts-cell">' + (c.state === 'active'
+        ? '<button class="btn small ghost" onclick="copyText(codeMessage(\'' + c.display + '\'), \'Message copied\')">Copy message</button>'
+          + '<button class="btn small danger" onclick="revokeCode(\'' + c.code + '\')">Revoke</button>' : '') + '</div></td></tr>').join('')
+    + '</tbody></table></div>';
+}
+$('code-filter').addEventListener('click', e => {
+  const b = e.target.closest('[data-filter]'); if (!b) return;
+  codeFilter = b.dataset.filter;
+  document.querySelectorAll('#code-filter .chip').forEach(c => c.classList.toggle('on', c === b));
+  renderCodes();
+});
+async function revokeCode(code) {
+  if (!confirm('Revoke code ' + code.slice(0, 4) + '-' + code.slice(4) + '? It will stop working.')) return;
+  const r = await adminCall({ action: 'revokeCode', code });
+  if (r.ok) { toast('Code revoked'); freshCodes = freshCodes.filter(c => c.code !== code); adminLoad(); }
+}
+
+// ─── Class links ───
+function linkMessage(l) {
+  return 'Here is your Polymath ' + levelName(l.level) + ' ' + subjectName(l.subject) + ' class link (' + l.slotLabel + '). It has the Zoom link and worksheets: ' + l.url;
+}
+async function createLink() {
+  const slot = $('link-slot').value, label = $('link-label').value.trim();
+  if (!slot) { toast('Choose a class', true); return; }
+  const r = await adminCall({ action: 'createLink', slot, label });
+  if (!r.ok) return;
+  $('link-label').value = '';
+  copyText(r.link.url, 'Link made and copied. It works for 7 days.');
+  adminLoad();
+}
+function renderLinks() {
+  $('link-slot').innerHTML = '<option value="">Choose a class…</option>' + adminData.slots.map(s => '<option value="' + s.slot + '">'
+    + escapeHtml(s.level + ' ' + subjectName(s.subject) + ' · ' + s.label) + '</option>').join('');
+  const list = adminData.links;
+  if (!list.length) { $('link-list').innerHTML = '<div class="state">No class links yet.</div>'; return; }
+  window.__links = list;
+  $('link-list').innerHTML = '<div class="table-wrap"><table class="list"><thead><tr><th>Class</th><th>Note</th><th>Status</th><th>Opened</th><th>Made</th><th></th></tr></thead><tbody>'
+    + list.map((l, i) => '<tr><td><b>' + escapeHtml(l.level + ' ' + subjectName(l.subject)) + '</b><div class="muted">' + escapeHtml(l.slotLabel) + '</div></td>'
+      + '<td>' + escapeHtml(l.label || '—') + '</td>'
+      + '<td><span class="badge ' + l.state + '">' + l.state + '</span><div class="muted">' + (l.state === 'active' ? daysLeft(l.expiresAtMs) + ' · until ' + escapeHtml(fmtMs(l.expiresAtMs, true)) : 'ended ' + escapeHtml(fmtMs(l.expiresAtMs))) + '</div></td>'
+      + '<td>' + l.people + ' ' + (l.people === 1 ? 'person' : 'people') + '<div class="muted">' + l.opens + ' opens</div></td>'
+      + '<td>' + escapeHtml(fmtMs(l.createdAtMs, true)) + '<div class="muted">' + escapeHtml(l.createdBy) + '</div></td>'
+      + '<td><div class="acts-cell">' + (l.state === 'active'
+        ? '<button class="btn small" onclick="copyText(window.__links[' + i + '].url, \'Link copied\')">Copy link</button>'
+          + '<button class="btn small ghost" onclick="copyText(linkMessage(window.__links[' + i + ']), \'Message copied\')">Copy message</button>'
+          + '<button class="btn small danger" onclick="revokeLink(\'' + l.token + '\')">Stop</button>' : '') + '</div></td></tr>').join('')
+    + '</tbody></table></div>';
+}
+async function revokeLink(token) {
+  if (!confirm('Stop this link now? Anyone using it loses the Zoom link and worksheets.')) return;
+  const r = await adminCall({ action: 'revokeLink', token });
+  if (r.ok) { toast('Link stopped'); adminLoad(); }
+}
+
+// ─── Classes and Zoom ───
+function renderClasses() {
+  const s = adminData.settings;
+  $('zoom-default').value = s.zoomDefault || '';
+  $('zoom-default-note').value = s.zoomDefaultNote || '';
+  const courses = adminData.courses;
+  const sheet = (info, label) => info ? '<div><span class="muted">' + label + ':</span> ' + escapeHtml(info.name) + (info.available ? '' : ' <span class="muted">(no PDF)</span>') + '</div>' : '<div class="muted">' + label + ': none</div>';
+  $('class-table').innerHTML = '<thead><tr><th>Class</th><th>Zoom link</th><th>Meeting ID / passcode</th><th>Follows Polymath Online class</th><th>Worksheets now</th></tr></thead><tbody>'
+    + adminData.slots.map(r => {
+      const options = ['<option value="">Automatic' + (r.courseId && !r.courseChoice ? ': ' + escapeHtml((courses.find(c => c.id === r.courseId) || {}).title || '') : ' (none found)') + '</option>']
+        .concat(courses.map(c => '<option value="' + escapeHtml(c.id) + '"' + (r.courseChoice === c.id ? ' selected' : '') + '>' + escapeHtml(c.title + ' (' + c.worksheets + ' worksheets)') + '</option>'))
+        .concat(['<option value="none"' + (r.courseChoice === 'none' ? ' selected' : '') + '>No worksheets</option>']);
+      return '<tr data-slot="' + r.slot + '"><td><b>' + escapeHtml(r.level + ' ' + subjectName(r.subject)) + '</b><div class="muted">' + escapeHtml(r.label) + ' · ' + escapeHtml(r.mode) + '</div></td>'
+        + '<td><input type="url" class="zoom-url" value="' + escapeHtml(r.zoom) + '" placeholder="' + escapeHtml(s.zoomDefault ? 'Uses the default' : 'https://…zoom.us/j/…') + '"></td>'
+        + '<td><input type="text" class="zoom-note" maxlength="200" value="' + escapeHtml(r.zoomNote) + '"></td>'
+        + '<td><select class="course-for">' + options.join('') + '</select></td>'
+        + '<td>' + (r.materials.linked ? sheet(r.materials.current, 'Current') + sheet(r.materials.next, 'Next') : '<span class="muted">No class linked</span>') + '</td></tr>';
+    }).join('') + '</tbody>';
+}
+async function saveClasses() {
+  const zoom = {}, zoomNote = {}, courseFor = {};
+  document.querySelectorAll('#class-table tr[data-slot]').forEach(tr => {
+    const id = tr.dataset.slot;
+    const url = tr.querySelector('.zoom-url').value.trim(), note = tr.querySelector('.zoom-note').value.trim(), course = tr.querySelector('.course-for').value;
+    if (url) zoom[id] = url;
+    if (note) zoomNote[id] = note;
+    if (course) courseFor[id] = course;
+  });
+  const r = await adminCall({ action: 'saveSettings', zoomDefault: $('zoom-default').value.trim(), zoomDefaultNote: $('zoom-default-note').value.trim(), zoom, zoomNote, courseFor });
+  if (r.ok) { toast('Saved'); adminLoad(); }
+}
+
+// ─── Password ───
+function renderPassword() {
+  const s = adminData.settings;
+  $('password-enabled').checked = !!s.passwordEnabled;
+  $('password-state').textContent = (s.passwordEnabled ? 'On. ' : 'Off: only one-time codes and class links open the page. ')
+    + (s.passwordIsDefault ? 'The password is the default (plctrial).' : 'Password changed ' + fmtMs(s.passwordSetAt, true) + (s.passwordSetBy ? ' by ' + s.passwordSetBy : '') + '.');
+}
+$('password-enabled').addEventListener('change', async e => {
+  const r = await adminCall({ action: 'setPassword', enabled: e.target.checked });
+  if (r.ok) { toast(e.target.checked ? 'The shared password now opens the page' : 'The shared password is off'); adminLoad(); } else e.target.checked = !e.target.checked;
+});
+async function savePassword() {
+  const password = $('password-new').value.trim();
+  if (password.length < 4) { toast('The password needs at least 4 characters', true); return; }
+  const r = await adminCall({ action: 'setPassword', password });
+  if (r.ok) { $('password-new').value = ''; toast('Password changed'); adminLoad(); }
+}
+
+// ─── Start ───
+function route() {
+  const hash = location.hash.replace(/^#/, '');
+  if (hash === 'admin') { history.replaceState(null, '', location.pathname + location.search); maybeAdminFromHash(); if (!VIEWS.some(v => !$(v).classList.contains('hidden'))) start(''); return; }
+  start(hash);
+}
+function start(hash) {
+  const link = /^l=([A-Za-z2-9]{20,40})$/.exec(hash);
+  if (link) { openLink(link[1]); return; }
+  const booking = /^b=([A-Z2-9]{6}-[A-Za-z2-9]{20,40})$/.exec(hash);
+  if (booking) { openLesson(booking[1]); return; }
+  const saved = storageGet(CODE_KEY);
+  if (saved) { accessCode = saved; openBooking(); return; }
+  openGate();
+}
+window.addEventListener('hashchange', route);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  if (!$('book-view').classList.contains('hidden') && configState !== 'loading') loadConfig(true);
+});
+loadConfig(false);
+firebaseReady();
+route();
+</script>
+</body>
+</html>
