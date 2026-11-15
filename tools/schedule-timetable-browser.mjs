@@ -389,6 +389,10 @@ try {
     assert.equal(store.bookings[0].kind, 'trial');
     assert.equal(store.mail.length, 2);
     const [centre, parent] = store.mail;
+    // Both emails are sent as the centre, never a personal account.
+    for (const m of store.mail) assert.equal(m.from, 'Polymath Learning Centre <admin@polymathlc.com.sg>');
+    assert.equal(parent.replyTo, 'admin@polymathlc.com.sg');
+    assert.equal(centre.replyTo, store.bookings[0].email);
     assert.match(centre.message.html, /Earliest possible trial date<\/td><td[^>]*>Monday 19 October 2026 \(3 business days&#39; notice\)/);
     assert.match(parent.message.html, /<b>Your trial date:<\/b> Trial slots must be booked at least 3 business days in advance/);
     assert.match(parent.message.html, /earliest possible trial date for this class is Monday 19 October 2026\./);
@@ -424,7 +428,7 @@ try {
   await check('the teacher previews the timetable and sees the page version', async () => {
     const { context, page, errors } = await openPage({ admin: true });
     assert.equal(await page.getAttribute('#view-day', 'aria-pressed'), 'true', 'The teacher still starts on the editing view.');
-    assert.equal(await page.textContent('#page-version'), 'Schedule page v1.6.2');
+    assert.equal(await page.textContent('#page-version'), 'Schedule page v1.6.3');
     assert.ok(await page.isVisible('#page-version'));
     await page.click('#view-week');
     assert.match(await page.textContent('#schedule-grid'), /This is the weekly timetable parents see/);

@@ -105,6 +105,7 @@ test('mail is server-addressed plaintext, with safe reply-to and no client heade
   const submission = submissionFor(input, '192.0.2.1', NOW);
   assert.deepEqual(submission.mail.to, mailRecipients(RECIPIENTS));
   assert.equal(submission.mail.replyTo, input.email);
+  assert.equal(submission.mail.from, 'Polymath Learning Centre <admin@polymathlc.com.sg>');
   assert.equal(submission.mail.message.html, undefined);
   assert.match(submission.mail.message.text, /<img src=x onerror=alert\(1\)>/);
   assert.ok(submission.quotas.every(quota => !quota.id.includes(input.email) && !quota.id.includes('192.0.2.1')));
