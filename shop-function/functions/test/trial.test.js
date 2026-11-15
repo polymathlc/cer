@@ -98,8 +98,9 @@ function harness(rows = seed()) {
   }
   const call = (body, options) => post('trialBooking', body, options);
   const admin = (body, token = ADMIN_TOKEN) => post('trialAdmin', body, { headers: { authorization: 'Bearer ' + token } });
-  async function material(access, which, ip = '192.0.2.31') {
-    const req = { method: 'GET', query: { a: access, w: which }, ip, get: () => undefined };
+  async function material(url, ip = '192.0.2.31') {
+    const query = Object.fromEntries(new URL(url, 'https://x.test/').searchParams);
+    const req = { method: 'GET', query, ip, get: () => undefined };
     const res = response();
     await service.trialMaterial(req, res);
     return res;
@@ -235,7 +236,8 @@ test('a booking uses up its code, emails the centre and the parent, and shows th
   assert.equal(b.materials.className, 'P6 Science Monday 7:00pm');
   assert.equal(b.materials.current.name, 'P6 Science WS 2 Energy');
   assert.equal(b.materials.next.name, 'P6 Science WS 3 Forces');
-  assert.match(b.materials.current.url, /^https:\/\/us-central1-mathgen--app\.cloudfunctions\.net\/trialMaterial\?a=[A-Z2-9]{6}-[A-Za-z2-9]{24}&w=current$/);
+  assert.match(b.materials.current.url, /^https:\/\/us-central1-mathgen--app\.cloudfunctions\.net\/trialMaterial\?a=[A-Z2-9]{6}-[A-Za-z2-9]{24}&d=ws2&x=\d+&s=[\w-]{32}$/);
+  assert.equal(new URL(b.materials.current.url).searchParams.get('x'), String(NOW + DAY), 'the page links last a day');
   assert.equal(b.pageUrl, 'https://polymathlc.com.sg/trial/#b=' + b.access);
   assert.equal(b.confirmationSent, true);
 
@@ -260,6 +262,18 @@ test('a booking uses up its code, emails the centre and the parent, and shows th
   const parent = mails.find(m => m.polymathTrial.kind === 'trial-parent');
   assert.deepEqual(parent.to, ['parent@example.test']);
   assert.match(parent.message.html, /zoom\.us\/j\/3333333333/);
+  // The worksheets themselves are in the email, with links that last one week.
+  const emailed = parent.message.text.match(/Current worksheet: P6 Science WS 2 Energy \(12 pages\)\nDownload \(link works until Sun 22 Nov 2026, 11:00am\): (\S+)/);
+  assert.ok(emailed, parent.message.text);
+  assert.equal(new URL(emailed[1]).searchParams.get('x'), String(NOW + 7 * DAY));
+  assert.match(parent.message.text, /Next worksheet: P6 Science WS 3 Forces \(8 pages\)\nDownload/);
+  assert.match(parent.message.html, /Download the PDF/);
+  assert.equal((await h.material(emailed[1])).statusCode, 200);
+  h.advance(7 * DAY);
+  const expired = await h.material(emailed[1]);
+  assert.equal(expired.statusCode, 410);
+  assert.match(expired.body, /work for one week/);
+  h.advance(-7 * DAY);
   assert.match(parent.message.text, /trial\/#b=/);
   assert.ok(rowsUnder(h.db, 'mail').every(([path]) => /^mail\/polymath-trial-[A-Z2-9]{6}-(admin|parent)-[0-9a-f]{12}$/.test(path)));
 });
@@ -319,19 +333,32 @@ test('the booking page reopens with its key, live, and refuses a wrong key', asy
   assert.equal((await h.call({ action: 'view', access })).body.error, 'booking-ended');
 });
 
-test('the worksheet download streams the live Current or Next PDF to the key holder only', async () => {
+test('the worksheet download streams the PDF only through a signed, unexpired link', async () => {
   const h = harness();
-  const { access } = (await h.call(book())).body.booking;
-  const current = await h.material(access, 'current');
+  const b = (await h.call(book())).body.booking;
+  const current = await h.material(b.materials.current.url);
   assert.equal(current.statusCode, 200);
   assert.equal(current.headers['content-type'], 'application/pdf');
   assert.match(current.headers['content-disposition'], /inline; filename="P6 Science WS 2 Energy\.pdf"/);
   assert.equal(Buffer.concat(current.chunks).toString(), '%PDF-1.4 pdf-annotator/ws2.pdf');
-  const next = await h.material(access, 'next');
+  const next = await h.material(b.materials.next.url);
   assert.equal(Buffer.concat(next.chunks).toString(), '%PDF-1.4 pdf-annotator/ws3.pdf');
-  assert.equal((await h.material('ABCDEF-' + 'x'.repeat(24), 'current')).statusCode, 404);
-  assert.equal((await h.material(access, 'answers')).statusCode, 400);
-  assert.match((await h.material('nope', 'current')).body, /not valid/);
+  // Stretching the expiry, or pointing at another worksheet, breaks the signature.
+  const stretched = new URL(b.materials.current.url); stretched.searchParams.set('x', String(NOW + 400 * DAY));
+  assert.equal((await h.material(stretched.href)).statusCode, 404);
+  const other = new URL(b.materials.current.url); other.searchParams.set('d', 'ws1');
+  assert.equal((await h.material(other.href)).statusCode, 404);
+  const unsigned = new URL(b.materials.current.url); unsigned.searchParams.delete('s');
+  assert.match((await h.material(unsigned.href)).body, /not valid/);
+  assert.equal((await h.material('https://x.test/?a=nope&d=ws2')).statusCode, 404);
+  // The page's own links last a day; reopening the page gives fresh ones.
+  h.advance(DAY + 1);
+  assert.equal((await h.material(b.materials.current.url)).statusCode, 410);
+  const fresh = (await h.call({ action: 'view', access: b.access })).body.booking;
+  assert.equal((await h.material(fresh.materials.current.url)).statusCode, 200);
+  // A worksheet taken out of the class no longer downloads.
+  h.db.rows.set('onlineCourses/c-mon', Object.assign({}, h.db.rows.get('onlineCourses/c-mon'), { worksheetIds: ['ws1', 'ws3'] }));
+  assert.equal((await h.material(fresh.materials.current.url)).statusCode, 404);
 });
 
 test('a worksheet with no PDF yet is listed but not downloadable', async () => {
@@ -342,7 +369,7 @@ test('a worksheet with no PDF yet is listed but not downloadable', async () => {
   assert.equal(m.next.available, false);
   assert.equal(m.next.url, '');
   assert.equal(res.body.booking.zoomUrl, 'https://us02web.zoom.us/j/1111111111', 'the default Zoom link');
-  assert.equal((await h.material(res.body.booking.access, 'next')).statusCode, 404);
+  assert.equal(m.current.url.includes('&d=wa&'), true);
 });
 
 test('a class with no /online class or Zoom link still books, and the centre is told what is missing', async () => {
@@ -385,7 +412,17 @@ test('a class link asks for email and WhatsApp, then opens the class straight aw
   assert.equal(visits.length, 1);
   assert.equal(visits[0].whatsapp, '91234567');
   assert.equal(visits[0].linkLabel, 'Facebook group');
-  assert.equal(rowsUnder(h.db, 'mail').length, 0, 'a link visit sends no email');
+  // The Zoom link and the worksheets (one-week links) go to the visitor's email straight away.
+  const mails = rowsUnder(h.db, 'mail').map(([, m]) => m);
+  assert.equal(mails.length, 1);
+  assert.deepEqual(mails[0].to, ['kid@example.test']);
+  assert.equal(mails[0].from, 'Polymath Learning Centre <admin@polymathlc.com.sg>');
+  assert.match(mails[0].message.subject, /^Zoom link and worksheets: Polymath Primary 6 Science class$/);
+  assert.match(mails[0].message.text, /Join on Zoom: https:\/\/us02web\.zoom\.us\/j\/3333333333 \(Passcode 2027\)/);
+  assert.match(mails[0].message.text, /Current worksheet: P6 Science WS 2 Energy \(12 pages\)\nDownload \(link works until/);
+  assert.equal(visits[0].materialsSentTo, 'kid@example.test');
+  const mailedUrl = mails[0].message.text.match(/Download \(link works until [^)]*\): (\S+)/)[1];
+  assert.equal((await h.material(mailedUrl)).statusCode, 200);
 
   // The same person again is the same visit, counted.
   h.advance(DAY);
@@ -393,17 +430,19 @@ test('a class link asks for email and WhatsApp, then opens the class straight aw
   assert.equal(again.statusCode, 200);
   assert.equal(again.body.booking.code, open.body.booking.code);
   assert.equal(rowsUnder(h.db, 'trialBookings')[0][1].opens, 2);
+  assert.equal(rowsUnder(h.db, 'mail').length, 1, 'opening again sends no second email');
   const stored = h.db.rows.get('trialLinks/' + link.token);
   assert.equal(stored.opens, 2);
   assert.equal(stored.people, 1);
-  assert.equal((await h.material(open.body.booking.access, 'current')).statusCode, 200);
+  assert.equal((await h.material(again.body.booking.materials.current.url)).statusCode, 200, 'fresh page link');
+  assert.equal((await h.material(mailedUrl)).statusCode, 200, 'the emailed link still works');
 
   // After a week the link, its page and its worksheets stop.
   h.advance(6 * DAY);
   assert.equal((await h.call({ action: 'linkInfo', link: link.token })).body.error, 'link-expired');
   assert.equal((await h.call({ action: 'linkOpen', link: link.token, email: 'new@example.test', whatsapp: '81234567' })).body.error, 'link-expired');
   assert.equal((await h.call({ action: 'view', access: open.body.booking.access })).body.error, 'link-expired');
-  assert.equal((await h.material(open.body.booking.access, 'current')).statusCode, 410);
+  assert.equal((await h.material(mailedUrl)).statusCode, 410, 'the emailed link stops with the class link');
 });
 
 test('a revoked or unknown link opens nothing', async () => {
@@ -521,4 +560,19 @@ test('cancelled bookings and class-link visits get no reminder; an admin can res
   assert.equal(sent.body.to, 'parent@example.test');
   assert.equal((await h.admin({ action: 'sendReminder', code: b.code })).body.error, 'reminder-just-sent');
   assert.deepEqual(T.dueReminders(await h.store.listBookings(), sunday22), [], 'already reminded');
+});
+
+test('an admin can email the Zoom link and worksheets again, with fresh one-week links', async () => {
+  const h = harness();
+  const b = (await h.call(book())).body.booking;
+  assert.equal((await h.admin({ action: 'emailMaterials', code: b.code })).body.error, 'materials-just-sent', 'not twice within a minute of the confirmation');
+  h.advance(3 * DAY);
+  const sent = await h.admin({ action: 'emailMaterials', code: b.code });
+  assert.equal(sent.statusCode, 200);
+  const mail = rowsUnder(h.db, 'mail').map(([, m]) => m).find(m => m.polymathTrial.kind === 'trial-materials-resend');
+  assert.match(mail.message.text, /As requested, here again are the Zoom link and worksheets/);
+  const url = mail.message.text.match(/Download \(link works until [^)]*\): (\S+)/)[1];
+  assert.equal(new URL(url).searchParams.get('x'), String(NOW + 10 * DAY));
+  assert.equal(h.db.rows.get('trialBookings/' + b.code).materialsCount, 1);
+  assert.equal((await h.admin({ action: 'emailMaterials', code: 'ZZZZZZ' })).statusCode, 404);
 });

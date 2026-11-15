@@ -41,7 +41,7 @@ export async function runReminders({ store, now = Date.now(), dryRun = false, lo
       const extras = extrasBySlot.get(booking.slot);
       if (!extras.zoom.url) result.noZoom++;
       if (dryRun) continue;
-      const outcome = await store.sendReminder(booking.code, b => T.reminderMail(b, extras.zoom, extras.materials),
+      const outcome = await store.sendReminder(booking.code, b => T.reminderMail(b, extras.zoom, extras.materials, now),
         T.mailIdFor(booking.code, 'reminder'), now, { force: false, by: 'schedule' });
       if (outcome.sent) result.sent++;
       else result.skipped++;
