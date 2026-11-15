@@ -144,6 +144,12 @@ function createTrialStore(db, Timestamp, { bucket = null } = {}) {
           }
           if (visitSnapshot.exists) return null;
           const visit = Object.assign({}, submission.visit, { createdAt: timestamp(now) });
+          // The Zoom link and worksheets go to the visitor's email with the visit, once.
+          const item = submission.mail ? submission.mail(visit) : null;
+          if (item && item.mail) {
+            transaction.create(mail().doc(item.id), item.mail);
+            visit.materialsSentAtMs = now; visit.materialsSentTo = item.mail.to[0]; visit.materialsCount = 1;
+          }
           transaction.set(duplicateRef, { code, expiresAt: timestamp(Math.max(now, Number(link.expiresAtMs) || now) + 86400000) });
           transaction.create(bookings().doc(code), visit);
           transaction.update(linkRef, { opens: (Number(link.opens) || 0) + 1, people: (Number(link.people) || 0) + 1, lastOpenedAtMs: now });
@@ -227,6 +233,26 @@ function createTrialStore(db, Timestamp, { bucket = null } = {}) {
         transaction.create(mail().doc(mailId), message);
         transaction.update(ref, { reminderSentAtMs: now, reminderSentTo: message.to[0], reminderSentBy: by,
           reminderCount: (Number(booking.reminderCount) || 0) + 1 });
+        return { sent: true, to: message.to[0] };
+      });
+    },
+
+    // An admin's "Email Zoom + worksheets": a fresh email with fresh one-week
+    // download links. Pressed twice within a minute, it sends once.
+    async sendMaterials(code, buildMail, mailId, now, by) {
+      const ref = bookings().doc(code);
+      return db.runTransaction(async transaction => {
+        const snapshot = await transaction.get(ref);
+        if (!snapshot.exists) return { sent: false, reason: 'booking-not-found' };
+        const booking = snapshot.data();
+        if (booking.status === 'cancelled') return { sent: false, reason: 'booking-cancelled' };
+        const last = Math.max(Number(booking.materialsSentAtMs) || 0, Number(booking.confirmationSentAtMs) || 0);
+        if (last && now - last < 60000) return { sent: false, reason: 'materials-just-sent' };
+        const message = buildMail(booking);
+        if (!message) return { sent: false, reason: 'no-email' };
+        transaction.create(mail().doc(mailId), message);
+        transaction.update(ref, { materialsSentAtMs: now, materialsSentTo: message.to[0], materialsSentBy: by,
+          materialsCount: (Number(booking.materialsCount) || 0) + 1 });
         return { sent: true, to: message.to[0] };
       });
     },

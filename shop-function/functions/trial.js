@@ -32,7 +32,7 @@
 // trialSettings, trialBookings and trialLinks are private: only these functions
 // (the Admin SDK) read or write them. tools/trial-rules.mjs keeps every browser
 // out of them in the shared Firestore rules.
-const { randomBytes, scryptSync, timingSafeEqual, createHash } = require('node:crypto');
+const { randomBytes, scryptSync, timingSafeEqual, createHash, createHmac } = require('node:crypto');
 const { ShopError, newOrderCode } = require('./service');
 const { slotLabel, readSlot, isMaster, slotModes } = require('./booking');
 const { SENDER_EMAIL, SENDER_NAME, escapeHtml, validEmail } = require('./receipt');
@@ -69,6 +69,10 @@ const SG_OFFSET = 8 * HOUR;
 const TRIAL_HORIZON_DAYS = 56;
 // A class link works for one week from when it is made.
 const LINK_DAYS = 7;
+// Worksheet download links in emails work for one week from when the email is
+// written; the page's own links for a day (the page makes fresh ones each visit).
+const MAIL_LINK_DAYS = 7;
+const PAGE_LINK_MS = DAY;
 // A booking's page (and its worksheets) keeps working this long after the lesson.
 const BOOKING_ACCESS_DAYS_AFTER = 7;
 const LIMITS = Object.freeze({
@@ -350,7 +354,23 @@ function parseAccess(value) {
   const match = ACCESS_PATTERN.exec(typeof value === 'string' ? value.trim() : '');
   return match ? { code: match[1], token: match[2] } : null;
 }
-const materialUrl = (access, which) => MATERIAL_ENDPOINT + '?a=' + encodeURIComponent(access) + '&w=' + which;
+// A worksheet download link names the booking, the worksheet and when the link
+// stops working, signed with the booking's own secret linkKey (never sent to
+// anyone), so a link's expiry cannot be stretched by editing it.
+function materialSignature(booking, id, expiresAtMs) {
+  const key = booking.linkKey || ('legacy:' + booking.viewToken);
+  return createHmac('sha256', key).update([booking.code, id, expiresAtMs].join('|')).digest('base64url').slice(0, 32);
+}
+function materialUrl(booking, id, expiresAtMs) {
+  return MATERIAL_ENDPOINT + '?a=' + encodeURIComponent(accessFor(booking)) + '&d=' + encodeURIComponent(id)
+    + '&x=' + expiresAtMs + '&s=' + materialSignature(booking, id, expiresAtMs);
+}
+// The download links an email carries: one week from `now`.
+function emailSheetLinks(booking, materials, now) {
+  const until = now + MAIL_LINK_DAYS * DAY;
+  const link = info => info && info.available ? materialUrl(booking, info.id, until) : '';
+  return { until, current: link(materials && materials.current), next: link(materials && materials.next) };
+}
 const bookingPageUrl = access => TRIAL_URL + '#b=' + access;
 const linkPageUrl = token => TRIAL_URL + '#l=' + token;
 
@@ -476,7 +496,9 @@ function publicBooking(booking, extras) {
   const access = accessFor(booking);
   const zoom = extras.zoom || { url: '', note: '' };
   const materials = extras.materials || { linked: false, className: '', current: null, next: null };
-  const sheet = (info, which) => info ? Object.assign({}, info, { url: info.available ? materialUrl(access, which) : '' }) : null;
+  const accessUntil = num(extras.accessUntilMs, num(booking.accessUntilMs, Infinity));
+  const linkUntil = Math.min(num(extras.now, Date.now()) + PAGE_LINK_MS, accessUntil);
+  const sheet = info => info ? Object.assign({}, info, { url: info.available ? materialUrl(booking, info.id, linkUntil) : '' }) : null;
   return {
     code: booking.code, kind: booking.kind, access, pageUrl: bookingPageUrl(access),
     slot: booking.slot, date: booking.lessonDate || '', sessionLabel: booking.sessionLabel || slotLabel(booking.slot),
@@ -486,9 +508,10 @@ function publicBooking(booking, extras) {
     status: booking.status || 'booked',
     zoomUrl: zoom.url || '', zoomNote: zoom.note || '',
     materials: { linked: materials.linked, className: materials.className,
-      current: sheet(materials.current, 'current'), next: sheet(materials.next, 'next') },
+      current: sheet(materials.current), next: sheet(materials.next) },
     accessUntil: num(extras.accessUntilMs, num(booking.accessUntilMs, 0)),
-    confirmationSent: !!booking.confirmationSentTo
+    confirmationSent: !!booking.confirmationSentTo,
+    materialsSent: !!(booking.confirmationSentTo || booking.materialsSentTo)
   };
 }
 
@@ -503,20 +526,27 @@ const rowsText = rows => rows.map(([k, v]) => k + ': ' + v).join('\n');
 const linkHtml = (url, label) => '<a href="' + escapeHtml(url) + '" style="color:#056c76;font-weight:700">' + escapeHtml(label || url) + '</a>';
 function sheetLine(info) { return info ? info.name + (info.pages ? ' (' + info.pages + ' pages)' : '') : ''; }
 
-function lessonRows(booking, zoom, materials) {
+function lessonRows(booking, zoom, materials, links) {
   const rows = [
     ['Booking code', booking.code],
-    ['Lesson', booking.sessionLabel],
+    booking.lessonDate ? ['Lesson', booking.sessionLabel] : ['Class time', slotLabel(booking.slot) + ' (every week)'],
     ['Class', (levelName(booking.classLevel) + ' ' + subjectName(booking.classSubject)).trim() + ' (online, on Zoom)'],
-    ['Student', booking.studentName]
   ];
+  if (booking.studentName) rows.push(['Student', booking.studentName]);
   if (booking.parentName) rows.push(['Parent', booking.parentName]);
   rows.push(['Email', booking.email]);
   if (booking.whatsapp) rows.push(['WhatsApp', booking.whatsapp]);
   rows.push(zoom && zoom.url ? ['Zoom link', zoom.url, linkHtml(zoom.url) + (zoom.note ? '<br>' + escapeHtml(zoom.note) : '')]
     : ['Zoom link', 'We will send it before the lesson']);
-  if (materials && materials.current) rows.push(['Current worksheet', sheetLine(materials.current)]);
-  if (materials && materials.next) rows.push(['Next worksheet', sheetLine(materials.next)]);
+  const sheetRow = (label, info, url) => {
+    if (!info) return;
+    if (!url) return rows.push([label, sheetLine(info)]);
+    rows.push([label, sheetLine(info) + '\nDownload (link works until ' + fmtMoment(links.until) + '): ' + url,
+      escapeHtml(sheetLine(info)) + '<br>' + linkHtml(url, 'Download the PDF') + ' <span style="color:#8A8A8A;font-size:12px">(link works until '
+      + escapeHtml(fmtMoment(links.until)) + ')</span>']);
+  };
+  sheetRow('Current worksheet', materials && materials.current, links && links.current);
+  sheetRow('Next worksheet', materials && materials.next, links && links.next);
   return rows;
 }
 function parentShell(paragraphs, rows, button) {
@@ -532,14 +562,16 @@ function parentShell(paragraphs, rows, button) {
     + '</div>';
 }
 
-function parentConfirmationMail(booking, zoom, materials) {
+function parentConfirmationMail(booking, zoom, materials, now) {
   if (!validEmail(booking.email)) return null;
   const access = accessFor(booking);
-  const rows = lessonRows(booking, zoom, materials);
+  const links = emailSheetLinks(booking, materials, now);
+  const rows = lessonRows(booking, zoom, materials, links);
   const greeting = 'Dear ' + (booking.parentName || 'Parent') + ',';
   const lead = 'Thank you for booking an online trial lesson for ' + booking.studentName + ' on ' + booking.sessionLabel + '.';
-  const what = 'Your trial page has the Zoom link and the worksheets ' + booking.studentName + ' will use. The worksheets follow the class, '
-    + 'so please open the page again the day before and print or download them. We will also email you a reminder the afternoon before the lesson.';
+  const what = 'The Zoom link and the worksheets ' + booking.studentName + ' will use are below, so please keep this email. '
+    + 'The worksheet download links work for one week. The worksheets follow the class, so the reminder we email the afternoon before the lesson '
+    + 'brings the latest worksheets with fresh links, and your trial page always has them too.';
   const page = bookingPageUrl(access);
   return {
     to: [booking.email],
@@ -554,15 +586,16 @@ function parentConfirmationMail(booking, zoom, materials) {
   };
 }
 
-function reminderMail(booking, zoom, materials) {
+function reminderMail(booking, zoom, materials, now) {
   if (!validEmail(booking.email)) return null;
   const access = accessFor(booking);
-  const rows = lessonRows(booking, zoom, materials);
+  const links = emailSheetLinks(booking, materials, now);
+  const rows = lessonRows(booking, zoom, materials, links);
   const greeting = 'Dear ' + (booking.parentName || 'Parent') + ',';
   const lead = 'A reminder that ' + booking.studentName + "'s online trial lesson is tomorrow, " + booking.sessionLabel + '.';
   const join = zoom && zoom.url ? 'Join on Zoom a few minutes early: ' + zoom.url : 'We will send the Zoom link before the lesson.';
   const prepare = materials && (materials.current || materials.next)
-    ? 'Please have the worksheets ready (printed, or open on a tablet). They are on your trial page.'
+    ? 'Please have the worksheets ready (printed, or open on a tablet). Their download links are below and work for one week.'
     : 'Your trial page has everything for the lesson.';
   const page = bookingPageUrl(access);
   return {
@@ -577,6 +610,36 @@ function reminderMail(booking, zoom, materials) {
         rowsText(rows), '', 'Need a different time? Reply to this email or WhatsApp us at ' + WHATSAPP_DISPLAY + '.', '', 'Thank you,', SENDER_NAME].join('\n')
     },
     polymathTrial: { code: booking.code, kind: 'trial-reminder' }
+  };
+}
+
+// The Zoom link and worksheets, by email: sent to everyone who opens a class
+// link, and by an admin's "Email Zoom + worksheets" for any booking, so nobody
+// has to send them again by hand when a file or link is lost.
+function materialsMail(booking, zoom, materials, now, { resend = false } = {}) {
+  if (!validEmail(booking.email)) return null;
+  const access = accessFor(booking);
+  const links = emailSheetLinks(booking, materials, now);
+  const rows = lessonRows(booking, zoom, materials, links);
+  const name = (levelName(booking.classLevel) + ' ' + subjectName(booking.classSubject)).trim();
+  const greeting = booking.parentName ? 'Dear ' + booking.parentName + ',' : 'Hello' + (booking.studentName ? ' ' + booking.studentName : '') + ',';
+  const lead = (resend ? 'As requested, here again are ' : 'Here are ') + 'the Zoom link and worksheets for the Polymath ' + name + ' class'
+    + (booking.lessonDate ? ' on ' + booking.sessionLabel : ' (' + slotLabel(booking.slot) + ')') + '. Please keep this email.';
+  const join = zoom && zoom.url ? 'Join on Zoom: ' + zoom.url + (zoom.note ? ' (' + zoom.note + ')' : '') : 'We will send the Zoom link before the lesson.';
+  const until = 'The worksheet download links work for one week, until ' + fmtMoment(links.until) + '.';
+  const page = bookingPageUrl(access);
+  return {
+    to: [booking.email],
+    from: FROM, replyTo: SENDER_EMAIL,
+    message: {
+      subject: 'Zoom link and worksheets: Polymath ' + name + ' class' + (booking.lessonDate ? ' (' + fmtDayKey(booking.lessonDate) + ')' : ''),
+      html: parentShell([escapeHtml(greeting), escapeHtml(lead),
+        zoom && zoom.url ? 'Join on Zoom: ' + linkHtml(zoom.url) + (zoom.note ? ' (' + escapeHtml(zoom.note) + ')' : '') : escapeHtml(join),
+        escapeHtml(until)], rows, { url: page, label: 'Open the class page' }),
+      text: [greeting, '', lead, '', join, '', until, 'Class page: ' + page, '', rowsText(rows), '',
+        'Questions? Reply to this email or WhatsApp us at ' + WHATSAPP_DISPLAY + '.', '', 'Thank you,', SENDER_NAME].join('\n')
+    },
+    polymathTrial: { code: booking.code, kind: resend ? 'trial-materials-resend' : 'trial-materials' }
   };
 }
 
@@ -638,7 +701,7 @@ function adminBooking(b) {
   const out = {};
   for (const key of ['code', 'kind', 'slot', 'slotLabel', 'lessonDate', 'sessionLabel', 'classLevel', 'classSubject', 'parentName',
     'studentName', 'email', 'whatsapp', 'status', 'createdAtMs', 'reminderSentAtMs', 'reminderSentTo', 'confirmationSentTo',
-    'linkToken', 'linkLabel', 'accessCode', 'via', 'opens', 'lastOpenedAtMs', 'accessUntilMs', 'pageVersion']) if (b[key] !== undefined) out[key] = b[key];
+    'linkToken', 'linkLabel', 'accessCode', 'via', 'materialsSentAtMs', 'materialsSentTo', 'opens', 'lastOpenedAtMs', 'accessUntilMs', 'pageVersion']) if (b[key] !== undefined) out[key] = b[key];
   if (b.viewToken) out.pageUrl = bookingPageUrl(accessFor(b));
   return out;
 }
@@ -673,7 +736,7 @@ function createTrialService({ store, http, hashIp, verifyIdToken = async () => {
     const course = courseForSlot(courses, slotId, slot.level ? slot : null, settings.courseFor[slotId]);
     const { current, next } = currentAndNext(course);
     const sheets = await store.loadSheets([current, next].filter(Boolean));
-    return { zoom: zoomFor(settings, slotId), materials: materialsFor(course, sheets), course, sheets };
+    return { zoom: zoomFor(settings, slotId), materials: materialsFor(course, sheets), course, sheets, now: now() };
   }
 
   // The way in for booking a date: an unused one-time code (checked here, used
@@ -734,10 +797,11 @@ function createTrialService({ store, http, hashIp, verifyIdToken = async () => {
           quotas: [hourQuota('book', req, at, LIMITS.bookPerIpHour),
             { id: 'trial-book-global-' + day, maximum: LIMITS.bookGlobalDay, expiresAt: (day + 2) * DAY }],
           accessCode: gate.accessCode,
-          booking: bookingRecord(request, slot, code, randomToken(24, randomBytesImpl), at, gate),
+          booking: Object.assign(bookingRecord(request, slot, code, randomToken(24, randomBytesImpl), at, gate),
+            { linkKey: randomToken(32, randomBytesImpl) }),
           mails: booking => [
             { id: mailIdFor(code, 'admin', randomBytesImpl), mail: adminBookingMail(booking, extras.zoom, extras.materials) },
-            { id: mailIdFor(code, 'parent', randomBytesImpl), mail: parentConfirmationMail(booking, extras.zoom, extras.materials), confirmation: true }
+            { id: mailIdFor(code, 'parent', randomBytesImpl), mail: parentConfirmationMail(booking, extras.zoom, extras.materials, at), confirmation: true }
           ]
         }), () => newOrderCode(random));
         const live = result.already ? await extrasFor(result.booking.slot) : extras;
@@ -767,15 +831,23 @@ function createTrialService({ store, http, hashIp, verifyIdToken = async () => {
         if (!LINK_PATTERN.test(request.link)) throw new ShopError(404, 'link-unknown');
         await store.countAttempts([hourQuota('link', req, at, LIMITS.linkOpenPerIpHour)], 'too-many-attempts');
         const ctx = await store.loadContext();
+        const first = await store.getLink(request.link);
+        const firstState = linkState(first, at);
+        if (firstState !== 'active') throw new ShopError(firstState === 'unknown' ? 404 : 410, 'link-' + firstState);
+        let extras = await extrasFor(first.slot, ctx);
         const result = await store.openLink(request.link, at, (link, code) => {
           const slot = readSlot(ctx.config, link.slot);
           return {
             duplicateId: 'trial-linkuse-' + hashKey([link.token, request.email].join('|')),
-            visit: linkVisitRecord(request, link, slot.level ? slot : null, code, randomToken(24, randomBytesImpl), at)
+            visit: Object.assign(linkVisitRecord(request, link, slot.level ? slot : null, code, randomToken(24, randomBytesImpl), at),
+              { linkKey: randomToken(32, randomBytesImpl) }),
+            // Everyone who opens a class link gets the Zoom link and worksheets by email.
+            mail: visit => ({ id: mailIdFor(code, 'materials', randomBytesImpl),
+              mail: link.slot === first.slot ? materialsMail(visit, extras.zoom, extras.materials, at) : null })
           };
         }, () => newOrderCode(random));
         if (result.state !== 'active') throw new ShopError(result.state === 'unknown' ? 404 : 410, 'link-' + result.state);
-        const extras = await extrasFor(result.visit.slot, ctx);
+        if (result.visit.slot !== first.slot) extras = await extrasFor(result.visit.slot, ctx);
         extras.accessUntilMs = Math.min(num(result.link.expiresAtMs, 0), num(result.visit.accessUntilMs, Infinity));
         return res.status(result.already ? 200 : 201).json({ ok: true, booking: publicBooking(result.visit, extras) });
       }
@@ -785,7 +857,10 @@ function createTrialService({ store, http, hashIp, verifyIdToken = async () => {
     }
   }
 
-  // GET /trialMaterial?a=<access>&w=current|next — the worksheet PDF itself.
+  // GET /trialMaterial?a=<access>&d=<worksheet>&x=<expires ms>&s=<signature> — the worksheet PDF.
+  // Refused once the link's time is up (a week for emailed links, a day for the
+  // page's), when the signature does not match, when the booking or its class
+  // link has ended, or when the worksheet is no longer in the class's list.
   async function trialMaterial(req, res) {
     res.set('Cache-Control', 'private, no-store');
     res.set('X-Content-Type-Options', 'nosniff');
@@ -797,14 +872,20 @@ function createTrialService({ store, http, hashIp, verifyIdToken = async () => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return page(405, 'This address only opens worksheets.');
     try {
       const at = now();
-      const which = req.query && req.query.w === 'next' ? 'next' : req.query && req.query.w === 'current' ? 'current' : '';
-      if (!which) return page(400, 'This worksheet link is incomplete.');
+      const q = req.query || {};
+      const id = typeof q.d === 'string' && /^[\w-]{1,80}$/.test(q.d) ? q.d : '';
+      const until = typeof q.x === 'string' && /^\d{12,15}$/.test(q.x) ? Number(q.x) : NaN;
+      const signature = typeof q.s === 'string' && /^[\w-]{32}$/.test(q.s) ? q.s : '';
+      if (!id || !Number.isFinite(until) || !signature) return page(404, 'This worksheet link is not valid.');
       await store.countAttempts([hourQuota('pdf', req, at, LIMITS.materialPerIpHour)], 'too-many-attempts');
-      const { booking } = await bookingAccess(req.query && req.query.a, at);
+      const { booking } = await bookingAccess(q.a, at);
+      if (!samePassword(materialSignature(booking, id, until), signature)) return page(404, 'This worksheet link is not valid.');
+      if (!(at < until)) return page(410, 'This download link has expired. Worksheet links in our emails work for one week. '
+        + 'Open your trial page for fresh links, or WhatsApp us and we will help.');
       const extras = await extrasFor(booking.slot);
-      const id = currentAndNext(extras.course)[which];
-      const sheet = id ? extras.sheets[id] : null;
-      if (!sheet || !sheet.storagePath) return page(404, 'This class has no ' + which + ' worksheet right now.');
+      if (!courseIds(extras.course).includes(id)) return page(404, 'This worksheet is no longer in the class.');
+      const sheet = (await store.loadSheets([id]))[id];
+      if (!sheet || !sheet.storagePath) return page(404, 'This worksheet has no file right now.');
       const name = String(sheet.name || 'Worksheet').replace(/[^\w .,()&+-]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || 'Worksheet';
       const file = await store.openPdf(sheet.storagePath);
       if (!file) return page(404, 'This worksheet file could not be found.');
@@ -962,8 +1043,19 @@ function createTrialService({ store, http, hashIp, verifyIdToken = async () => {
         const booking = await store.getBooking(code);
         if (!booking || booking.kind !== 'booking') throw new ShopError(404, 'booking-not-found');
         const extras = await extrasFor(booking.slot);
-        const result = await store.sendReminder(code, b => reminderMail(b, extras.zoom, extras.materials),
+        const result = await store.sendReminder(code, b => reminderMail(b, extras.zoom, extras.materials, at),
           mailIdFor(code, 'reminder', randomBytesImpl), at, { force: true, by: email });
+        if (!result.sent) throw new ShopError(409, result.reason || 'not-sent');
+        return res.status(200).json({ ok: true, to: result.to });
+      }
+      if (action === 'emailMaterials') {
+        checkKeys(body, ['action', 'code']);
+        const code = oneLine(body.code, 6, 6);
+        const booking = await store.getBooking(code);
+        if (!booking) throw new ShopError(404, 'booking-not-found');
+        const extras = await extrasFor(booking.slot);
+        const result = await store.sendMaterials(code, b => materialsMail(b, extras.zoom, extras.materials, at, { resend: true }),
+          mailIdFor(code, 'materials', randomBytesImpl), at, email);
         if (!result.sent) throw new ShopError(409, result.reason || 'not-sent');
         return res.status(200).json({ ok: true, to: result.to });
       }
@@ -984,6 +1076,6 @@ module.exports = {
   lessonStart, ansKeyAt, currentAndNext, courseForSlot, courseTitle, materialsFor, readSettings, zoomFor,
   normalPassword, hashPassword, passwordMatches, newPasswordFields, randomToken, accessFor, parseAccess, materialUrl, bookingPageUrl, linkPageUrl,
   validateBook, validateLinkOpen, checkSession, cleanWhatsapp, bookingRecord, linkVisitRecord, accessOpen, linkState, publicBooking,
-  parentConfirmationMail, reminderMail, adminBookingMail, dueReminders, mailIdFor, adminSlotRows, publicLink, adminBooking, trialAdminFrom,
+  parentConfirmationMail, reminderMail, adminBookingMail, materialsMail, emailSheetLinks, materialSignature, MAIL_LINK_DAYS, dueReminders, mailIdFor, adminSlotRows, publicLink, adminBooking, trialAdminFrom,
   createTrialService
 };

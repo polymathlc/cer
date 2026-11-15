@@ -375,7 +375,7 @@
           <div class="grid-2">
             <div class="field"><label for="f-student">Student's name <span class="req">*</span></label><input id="f-student" maxlength="80" autocomplete="off"></div>
             <div class="field"><label for="f-parent">Parent's name <span class="req">*</span></label><input id="f-parent" maxlength="80" autocomplete="name"></div>
-            <div class="field"><label for="f-email">Email <span class="req">*</span></label><input id="f-email" type="email" maxlength="120" autocomplete="email" inputmode="email"><div class="hint">We send the Zoom link and a reminder the afternoon before.</div></div>
+            <div class="field"><label for="f-email">Email <span class="req">*</span></label><input id="f-email" type="email" maxlength="120" autocomplete="email" inputmode="email"><div class="hint">We email you the Zoom link and the worksheets now, and a reminder the afternoon before.</div></div>
             <div class="field"><label for="f-whatsapp">WhatsApp number</label><input id="f-whatsapp" type="tel" maxlength="24" autocomplete="tel" inputmode="tel" placeholder="9123 4567"><div class="hint">Optional, in case we need to reach you quickly.</div></div>
           </div>
           <div style="margin-top:16px">
@@ -392,7 +392,7 @@
       <div id="link-form" class="hidden">
         <h2 id="link-title">Your class</h2>
         <p class="lead" id="link-lead">Tell us how to reach you, and the Zoom link and worksheets open straight away.</p>
-        <div class="field" style="margin-bottom:12px"><label for="l-email">Email <span class="req">*</span></label><input id="l-email" type="email" maxlength="120" autocomplete="email" inputmode="email"></div>
+        <div class="field" style="margin-bottom:12px"><label for="l-email">Email <span class="req">*</span></label><input id="l-email" type="email" maxlength="120" autocomplete="email" inputmode="email"><div class="hint">We email you the Zoom link and the worksheets, so you always have them.</div></div>
         <div class="field" style="margin-bottom:12px"><label for="l-whatsapp">WhatsApp number <span class="req">*</span></label><input id="l-whatsapp" type="tel" maxlength="24" autocomplete="tel" inputmode="tel" placeholder="9123 4567"><div class="hint">Singapore number, or include your country code (e.g. +60…).</div></div>
         <div class="field" style="margin-bottom:16px"><label for="l-student">Student's name</label><input id="l-student" maxlength="80" autocomplete="off"></div>
         <button class="btn big" id="link-btn" onclick="submitLink()">Open the class</button>
@@ -460,7 +460,7 @@
 
 // Shown to the signed-in admin in the footer, so a deploy can be checked.
 // Bump it on every change to this page.
-const TRIAL_PAGE_VERSION = 'v1.0.0';
+const TRIAL_PAGE_VERSION = 'v1.1.0';
 const API = 'https://us-central1-mathgen--app.cloudfunctions.net/';
 const BOOK_URL = API + 'trialBooking';
 const ADMIN_URL = API + 'trialAdmin';
@@ -865,7 +865,7 @@ async function submitLink() {
     storageSet('pl_trial_contact_v1', JSON.stringify({ email, whatsapp }));
     storageSet(LAST_KEY, r.booking.access);
     history.replaceState(null, '', location.pathname + '#b=' + r.booking.access);
-    showLesson(r.booking, null, false);
+    showLesson(r.booking, r.booking.materialsSent ? 'We have also emailed the Zoom link and the worksheets to ' + email + '. The download links in the email work for one week.' : null, false);
     return;
   }
   toast(errorText(r), true);
@@ -901,7 +901,8 @@ function showLesson(b, note, justBooked) {
   const dated = !!b.date;
   const booked = $('lesson-booked');
   booked.classList.toggle('hidden', !(justBooked || note));
-  booked.textContent = note || (justBooked ? 'You are booked! ' + (b.confirmationSent ? 'We have emailed the details to ' + b.email + '. ' : '')
+  booked.textContent = note || (justBooked ? 'You are booked! ' + (b.confirmationSent ? 'We have emailed the Zoom link and the worksheets to ' + b.email
+    + ' (download links work for one week, and the reminder brings fresh ones). ' : '')
     + 'Bookmark this page: it always has the latest Zoom link and worksheets.' : '');
   if (dated) {
     const p = b.date.split('-').map(Number);
@@ -927,7 +928,7 @@ function showLesson(b, note, justBooked) {
   $('lesson-actions').innerHTML = actions.join('');
   const m = b.materials || {};
   $('sheets-lead').textContent = m.linked
-    ? 'These follow the class (' + (m.className || b.className) + '): the worksheet the class is on now, and the one after it. Open this page again the day before, then print them or have them ready on a tablet.'
+    ? 'These follow the class (' + (m.className || b.className) + '): the worksheet the class is on now, and the one after it. Open this page again the day before, then print them or have them ready on a tablet. The buttons here make fresh download links each time you open the page.'
     : 'The worksheets for this lesson will appear here before the lesson.';
   $('sheets').innerHTML = m.linked ? sheetCard(m.current, 'current') + sheetCard(m.next, 'next') : '<div class="state" style="grid-column:1/-1">Worksheets coming soon.</div>';
   const rows = [['Booking code', b.code]];
@@ -1028,7 +1029,8 @@ async function adminCall(body) {
   if (!r.ok) {
     const words = { 'admin-only': 'This account is not a trial admin.', 'sign-in-required': 'Please sign in again.', 'invalid-zoom-link': 'A Zoom link must start with https://',
       'weak-password': 'The password needs 4 to 64 characters.', 'invalid-count': 'Make between 1 and 30 codes at a time.',
-      'session-unavailable': 'That class is not open for online trials on the schedule.', 'reminder-just-sent': 'A reminder was just sent. Try again in a minute.' };
+      'session-unavailable': 'That class is not open for online trials on the schedule.', 'reminder-just-sent': 'A reminder was just sent. Try again in a minute.',
+      'materials-just-sent': 'That email was just sent. Try again in a minute.', 'booking-cancelled': 'That booking is cancelled.' };
     toast(words[r.error] || ('Failed: ' + (r.error || 'error')), true);
   }
   return r;
@@ -1099,7 +1101,8 @@ function renderBookings() {
       const lesson = link ? '<span class="badge link">Class link</span><div>' + escapeHtml(b.slotLabel || '') + '</div><div class="muted">first opened ' + escapeHtml(fmtMs(b.createdAtMs, true)) + (b.opens > 1 ? ' · opened ' + b.opens + '×' : '') + '</div>'
         : '<b>' + escapeHtml(monthName(monthKey(b.lessonDate))) + '</b><div>' + escapeHtml(b.sessionLabel || '') + '</div><div class="muted">booked ' + escapeHtml(fmtMs(b.createdAtMs, true)) + '</div>';
       const way = link ? 'Link' + (b.linkLabel ? ': ' + escapeHtml(b.linkLabel) : '') : (b.via === 'password' ? 'Shared password' : '<span class="mono">' + escapeHtml(b.accessCode ? b.accessCode.slice(0, 4) + '-' + b.accessCode.slice(4) : '') + '</span>');
-      const reminder = link ? '' : (b.reminderSentAtMs ? '<div class="muted">reminder sent ' + escapeHtml(fmtMs(b.reminderSentAtMs, true)) + '</div>' : '<div class="muted">reminder not sent yet</div>');
+      const mailed = b.materialsSentAtMs ? '<div class="muted">Zoom + worksheets emailed ' + escapeHtml(fmtMs(b.materialsSentAtMs, true)) + '</div>' : '';
+      const reminder = mailed + (link ? '' : b.reminderSentAtMs ? '<div class="muted">reminder sent ' + escapeHtml(fmtMs(b.reminderSentAtMs, true)) + '</div>' : '<div class="muted">reminder not sent yet</div>');
       const act = (s, label) => status === s ? '' : '<button class="btn small ghost" onclick="setStatus(\'' + b.code + '\',\'' + s + '\')">' + label + '</button>';
       return '<tr><td><b>' + escapeHtml(b.studentName || '—') + '</b>' + (b.parentName ? '<div class="muted">Parent: ' + escapeHtml(b.parentName) + '</div>' : '') + '<div class="muted mono">' + escapeHtml(b.code) + '</div></td>'
         + '<td><b>' + escapeHtml(b.classLevel || '') + '</b> ' + escapeHtml(subjectName(b.classSubject)) + '</td>'
@@ -1109,6 +1112,7 @@ function renderBookings() {
         + '<td><span class="badge ' + escapeHtml(status) + '">' + escapeHtml(status) + '</span>' + reminder + '</td>'
         + '<td><div class="acts-cell">'
         + (b.pageUrl ? '<button class="btn small ghost" onclick="copyText(\'' + escapeHtml(b.pageUrl) + '\', \'Their page link copied\')">Page link</button>' : '')
+        + (status !== 'cancelled' ? '<button class="btn small ghost" onclick="emailMaterials(\'' + b.code + '\')">Email Zoom + worksheets</button>' : '')
         + (link ? '' : act('attended', 'Attended') + act('no-show', 'No-show') + act('booked', 'Booked') + act('cancelled', 'Cancel')
           + (status !== 'cancelled' ? '<button class="btn small ghost" onclick="sendReminder(\'' + b.code + '\')">' + (b.reminderSentAtMs ? 'Resend' : 'Send') + ' reminder</button>' : ''))
         + '<button class="btn small danger" onclick="deleteBooking(\'' + b.code + '\')">Delete</button></div></td></tr>';
@@ -1131,6 +1135,12 @@ async function sendReminder(code) {
   if (!b || !confirm('Email the reminder (Zoom link, time and worksheets) to ' + b.email + ' now?')) return;
   const r = await adminCall({ action: 'sendReminder', code });
   if (r.ok) { toast('Reminder sent to ' + r.to); adminLoad(); }
+}
+async function emailMaterials(code) {
+  const b = adminData.bookings.find(x => x.code === code);
+  if (!b || !confirm('Email the Zoom link and the worksheets (download links that work for one week) to ' + b.email + ' now?')) return;
+  const r = await adminCall({ action: 'emailMaterials', code });
+  if (r.ok) { toast('Sent to ' + r.to); adminLoad(); }
 }
 async function deleteBooking(code) {
   const b = adminData.bookings.find(x => x.code === code);
