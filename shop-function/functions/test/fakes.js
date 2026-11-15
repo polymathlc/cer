@@ -11,21 +11,30 @@ function database(seed = {}) {
   const ref = path => ({
     path, id: path.split('/').at(-1),
     async get() { return snapshot(this); },
-    async update(data) { if (!rows.has(path)) throw new Error('No document'); rows.set(path, Object.assign({}, rows.get(path), data)); }
+    async update(data) { if (!rows.has(path)) throw new Error('No document'); rows.set(path, Object.assign({}, rows.get(path), data)); },
+    async create(data) { if (rows.has(path)) throw new Error('Already exists'); rows.set(path, structuredClone(data)); },
+    async set(data) { rows.set(path, structuredClone(data)); },
+    async delete() { rows.delete(path); }
   });
+  // getAll(...refs, { fieldMask }) — read options are accepted and ignored.
+  const refsOnly = list => list.filter(item => item && typeof item.path === 'string');
   const snapshot = reference => ({ exists: rows.has(reference.path), data: () => structuredClone(rows.get(reference.path)), ref: reference, id: reference.id });
   let pending = Promise.resolve();
   const db = {
     rows,
     collection(name) { return {
       doc: id => ref(name + '/' + id),
+      async get() {
+        const docs = [...rows.keys()].filter(path => path.startsWith(name + '/') && path.split('/').length === 2).map(path => snapshot(ref(path)));
+        return { empty: docs.length === 0, docs, size: docs.length };
+      },
       where(field, op, value) { assert.equal(op, '<='); return { limit(count) { return { async get() {
         const docs = [...rows.keys()].filter(path => path.startsWith(name + '/') && path.split('/').length === 2
           && rows.get(path)[field] <= value).slice(0, count).map(path => snapshot(ref(path)));
         return { empty: docs.length === 0, docs };
       } }; } }; }
     }; },
-    async getAll(...references) { return references.map(snapshot); },
+    async getAll(...references) { return refsOnly(references).map(snapshot); },
     runTransaction(action) {
       const run = pending.then(async () => {
         const writes = [];
@@ -33,7 +42,8 @@ function database(seed = {}) {
         const read = reference => { if (wrote) throw new Error('Read after write in a transaction'); return snapshot(reference); };
         const result = await action({
           get: async reference => read(reference),
-          getAll: async (...references) => references.map(read),
+          getAll: async (...references) => refsOnly(references).map(read),
+          delete: reference => { wrote = true; writes.push(['delete', reference]); },
           set: (reference, data) => { wrote = true; writes.push(['set', reference, data]); },
           create: (reference, data) => { wrote = true; writes.push(['create', reference, data]); },
           update: (reference, data) => { wrote = true; writes.push(['update', reference, data]); }
@@ -43,7 +53,8 @@ function database(seed = {}) {
           if (type === 'update' && !rows.has(reference.path)) throw new Error('No document');
         }
         for (const [type, reference, data] of writes)
-          rows.set(reference.path, type === 'update' ? Object.assign({}, rows.get(reference.path), data) : structuredClone(data));
+          if (type === 'delete') rows.delete(reference.path);
+          else rows.set(reference.path, type === 'update' ? Object.assign({}, rows.get(reference.path), data) : structuredClone(data));
         return result;
       });
       pending = run.catch(() => {});
