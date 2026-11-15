@@ -22,6 +22,8 @@ jobs:
         run: |
           node --check online/portal-core.js
           node --check online/portal.js
+          node --check online/watch-core.js
+          node --check online/watch.js
           node --test tools/online-portal-tests.mjs
       - name: Install isolated browser runtime
         run: |
@@ -32,6 +34,11 @@ jobs:
           PW: ${{ runner.temp }}/online-browser/node_modules/playwright/index.mjs
           ONLINE_SCREENSHOTS: ${{ runner.temp }}/online-portal-qa
         run: node tools/online-portal-browser-check.mjs
+      - name: Check the lesson video player (every lesson in order, question and page marks)
+        env:
+          PW: ${{ runner.temp }}/online-browser/node_modules/playwright/index.mjs
+          ONLINE_SCREENSHOTS: ${{ runner.temp }}/online-portal-qa
+        run: node tools/online-portal-watch-check.mjs
       - name: Keep browser previews for review
         if: always()
         uses: actions/upload-artifact@v4

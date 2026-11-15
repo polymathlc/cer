@@ -374,6 +374,23 @@
     if (action === 'play' && rec) url += '&rec=' + encodeURIComponent(rec);
     return url;
   }
+  /* ---- 🎬 The lesson video player, a page of its own (portal v1.11.0) ----
+     The Video buttons open online/watch.html — every lesson on the worksheet,
+     oldest first, one after another, with the questions and pages marked on
+     its timeline (watch-core.js) — never the Ans Key app. `day` starts at
+     that class day's first lesson; `course` says which class it is watched
+     from. Byte for byte watch-core.js's own watchLink (the tests compare). */
+  var WATCH_WS_RE = /^[A-Za-z0-9_-]{1,128}$/;
+  function watchLink(wsId, opts) {
+    if (!WATCH_WS_RE.test(String(wsId || ''))) return '';
+    opts = opts || {};
+    var url = 'watch.html?ws=' + encodeURIComponent(wsId);
+    if (opts.day && /^\d{4}-\d{2}-\d{2}$/.test(opts.day)) url += '&day=' + encodeURIComponent(opts.day);
+    if (opts.rec && /^[A-Za-z0-9_-]{1,120}$/.test(String(opts.rec))) url += '&rec=' + encodeURIComponent(opts.rec);
+    if (opts.t > 0) url += '&t=' + Math.floor(opts.t);
+    if (opts.course && WATCH_WS_RE.test(String(opts.course))) url += '&c=' + encodeURIComponent(opts.course);
+    return url;
+  }
   /* ---- 🎬 The worksheet's video page: the SAME page as the QR code ----
      Ans Key (v1.196.0) files every worksheet's videos as one hosted list
      after each save and each lesson it records, and keeps its address on
@@ -963,7 +980,7 @@
     slotsForDay: slotsForDay, slotLabel: slotLabel, courseTitle: courseTitle, autoCourseTitle: autoCourseTitle,
     normalizeEmail: normalizeEmail, isEmail: isEmail, escapeHtml: escapeHtml, initials: initials,
     naturalCompare: naturalCompare, worksheetNameFromFile: worksheetNameFromFile,
-    VIDEO_PAGE: VIDEO_PAGE, videoPackCode: videoPackCode, videoPlaylistOf: videoPlaylistOf, videoPageLink: videoPageLink,
+    watchLink: watchLink, VIDEO_PAGE: VIDEO_PAGE, videoPackCode: videoPackCode, videoPlaylistOf: videoPlaylistOf, videoPageLink: videoPageLink,
     videoPlaylistCurrent: videoPlaylistCurrent, lessonDayKey: lessonDayKey, recordingDays: recordingDays,
     answerKeyUrlOk: answerKeyUrlOk, answerKeysOf: answerKeysOf, classDays: classDays,
     libraryInfo: libraryInfo, libraryMatches: libraryMatches, libraryOrder: libraryOrder, libraryNeedsCopy: libraryNeedsCopy,

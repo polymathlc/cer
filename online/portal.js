@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = 'v1.10.0';
+  var APP_VERSION = 'v1.11.0';
   var Core = window.PolymathOnlineCore;
 
   // Who runs the portal. Anyone else signs in as a student or a parent.
@@ -723,12 +723,14 @@
         ? '<span class="tl-when-label">' + (it.marked ? 'Edited' : 'Uploaded') + '</span> <time datetime="' + new Date(it.edited).toISOString() + '" title="' + (it.marked ? 'Last edited in Ans Key' : 'Not written on in Ans Key yet') + '">' + h(Core.formatDay(it.edited)) + '<span class="tl-clock"> · ' + h(Core.formatClock(it.edited)) + '</span></time>'
         : (it.loading ? '<span class="tl-muted">…</span>' : '<span class="tl-muted">Not edited yet</span>');
       var recs = it.recordings;
-      // 🎬 The worksheet's video page — the same one its printed QR code
-      // opens — once Ans Key has filed it with every lesson on it.
       var page = Core.videoPlaylistCurrent(it.playlist, recs) ? it.playlist : null;
-      var videoCount = page ? Math.max(page.n, recs.length) : recs.length;
+      // 🎬 v1.11.0: the lesson videos open on a page of their own (watch.html),
+      // a media player with every lesson on the worksheet one after another,
+      // oldest first, and the questions and pages marked on its timeline —
+      // never the Ans Key app.
+      var videoCount = recs.length;
       var videoBtn = videoCount
-        ? '<button class="btn btn-sm btn-video" type="button" data-action="video" data-id="' + h(it.id) + '" data-tooltip="' + (page ? 'Every video for this worksheet, by lesson day' : 'Watch the lesson recorded in Ans Key') + '">▶ ' + (videoCount === 1 ? 'Video' : videoCount + ' videos') + '</button>'
+        ? '<a class="btn btn-sm btn-video" href="' + h(watchHref(it.id, course)) + '" data-action="video" data-id="' + h(it.id) + '" data-tooltip="Every lesson on this worksheet, one after another, with each question marked">▶ ' + (videoCount === 1 ? 'Video' : videoCount + ' videos') + '</a>'
         : '';
       // 📅 Every class day, newest first: that day's lesson videos beside the
       // answer key exactly as it stood after that lesson (a PDF Ans Key filed
@@ -738,9 +740,9 @@
         return '<li class="tl-cday' + (i === 0 ? ' is-latest' : '') + '">' +
           '<span class="tl-cday-date"><b>' + h(d.label) + '</b>' + (i === 0 ? '<span class="tl-cday-new">Latest</span>' : '') + '</span>' +
           '<span class="tl-cday-acts">' +
-            (v ? '<button class="tl-day" type="button" data-action="video-day" data-id="' + h(it.id) + '" data-day="' + h(d.key) + '" data-tooltip="Play the ' + h(d.label) + ' lesson">' +
+            (v ? '<a class="tl-day" href="' + h(watchHref(it.id, course, d.key)) + '" data-action="video-day" data-id="' + h(it.id) + '" data-day="' + h(d.key) + '" data-tooltip="Play from the ' + h(d.label) + ' lesson">' +
                 '<span class="tl-day-play" aria-hidden="true">▶</span><span><b>' + (v.count === 1 ? 'Video' : v.count + ' videos') + '</b>' +
-                (v.seconds ? '<small>' + h(Core.formatDuration(v.seconds)) + '</small>' : '') + '</span></button>'
+                (v.seconds ? '<small>' + h(Core.formatDuration(v.seconds)) + '</small>' : '') + '</span></a>'
               : '<span class="tl-cday-none">No video</span>') +
             (k ? '<a class="tl-key" href="' + h(k.url) + '" target="_blank" rel="noopener" data-tooltip="The answer key after the ' + h(d.label) + ' lesson, with the QR code to its videos">' +
                 '<span class="tl-key-icon" aria-hidden="true">📄</span><span><b>Answer key</b><small>PDF' + (k.pages ? ' · ' + k.pages + (k.pages === 1 ? ' page' : ' pages') : '') + '</small></span></a>'
@@ -808,70 +810,13 @@
       if (frame) frame.addEventListener('load', function () { var l = document.querySelector('.anskey-loading'); if (l) l.remove(); });
     });
   }
-  /* ---- 🎬 The worksheet's video page, in a window over the portal ----
-     Ans Key's videos.html: the very page the worksheet's printed QR code
-     opens, with every video on the sheet grouped by the day of the lesson
-     and the answer key one tap away. `day` (YYYY-MM-DD) starts it at that
-     lesson day's first video. */
-  function currentVideoPage(id) {
-    var d = state.docs[id];
-    var vp = Core.videoPlaylistOf(d);
-    return Core.videoPlaylistCurrent(vp, state.recordings[id] || []) ? vp : null;
-  }
-  function openVideoPage(id, day) {
-    var vp = currentVideoPage(id);
-    var url = vp ? Core.videoPageLink(ANSKEY_URL, vp, day) : '';
-    if (!url) return false;
-    var dayLabel = '';
-    if (day) {
-      var g = Core.recordingDays(state.recordings[id] || []).filter(function (x) { return x.key === day; })[0];
-      if (g) dayLabel = g.label + ' lesson';
-    }
-    var heading = 'Videos · ' + docName(id) + (dayLabel ? ' · ' + dayLabel : '');
-    openModal(function () {
-      return '<div class="modal-head anskey-head"><div><h2>' + h(heading) + '</h2><p class="muted" style="margin-top:4px;font-size:var(--font-size-sm)">' +
-        h('Every video for this worksheet, lesson day by lesson day. The same page as the QR code on the printed worksheet.') + '</p></div>' +
-        '<div class="row"><a class="btn btn-sm btn-ghost" href="' + h(url) + '" target="_blank" rel="noopener">Open in a new tab</a>' +
-        '<button class="btn btn-sm" type="button" data-modal-close aria-label="Close">Close</button></div></div>' +
-        '<div class="anskey-frame-wrap"><div class="anskey-loading"><div class="spinner" aria-hidden="true"></div><div>Opening the videos…</div></div>' +
-        '<iframe class="anskey-frame video-page-frame" title="' + h(heading) + '" src="' + h(url) + '" allow="autoplay; fullscreen; clipboard-write" allowfullscreen></iframe></div>';
-    }, null, function () {
-      var backs = document.querySelectorAll('.modal-back');
-      if (backs.length) backs[backs.length - 1].classList.add('modal-wide');
-      var frame = document.querySelector('.video-page-frame');
-      if (frame) frame.addEventListener('load', function () { var l = document.querySelector('.anskey-loading'); if (l) l.remove(); });
-    });
-    return true;
-  }
-  // A lesson day's button: the video page at that day, or (before Ans Key
-  // has filed the page) that day's first recording replayed in Ans Key.
-  function chooseVideoDay(id, day) {
-    if (openVideoPage(id, day)) return;
-    var g = Core.recordingDays(state.recordings[id] || []).filter(function (x) { return x.key === day; })[0];
-    if (g && g.ids.length === 1) { openAnskey(id, 'play', g.ids[0]); return; }
-    chooseVideo(id, true);
-  }
-  function chooseVideo(id, chooserOnly) {
-    if (!chooserOnly && openVideoPage(id)) return;
-    var recs = state.recordings[id] || [];
-    if (!recs.length) { toast('There is no recorded lesson on this worksheet yet.'); return; }
-    if (recs.length === 1) { openAnskey(id, 'play', recs[0].id); return; }
-    var modal = openModal(function () {
-      return '<div class="modal-head"><div><h2>Recorded lessons</h2><p class="muted" style="margin-top:4px;font-size:var(--font-size-sm)">' + h(docName(id)) + '</p></div>' +
-        '<button class="btn btn-sm btn-ghost" type="button" data-modal-close aria-label="Close">✕</button></div>' +
-        '<div class="rec-list">' + recs.map(function (r, k) {
-          return '<button class="rec-row" type="button" data-rec="' + h(r.id) + '">' +
-            '<span class="rec-play" aria-hidden="true">▶</span>' +
-            '<span class="rec-text"><b>' + h(r.title) + (k === 0 ? ' <span class="tl-tag tag-next">Newest</span>' : '') + '</b>' +
-            '<span class="muted">' + h([r.at ? Core.formatDay(r.at) + ' · ' + Core.formatClock(r.at) : '', r.duration ? Core.formatDuration(r.duration) : '', r.video ? 'video' : 'voice and writing'].filter(Boolean).join(' · ')) + '</span></span></button>';
-        }).join('') + '</div>';
-    }, function (e, _rerender, close) {
-      var row = e.target.closest('[data-rec]');
-      if (!row) return;
-      close();
-      openAnskey(id, 'play', row.dataset.rec);
-    });
-    return modal;
+  /* ---- 🎬 The lesson videos: a page of their own (v1.11.0) ----
+     watch.html plays every lesson recorded on the worksheet, oldest first,
+     one after another, with the question and page marks on its timeline.
+     `day` starts it at that class day's first lesson. Plain links, so a
+     long press or a middle click opens them in a new tab too. */
+  function watchHref(id, course, day) {
+    return Core.watchLink(id, { day: day, course: course && course.id });
   }
 
   function afterStudentRender(member) {
@@ -2313,8 +2258,7 @@
       case 'print': printWorksheet(id, el); break;
       case 'answer-key': openAnskey(id, 'view'); break;
       case 'print-key': openAnskey(id, 'print-answers'); break;
-      case 'video': chooseVideo(id); break;
-      case 'video-day': chooseVideoDay(id, el.dataset.day); break;
+      // 🎬 'video' / 'video-day' are links to watch.html: the browser follows them.
       case 'tab': state.adminTab = el.dataset.tab; state.courseId = null; render(); break;
       case 'new-course': courseForm(null); break;
       case 'open-course': state.courseId = id; state.uploads = []; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); break;

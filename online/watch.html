@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="robots" content="noindex">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lesson videos | Polymath Online</title>
+<meta name="theme-color" content="#FFFFFF">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/app-icons/favicon-32.png">
+<link rel="apple-touch-icon" href="assets/app-icons/apple-touch-icon.png">
+<!--
+  POLYMATH ONLINE — LESSON VIDEOS (watch.html, v1.0.0, Nov 2026)
+  ----------------------------------------------------------------
+  Where a Video button on the class timeline leads. It used to open the whole
+  Ans Key app in a window; now it is this page, a media player of its own:
+
+    · every lesson recorded on the worksheet plays, one after another, in the
+      order it was taught (oldest first), and the next starts by itself;
+    · the timeline carries the QUESTION being explained (Q1, Q2 …, chips above
+      the bar) and the PAGE on screen (bands under it), and the same marks are
+      listed as chapters beside the player, so a student jumps straight there;
+    · a camera or voice lesson replays the teacher's writing on the worksheet
+      in step with the voice (a window recording already shows it).
+
+  The marks come from what Ans Key already records with every lesson (the
+  manifest's `steps` and its view timeline); see watch-core.js. Students see
+  only worksheets released to their classes, the same rule as the timeline.
+-->
+<style>
+  :root {
+    --bg-primary: #FFFFFF;
+    --bg-secondary: #FAFAFA;
+    --bg-tertiary: #F3F3F0;
+    --border-subtle: #ECECE8;
+    --border-medium: #D4D4CF;
+    --text-primary: #1A1A1A;
+    --text-secondary: #5C5C5C;
+    --text-tertiary: #8A8A8A;
+    --accent-light: #FFE0B2;
+    --accent-base: #FFB74D;
+    --accent-dark: #E8A54B;
+    --accent-ink: #8A5A12;
+    --accent-bg: #FFF6EA;
+    --page-a: #E3F2FD;
+    --page-b: #D3E8FA;
+    --page-ink: #1F5B92;
+    --stage-bg: #111111;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.06);
+    --shadow-md: 0 2px 4px rgba(0,0,0,0.05), 0 6px 20px rgba(0,0,0,0.08);
+    --radius: 14px;
+    --font-family: 'Century Gothic', CenturyGothic, AppleGothic, 'Segoe UI', sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    font-family: var(--font-family);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+  button, select { font-family: inherit; font-size: inherit; color: inherit; }
+  button { cursor: pointer; }
+  [hidden] { display: none !important; }
+  a { color: inherit; }
+
+  /* ---- Header ---- */
+  .top {
+    position: sticky; top: 0; z-index: 20;
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px max(16px, env(safe-area-inset-left)) 10px max(16px, env(safe-area-inset-right));
+    background: rgba(255,255,255,0.94);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .back {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 12px; border-radius: 999px;
+    border: 1px solid var(--border-medium); background: var(--bg-primary);
+    text-decoration: none; font-size: 14px; font-weight: 600; white-space: nowrap;
+  }
+  .back:hover { background: var(--accent-bg); border-color: var(--accent-base); }
+  .head-text { min-width: 0; flex: 1; }
+  .kicker { margin: 0; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-tertiary); font-weight: 700; }
+  .ws-name { margin: 2px 0 0; font-size: 18px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ws-sub { margin: 2px 0 0; font-size: 13px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .who { font-size: 12px; color: var(--text-tertiary); white-space: nowrap; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+
+  /* ---- Screens ---- */
+  .center { max-width: 520px; margin: 12vh auto 0; padding: 0 16px; text-align: center; }
+  .card { background: var(--bg-primary); border: 1px solid var(--border-subtle); border-radius: var(--radius); box-shadow: var(--shadow-sm); padding: 32px 24px; }
+  .card .big { font-size: 44px; line-height: 1; }
+  .card h2 { margin: 14px 0 8px; font-size: 20px; }
+  .card p { margin: 0 0 18px; color: var(--text-secondary); line-height: 1.55; }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 10px 18px; border-radius: 999px; border: 1px solid var(--border-medium);
+    background: var(--bg-primary); font-weight: 600; text-decoration: none;
+  }
+  .btn-primary { background: var(--accent-base); border-color: var(--accent-dark); color: #1A1A1A; }
+  .btn-primary:hover { background: var(--accent-dark); }
+  .spinner { width: 34px; height: 34px; border-radius: 50%; border: 3px solid var(--border-subtle); border-top-color: var(--accent-dark); margin: 0 auto 14px; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---- The player ---- */
+  .layout {
+    display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px;
+    max-width: 1400px; margin: 0 auto; padding: 18px 16px 40px;
+  }
+  .player { min-width: 0; }
+  .player-box { background: var(--bg-primary); border: 1px solid var(--border-subtle); border-radius: var(--radius); box-shadow: var(--shadow-md); overflow: hidden; }
+  .player-box:fullscreen { border-radius: 0; display: flex; flex-direction: column; background: #000; }
+  .player-box:fullscreen .stage { flex: 1; aspect-ratio: auto; max-height: none; }
+  .player-box:fullscreen .controls { background: #1b1b1b; color: #fff; border-top-color: #333; }
+  .player-box:fullscreen .ctl-btn, .player-box:fullscreen select { background: #2a2a2a; border-color: #444; color: #fff; }
+
+  .stage { position: relative; background: var(--stage-bg); aspect-ratio: 16 / 9; max-height: 74vh; width: 100%; overflow: hidden; }
+  .stage.is-portrait.kind-screen { aspect-ratio: 3 / 4; }
+  .stage video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+  /* A camera lesson: the worksheet fills the stage and the teacher sits in a
+     corner — or the other way round with ⇄. A voice lesson: the worksheet only. */
+  .stage.kind-camera, .stage.kind-voice { background: #E9E9E4; aspect-ratio: 4 / 3; }
+  .stage.kind-camera video { inset: auto 12px 12px auto; width: 30%; height: auto; aspect-ratio: 4 / 3; border-radius: 12px; box-shadow: 0 6px 20px rgba(0,0,0,.35); z-index: 3; object-fit: cover; }
+  .stage.kind-camera.is-swapped video { inset: 0; width: 100%; height: 100%; border-radius: 0; object-fit: contain; z-index: 1; }
+  .stage.kind-camera.is-swapped .page-wrap { inset: auto 12px 12px auto; width: 34%; height: 46%; border-radius: 12px; box-shadow: 0 6px 20px rgba(0,0,0,.35); z-index: 3; }
+  .stage.kind-voice video { opacity: 0; pointer-events: none; width: 1px; height: 1px; }
+  .page-wrap { position: absolute; inset: 0; overflow: auto; overscroll-behavior: contain; background: #E9E9E4; z-index: 1; scrollbar-width: thin; }
+  .page-sheet { position: relative; margin: 0 auto; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+  .page-sheet canvas { position: absolute; left: 0; top: 0; display: block; }
+  .page-label { position: absolute; left: 12px; top: 12px; z-index: 4; padding: 4px 10px; border-radius: 999px; background: rgba(255,255,255,.92); font-size: 12px; font-weight: 700; color: var(--page-ink); box-shadow: 0 1px 4px rgba(0,0,0,.15); pointer-events: none; }
+  .stage.kind-screen .page-label { display: none; }
+  .page-note { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2; background: #fff; padding: 12px 16px; border-radius: 12px; font-size: 14px; color: var(--text-secondary); box-shadow: var(--shadow-sm); text-align: center; }
+  .voice-badge { position: absolute; right: 12px; bottom: 12px; z-index: 4; padding: 6px 12px; border-radius: 999px; background: rgba(26,26,26,.82); color: #fff; font-size: 13px; }
+  .follow-btn { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 5; padding: 8px 14px; border-radius: 999px; border: 0; background: var(--text-primary); color: #fff; font-weight: 600; box-shadow: var(--shadow-md); }
+  .now-mark { position: absolute; right: 12px; top: 12px; z-index: 4; padding: 6px 12px; border-radius: 999px; background: var(--accent-base); color: #1A1A1A; font-weight: 700; font-size: 14px; box-shadow: 0 2px 8px rgba(0,0,0,.25); pointer-events: none; }
+  .big-play {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 6;
+    width: 78px; height: 78px; border-radius: 50%; border: 0;
+    background: rgba(255,183,77,.95); color: #1A1A1A; font-size: 30px; padding-left: 6px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.35); transition: transform .15s ease;
+  }
+  .big-play:hover { transform: translate(-50%, -50%) scale(1.06); }
+  .wait-ring { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; border: 4px solid rgba(255,255,255,.3); border-top-color: var(--accent-base); animation: spin .8s linear infinite; z-index: 6; display: none; }
+  .stage.is-waiting.is-playing .wait-ring { display: block; }
+  .up-next { position: absolute; inset: 0; z-index: 8; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: rgba(17,17,17,.82); color: #fff; text-align: center; padding: 16px; }
+  .up-next p { margin: 0; }
+  .up-kicker { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; opacity: .75; font-weight: 700; }
+  .up-title { font-size: 20px; font-weight: 700; max-width: 520px; }
+  .up-count { width: 56px; height: 56px; border-radius: 50%; border: 3px solid var(--accent-base); display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; }
+  .up-btns { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  .up-btns .btn { border-color: #555; background: #2a2a2a; color: #fff; }
+  .up-btns .btn-primary { background: var(--accent-base); color: #1A1A1A; border-color: var(--accent-dark); }
+
+  /* ---- The timeline: questions above, pages below ---- */
+  .controls { padding: 6px 14px 12px; border-top: 1px solid var(--border-subtle); background: var(--bg-primary); }
+  .q-row { position: relative; height: 30px; margin: 4px 8px 0; }
+  .qmark {
+    position: absolute; bottom: 2px; transform: translateX(-50%);
+    padding: 2px 7px; border-radius: 8px; border: 1px solid var(--accent-dark);
+    background: var(--accent-light); color: var(--accent-ink); font-size: 11px; font-weight: 700; line-height: 1.4; white-space: nowrap;
+  }
+  .qmark::after { content: ''; position: absolute; left: 50%; bottom: -5px; width: 2px; height: 5px; margin-left: -1px; background: var(--accent-dark); }
+  .qmark:hover, .qmark:focus-visible { background: var(--accent-base); z-index: 3; outline: none; }
+  .qmark.is-quiet { padding: 0; width: 8px; height: 8px; border-radius: 50%; font-size: 0; bottom: 4px; }
+  .qmark.is-quiet::after { display: none; }
+  .qmark.is-quiet:hover { width: auto; height: auto; padding: 2px 7px; border-radius: 8px; font-size: 11px; }
+  .seek { position: relative; height: 22px; margin: 0 8px; touch-action: none; cursor: pointer; outline: none; }
+  .seek-track { position: absolute; left: 0; right: 0; top: 8px; height: 6px; border-radius: 999px; background: var(--bg-tertiary); overflow: hidden; }
+  .seek:focus-visible .seek-track { box-shadow: 0 0 0 2px var(--accent-base); }
+  .seek-buf { position: absolute; left: 0; top: 0; bottom: 0; background: var(--border-medium); }
+  .seek-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent-dark); }
+  .seek-ticks .tick { position: absolute; top: 6px; width: 2px; height: 10px; margin-left: -1px; background: var(--accent-ink); border-radius: 1px; opacity: .65; pointer-events: none; }
+  .seek-knob { position: absolute; top: 4px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: #fff; border: 3px solid var(--accent-dark); box-shadow: 0 1px 4px rgba(0,0,0,.25); pointer-events: none; }
+  .seek-tip { position: absolute; bottom: 26px; transform: translateX(-50%); padding: 4px 8px; border-radius: 8px; background: var(--text-primary); color: #fff; font-size: 12px; white-space: nowrap; pointer-events: none; z-index: 5; }
+  .page-row { position: relative; height: 20px; margin: 2px 8px 0; }
+  .pmark { position: absolute; top: 0; height: 18px; border: 0; border-radius: 4px; background: var(--page-a); color: var(--page-ink); font-size: 10px; font-weight: 700; padding: 0; overflow: hidden; border-left: 2px solid var(--page-ink); }
+  .pmark.is-alt { background: var(--page-b); }
+  .pmark span { display: block; padding: 0 4px; text-align: left; line-height: 18px; white-space: nowrap; }
+  .pmark:hover, .pmark:focus-visible { background: #BBDEFB; outline: none; }
+  .bar-legend { display: flex; gap: 14px; flex-wrap: wrap; margin: 6px 8px 0; font-size: 12px; color: var(--text-tertiary); }
+  .bar-legend .lg-q::before { content: ''; display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--accent-light); border: 1px solid var(--accent-dark); margin-right: 5px; vertical-align: -1px; }
+  .bar-legend .lg-p::before { content: ''; display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--page-a); border-left: 2px solid var(--page-ink); margin-right: 5px; vertical-align: -1px; }
+
+  .ctl-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .ctl-btn { min-width: 40px; height: 38px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--border-medium); background: var(--bg-primary); font-weight: 700; font-size: 14px; }
+  .ctl-btn:hover:not(:disabled) { background: var(--accent-bg); border-color: var(--accent-base); }
+  .ctl-btn:disabled { opacity: .4; cursor: default; }
+  .ctl-btn.play { background: var(--accent-base); border-color: var(--accent-dark); min-width: 52px; font-size: 16px; }
+  .ctl-btn[aria-pressed="false"] { opacity: .55; }
+  .time { font-variant-numeric: tabular-nums; font-size: 14px; color: var(--text-secondary); margin: 0 4px; white-space: nowrap; }
+  .spacer { flex: 1; }
+  select.ctl-btn { padding: 0 6px; }
+
+  .now { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; padding: 14px 4px 4px; }
+  .now h2 { margin: 0; font-size: 18px; }
+  .now p { margin: 0; font-size: 13px; color: var(--text-secondary); }
+  .mark-note { font-size: 12px; color: var(--text-tertiary); margin: 8px 8px 0; }
+
+  /* ---- Every lesson as one strip ---- */
+  .strip-box { margin-top: 14px; }
+  .strip-head { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-tertiary); margin: 0 2px 6px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+  .strip { display: flex; gap: 3px; height: 34px; }
+  .seg { position: relative; min-width: 28px; border: 1px solid var(--border-medium); border-radius: 8px; background: var(--bg-primary); overflow: hidden; padding: 0; font-size: 11px; font-weight: 700; color: var(--text-secondary); }
+  .seg.is-done { background: var(--bg-tertiary); }
+  .seg.is-current { border-color: var(--accent-dark); color: var(--accent-ink); }
+  .seg-now { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent-light); }
+  .seg-label { position: relative; padding: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+
+  /* ---- The list ---- */
+  .side { min-width: 0; }
+  .list-box { position: sticky; top: 78px; background: var(--bg-primary); border: 1px solid var(--border-subtle); border-radius: var(--radius); box-shadow: var(--shadow-sm); max-height: calc(100vh - 100px); display: flex; flex-direction: column; }
+  .list-head { display: flex; justify-content: space-between; align-items: baseline; padding: 14px 16px 10px; border-bottom: 1px solid var(--border-subtle); }
+  .list-head h3 { margin: 0; font-size: 16px; }
+  .list-head span { font-size: 12px; color: var(--text-tertiary); }
+  .list-hint { padding: 8px 16px; font-size: 12px; color: var(--text-tertiary); border-bottom: 1px solid var(--border-subtle); }
+  .lessons { list-style: none; margin: 0; padding: 6px 8px 12px; overflow: auto; }
+  .day-head { padding: 12px 8px 4px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: 700; color: var(--text-tertiary); }
+  .lesson { border-radius: 12px; margin-bottom: 4px; }
+  .lesson.is-current { background: var(--accent-bg); outline: 1px solid var(--accent-light); }
+  .lesson-btn { width: 100%; display: flex; gap: 10px; align-items: center; text-align: left; padding: 10px 8px; border: 0; background: transparent; border-radius: 12px; }
+  .lesson-btn:hover { background: rgba(0,0,0,.03); }
+  .lesson-num { flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--bg-tertiary); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
+  .lesson.is-current .lesson-num { background: var(--accent-base); }
+  .lesson.is-done .lesson-num { background: var(--text-primary); color: #fff; }
+  .lesson-text { min-width: 0; }
+  .lesson-text b { display: block; font-size: 14px; }
+  .lesson-text small { display: block; font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+  .chaps { list-style: none; margin: 0 0 6px; padding: 0 8px 4px 46px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .chap { display: inline-flex; gap: 5px; align-items: center; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-primary); font-size: 12px; }
+  .chap:hover { border-color: var(--accent-base); background: var(--accent-bg); }
+  .chap-question .chap-label { font-weight: 700; color: var(--accent-ink); }
+  .chap-page .chap-label { font-weight: 700; color: var(--page-ink); }
+  .chap-page { background: var(--page-a); border-color: transparent; }
+  .chap-page-num, .chap-page { }
+  .chap .chap-page { background: transparent; color: var(--page-ink); font-weight: 600; }
+  .chap-time { color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+  .chap.is-now { background: var(--accent-base); border-color: var(--accent-dark); }
+  .chap.is-now .chap-time, .chap.is-now .chap-label { color: #1A1A1A; }
+  .chaps-wait { padding: 0 8px 8px 46px; font-size: 12px; color: var(--text-tertiary); }
+  .keys { margin: 16px 4px 0; font-size: 12px; color: var(--text-tertiary); line-height: 1.6; }
+  .keys kbd { font-family: inherit; padding: 1px 6px; border: 1px solid var(--border-medium); border-bottom-width: 2px; border-radius: 5px; background: var(--bg-primary); font-size: 11px; }
+  .foot { text-align: center; font-size: 11px; color: var(--text-tertiary); padding: 0 0 24px; }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 50; padding: 10px 16px; border-radius: 12px; background: var(--text-primary); color: #fff; font-size: 14px; box-shadow: var(--shadow-md); max-width: calc(100vw - 32px); }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: minmax(0, 1fr); padding: 12px 0 32px; gap: 14px; }
+    .player-box { border-radius: 0; border-left: 0; border-right: 0; }
+    .now, .strip-box, .keys { padding-left: 16px; padding-right: 16px; margin-left: 0; margin-right: 0; }
+    .side { padding: 0 16px; }
+    .list-box { position: static; max-height: none; }
+    .stage.kind-camera, .stage.kind-voice { aspect-ratio: 3 / 4; max-height: 64vh; }
+    .stage.kind-camera video { width: 36%; }
+    .who { display: none; }
+    .ws-name { font-size: 16px; }
+    .keys { display: none; }
+    .strip-head span + span { display: none; }
+  }
+  @media (max-width: 520px) {
+    .ctl-row .hide-phone { display: none; }
+    .back .back-word { display: none; }
+    .controls { padding: 4px 8px 10px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .spinner, .wait-ring { animation-duration: 2s; }
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="back" id="backLink" href="./" aria-label="Back to Polymath Online">← <span class="back-word">Polymath Online</span></a>
+  <div class="head-text">
+    <p class="kicker">Lesson videos</p>
+    <h1 class="ws-name" id="wsName">Opening…</h1>
+    <p class="ws-sub" id="wsSub"></p>
+  </div>
+  <span class="who" id="who"></span>
+</header>
+
+<section id="scrLoading" class="center">
+  <div class="card"><div class="spinner" aria-hidden="true"></div><p style="margin:0">Opening the lesson videos…</p></div>
+</section>
+
+<section id="scrSignIn" class="center" hidden>
+  <div class="card">
+    <div class="big" aria-hidden="true">🎬</div>
+    <h2>Sign in to watch</h2>
+    <p>Use the same Google account as Polymath Online.</p>
+    <button class="btn btn-primary" type="button" id="signInBtn">Sign in with Google</button>
+  </div>
+</section>
+
+<section id="scrMessage" class="center" hidden>
+  <div class="card">
+    <div class="big" id="msgIcon" aria-hidden="true">🎬</div>
+    <h2 id="msgTitle"></h2>
+    <p id="msgText"></p>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+      <a class="btn btn-primary" href="./">Back to Polymath Online</a>
+      <button class="btn" type="button" id="msgRetry" hidden>Try again</button>
+    </div>
+  </div>
+</section>
+
+<main id="scrPlayer" class="layout" hidden>
+  <section class="player" aria-label="Lesson video player">
+    <div class="player-box" id="playerBox">
+      <div class="stage" id="stage">
+        <div class="page-wrap" id="pageWrap" hidden>
+          <div class="page-sheet" id="pageSheet">
+            <canvas id="pagePic" aria-hidden="true"></canvas>
+            <canvas id="ink" role="img" aria-label="The teacher's writing on the worksheet"></canvas>
+          </div>
+        </div>
+        <div class="page-note" id="pageLoading" hidden>Opening the worksheet…</div>
+        <div class="page-note" id="pageMissing" hidden>The worksheet page could not be shown. The lesson still plays.</div>
+        <span class="page-label" id="pageLabel"></span>
+        <video id="media" playsinline preload="metadata"></video>
+        <span class="now-mark" id="nowMark" hidden></span>
+        <span class="voice-badge" id="voiceBadge" hidden>🎙 Voice lesson</span>
+        <button type="button" class="follow-btn" id="followBtn" hidden>↺ Follow the teacher</button>
+        <div class="wait-ring" aria-hidden="true"></div>
+        <button type="button" class="big-play" id="bigPlay" aria-label="Play">▶</button>
+        <div class="up-next" id="upNext" hidden role="dialog" aria-label="Up next">
+          <p class="up-kicker">Up next</p>
+          <p class="up-title" id="upTitle"></p>
+          <div class="up-count" id="upCount" aria-live="polite">4</div>
+          <div class="up-btns">
+            <button type="button" class="btn btn-primary" id="upNow">▶ Play now</button>
+            <button type="button" class="btn" id="upStay">Stay here</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <div class="q-row" id="qRow" aria-label="Questions in this lesson"></div>
+        <div class="seek" id="seek" role="slider" tabindex="0" aria-label="Seek" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+          <div class="seek-track"><div class="seek-buf" id="seekBuf"></div><div class="seek-fill" id="seekFill"></div></div>
+          <div class="seek-ticks" id="seekTicks"></div>
+          <div class="seek-knob" id="seekKnob"></div>
+          <div class="seek-tip" id="seekTip" hidden></div>
+        </div>
+        <div class="page-row" id="pageRow" aria-label="Pages in this lesson"></div>
+        <div class="bar-legend"><span class="lg-q">Question</span><span class="lg-p">Page</span></div>
+        <div class="ctl-row">
+          <button type="button" class="ctl-btn" id="prevBtn" aria-label="Previous lesson" title="Previous lesson">⏮</button>
+          <button type="button" class="ctl-btn hide-phone" id="backBtn" aria-label="Back 10 seconds" title="Back 10 seconds">↺ 10</button>
+          <button type="button" class="ctl-btn play" id="playBtn" aria-label="Play">▶</button>
+          <button type="button" class="ctl-btn hide-phone" id="fwdBtn" aria-label="Forward 10 seconds" title="Forward 10 seconds">10 ↻</button>
+          <button type="button" class="ctl-btn" id="nextBtn" aria-label="Next lesson" title="Next lesson">⏭</button>
+          <span class="time" id="time">0:00 / 0:00</span>
+          <span class="spacer"></span>
+          <select class="ctl-btn" id="speed" aria-label="Playback speed" title="Speed">
+            <option value="0.75">0.75×</option>
+            <option value="1" selected>1×</option>
+            <option value="1.25">1.25×</option>
+            <option value="1.5">1.5×</option>
+            <option value="1.75">1.75×</option>
+            <option value="2">2×</option>
+          </select>
+          <button type="button" class="ctl-btn" id="ccBtn" aria-pressed="true" title="Captions" hidden>CC</button>
+          <button type="button" class="ctl-btn" id="swapBtn" title="Swap the camera and the worksheet" aria-label="Swap the camera and the worksheet" hidden>⇄</button>
+          <button type="button" class="ctl-btn" id="fullBtn" title="Full screen" aria-label="Full screen">⛶</button>
+        </div>
+        <p class="mark-note" id="markNote"></p>
+      </div>
+    </div>
+
+    <div class="now">
+      <h2 id="nowTitle"></h2>
+      <p id="nowNote"></p>
+    </div>
+    <div class="strip-box">
+      <div class="strip-head"><span>Every lesson on this worksheet</span><span>plays one after another</span></div>
+      <div class="strip" id="strip"></div>
+    </div>
+    <p class="keys">Keys: <kbd>Space</kbd> play or pause · <kbd>←</kbd> <kbd>→</kbd> 5 seconds · <kbd>[</kbd> <kbd>]</kbd> previous or next question · <kbd>N</kbd> next lesson · <kbd>F</kbd> full screen</p>
+  </section>
+
+  <aside class="side" aria-label="Lessons and questions">
+    <div class="list-box">
+      <div class="list-head"><h3>Lessons</h3><span id="listCount"></span></div>
+      <div class="list-hint">Oldest first, in the order they were taught. Tap a question to jump there.</div>
+      <ol class="lessons" id="lessonList"></ol>
+    </div>
+  </aside>
+</main>
+
+<p class="foot">Polymath Online · Lesson videos <span id="versionTag"></span></p>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<script src="portal-core.js?v=1.11.0"></script>
+<script src="watch-core.js?v=1.0.0"></script>
+<script src="watch.js?v=1.0.0"></script>
+</body>
+</html>
