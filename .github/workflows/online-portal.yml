@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   online-portal:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # ubuntu-latest (26.04) has no packages for playwright --with-deps
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
