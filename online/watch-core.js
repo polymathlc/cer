@@ -30,7 +30,7 @@
 (function (root) {
   'use strict';
 
-  var VERSION = '1.0.0';
+  var VERSION = '1.1.0';
   var BUCKETS = ['mathgen--app.firebasestorage.app', 'mathgen--app.appspot.com'];
   var STORAGE_HOST = 'firebasestorage.googleapis.com';
   var STORAGE_DIR = 'pdf-annotator/';
@@ -137,11 +137,16 @@
   }
   // Every lesson, in the order it was taught: oldest first. A lesson with no
   // recorded time (very old) goes after the dated ones, in worksheet order.
-  function lessonsOf(annotations) {
+  // `skipDays` (['YYYY-MM-DD']): class days archived for students in the
+  // class it is watched from (portal-core.js `archivedDaysOf`); their lessons
+  // are left out before the lessons are numbered.
+  function lessonsOf(annotations, skipDays) {
     var list = [], seen = {};
+    var skip = Array.isArray(skipDays) ? skipDays : [];
     parseAnnotations(annotations).forEach(function (a, i) {
       var l = lessonFrom(a);
       if (!l || seen[l.id]) return;
+      if (skip.length && skip.indexOf(dayKey(l.at)) >= 0) return;
       seen[l.id] = true;
       l.order = i;
       list.push(l);
@@ -501,7 +506,23 @@
       var cur = c && typeof c.currentIndex === 'number' && isFinite(c.currentIndex) ? Math.floor(c.currentIndex) : -1;
       if (cur >= 0) rel = Math.max(rel, cur + RELEASE_AHEAD);
       var at = ids.indexOf(wsId);
-      if (at >= 0 && at <= rel) out.push({ course: c, seq: at });
+      // 🗄 v1.13.0: a worksheet archived in a class is not shown from it.
+      var archived = c && Array.isArray(c.archivedWorksheets) && c.archivedWorksheets.indexOf(wsId) >= 0;
+      if (at >= 0 && at <= rel && !archived) out.push({ course: c, seq: at });
+    });
+    return out;
+  }
+  // 🗄 The class days of a worksheet archived in one class: ['YYYY-MM-DD'].
+  // The same reading as portal-core.js `archivedDaysOf`.
+  function archivedDaysIn(course, wsId) {
+    var list = course && Array.isArray(course.archivedDays) ? course.archivedDays : [];
+    var out = [];
+    list.forEach(function (entry) {
+      if (typeof entry !== 'string') return;
+      var at = entry.lastIndexOf('|');
+      if (at <= 0 || entry.slice(0, at) !== wsId) return;
+      var key = entry.slice(at + 1);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(key) && out.indexOf(key) < 0) out.push(key);
     });
     return out;
   }
@@ -543,7 +564,7 @@
     pageAt: pageAt, questionAt: questionAt, chapterAt: chapterAt, nowText: nowText, percentAt: percentAt, labelled: labelled,
     strip: strip, createReplay: createReplay, onPage: onPage, safeColor: safeColor, arrowHead: arrowHead,
     watchLink: watchLink, readQuery: readQuery, spotKey: spotKey, readSpot: readSpot,
-    releasedTo: releasedTo, placeText: placeText, captionsVtt: captionsVtt
+    releasedTo: releasedTo, archivedDaysIn: archivedDaysIn, placeText: placeText, captionsVtt: captionsVtt
   };
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.PolymathWatchCore = api;

@@ -649,5 +649,86 @@ let studentDb = null;
   await phone.context.close();
 }
 
+/* ---- 🗄 v1.13.0: archive items for students, restore with one tap ---- */
+{
+  const docs = JSON.parse(JSON.stringify(studentDb));
+  const [coursePath, course0] = Object.entries(docs).find(([p]) => p.startsWith('onlineCourses/'));
+  const ws2 = course0.worksheetIds[1], ws3 = course0.worksheetIds[2];
+  const before = { cur: course0.currentIndex, rel: course0.releasedThrough, ids: course0.worksheetIds.join() };
+  const { page, context, errors } = await open({ user: admin, docs });
+  await page.waitForSelector('.tabs');
+  await page.click('[data-action="open-course"] >> nth=0');
+  await page.waitForSelector('#archivedSection');
+  check('archive: the class shows an empty Archived section to begin with', /Nothing archived in this class/.test(await page.textContent('#archivedSection')));
+  await page.click('.seq-row:nth-child(2) [data-action="archive-item"]');
+  await page.waitForSelector('.seq-row.is-archived');
+  let now = await page.evaluate((p) => window.__fake.db[p], coursePath);
+  check('archive: Archive on worksheet 2 stores it on the class, nothing else changes',
+    JSON.stringify(now.archivedWorksheets) === JSON.stringify([ws2]) && now.currentIndex === before.cur && now.releasedThrough === before.rel && now.worksheetIds.join() === before.ids);
+  check('archive: the row says Archived and offers Restore', /Archived/.test(await page.textContent('.seq-row.is-archived')) && (await page.locator('.seq-row.is-archived [data-action="restore-item"]').count()) === 1);
+  check('archive: the Archived section lists it with Restore', /Worksheet 2/.test(await page.textContent('#archivedSection')) && (await page.locator('#archivedSection [data-action="restore-item"]').count()) === 1);
+  check('archive: the worksheet itself is untouched (not deleted, not hidden in Ans Key)', !!(await page.evaluate((id) => window.__fake.db['pdfAnnotator/' + id], ws2)) && !(await page.evaluate((id) => window.__fake.db['pdfAnnotator/' + id].hidden, ws2)));
+  await page.screenshot({ path: path.join(shots, '17-archive-class.png'), fullPage: true });
+
+  // 👁 Preview as a student, Timeline tab: archive one class day there.
+  await page.click('[data-action="preview-course"]');
+  await page.click('#st-tab-timeline');
+  await page.waitForSelector('.tl-item');
+  check('archive: the preview timeline no longer shows worksheet 2', !(await page.$$eval('.tl-item .tl-name', (els) => els.map((e) => e.textContent))).includes('Worksheet 2'));
+  const ws3Item = page.locator('.tl-item', { has: page.locator('.tl-name', { hasText: /^Worksheet 3$/ }) });
+  check('archive: each worksheet and each class day has Archive for the admin', (await ws3Item.locator('[data-action="archive-item"][data-kind="worksheet"]').count()) === 1 && (await ws3Item.locator('[data-action="archive-item"][data-kind="day"]').count()) === 2);
+  const oldDay = await ws3Item.locator('[data-action="archive-item"][data-kind="day"]').nth(1).getAttribute('data-day');
+  await ws3Item.locator('[data-action="archive-item"][data-kind="day"]').nth(1).click();
+  await page.waitForFunction(() => document.querySelectorAll('.tl-item .tl-cday').length === 1);
+  now = await page.evaluate((p) => window.__fake.db[p], coursePath);
+  check('archive: one class day is archived on its own', JSON.stringify(now.archivedDays) === JSON.stringify([ws3 + '|' + oldDay]));
+  check('archive: the timeline keeps an admin-only Archived fold with both items', /Archived · 2 hidden/.test(await page.textContent('.arch-fold summary')));
+  await page.click('.arch-fold summary');
+  await page.locator('.class-card').screenshot({ path: path.join(shots, '18-archive-preview-timeline.png') });
+  check('archive (admin): no script errors', errors.length === 0 || (console.log(errors), false));
+  const archivedDb = await page.evaluate(() => window.__fake.db);
+  await context.close();
+
+  // The student: worksheet 2 and that day's video + answer key are gone everywhere.
+  const stu = await open({ user: { uid: 'stu-1', email: 'ethan.t@gmail.com', displayName: 'Ethan Tan' }, docs: archivedDb, query: '#timeline', width: 1100 });
+  await stu.page.waitForSelector('.tl-item');
+  const names = await stu.page.$$eval('.tl-item .tl-name', (els) => els.map((e) => e.textContent));
+  check('archive (student): the timeline skips the archived worksheet and keeps the numbers', !names.includes('Worksheet 2') && names[0] === 'Worksheet 1' && names[1] === 'Worksheet 3' &&
+    (await stu.page.$$eval('.tl-item .tl-node', (els) => els.map((e) => e.textContent))).slice(0, 2).join() === '1,3');
+  check('archive (student): the class is still on worksheet 5 with the same next two', (await stu.page.textContent('.tl-item.is-current .tl-name')) === 'Worksheet 5' &&
+    (await stu.page.$$eval('.next-tile .name', (els) => els.map((e) => e.textContent))).join('|') === 'Worksheet 6|Worksheet 7');
+  const s3 = stu.page.locator('.tl-item', { has: stu.page.locator('.tl-name', { hasText: /^Worksheet 3$/ }) });
+  check('archive (student): the archived class day is gone, the other day stays', (await s3.locator('.tl-cday').count()) === 1 && !(await s3.locator('.tl-day').getAttribute('href')).includes(oldDay));
+  check('archive (student): no Archive buttons or Archived list for a student', (await stu.page.locator('[data-action="archive-item"], [data-action="restore-item"], .arch-fold').count()) === 0);
+  await stu.page.click('#st-tab-worksheets');
+  await stu.page.waitForSelector('.st-row');
+  check('archive (student): Worksheets tab leaves it out', !(await stu.page.$$eval('.st-row .st-name', (els) => els.map((e) => e.textContent))).includes('Worksheet 2'));
+  await stu.page.click('#st-tab-answers');
+  await stu.page.waitForFunction(() => document.querySelector('#st-tab-answers[aria-selected="true"]'));
+  const ak = await stu.page.$$eval('.st-row', (els) => els.map((e) => ({ name: e.querySelector('.st-name').textContent, more: e.querySelectorAll('.st-more a').length })));
+  const ak3 = ak.find((r) => r.name === 'Worksheet 3');
+  check('archive (student): Answer keys tab drops the archived day\'s key', ak3 && ak3.more === 0, JSON.stringify(ak));
+  await stu.page.click('#st-tab-videos');
+  await stu.page.waitForFunction(() => document.querySelector('#st-tab-videos[aria-selected="true"]'));
+  const v3 = await stu.page.$$eval('.st-row', (els) => els.map((e) => ({ name: e.querySelector('.st-name').textContent, sub: e.querySelector('.st-sub').textContent })).find((r) => r.name === 'Worksheet 3'));
+  check('archive (student): Videos tab counts only the videos still shown', v3 && /2 videos/.test(v3.sub), JSON.stringify(v3));
+  check('archive (student): no script errors', stu.errors.length === 0 || (console.log(stu.errors), false));
+  await stu.context.close();
+
+  // Restore: one tap in the class's Archived list puts it back as it was.
+  const back = await open({ user: admin, docs: archivedDb });
+  await back.page.waitForSelector('.tabs');
+  await back.page.click('[data-action="open-course"] >> nth=0');
+  await back.page.waitForSelector('#archivedSection [data-action="restore-item"]');
+  await back.page.click('#archivedSection [data-action="restore-item"][data-kind="worksheet"]');
+  await back.page.waitForFunction(() => !document.querySelector('.seq-row.is-archived'));
+  await back.page.click('#archivedSection [data-action="restore-item"][data-kind="day"]');
+  await back.page.waitForFunction(() => /Nothing archived/.test(document.querySelector('#archivedSection').textContent));
+  now = await back.page.evaluate((p) => window.__fake.db[p], coursePath);
+  check('restore: both lists are empty again and the class is where it was', now.archivedWorksheets.length === 0 && now.archivedDays.length === 0 && now.currentIndex === before.cur && now.releasedThrough === before.rel);
+  check('restore: no script errors', back.errors.length === 0 || (console.log(back.errors), false));
+  await back.context.close();
+}
+
 await browser.close();
 console.log(`Passed ${checks} Polymath Online browser checks.`);

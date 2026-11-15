@@ -835,3 +835,124 @@ test('watch: the timeline never opens Ans Key for a video, and the player page i
     assert.match(html, new RegExp('id="' + id + '"'), 'watch.html has #' + id);
   }
 });
+
+/* ---------------- 🗄 Archive for students (portal v1.13.0) ---------------- */
+const dayMs = (key, hour = 15) => { const [y, m, d] = key.split('-').map(Number); return new Date(y, m - 1, d, hour).getTime(); };
+const archKey = (id, day) => 'https://firebasestorage.googleapis.com/v0/b/mathgen--app.firebasestorage.app/o/' +
+  encodeURIComponent('pdf-annotator/lesson-key-' + id + '-' + day + '.pdf') + '?alt=media&token=0b5e4a5c-1f6c-4c1e-9a7e-2c1d3e4f5a6b';
+
+test('archive: an archived worksheet leaves every student list but keeps the class where it is', () => {
+  const base = course({ currentIndex: 2, releasedThrough: 5 });
+  const c = { ...base, archivedWorksheets: ['b', 'd'] };
+  // The class position, the release and the Ans Key queue are untouched.
+  assert.equal(Core.currentIndex(c), 2);
+  assert.equal(Core.releasedThrough(c), Core.releasedThrough(base));
+  assert.equal(Core.ansKeyState(c, 3), 'next');
+  assert.deepEqual(Core.finishUpdate(c), Core.finishUpdate(base));
+  // Students do not see b or d; the others keep their own numbers.
+  assert.deepEqual(Core.releasedWorksheets(c).map((w) => [w.id, w.seq]), [['a', 0], ['c', 2], ['e', 4], ['f', 5]]);
+  assert.deepEqual(Core.nextWorksheets(c).map((w) => w.id), ['e']);
+  assert.deepEqual(Core.timelineItems(c, {}, {}).map((it) => it.id), ['a', 'c', 'e', 'f']);
+  // An archived worksheet will not "appear later": it is not counted as locked.
+  const later = { ...base, archivedWorksheets: ['h'] };
+  assert.equal(Core.lockedCount(base), 4);
+  assert.equal(Core.lockedCount(later), 3);
+  // Worksheets / Answer keys / Videos tabs are built from the same items.
+  const rows = Core.worksheetRows(c, Core.timelineItems(c, {}, {}));
+  assert.deepEqual(rows.now.map((r) => r.id), ['c', 'e', 'f']);
+  assert.deepEqual(rows.earlier.map((r) => r.id), ['a']);
+});
+
+test('archive: one class day hides that day\'s videos and answer key, and nothing else', () => {
+  const c = course({ currentIndex: 0, releasedThrough: 3, archivedDays: ['a|2026-11-09'] });
+  const docs = { a: { name: 'Fractions', answerKeys: {
+    '2026-11-09': { url: archKey('a', '2026-11-09'), at: 1, pages: 2 },
+    '2026-11-16': { url: archKey('a', '2026-11-16'), at: 2, pages: 3 }
+  } } };
+  const recordings = { a: [
+    { id: 'r3', at: dayMs('2026-11-16'), duration: 600 },
+    { id: 'r2', at: dayMs('2026-11-09', 16), duration: 300 },
+    { id: 'r1', at: dayMs('2026-11-09'), duration: 300 }
+  ] };
+  const [it] = Core.timelineItems(c, docs, recordings);
+  assert.deepEqual(it.recordings.map((r) => r.id), ['r3']);
+  assert.deepEqual(it.answerKeys.map((k) => k.key), ['2026-11-16']);
+  assert.deepEqual(it.classDays.map((d) => d.key), ['2026-11-16']);
+  assert.deepEqual(it.days.map((d) => d.key), ['2026-11-16']);
+  assert.equal(it.archivedDays, 1);
+  assert.deepEqual(Core.answerKeyRows(c, [it])[0].earlier, []);
+  assert.equal(Core.videoRows(c, [it])[0].count, 1);
+  // Another class with the same worksheet is not affected.
+  const other = { ...c, id: 'k2', archivedDays: [] };
+  assert.equal(Core.timelineItems(other, docs, recordings)[0].recordings.length, 3);
+  // Garbage in the list is ignored, never thrown on.
+  const messy = { ...c, archivedDays: ['a|2026-11-09', 'nope', 42, 'a|bad', '|2026-11-09', 'a|2026-11-09'], archivedWorksheets: [null, 'x y', 7] };
+  assert.deepEqual(Core.archivedDayList(messy), [{ id: 'a', key: '2026-11-09' }]);
+  assert.deepEqual(Core.archivedWorksheetIds(messy), []);
+});
+
+test('archive: the update to write, and restoring puts it back exactly', () => {
+  const c = course({ currentIndex: 1, releasedThrough: 4 });
+  const a1 = Core.archiveUpdate(c, 'worksheet', 'b', '', true);
+  assert.deepEqual(plainList(a1), { field: 'archivedWorksheets', value: ['b'] });
+  const c1 = { ...c, archivedWorksheets: a1.value };
+  assert.equal(Core.archiveUpdate(c1, 'worksheet', 'b', '', true), null, 'already archived');
+  assert.equal(Core.archiveUpdate(c, 'worksheet', 'zz', '', true), null, 'not in this class');
+  assert.equal(Core.archiveUpdate(c, 'worksheet', 'b', '', false), null, 'nothing to restore');
+  const r1 = Core.archiveUpdate(c1, 'worksheet', 'b', '', false);
+  assert.deepEqual(plainList(r1), { field: 'archivedWorksheets', value: [] });
+  assert.deepEqual(Core.releasedWorksheets({ ...c1, archivedWorksheets: r1.value }), Core.releasedWorksheets(c));
+
+  const d1 = Core.archiveUpdate(c, 'day', 'a', '2026-11-09', true);
+  assert.deepEqual(plainList(d1), { field: 'archivedDays', value: ['a|2026-11-09'] });
+  assert.equal(Core.archiveUpdate(c, 'day', 'a', '9 Nov', true), null, 'a real day key only');
+  const c2 = { ...c, archivedDays: d1.value };
+  assert.ok(Core.isDayArchived(c2, 'a', '2026-11-09'));
+  assert.ok(!Core.isDayArchived(c2, 'b', '2026-11-09'));
+  assert.deepEqual(plainList(Core.archiveUpdate(c2, 'day', 'a', '2026-11-09', false)), { field: 'archivedDays', value: [] });
+  // A worksheet that has since left the class can still be restored.
+  const gone = { ...c, worksheetIds: ['a'], archivedWorksheets: ['b'] };
+  assert.deepEqual(plainList(Core.archiveUpdate(gone, 'worksheet', 'b', '', false)), { field: 'archivedWorksheets', value: [] });
+});
+
+test('archive: the admin\'s Archived list names each item', () => {
+  const c = course({ currentIndex: 1, releasedThrough: 4, archivedWorksheets: ['c', 'gone'], archivedDays: ['a|2026-11-02', 'b|2026-11-09'] });
+  const a = Core.archivedItems(c, { c: { name: 'Speed' }, b: { name: 'Ratio' } }, dayMs('2026-11-15'));
+  assert.equal(a.count, 4);
+  assert.deepEqual(a.worksheets.map((w) => [w.id, w.name, w.inClass, w.released]), [['c', 'Speed', true, true], ['gone', 'A worksheet no longer in this class', false, false]]);
+  assert.deepEqual(a.days.map((d) => [d.id, d.key, d.label, d.name]), [['b', '2026-11-09', 'Mon 9 Nov', 'Ratio'], ['a', '2026-11-02', 'Mon 2 Nov', 'Worksheet 1']]);
+  assert.equal(Core.archivedCount(c), 4);
+});
+
+test('archive: the video page hides archived worksheets and class days the same way', () => {
+  const W2 = require('../online/watch-core.js');
+  const c = { id: 'k', worksheetIds: ['a', 'b'], currentIndex: 0, releasedThrough: 1, archivedWorksheets: ['b'], archivedDays: ['a|2026-11-09', 'b|2026-11-16'] };
+  const free = { id: 'k2', worksheetIds: ['b'], currentIndex: 0, releasedThrough: 0 };
+  assert.deepEqual(W2.releasedTo([c], 'a').map((f) => f.course.id), ['k']);
+  assert.deepEqual(W2.releasedTo([c], 'b'), []);
+  assert.deepEqual(W2.releasedTo([c, free], 'b').map((f) => f.course.id), ['k2']);
+  assert.deepEqual(W2.archivedDaysIn(c, 'a'), ['2026-11-09']);
+  assert.deepEqual(W2.archivedDaysIn(free, 'b'), []);
+  const url = (n) => 'https://firebasestorage.googleapis.com/v0/b/mathgen--app.firebasestorage.app/o/' + encodeURIComponent('pdf-annotator/lesson-' + n + '.webm') + '?alt=media&token=x';
+  const ann = [
+    { id: 'v1', type: 'video', url: url('v1'), ts: dayMs('2026-11-09'), lessonRecording: { version: 1, duration: 60000, video: true } },
+    { id: 'v2', type: 'video', url: url('v2'), ts: dayMs('2026-11-16'), lessonRecording: { version: 1, duration: 60000, video: true } }
+  ];
+  const all = W2.lessonsOf(JSON.stringify(ann));
+  const shown = W2.lessonsOf(JSON.stringify(ann), W2.archivedDaysIn(c, 'a'));
+  assert.equal(all.length, 2);
+  assert.deepEqual(shown.map((l) => [l.id, l.index]), [['v2', 0]]);
+  // Core and the video page read the same list.
+  assert.deepEqual(W2.archivedDaysIn(c, 'a'), Core.archivedDaysOf(c, 'a'));
+});
+
+test('archive: the page wires Archive and Restore, and the class card key skips archived days', () => {
+  const portal = fs.readFileSync(new URL('../online/portal.js', import.meta.url), 'utf8');
+  assert.match(portal, /case 'archive-item': setArchived\(el, true\)/);
+  assert.match(portal, /case 'restore-item': setArchived\(el, false\)/);
+  assert.match(portal, /Core\.archiveUpdate\(live, kind, id, day, archive\)/);
+  assert.match(portal, /Core\.visibleAnswerKeys\(course, ids\[cur\]/);
+  assert.ok(!/Core\.answerKeysOf\(state\.docs\[ids\[cur\]\]\)/.test(portal), 'the class card key must not bypass the archive');
+  const watch = fs.readFileSync(new URL('../online/watch.js', import.meta.url), 'utf8');
+  assert.match(watch, /W\.lessonsOf\(annotations, !admin && state\.found \? W\.archivedDaysIn\(state\.found\.course, query\.ws\) : \[\]\)/);
+});

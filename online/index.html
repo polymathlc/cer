@@ -673,6 +673,25 @@
   .tag-ahead { background: var(--accent-bg); color: var(--accent-ink); }
   .tl-sub { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 3px; font-size: var(--font-size-xs); color: var(--text-tertiary); }
   .tl-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 12px; }
+  /* 🗄 Archive for students (v1.13.0) */
+  .btn-archive { color: var(--text-secondary); }
+  .btn-restore { color: var(--ok-ink); border-color: var(--ok-ink); }
+  .chip-archived { background: #ECEFF1; color: #455A64; margin-left: 4px; }
+  .seq-row.is-archived { background: repeating-linear-gradient(135deg, #fafafa, #fafafa 8px, #f3f4f5 8px, #f3f4f5 16px); }
+  .seq-row.is-archived .name-edit { color: var(--text-secondary); text-decoration: line-through; text-decoration-color: rgba(0,0,0,.25); }
+  .count-pill { display: inline-block; min-width: 1.6em; padding: 1px 8px; border-radius: 999px; background: #ECEFF1; color: #455A64; font-size: .8rem; vertical-align: middle; text-align: center; }
+  .arch-card { padding: 4px 0; }
+  .arch-list { list-style: none; margin: 0; padding: 0; }
+  .arch-row { display: grid; grid-template-columns: 96px 1fr auto; gap: 10px 14px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border-subtle); }
+  .arch-row:last-child { border-bottom: 0; }
+  .arch-kind { font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: #455A64; }
+  .arch-main { display: flex; flex-direction: column; min-width: 0; }
+  .arch-main b { overflow-wrap: anywhere; }
+  .arch-main small { color: var(--text-secondary); }
+  .arch-fold { margin: 14px 0 4px; border: 1px dashed #B0BEC5; border-radius: 12px; background: #FAFBFC; }
+  .arch-fold > summary { cursor: pointer; padding: 10px 14px; font-weight: 600; color: #455A64; }
+  .arch-fold .arch-row { padding: 8px 14px; }
+  @media (max-width: 560px) { .arch-row { grid-template-columns: 1fr; gap: 4px; } .arch-row .btn { justify-self: start; } }
   .tl-group { display: inline-flex; align-items: center; gap: 6px; padding: 4px 4px 4px 10px; border-radius: 12px; background: #F7F7F5; }
   .tl-group-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-tertiary); margin-right: 2px; }
   .btn-video { background: #1A1A1A; color: #fff; border-color: #1A1A1A; }
@@ -823,7 +842,7 @@
   @media print {
     body { background: #fff; color: #000; }
     .polymath-header { position: static; background: #fff; backdrop-filter: none; border-bottom: 1px solid #ccc; }
-    .header-actions, .ws-actions, .tl-actions, .tl-legend, .tabs, .preview-bar, .toasts, .btn, .site-footer, .modal-back, .locked-row .btn { display: none !important; }
+    .header-actions, .ws-actions, .tl-actions, .arch-fold, .btn-archive, .tl-legend, .tabs, .preview-bar, .toasts, .btn, .site-footer, .modal-back, .locked-row .btn { display: none !important; }
     .card, .next-tile, .up-next { box-shadow: none !important; border-color: #ccc !important; background: #fff !important; }
     .class-card, .up-next, .ws-row, .tl-item { page-break-inside: avoid; break-inside: avoid; }
     .tl-card { box-shadow: none !important; }
@@ -868,8 +887,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
-<script src="portal-core.js?v=1.11.0"></script>
-<script src="portal.js?v=1.11.0"></script>
+<script src="portal-core.js?v=1.13.0"></script>
+<script src="portal.js?v=1.13.0"></script>
 <script defer src="pwa-install.js?v=2.0.0" data-app-name="Polymath Worksheets" data-app-key="online" data-app-icon="assets/app-icons/icon-192.png" data-accent="#00695C" data-sw="sw.js" data-floating="auto"></script>
 <!-- 🔐 Polymath student access (v1.0.0): the enrolment pop-up every Polymath app shares. A signed-in student is
      blocked here until an admin approves them at polymathlc.com.sg/student/#admin. Source: polymathlc/cer student/access-gate.js -->

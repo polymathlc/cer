@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = 'v1.12.0';
+  var APP_VERSION = 'v1.13.0';
   var Core = window.PolymathOnlineCore;
 
   // Who runs the portal. Anyone else signs in as a student or a parent.
@@ -830,7 +830,8 @@
           '<div class="class-summary">' + h(summary) + '</div></div>' +
         '<div class="class-cta">' + (function () {
           // 📄 The newest answer key PDF Ans Key filed for this lesson's worksheet.
-          var k = cur >= 0 ? Core.answerKeysOf(state.docs[ids[cur]])[0] : null;
+          // 🗄 v1.13.0: never from an archived worksheet or an archived class day.
+          var k = cur >= 0 && !Core.isArchived(course, ids[cur]) ? Core.visibleAnswerKeys(course, ids[cur], state.docs[ids[cur]])[0] : null;
           return k ? '<a class="btn btn-sm" href="' + h(k.url) + '" target="_blank" rel="noopener" data-tooltip="The answer key after the ' + h(k.label) + ' lesson, as a PDF">This lesson\'s answer key</a>' : '';
         })() + '</div>' +
       '</div>';
@@ -868,6 +869,8 @@
      answer key to view or print. */
   function timelineHtml(course) {
     var items = Core.timelineItems(course, state.docs, state.recordings);
+    // 🗄 v1.13.0: an admin previewing the student view archives from here.
+    var admin = state.isAdmin && !!state.preview;
     var html = '<section class="timeline" aria-label="Worksheets, in the order they are taught">' +
       '<div class="tl-head"><span class="eyebrow">Worksheet timeline</span><span class="tl-legend"><span class="dot dot-current"></span>Current worksheet<span class="dot dot-done"></span>Done<span class="dot dot-ahead"></span>Released ahead</span></div>' +
       '<ol class="tl-list">';
@@ -904,6 +907,7 @@
             (k ? '<a class="tl-key" href="' + h(k.url) + '" target="_blank" rel="noopener" data-tooltip="The answer key after the ' + h(d.label) + ' lesson, with the QR code to its videos">' +
                 '<span class="tl-key-icon" aria-hidden="true">📄</span><span><b>Answer key</b><small>PDF' + (k.pages ? ' · ' + k.pages + (k.pages === 1 ? ' page' : ' pages') : '') + '</small></span></a>'
               : '<span class="tl-cday-none">Answer key after the lesson</span>') +
+            (admin ? archiveButtonHtml(course, 'day', it.id, d.key, true, 'Hide the ' + d.label + ' videos and answer key of ' + it.name + ' from students. Nothing is deleted.') : '') +
           '</span></li>';
       };
       var cdays = it.classDays || [];
@@ -938,10 +942,76 @@
               '<button class="btn btn-sm btn-ghost" type="button" data-action="view" data-id="' + h(it.id) + '">View</button>' +
               '<button class="btn btn-sm btn-ghost" type="button" data-action="print" data-id="' + h(it.id) + '">Print</button></span>' +
             keyGroup +
+            (admin ? archiveButtonHtml(course, 'worksheet', it.id, '', true, 'Hide ' + it.name + ' from students, with its answer keys and videos. Nothing is deleted and the class stays where it is.') : '') +
           '</div>' +
         '</div></li>';
     });
-    return html + '</ol></section>';
+    html += '</ol>';
+    if (admin) html += archivedListHtml(course, true);
+    return html + '</section>';
+  }
+
+  /* ---- 🗄 Archive for students (v1.13.0) ----
+     An admin can take a worksheet, or one class day of it (that day's lesson
+     videos and answer key), out of what students see, and bring it back with
+     one tap. Nothing is deleted: the worksheet keeps its place and number,
+     the class keeps its position and its release, and Ans Key is unchanged
+     for the teacher. The rules are in portal-core.js (`archiveUpdate`,
+     `releasedWorksheets`, `timelineItems`). */
+  function archiveButtonHtml(course, kind, id, day, archive, tip) {
+    var label = archive ? (kind === 'day' ? '🗄 Archive day' : '🗄 Archive') : '↩ Restore';
+    return '<button class="btn btn-xs ' + (archive ? 'btn-archive' : 'btn-restore') + '" type="button" data-action="' + (archive ? 'archive-item' : 'restore-item') + '"' +
+      ' data-course="' + h(course.id) + '" data-kind="' + kind + '" data-id="' + h(id) + '"' + (day ? ' data-day="' + h(day) + '"' : '') +
+      ' data-tooltip="' + h(tip || '') + '" aria-label="' + h((archive ? 'Archive ' : 'Restore ') + (kind === 'day' ? 'class day ' + day : 'worksheet')) + '">' + label + '</button>';
+  }
+  // The admin's Archived list for one class: everything hidden from
+  // students, each with Restore. `folded` keeps it in a fold (the timeline).
+  function archivedListHtml(course, folded) {
+    var a = Core.archivedItems(course, state.docs);
+    if (!a.count) {
+      return folded ? '' : '<div class="card empty archived-empty"><p>Nothing archived in this class. Use 🗄 Archive on a worksheet here, or on a worksheet or class day in 👁 Preview as a student (Timeline tab), to hide it from students without deleting it.</p></div>';
+    }
+    var rows = a.worksheets.map(function (w) {
+      return '<li class="arch-row"><span class="arch-kind">Worksheet</span>' +
+        '<span class="arch-main"><b>' + h(w.name) + '</b><small>' + (w.inClass ? 'Worksheet ' + (w.seq + 1) + (w.released ? ' · released, hidden from students' : ' · not released yet') : 'No longer in this class list') + '</small></span>' +
+        archiveButtonHtml(course, 'worksheet', w.id, '', false, 'Show ' + w.name + ' to students again') + '</li>';
+    }).concat(a.days.map(function (d) {
+      return '<li class="arch-row"><span class="arch-kind">Class day</span>' +
+        '<span class="arch-main"><b>' + h(d.label) + ' · ' + h(d.name) + '</b><small>That day\'s lesson videos and answer key' + (d.inClass ? ' · worksheet ' + (d.seq + 1) : ' · no longer in this class list') + (d.worksheetArchived ? ' · the whole worksheet is archived too' : '') + '</small></span>' +
+        archiveButtonHtml(course, 'day', d.id, d.key, false, 'Show the ' + d.label + ' videos and answer key to students again') + '</li>';
+    }));
+    var list = '<ol class="arch-list">' + rows.join('') + '</ol>';
+    if (folded) {
+      return '<details class="arch-fold"><summary>🗄 Archived · ' + a.count + ' hidden from students <span class="muted">(only you see this)</span></summary>' + list + '</details>';
+    }
+    return '<div class="card arch-card">' + list + '</div>';
+  }
+  async function setArchived(button, archive) {
+    var courseId = button.dataset.course, kind = button.dataset.kind, id = button.dataset.id, day = button.dataset.day || '';
+    if (!state.isAdmin || !courseId || !state.courses[courseId]) return;
+    busy(button, true);
+    try {
+      var ref = db.collection(COURSES).doc(courseId);
+      // A transaction with the live class, so two devices archiving at once
+      // both land, and a list another admin just changed is not overwritten.
+      var done = await db.runTransaction(async function (tx) {
+        var snap = await tx.get(ref);
+        if (!snap.exists) return null;
+        var live = Object.assign({ id: courseId }, snap.data());
+        var update = Core.archiveUpdate(live, kind, id, day, archive);
+        if (!update) return 'same';
+        var data = { archivedAt: FieldValue.serverTimestamp(), archivedBy: state.user.email };
+        data[update.field] = update.value;
+        tx.set(ref, data, { merge: true });
+        return update;
+      });
+      busy(button, false);
+      if (!done) { toast('That class no longer exists.', { error: true }); return; }
+      var what = kind === 'day' ? 'The ' + Core.formatDay(new Date(day + 'T12:00:00').getTime()) + ' videos and answer key' : '“' + docName(id) + '”';
+      if (done === 'same') toast(what + (archive ? ' was already archived.' : ' is already showing.'));
+      else toast(archive ? what + ' archived. Students no longer see ' + (kind === 'day' ? 'them' : 'it') + '. Restore it any time from Archived.'
+        : what + ' restored. Students see ' + (kind === 'day' ? 'them' : 'it') + ' again.');
+    } catch (err) { busy(button, false); fail(archive ? 'Could not archive it' : 'Could not restore it', err); }
   }
 
   /* ---- Ans Key inside the portal ----
@@ -982,6 +1052,15 @@
       Core.releasedWorksheets(c).forEach(function (w) { ids.push(w.id); });
     });
     watchDocs(ids);
+    // 🗄 The admin's Archived fold names its worksheets.
+    if (state.isAdmin) {
+      var archivedIds = [];
+      Core.coursesForMember(state.courses, member).forEach(function (c) {
+        Core.archivedItems(c, {}).worksheets.forEach(function (w) { archivedIds.push(w.id); });
+        Core.archivedDayList(c).forEach(function (d) { archivedIds.push(d.id); });
+      });
+      if (archivedIds.length) ensureDocs(archivedIds);
+    }
     // The current worksheet is brought into view once, on arrival — on the
     // Timeline tab only; the other tabs open at the top, where the rows start.
     if (!scrolledToCurrent && state.studentTab === 'timeline') {
@@ -1096,8 +1175,9 @@
           '<button class="btn btn-xs" type="button" data-action="step" data-target="releaseInput" data-delta="1" aria-label="More">+</button>' +
           '<button class="btn btn-xs btn-primary" type="button" data-action="set-release"' + (total ? '' : ' disabled') + '>Set</button></div>' +
           '<div class="small muted" style="margin-top:8px">' + (cur >= 0 ? 'Always at least ' + Core.RELEASE_AHEAD + ' ahead of where the class is. Raise it to release more.' : '0 hides them all until the class starts.') + '</div></div>' +
-        '<div class="card control"><div class="label">Students see</div><div class="big">' + Core.releasedCount(course) + ' <span class="small muted">of ' + total + '</span></div>' +
+        '<div class="card control"><div class="label">Students see</div><div class="big">' + Core.releasedWorksheets(course).length + ' <span class="small muted">of ' + total + '</span></div>' +
           '<div class="small muted" style="margin-top:10px">' + countSeeing(course) + '</div>' +
+          (Core.archivedCount(course) ? '<div class="small muted" style="margin-top:6px">🗄 ' + Core.archivedCount(course) + ' archived item' + (Core.archivedCount(course) === 1 ? '' : 's') + ' hidden from students (see Archived below).</div>' : '') +
           '<button class="btn btn-xs" type="button" data-action="preview-course" style="margin-top:10px">👁 Preview as a student</button></div>' +
       '</div>';
     html += '<div class="section"><div class="section-head"><div><h2 class="section-heading">Add worksheets</h2>' +
@@ -1115,11 +1195,15 @@
         var st = Core.worksheetState(course, i);
         var status = seqStatusHtml(course, i);
         var ak = Core.ansKeyState(course, i);
-        html += '<div class="seq-row' + (st === 'current' ? ' is-current' : i <= rel ? ' is-released' : '') + (ak === 'current' ? ' ak-current' : ak === 'next' ? ' ak-next' : '') + '">' +
+        var archived = Core.isArchived(course, id);
+        var dayCount = Core.archivedDaysOf(course, id).length;
+        html += '<div class="seq-row' + (st === 'current' ? ' is-current' : i <= rel ? ' is-released' : '') + (ak === 'current' ? ' ak-current' : ak === 'next' ? ' ak-next' : '') + (archived ? ' is-archived' : '') + '">' +
           '<div class="ws-num">' + (i + 1) + '</div>' +
           '<div><input class="name-edit" id="name-' + h(id) + '" type="text" value="' + h(docName(id)) + '" data-action-change="rename" data-id="' + h(id) + '" aria-label="Name of worksheet ' + (i + 1) + '">' +
             '<div class="ws-sub" style="padding-left:8px">' + (pagesLabel(id) ? h(pagesLabel(id)) : '') + '</div></div>' +
-          '<div class="seq-status">' + status + '</div>' +
+          '<div class="seq-status">' + status +
+            (archived ? '<span class="chip chip-archived" data-tooltip="Hidden from students. Ans Key and the class position are unchanged.">🗄 Archived</span>' : '') +
+            (!archived && dayCount ? '<span class="chip chip-archived" data-tooltip="Class days whose videos and answer key are hidden from students">🗄 ' + dayCount + ' day' + (dayCount === 1 ? '' : 's') + ' archived</span>' : '') + '</div>' +
           '<div class="seq-tools">' +
             '<button class="btn btn-xs" type="button" data-action="move" data-index="' + i + '" data-delta="-1" aria-label="Move up"' + (i === 0 ? ' disabled' : '') + '>↑</button>' +
             '<button class="btn btn-xs" type="button" data-action="move" data-index="' + i + '" data-delta="1" aria-label="Move down"' + (i === total - 1 ? ' disabled' : '') + '>↓</button>' +
@@ -1127,12 +1211,19 @@
             '<button class="btn btn-xs" type="button" data-action="view" data-id="' + h(id) + '" aria-label="View PDF">PDF</button>' +
             '<button class="btn btn-xs" type="button" data-action="replace-pdf" data-id="' + h(id) + '" aria-label="Replace the PDF of worksheet ' + (i + 1) + '" data-tooltip="Upload a corrected PDF. The answer key stays.">Replace</button>' +
             '<button class="btn btn-xs" type="button" data-action="link-anskey" data-id="' + h(id) + '" aria-label="Answer key and videos for worksheet ' + (i + 1) + ' from Ans Key" data-tooltip="Take the answer key and the video recordings from another worksheet in Ans Key">From Ans Key</button>' +
+            archiveButtonHtml(course, 'worksheet', id, '', !archived, archived ? 'Show it to students again' : 'Hide it from students, with its answer keys and videos. Nothing is deleted and the class stays where it is.') +
             '<button class="btn btn-xs btn-danger" type="button" data-action="remove-ws" data-index="' + i + '" aria-label="Remove from class">✕</button>' +
           '</div></div>';
       });
       html += '</div>';
     }
-    return html + '</div></div>';
+    html += '</div>';
+    // 🗄 v1.13.0: everything archived in this class, each with Restore.
+    var arch = Core.archivedItems(course, state.docs);
+    html += '<div class="section" id="archivedSection"><div class="section-head"><div><h2 class="section-heading">🗄 Archived' + (arch.count ? ' <span class="count-pill">' + arch.count + '</span>' : '') + '</h2>' +
+      '<div class="section-note">Hidden from students on every tab, the video page and Ans Key. Nothing is deleted, and the class position and releases are unchanged. Restore puts it back as it was.</div></div></div>' +
+      archivedListHtml(course, false) + '</div>';
+    return html + '</div>';
   }
   /* 📌 The labels in the teaching order say what Ans Key shows: the
      worksheet the class has yet to finish is the Current worksheet, the one
@@ -2447,6 +2538,8 @@
       case 'delete-course': deleteCourse(state.courses[state.courseId]); break;
       case 'move': moveWorksheet(Number(el.dataset.index), Number(el.dataset.delta)); break;
       case 'remove-ws': removeWorksheet(Number(el.dataset.index)); break;
+      case 'archive-item': setArchived(el, true); break;
+      case 'restore-item': setArchived(el, false); break;
       case 'browse-anskey': browseAnsKey(); break;
       case 'link-anskey': linkFromAnsKey(id); break;
       case 'step': {
