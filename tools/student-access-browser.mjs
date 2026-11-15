@@ -49,7 +49,9 @@ const ADMINS = ['chungzhikai@gmail.com', 'admin@polymathlc.com.sg', 'support@pol
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.json': 'application/json', '.webmanifest': 'application/manifest+json' };
 
 /* ───────────── the stand-in database (shared by REST and the fake SDK) ───────────── */
-const db = { studentAccess: new Map(), mail: new Map(), onlineMembers: new Map(), protectedRules: false };
+const db = { studentAccess: new Map(), mail: new Map(), onlineMembers: new Map(), protectedRules: false,
+  // The Ans Key app's roster: Wei Ming's own old pick there was P4 Maths (My Polymath v1.9.0 corrects it).
+  studentProfiles: new Map([['stu1', { name: 'Wei Ming', level: 'P4', subject: 'math', lsChangesUsed: 1, days: ['Monday'] }]]) };
 const USERS = {
   student: { uid: 'stu1', email: 'tan.kid@gmail.com', emailVerified: true, displayName: 'Tan Kid' },
   staff: { uid: 'staff1', email: 'elsielcr@gmail.com', emailVerified: true, displayName: 'Elsie' },
@@ -395,6 +397,16 @@ await step('an admin opens /student/#admin, sees the request waiting and approve
   assert.equal(member.level, 'P5');
   assert.equal(member.source, 'student-access');
   assert.equal(member.role, 'student');
+  // The Ans Key app follows too (v1.9.0): its own P4 Maths row becomes P5 Both; the name, days and one change stay.
+  for (let i = 0; i < 50 && db.studentProfiles.get('stu1').level !== 'P5'; i++) await adminPage.waitForTimeout(100);
+  const profile = db.studentProfiles.get('stu1');
+  assert.equal(profile.level, 'P5');
+  assert.equal(profile.subject, 'both');
+  assert.equal(profile.levelSource, 'student-access');
+  assert.equal(profile.name, 'Wei Ming');
+  assert.deepEqual(profile.days, ['Monday']);
+  assert.equal(profile.lsChangesUsed, 1);
+  assert.equal(db.studentProfiles.has('sci1'), false, 'no Ans Key row is made for an account that never opened Ans Key');
 });
 
 /* ───────────── 7. the waiting student unlocks ───────────── */

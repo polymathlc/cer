@@ -372,7 +372,7 @@ test('dashboard helpers: usernames, sorting, search, counts and the admin edit',
 test('/student signs in, shows the admin dashboard and loads the very same gate as every app', () => {
   assert.ok(DASHBOARD.includes('<div class="account-card" id="accountCard" hidden aria-live="polite"></div>'));
   assert.ok(DASHBOARD.includes('<section class="admin-view" id="adminView" hidden aria-labelledby="adminTitle"></section>'));
-  assert.ok(DASHBOARD.includes('<script src="student-account.js?v=1.8.0"></script>'));
+  assert.ok(DASHBOARD.includes('<script src="student-account.js?v=1.9.0"></script>'));
   assert.ok(DASHBOARD.includes('<script defer src="access-gate.js?v=1.1.0" data-app="student"></script>'));
   const at = text => DASHBOARD.indexOf(text);
   assert.ok(at('<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js">') < at('<script src="student-account.js'), 'the SDK first');
@@ -627,4 +627,62 @@ test('staff requests (Keertana, an employee) are kept apart from the students an
   assert.equal(h.staffBadge({ email: 'support@polymathlc.com.sg' }), 'Admin');
   assert.equal(h.counts(split.students).approved, 1, 'the employee is not counted as an approved family');
   assert.equal(h.classify(split.students).total.total, 1, 'nor as a P3 child');
+});
+
+/* ───────────── Ans Key follows this page (My Polymath v1.9.0) ───────────── */
+
+test('Ans Key level: the reported case — P4 Maths & Science there, P6 Science here', () => {
+  const H = loadAccount().helpers;
+  const record = { status: 'approved', children: [{ name: 'Kid', level: 'P6', subjects: 'science' }] };
+  const patch = H.ansKeyProfilePatch(record, { name: 'Kid', level: 'P4', subject: 'both', lsChangesUsed: 1 });
+  assert.deepEqual(JSON.parse(JSON.stringify(patch)), { level: 'P6', subject: 'science', levelSource: 'student-access', levelSyncedAt: H.SERVER_TIME });
+});
+
+test('Ans Key level: only approved records, only existing rows, only real changes', () => {
+  const H = loadAccount().helpers;
+  const children = [{ name: 'Kid', level: 'P6', subjects: 'science' }];
+  for (const status of ['pending', 'revoked']) assert.equal(H.ansKeyProfilePatch({ status, children }, { level: 'P4', subject: 'math' }), null, status);
+  assert.equal(H.ansKeyProfilePatch({ status: 'approved', children }, null), null, 'no Ans Key row yet → nothing written');
+  assert.equal(H.ansKeyProfilePatch({ status: 'approved', children }, { level: 'P6', subject: 'science' }), null, 'already agrees');
+  assert.equal(H.ansKeyProfilePatch({ status: 'approved', children: [{ level: 'P1', subjects: 'both' }, { level: 'Other', subjects: 'math' }] }, { level: 'P4', subject: 'math' }), null, 'no Ans Key level');
+});
+
+test('Ans Key level: P3 is Science only, siblings keep the row\'s level when it is one of theirs', () => {
+  const H = loadAccount().helpers;
+  assert.deepEqual(JSON.parse(JSON.stringify(H.ansKeyLevels({ status: 'approved', children: [{ level: 'P3', subjects: 'both' }, { level: 'P3', subjects: 'math' }] }))), { P3: 'science' });
+  assert.deepEqual(JSON.parse(JSON.stringify(H.ansKeyLevels({ status: 'approved', children: [{ level: 'P5', subjects: 'math' }, { level: 'P5', subjects: 'science' }] }))), { P5: 'both' });
+  const sib = { status: 'approved', children: [{ level: 'P6', subjects: 'science' }, { level: 'P4', subjects: 'math' }] };
+  assert.equal(H.ansKeyProfilePatch(sib, { level: 'P6', subject: 'science' }), null);
+  assert.equal(H.ansKeyProfilePatch(sib, { level: 'P6', subject: 'both' }).subject, 'science');
+  assert.equal(H.ansKeyProfilePatch(sib, { level: 'P5', subject: 'both' }).level, 'P4', 'otherwise the youngest child');
+  assert.deepEqual(Array.from(H.ANSKEY_LEVELS), ['P3', 'P4', 'P5', 'P6', 'S1']);
+});
+
+test('Ans Key level: approving, editing and the once-per-visit reconcile all write the roster row', () => {
+  assert.match(ACCOUNT_SOURCE, /function syncOnline\(id, record\) \{[\s\S]{0,300}syncAnsKey\(id, record\)/);
+  assert.match(ACCOUNT_SOURCE, /var ANSKEY_PROFILES = 'studentProfiles';/);
+});
+
+test('Ans Key level: the one-off correction uses the dashboard\'s own rule and counts only', async () => {
+  const { planAnsKeyFixes, planLines } = await import('./anskey-level-sync.mjs');
+  const records = [
+    { id: 'a', data: { status: 'approved', children: [{ level: 'P6', subjects: 'science' }] } },          // P4 both → P6 science
+    { id: 'b', data: { status: 'approved', children: [{ level: 'P5', subjects: 'both' }] } },             // already right
+    { id: 'c', data: { status: 'pending', children: [{ level: 'P6', subjects: 'math' }] } },              // waiting: untouched
+    { id: 'd', data: { status: 'approved', children: [{ level: 'P1', subjects: 'math' }] } },             // no Ans Key level
+    { id: 'e', data: { status: 'approved', children: [{ level: 'P4', subjects: 'math' }] } },             // no row: untouched
+    { id: 'f', data: { status: 'approved', children: [{ level: 'P4', subjects: 'math' }] } },             // subject only
+    { id: 'g', data: { status: 'approved', email: 'pkeertana21@gmail.com', children: [{ level: 'P6', subjects: 'math' }] } } // staff
+  ];
+  const profiles = { a: { name: 'A', level: 'P4', subject: 'both', days: ['Monday'] }, b: { level: 'P5', subject: 'both' }, c: { level: 'P4', subject: 'both' },
+    d: { level: 'P4', subject: 'math' }, f: { level: 'P4', subject: 'both' }, g: { level: 'P3', subject: 'science' } };
+  const { fixes, counts } = planAnsKeyFixes(records, profiles);
+  assert.deepEqual(fixes, [
+    { id: 'a', patch: { level: 'P6', subject: 'science', levelSource: 'student-access' } },
+    { id: 'f', patch: { level: 'P4', subject: 'math', levelSource: 'student-access' } }
+  ]);
+  assert.equal(counts.toFix, 2); assert.equal(counts.levelChanges, 1); assert.equal(counts.subjectOnly, 1);
+  assert.equal(counts.alreadyRight, 1); assert.equal(counts.noAnsKeyLevel, 1); assert.equal(counts.staffSkipped, 1);
+  const text = planLines(counts, 0).join('\n');
+  assert.ok(!/@|\bA\b/.test(text), 'counts only, never a name or email');
 });

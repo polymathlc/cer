@@ -34,13 +34,21 @@
     the account's onlineMembers/{uid} row — each child's own level (P3–P6) and
     subjects as `access` — and the portal reads the approval itself as well, so
     the worksheets follow this page even before that row is written.
+  ANS KEY LEVEL (v1.9.0) — the Ans Key app (polymathlc/anskey) used to keep
+  its own, self-picked level in studentProfiles/{uid}, so a pupil moved to P6
+  Science here still saw their old P4 list there. Approving or editing here
+  now also writes that row's level and subject (ansKeyProfilePatch, kept equal
+  to level-sync.js in the anskey repo, which does the same from the app's side
+  live), and once per admin visit every existing row is brought in line. Only
+  rows that exist are touched: a student who has never opened Ans Key still
+  types their name there, on chips locked to this page's level.
   Firestore: studentAccess/{uid}; the rules (tools/student-access-rules.mjs) let
   only these three admins list, approve, edit or delete.
 */
 (function () {
   'use strict';
 
-  var VERSION = 'v1.8.0';
+  var VERSION = 'v1.9.0';
   var FIREBASE_CONFIG = {
     apiKey: 'AIzaSyAUSI3Uh28IeqASEp0JhH4QPaVt-O3meBo',
     authDomain: 'mathgen--app.firebaseapp.com',
@@ -78,6 +86,10 @@
   // Polymath Online has classes for these levels only; P3 is Science only.
   var ONLINE_LEVELS = ['P3', 'P4', 'P5', 'P6'];
   var ONLINE_MEMBERS = 'onlineMembers';
+  // The Ans Key app's student roster (also the Study Buddy's and the Scan app's).
+  var ANSKEY_PROFILES = 'studentProfiles';
+  // Levels the Ans Key app has worksheets for. Keep equal to LEVELS in anskey index.html.
+  var ANSKEY_LEVELS = ['P3', 'P4', 'P5', 'P6', 'S1'];
   var WHATSAPP_NUMBER = '+65 9645 0588';
   // Markers onlineMemberPatch() returns; the page swaps in the Firestore sentinels.
   var SERVER_TIME = '__serverTimestamp__';
@@ -282,6 +294,46 @@
     return { access: [], source: 'student-access', revoked: true, revokedAt: SERVER_TIME, syncedAt: SERVER_TIME };
   }
 
+  /* ------------------ Ans Key follows this page (v1.9.0) ------------------ */
+  // The SAME rule as level-sync.js in polymathlc/anskey (a test compares the cases).
+  function ansKeySubject(level, subjects) {
+    var s = String(subjects || '').toLowerCase();
+    if (s !== 'math' && s !== 'science' && s !== 'both') return '';
+    if (level === 'P3') return s === 'math' ? '' : 'science';   // P3 is Science only at the centre
+    return s;
+  }
+  /** Every Ans Key level of an APPROVED record, with its subject: { P4: 'math', P6: 'science' }. */
+  function ansKeyLevels(record) {
+    var out = {};
+    if (statusOf(record) !== 'approved') return out;
+    ((record && record.children) || []).forEach(function (child) {
+      if (!child) return;
+      var level = String(child.level || '').trim().toUpperCase();
+      if (ANSKEY_LEVELS.indexOf(level) === -1) return;
+      var subject = ansKeySubject(level, child.subjects);
+      if (!subject) return;
+      out[level] = !out[level] || out[level] === subject ? subject : 'both';
+    });
+    return out;
+  }
+  /**
+   * What to merge into studentProfiles/{uid} so the Ans Key app shows this
+   * record's level and subject, or null when nothing needs writing.
+   * Only an approved record with a child at an Ans Key level counts. Siblings
+   * at different levels: the row's level is kept when it is one of theirs,
+   * otherwise the youngest child's. Only an EXISTING row is updated.
+   */
+  function ansKeyProfilePatch(record, existing) {
+    if (!existing) return null;
+    var levels = ansKeyLevels(record);
+    var choices = ANSKEY_LEVELS.filter(function (l) { return !!levels[l]; });
+    if (!choices.length) return null;
+    var level = levels[existing.level] ? existing.level : choices[0];
+    var subject = levels[level];
+    if (existing.level === level && existing.subject === subject) return null;
+    return { level: level, subject: subject, levelSource: 'student-access', levelSyncedAt: SERVER_TIME };
+  }
+
   /* ---------------------- classify and filter (v1.6.0) ---------------------- */
   // Subject filters: a child's own choice, or "takes Math / Science at all".
   var SUBJECT_FILTERS = [
@@ -416,6 +468,7 @@
     toDate: toDate, sgTime: sgTime, matches: matches, sortRecords: sortRecords, counts: counts, editedRecord: editedRecord,
     subjectsOfChoice: subjectsOfChoice, approvedSubjects: approvedSubjects, appSubjectLabel: appSubjectLabel, subjectsWords: subjectsWords,
     tileSubjects: tileSubjects, tileLocked: tileLocked, onlineAccessFor: onlineAccessFor, onlineMemberPatch: onlineMemberPatch,
+    ansKeyLevels: ansKeyLevels, ansKeyProfilePatch: ansKeyProfilePatch, ANSKEY_LEVELS: ANSKEY_LEVELS,
     SERVER_TIME: SERVER_TIME, DELETE_FIELD: DELETE_FIELD, ONLINE_LEVELS: ONLINE_LEVELS, APP_SUBJECTS: APP_SUBJECTS,
     childMatches: childMatches, recordMatchesClass: recordMatchesClass, matchingChildren: matchingChildren, classify: classify,
     chipCounts: chipCounts, recordLevel: recordLevel, recordSubjects: recordSubjects, sortBy: sortBy, groupRecords: groupRecords,
@@ -1054,6 +1107,27 @@
   }
   /** Bring one account's Online row in line with its record. Never fails the admin's save. */
   function syncOnline(id, record) {
+    if (!db || !id) return Promise.resolve(false);
+    // The Ans Key app's level follows too (v1.9.0). Independent: neither waits on the other's failure.
+    return Promise.all([syncOnlineMember(id, record), syncAnsKey(id, record)]).then(function (r) { return r[0] || r[1]; });
+  }
+  /** Bring the Ans Key app's roster row (studentProfiles/{uid}) in line. Never fails the admin's save. */
+  function syncAnsKey(id, record) {
+    if (!db || !id || isStaffRecord(record)) return Promise.resolve(false);   // staff are never students
+    var ref = db.collection(ANSKEY_PROFILES).doc(id);
+    return ref.get().then(function (snap) {
+      var patch = ansKeyProfilePatch(record, snap && snap.exists ? (snap.data() || {}) : null);
+      if (!patch) return false;
+      var data = {};
+      Object.keys(patch).forEach(function (k) { data[k] = firestoreValue(patch[k]); });
+      return ref.set(data, { merge: true }).then(function () { return true; });
+    }).catch(function (error) {
+      // The Ans Key app also reads this page's approval itself, live, so this is only a head start.
+      if (window.console) console.warn('Ans Key level not updated for ' + id, error && (error.code || error.message));
+      return false;
+    });
+  }
+  function syncOnlineMember(id, record) {
     if (!db || !id) return Promise.resolve(false);
     var ref = db.collection(ONLINE_MEMBERS).doc(id);
     return ref.get().then(function (snap) {
