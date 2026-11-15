@@ -127,7 +127,134 @@
     return Math.min(Math.max(stored, releaseFloor(course)), courseIds(course).length - 1);
   }
   function releasedCount(course) { return Math.max(0, releasedThrough(course) + 1); }
-  function lockedCount(course) { return Math.max(0, courseIds(course).length - releasedCount(course)); }
+  // The worksheets still to come for students: not released yet, and not
+  // archived (an archived worksheet will not "appear later in the term").
+  function lockedCount(course) {
+    var ids = courseIds(course), rel = releasedThrough(course), n = 0;
+    for (var i = rel + 1; i < ids.length; i++) if (!isArchived(course, ids[i])) n += 1;
+    return n;
+  }
+
+  /* ---- 🗄 Archived for students (v1.13.0) ----
+     Zhi Kai, 15 Nov 2026: "allow me to archive items on the worksheet
+     timeline as sometimes I don't want students to see them anymore but am
+     afraid I need those entries at a later date."
+
+     Two kinds of item can be archived, per class:
+       a whole worksheet          course.archivedWorksheets: [worksheetId]
+       one class day of one       course.archivedDays: ['worksheetId|YYYY-MM-DD']
+         worksheet (that day's lesson videos and that day's answer key PDF)
+
+     Nothing is deleted or moved. The worksheet keeps its place in the class
+     list, so the class position (Current / Next in Ans Key), the release
+     arithmetic and the worksheet numbers are exactly as before; archiving
+     only takes the item out of what STUDENTS are shown, by the same rules
+     that decide what is released: the timeline, the Worksheets / Answer keys
+     / Videos tabs, Up next, "This lesson's answer key", the lesson video page
+     (watch-core.js `releasedTo` / `lessonsOf`) and the Ans Key app's student
+     list (anskey `onlineReleased`). Restoring takes the id back out of the
+     list and everything shows again as it was. */
+  var ARCHIVE_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
+  var ARCHIVE_DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+  function archivedWorksheetIds(course) {
+    var list = course && Array.isArray(course.archivedWorksheets) ? course.archivedWorksheets : [];
+    return list.filter(function (id) { return typeof id === 'string' && ARCHIVE_ID_RE.test(id); });
+  }
+  function isArchived(course, id) {
+    return !!id && archivedWorksheetIds(course).indexOf(String(id)) >= 0;
+  }
+  function dayArchiveKey(id, key) {
+    if (!ARCHIVE_ID_RE.test(String(id || '')) || !ARCHIVE_DAY_RE.test(String(key || ''))) return '';
+    return String(id) + '|' + String(key);
+  }
+  // Every archived class day of a class: [{ id, key }], in stored order.
+  function archivedDayList(course) {
+    var list = course && Array.isArray(course.archivedDays) ? course.archivedDays : [];
+    var out = [], seen = {};
+    list.forEach(function (entry) {
+      if (typeof entry !== 'string' || seen[entry]) return;
+      var at = entry.lastIndexOf('|');
+      if (at <= 0) return;
+      var id = entry.slice(0, at), key = entry.slice(at + 1);
+      if (!dayArchiveKey(id, key)) return;
+      seen[entry] = true;
+      out.push({ id: id, key: key });
+    });
+    return out;
+  }
+  // The archived class days of one worksheet in one class: ['YYYY-MM-DD'].
+  function archivedDaysOf(course, id) {
+    return archivedDayList(course).filter(function (d) { return d.id === id; }).map(function (d) { return d.key; });
+  }
+  function isDayArchived(course, id, key) {
+    var k = dayArchiveKey(id, key);
+    if (!k) return false;
+    return archivedDayList(course).some(function (d) { return d.id === id && d.key === key; });
+  }
+  // How many items are archived in a class (worksheets + class days).
+  function archivedCount(course) {
+    return archivedWorksheetIds(course).length + archivedDayList(course).length;
+  }
+  // The field to write for an Archive or Restore tap: { field, value }, or
+  // null when there is nothing to change. Pure, so the page writes the whole
+  // new list in one transaction with the live document.
+  //   kind 'worksheet' → archivedWorksheets, kind 'day' → archivedDays.
+  function archiveUpdate(course, kind, id, key, archive) {
+    if (kind === 'worksheet') {
+      if (!ARCHIVE_ID_RE.test(String(id || ''))) return null;
+      var ids = archivedWorksheetIds(course);
+      var has = ids.indexOf(id) >= 0;
+      if (archive === has) return null;
+      // Only a worksheet that is in this class can be archived in it.
+      if (archive && courseIds(course).indexOf(id) < 0) return null;
+      return { field: 'archivedWorksheets', value: archive ? ids.concat([id]) : ids.filter(function (x) { return x !== id; }) };
+    }
+    if (kind === 'day') {
+      var k = dayArchiveKey(id, key);
+      if (!k) return null;
+      var days = archivedDayList(course).map(function (d) { return d.id + '|' + d.key; });
+      var hasDay = days.indexOf(k) >= 0;
+      if (archive === hasDay) return null;
+      if (archive && courseIds(course).indexOf(id) < 0) return null;
+      return { field: 'archivedDays', value: archive ? days.concat([k]) : days.filter(function (x) { return x !== k; }) };
+    }
+    return null;
+  }
+  // Recorded lessons a student may see on one worksheet of one class: the
+  // ones not taught on an archived class day.
+  function visibleRecordings(course, id, recordings) {
+    var hidden = archivedDaysOf(course, id);
+    var list = Array.isArray(recordings) ? recordings : [];
+    if (!hidden.length) return list;
+    return list.filter(function (r) { return !(r && hidden.indexOf(lessonDayKey(r.at)) >= 0); });
+  }
+  // A worksheet's answer key PDFs a student may see in one class, newest first.
+  function visibleAnswerKeys(course, id, doc, now) {
+    var hidden = archivedDaysOf(course, id);
+    return answerKeysOf(doc, now).filter(function (k) { return hidden.indexOf(k.key) < 0; });
+  }
+  // What the admin's Archived list shows for a class: the archived
+  // worksheets in teaching order, then the archived class days, newest day
+  // first. A worksheet that has left the class list is still listed, so its
+  // archive entry can be cleared.
+  function archivedItems(course, docs, now) {
+    docs = docs || {};
+    var ids = courseIds(course);
+    var nameOf = function (id) {
+      var d = docs[id];
+      var seq = ids.indexOf(id);
+      return d && d.name ? String(d.name) : seq >= 0 ? 'Worksheet ' + (seq + 1) : 'A worksheet no longer in this class';
+    };
+    var worksheets = archivedWorksheetIds(course).map(function (id) {
+      var seq = ids.indexOf(id);
+      return { kind: 'worksheet', id: id, seq: seq, name: nameOf(id), inClass: seq >= 0, released: seq >= 0 && seq <= releasedThrough(course) };
+    }).sort(function (p, q) { return (p.seq < 0 ? 1e9 : p.seq) - (q.seq < 0 ? 1e9 : q.seq); });
+    var days = archivedDayList(course).map(function (d) {
+      var seq = ids.indexOf(d.id);
+      return { kind: 'day', id: d.id, key: d.key, seq: seq, name: nameOf(d.id), label: formatDay(dayNoon(d.key), now), inClass: seq >= 0, worksheetArchived: isArchived(course, d.id) };
+    }).sort(function (p, q) { return p.key < q.key ? 1 : p.key > q.key ? -1 : (p.seq - q.seq); });
+    return { worksheets: worksheets, days: days, count: worksheets.length + days.length };
+  }
   function worksheetState(course, index) {
     var cur = currentIndex(course), rel = releasedThrough(course);
     if (index === cur) return 'current';
@@ -136,9 +263,14 @@
     return 'locked';
   }
   // What a student is shown: released worksheets, in teaching order.
+  // 🗄 v1.13.0: an archived worksheet is never shown, released or not. It
+  // keeps its number (seq) and the class keeps its position.
   function releasedWorksheets(course) {
     var ids = courseIds(course), rel = releasedThrough(course), out = [];
-    for (var i = 0; i <= rel && i < ids.length; i++) out.push({ id: ids[i], seq: i, state: worksheetState(course, i) });
+    for (var i = 0; i <= rel && i < ids.length; i++) {
+      if (isArchived(course, ids[i])) continue;
+      out.push({ id: ids[i], seq: i, state: worksheetState(course, i) });
+    }
     return out;
   }
   // The next two after where the class is — released only, because a
@@ -147,7 +279,7 @@
     var ids = courseIds(course), cur = currentIndex(course), rel = releasedThrough(course), out = [];
     var n = count || NEXT_COUNT;
     for (var i = cur + 1; i <= cur + n && i < ids.length; i++) {
-      if (i <= rel) out.push({ id: ids[i], seq: i });
+      if (i <= rel && !isArchived(course, ids[i])) out.push({ id: ids[i], seq: i });
     }
     return out;
   }
@@ -554,10 +686,16 @@
 
   // The timeline of one class: every released worksheet in teaching order,
   // with its state, its last-edited time and its recorded lessons.
+  // 🗄 v1.13.0: archived worksheets are left out (releasedWorksheets) and so
+  // are the lesson videos and answer keys of archived class days, so every
+  // tab built from these items (Worksheets, Answer keys, Videos, Timeline)
+  // hides them alike.
   function timelineItems(course, docs, recordings) {
     docs = docs || {}; recordings = recordings || {};
     return releasedWorksheets(course).map(function (w) {
       var d = docs[w.id] || null;
+      var recs = visibleRecordings(course, w.id, recordings[w.id] || []);
+      var keys = visibleAnswerKeys(course, w.id, d);
       return {
         id: w.id, seq: w.seq, state: w.state,
         name: d && d.name ? String(d.name) : 'Worksheet ' + (w.seq + 1),
@@ -565,15 +703,17 @@
         // Written on in Ans Key yet? Before that, the date is just the upload.
         marked: !!(d && (d.annotationsPath || parseAnnotations(d.annotations).length)),
         pages: d && d.pageCount ? Number(d.pageCount) : 0,
-        recordings: recordings[w.id] || [],
+        recordings: recs,
         // 🎬 The worksheet's video page (Ans Key's, the QR code's), and the
         // recorded lessons by the day of the class.
         playlist: videoPlaylistOf(d),
-        days: recordingDays(recordings[w.id] || []),
+        days: recordingDays(recs),
         // 📄 The answer key PDF of every class day, newest first, and the
         // days themselves (videos and key side by side).
-        answerKeys: answerKeysOf(d),
-        classDays: classDays(recordingDays(recordings[w.id] || []), answerKeysOf(d)),
+        answerKeys: keys,
+        classDays: classDays(recordingDays(recs), keys),
+        // How many class days of this worksheet are archived in this class.
+        archivedDays: archivedDaysOf(course, w.id).length,
         loading: !d
       };
     });
@@ -1093,6 +1233,9 @@
     memberFromStudentAccess: memberFromStudentAccess, studentAccessLevels: studentAccessLevels,
     moveItem: moveItem, remapProgress: remapProgress,
     toMillis: toMillis, editedMillis: editedMillis, formatDay: formatDay, formatClock: formatClock, parseAnnotations: parseAnnotations,
+    archivedWorksheetIds: archivedWorksheetIds, isArchived: isArchived, dayArchiveKey: dayArchiveKey, archivedDayList: archivedDayList,
+    archivedDaysOf: archivedDaysOf, isDayArchived: isDayArchived, archivedCount: archivedCount, archiveUpdate: archiveUpdate,
+    visibleRecordings: visibleRecordings, visibleAnswerKeys: visibleAnswerKeys, archivedItems: archivedItems,
     STUDENT_TABS: STUDENT_TABS, studentTab: studentTab, worksheetRows: worksheetRows, answerKeyRows: answerKeyRows, videoRows: videoRows,
     lessonRecordings: lessonRecordings, formatDuration: formatDuration, anskeyLink: anskeyLink, timelineItems: timelineItems,
     SENDER_EMAIL: SENDER_EMAIL, SENDER_NAME: SENDER_NAME, portalMail: portalMail,

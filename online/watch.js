@@ -10,7 +10,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = 'v1.0.0';
+  var APP_VERSION = 'v1.1.0';
   var W = window.PolymathWatchCore;
   var Core = window.PolymathOnlineCore;
 
@@ -161,7 +161,9 @@
     if (!snap.exists) { message('🗂', 'Worksheet not found', 'It may have been removed. Go back to Polymath Online and try another one.'); return; }
     state.doc = snap.data() || {};
     var annotations = await readAnnotations(state.doc);
-    state.lessons = W.lessonsOf(annotations);
+    // 🗄 v1.13.0: a student never gets the lessons of a class day the admin
+    // archived in the class this is watched from. Admins see every lesson.
+    state.lessons = W.lessonsOf(annotations, !admin && state.found ? W.archivedDaysIn(state.found.course, query.ws) : []);
     renderHead();
     if (!state.lessons.length) {
       message('🎬', 'No lesson recorded yet', 'Lessons are recorded during class. Come back after the lesson to watch it here.');
