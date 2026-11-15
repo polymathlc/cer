@@ -630,3 +630,186 @@ test('what a pick brings, in words', () => {
   assert.equal(Core.libraryBringLabel(info, { videos: true }), '3 videos');
   assert.equal(Core.libraryBringLabel({ answers: false, keys: 0, videos: 0 }, { answers: true, videos: true }), 'the worksheet only');
 });
+
+/* ---------------- 🎬 The lesson video player (watch-core.js, portal v1.11.0) ---------------- */
+const W = require('../online/watch-core.js');
+const MEDIA = (name) => 'https://firebasestorage.googleapis.com/v0/b/mathgen--app.firebasestorage.app/o/' + encodeURIComponent('pdf-annotator/' + name) + '?alt=media&token=t';
+const lessonAnn = (id, ts, extra = {}, rec = {}) => ({ id, type: 'video', page: 1, url: MEDIA('lesson-' + id + '.webm'), ts, lessonRecording: { version: 1, duration: 600000, manifestUrl: MEDIA('lesson-' + id + '.json'), ...rec }, ...extra });
+
+test('watch: every lesson on the worksheet, oldest first, with a name for each class day and part', () => {
+  const mon2 = Date.UTC(2026, 10, 2, 11, 30), mon9 = Date.UTC(2026, 10, 9, 11, 30);
+  const list = W.lessonsOf(JSON.stringify([
+    { id: 'pen1', type: 'pen', page: 1, points: [] },
+    lessonAnn('b', mon9, {}, { video: true, screen: true }),
+    lessonAnn('a2', mon2 + 3600000, {}, { video: true, title: 'Q5' }),
+    lessonAnn('a1', mon2),
+    lessonAnn('old', 0),
+    lessonAnn('evil', mon2, { url: 'https://evil.example/x.webm' }),
+    lessonAnn('a1', mon2 + 1)
+  ]));
+  assert.deepEqual(list.map((l) => l.id), ['a1', 'a2', 'b', 'old'], 'chronological; undated last; foreign media and repeats left out');
+  assert.deepEqual(list.map((l) => l.kind), ['voice', 'camera', 'screen', 'voice']);
+  assert.equal(list[0].dayParts, 2);
+  assert.match(list[0].name, /part 1 of 2$/);
+  assert.match(list[1].name, /^Q5 · .* · part 2 of 2$/);
+  assert.equal(list[2].dayParts, 1);
+  assert.equal(list[3].name.startsWith('Lesson 4'), true);
+  assert.equal(W.totalSeconds(list), 2400);
+  assert.equal(W.startIndex(list, {}), 0);
+  assert.equal(W.startIndex(list, { day: list[2].day }), 2, 'a class day starts at its first lesson');
+  assert.equal(W.startIndex(list, { rec: 'a2', day: list[2].day }), 1, 'a named lesson wins');
+  assert.equal(W.startIndex([], {}), -1);
+  assert.equal(W.nextIndex(list, 3), -1);
+  assert.equal(W.prevIndex(list, 0), -1);
+});
+
+test('watch: only our own bucket\'s pdf-annotator files are ever played or read', () => {
+  assert.equal(W.storageUrlOk(MEDIA('lesson-x.webm')), true);
+  assert.equal(W.storageUrlOk('https://firebasestorage.googleapis.com/v0/b/mathgen--app.appspot.com/o/pdf-annotator%2Flesson-x.webm'), true);
+  assert.equal(W.storageUrlOk('https://firebasestorage.googleapis.com/v0/b/other-app/o/pdf-annotator%2Fx'), false);
+  assert.equal(W.storageUrlOk('https://firebasestorage.googleapis.com/v0/b/mathgen--app.appspot.com/o/secret%2Fx'), false);
+  assert.equal(W.storageUrlOk('https://firebasestorage.googleapis.com/v0/b/mathgen--app.appspot.com/o/pdf-annotator%2F..%2Fx'), false);
+  assert.equal(W.storageUrlOk('http://firebasestorage.googleapis.com/v0/b/mathgen--app.appspot.com/o/pdf-annotator%2Fx'), false);
+  assert.equal(W.storageUrlOk('javascript:alert(1)'), false);
+  const l = W.lessonFrom(lessonAnn('z', 1, {}, { manifestUrl: 'https://evil.example/m.json', captionsUrl: MEDIA('lesson-z-captions.json') }));
+  assert.equal(l.manifestUrl, '', 'a foreign manifest is not read');
+  assert.equal(l.captionsUrl, MEDIA('lesson-z-captions.json'));
+});
+
+test('watch: question marks come from the lesson steps, one per change of question', () => {
+  const steps = [
+    { t: 0, label: 'Start', page: 1 },
+    { t: 1000, label: 'Q1', page: 1 },
+    { t: 5000, label: 'Q1', page: 1 },
+    { t: 60000, label: 'Q2', page: 1 },
+    { t: 61000, label: 'Q3', page: 1 },      // flicked past…
+    { t: 62000, label: 'Q2', page: 1 },      // …and straight back
+    { t: 120000, label: 'Page 2', page: 2 },
+    { t: 180000, label: 'Question 4', page: 2 },
+    { t: 9e9, label: 'Q9' },
+    { t: -1, label: 'Q8' },
+    null, { t: 'x', label: 'Q7' }
+  ];
+  const q = W.questionMarks(steps, 600000);
+  assert.deepEqual(q.map((m) => [m.t, m.label, m.page]), [[1000, 'Q1', 1], [60000, 'Q2', 1], [180000, 'Q4', 2]]);
+  assert.equal(W.questionNumber('Q12 part b'), 12);
+  assert.equal(W.questionNumber('Page 2'), 0);
+  assert.deepEqual(W.questionMarks(null, 1), []);
+});
+
+test('watch: page marks follow the recorded view, and pages scrolled past are not marks', () => {
+  const timeline = {
+    duration: 300000,
+    initial: { annotations: [], view: { page: 1, x: 0, y: 0, zoom: 1 } },
+    events: [
+      { t: 1000, type: 'view', view: { page: 1, x: 0, y: 200, zoom: 1 } },
+      { t: 90000, type: 'view', view: { page: 2, x: 0, y: 0, zoom: 1 } },
+      { t: 91000, type: 'view', view: { page: 3, x: 0, y: 0, zoom: 1 } },   // scrolled past
+      { t: 92000, type: 'view', view: { page: 4, x: 0, y: 0, zoom: 1 } },
+      { t: 200000, type: 'view', view: { page: 2, x: 0, y: 0, zoom: 1 } },
+      { t: 201000, type: 'upsert', annotation: { id: 'a', type: 'pen', page: 2, points: [], color: '#000', width: 2 } }
+    ]
+  };
+  const pages = W.pageMarks(timeline, 300000);
+  assert.deepEqual(pages.map((p) => [p.t, p.page, p.until]), [[0, 1, 92000], [92000, 4, 200000], [200000, 2, 300000]]);
+  assert.equal(W.pageAt(pages, 150000), 4);
+  assert.equal(W.pageAt(pages, 0), 1);
+  // An old lesson with no view at all: the steps know their pages.
+  const fromSteps = W.pageMarks({ duration: 100000, events: [] }, 100000, [{ t: 0, label: 'Q1', page: 1 }, { t: 50000, label: 'Q4', page: 3 }]);
+  assert.deepEqual(fromSteps.map((p) => [p.t, p.page]), [[0, 1], [50000, 3]]);
+  assert.deepEqual(W.pageMarks(null, 0), []);
+});
+
+test('watch: the chapters list every question with its page, and pages turned to before any question', () => {
+  const manifest = {
+    timeline: {
+      duration: 400000,
+      initial: { annotations: [], view: { page: 1, x: 0, y: 0, zoom: 1 } },
+      events: [{ t: 100000, type: 'view', view: { page: 2, x: 0, y: 0, zoom: 1 } }, { t: 300000, type: 'view', view: { page: 3, x: 0, y: 0, zoom: 1 } }]
+    },
+    steps: [{ t: 0, label: 'Start', page: 1 }, { t: 2000, label: 'Q1', page: 1 }, { t: 103000, label: 'Q2', page: 2 }, { t: 150000, label: 'Q3', page: 2 }]
+  };
+  const m = W.marksOf(manifest, 400000);
+  assert.deepEqual(m.chapters.map((c) => c.label + '@' + c.t), ['Q1@2000', 'Q2@103000', 'Q3@150000', 'Page 3@300000']);
+  assert.equal(m.chapters.find((c) => c.label === 'Q3').page, 2);
+  assert.equal(W.nowText(m, 160000), 'Q3 · page 2');
+  assert.equal(W.nowText(m, 310000), 'page 3', 'a new page with no question on it yet');
+  assert.equal(W.nowText(m, 500), 'page 1');
+  assert.equal(W.chapterAt(m.chapters, 104000), 1);
+  assert.equal(W.chapterAt(m.chapters, 0), -1);
+  assert.deepEqual(plainList(W.marksOf(null, 0)), plainList(W.emptyMarks()));
+  assert.equal(W.percentAt(200000, 400000), 50);
+  assert.equal(W.percentAt(5, 0), 0);
+  assert.deepEqual(W.labelled([{ t: 0 }, { t: 1000 }, { t: 200000 }], 400000, 600, 30), [true, false, true], 'labels that would overlap keep only their tick');
+});
+
+test('watch: the writing replays to any moment, forwards and back, skipping what it cannot use', () => {
+  const r = W.createReplay({
+    duration: 10000,
+    initial: { annotations: [{ id: 'base', type: 'pen', page: 1, points: [{ x: 1, y: 1 }], color: '#000', width: 2 }], view: { page: 1, x: 0, y: 50, zoom: 1 } },
+    events: [
+      { t: 1000, type: 'upsert', annotation: { id: 's1', type: 'pen', page: 1, points: [{ x: 0, y: 0 }], color: '#f00', width: 2 } },
+      { t: 2000, type: 'append', id: 's1', from: 1, points: [{ x: 5, y: 5 }, { x: 6, y: 6 }] },
+      { t: 2500, type: 'append', id: 'missing', from: 0, points: [{ x: 1, y: 1 }] },
+      { t: 3000, type: 'view', view: { page: 2, x: 0, y: 300, zoom: 1 } },
+      { t: 4000, type: 'remove', id: 'base' },
+      { t: 5000, type: 'upsert', annotation: { id: 'v', type: 'video', page: 1 } },
+      { t: 6000, type: 'bogus' }
+    ]
+  });
+  assert.equal(r.stateAt(500).annotations.length, 1);
+  assert.equal(r.stateAt(2100).annotations.find((a) => a.id === 's1').points.length, 3);
+  assert.equal(r.stateAt(3500).view.page, 2);
+  assert.deepEqual(r.stateAt(9000).annotations.map((a) => a.id), ['s1'], 'removed and undrawable ones are gone');
+  const back = r.stateAt(1500);
+  assert.deepEqual(back.annotations.map((a) => a.id), ['base', 's1'], 'going back starts again');
+  assert.equal(back.annotations.find((a) => a.id === 's1').points.length, 1);
+  assert.equal(back.view.page, 1);
+  assert.deepEqual(W.onPage(r.stateAt(9000).annotations, 2), []);
+  assert.equal(W.safeColor('#1A73E8'), '#1A73E8');
+  assert.equal(W.safeColor('url(javascript:x)'), '#1A1A1A');
+  assert.equal(W.createReplay(null).stateAt(5).view.page, 1, 'nothing to replay is still a page');
+});
+
+test('watch: the link, the query and the remembered spot', () => {
+  assert.equal(Core.watchLink('ws1', { day: '2026-11-09', course: 'k1' }), 'watch.html?ws=ws1&day=2026-11-09&c=k1');
+  assert.equal(Core.watchLink('ws1', { day: 'nope', course: 'x"y' }), 'watch.html?ws=ws1');
+  assert.equal(Core.watchLink('bad id'), '');
+  for (const [id, o] of [['ws1', {}], ['ws1', { day: '2026-11-09' }], ['w-2', { rec: 'r1', t: 75.6, course: 'k9' }]]) {
+    assert.equal(Core.watchLink(id, o), W.watchLink(id, o), 'the portal and the player build the same link');
+  }
+  assert.deepEqual(plainList(W.readQuery('?ws=ws1&day=2026-11-09&rec=r1&t=90&c=k1')), { ws: 'ws1', day: '2026-11-09', rec: 'r1', t: 90, course: 'k1' });
+  assert.deepEqual(plainList(W.readQuery('?ws=<x>&day=9&rec=a b&t=-4')), { ws: '', day: '', rec: '', t: 0, course: '' });
+  const lessons = W.lessonsOf([lessonAnn('a', 1e12), lessonAnn('b', 1e12 + 5)]);
+  assert.deepEqual(plainList(W.readSpot(JSON.stringify({ rec: 'b', t: 120 }), lessons)), { rec: 'b', index: 1, t: 120 });
+  assert.equal(W.readSpot(JSON.stringify({ rec: 'b', t: 595 }), lessons).t, 0, 'nearly finished: from the top');
+  assert.equal(W.readSpot('{bad', lessons), null);
+  assert.equal(W.readSpot(JSON.stringify({ rec: 'gone', t: 3 }), lessons), null);
+  assert.equal(W.spotKey('ws1'), 'polymath.watch.ws1');
+});
+
+test('watch: a worksheet plays for a class it is released to, and nowhere else', () => {
+  const k = course({ id: 'k5', worksheetIds: ['a', 'b', 'c'], releasedThrough: 1 });
+  assert.equal(W.releasedTo([k], 'b').length, 1);
+  assert.equal(W.releasedTo([k], 'c').length, 0, 'not released yet');
+  assert.equal(W.releasedTo([k], 'zz').length, 0);
+  assert.equal(W.placeText(W.releasedTo([k], 'b')[0]), 'Worksheet 2 of 3');
+  const segs = W.strip([{ durationMs: 1000 }, { durationMs: 3000 }], [0, 0]);
+  assert.deepEqual(segs.map((s) => s.width), [25, 75]);
+  assert.match(W.captionsVtt({ cues: [{ t: 'Hello', s: 0, e: 1200 }, { t: 'x', s: 5, e: 2 }] }), /^WEBVTT\n\n00:00:00\.000 --> 00:00:01\.200\nHello/);
+  assert.equal(W.formatTime(3725), '1:02:05');
+  assert.equal(W.formatTime(65), '1:05');
+});
+
+test('watch: the timeline never opens Ans Key for a video, and the player page is wired', () => {
+  const portal = fs.readFileSync(new URL('../online/portal.js', import.meta.url), 'utf8');
+  assert.equal(/openAnskey\([^)]*'play'/.test(portal), false, 'no lesson replays in the Ans Key app');
+  assert.match(portal, /Core\.watchLink\(/);
+  const html = fs.readFileSync(new URL('../online/watch.html', import.meta.url), 'utf8');
+  assert.match(html, /<meta name="robots" content="noindex">/);
+  for (const src of ['portal-core.js', 'watch-core.js', 'watch.js']) assert.match(html, new RegExp('<script src="' + src.replace('.', '\\.') + '\\?v='));
+  const js = fs.readFileSync(new URL('../online/watch.js', import.meta.url), 'utf8');
+  for (const id of [...js.matchAll(/\$\('([A-Za-z]+)'\)/g)].map((m) => m[1]).filter((id) => !js.includes('id="' + id + '"'))) {
+    assert.match(html, new RegExp('id="' + id + '"'), 'watch.html has #' + id);
+  }
+});

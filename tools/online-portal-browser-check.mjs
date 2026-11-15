@@ -189,19 +189,13 @@ let studentDb = null;
   check('student: each of the next two has Download and Print', (await page.locator('.next-tile [data-action="download"]').count()) === 2 && (await page.locator('.next-tile [data-action="print"]').count()) === 2);
   check('student: two locked worksheets are counted, not named', /2 more worksheets/.test(await page.textContent('.locked-row')) && !(await page.textContent('body')).includes('Worksheet 9'));
 
-  // ▶ Video: the two recordings, newest first; picking one replays it in Ans Key, in the portal.
-  await page.click('.tl-item.is-current [data-action="video"]');
-  await page.waitForSelector('.rec-row');
-  const recTitles = await page.$$eval('.rec-row b', (els) => els.map((e) => e.textContent));
-  check('student: the video list shows both lessons, newest first, with their length', recTitles.length === 2 && /^Q5/.test(recTitles[0]) && /12:04/.test(await page.textContent('.rec-row:first-child')) && /41:00/.test(await page.textContent('.rec-row:last-child')));
-  await page.screenshot({ path: path.join(shots, '04b-student-videos.png') });
-  await page.click('.rec-row:first-child');
-  await page.waitForSelector('.modal-wide iframe.anskey-frame');
-  const playSrc = await page.getAttribute('.modal-wide iframe.anskey-frame', 'src');
-  check('student: the video plays in Ans Key inside the portal, writing and all', playSrc === '../anskey/?ws=' + encodeURIComponent(ws3Id) + '&do=play&rec=rec-new');
-  await page.screenshot({ path: path.join(shots, '04c-student-video-player.png') });
-  await page.click('.modal-wide [data-modal-close]');
-  check('student: the player closes', (await page.locator('.modal-back').count()) === 0);
+  // ▶ Video: a page of its own (watch.html), never the Ans Key app.
+  const videoHref = await page.getAttribute('.tl-item.is-current [data-action="video"]', 'href');
+  check('student: ▶ Videos is a link to the lesson video page, never the Ans Key app',
+    /^watch\.html\?ws=[A-Za-z0-9_-]+&c=[A-Za-z0-9_-]+$/.test(videoHref) && videoHref.includes('ws=' + encodeURIComponent(ws3Id)) &&
+    (await page.locator('.tl-item.is-current [data-action="video"]').evaluate((el) => el.tagName)) === 'A', videoHref);
+  await page.click('.tl-item.is-current [data-action="video"]', { modifiers: [], trial: true });
+  check('student: no Ans Key window opens over the portal for a video', (await page.locator('iframe.anskey-frame').count()) === 0);
   // The teacher records again: the timeline follows without a reload.
   await page.evaluate(([p, at]) => {
     const d = Object.assign({}, window.__fake.db[p]);
@@ -224,42 +218,20 @@ let studentDb = null;
     /Mon 12 Oct/.test(dayDates[0]) && /Latest/.test(dayDates[0]) && /2 videos/.test(dayChips[0].text) &&
     /Sun 11 Oct/.test(dayDates[1]) && /Video/.test(dayChips[1].text) && /41:00/.test(dayChips[1].text), JSON.stringify([dayChips, dayDates]));
   check('student: a day with no key filed yet says it comes after the lesson', (await page.locator('.tl-item.is-current .tl-cday .tl-cday-none').count()) === 2);
-  // Before Ans Key has filed the video page, the old chooser still plays them.
-  await page.click('.tl-item.is-current .tl-day >> nth=-1');
-  await page.waitForSelector('.modal-wide iframe.anskey-frame');
-  check('student: with no video page yet, a one-lesson day replays that lesson in Ans Key',
-    (await page.getAttribute('.modal-wide iframe.anskey-frame', 'src')) === '../anskey/?ws=' + encodeURIComponent(ws3Id) + '&do=play&rec=rec-old');
-  await page.keyboard.press('Escape');
-  // A page filed BEFORE the newest lesson is not used: nobody misses a lesson.
+  // Each class day's button opens the same player, starting at that day.
+  const dayHrefs = await page.$$eval('.tl-item.is-current .tl-day', (els) => els.map((e) => e.getAttribute('href')));
+  check('student: a lesson day opens the video page at that day',
+    dayHrefs.length === 2 && dayHrefs[0].includes('&day=' + wantDays[0]) && dayHrefs[1].includes('&day=' + wantDays[1]) && dayHrefs.every((u) => u.startsWith('watch.html?ws=')), JSON.stringify(dayHrefs));
+  // Ans Key's filed video page (the printed QR code's) no longer decides what ▶ opens.
   const VP_HASH = 'vp1-812-9a3b4c5d', VP_TOKEN = '7e1d0a3c-1b2c-4d5e-8f90-000000000001';
-  await page.evaluate(([p, at, hash, token]) => {
-    window.__fake.seed(p, Object.assign({}, window.__fake.db[p], { videoPlaylist: { hash, token, n: 2, at: at } }));
-  }, [ws3, edited, VP_HASH, VP_TOKEN]);
-  await page.waitForTimeout(300);
-  await page.click('.tl-item.is-current [data-action="video"]');
-  await page.waitForSelector('.rec-row');
-  check('student: a video page older than the newest lesson is not used', (await page.locator('.rec-row').count()) === 3);
-  await page.keyboard.press('Escape');
-  // Ans Key files the page after the lesson: ▶ opens the SAME page as the printed QR code.
   await page.evaluate(([p, at, hash, token]) => {
     window.__fake.seed(p, Object.assign({}, window.__fake.db[p], { videoPlaylist: { hash, token, n: 4, at: at + 3700000 } }));
   }, [ws3, edited, VP_HASH, VP_TOKEN]);
-  await page.waitForFunction(() => /4 videos/.test((document.querySelector('.tl-item.is-current [data-action="video"]') || {}).textContent || ''));
+  await page.waitForFunction(() => /videos updated/.test((document.querySelector('.tl-item.is-current .tl-sub') || {}).textContent || ''));
   await page.locator('.tl-item.is-current').screenshot({ path: path.join(shots, '04f-student-lesson-days.png') });
   check('student: the worksheet says when its videos were last updated', /videos updated Mon 12 Oct/.test(await page.textContent('.tl-item.is-current .tl-sub')));
-  await page.click('.tl-item.is-current [data-action="video"]');
-  await page.waitForSelector('.modal-wide iframe.video-page-frame');
-  const pageSrc = await page.getAttribute('.modal-wide iframe.video-page-frame', 'src');
-  const wantSrc = await page.evaluate(([hash, token]) => '../anskey/videos.html?' + window.PolymathOnlineCore.videoPackCode(hash, token), [VP_HASH, VP_TOKEN]);
-  check('student: ▶ Videos opens Ans Key\'s video page, the same page as the QR code', pageSrc === wantSrc && /^\.\.\/anskey\/videos\.html\?[A-Za-z0-9_-]{31}$/.test(pageSrc), pageSrc);
-  await page.screenshot({ path: path.join(shots, '04e-student-video-page.png') });
-  await page.keyboard.press('Escape');
-  await page.click('.tl-item.is-current .tl-day >> nth=0');
-  await page.waitForSelector('.modal-wide iframe.video-page-frame');
-  check('student: a lesson day opens the video page at that day',
-    (await page.getAttribute('.modal-wide iframe.video-page-frame', 'src')) === wantSrc + '#day-' + wantDays[0] &&
-    /Mon 12 Oct lesson/.test(await page.textContent('.modal-wide h2')));
-  await page.keyboard.press('Escape');
+  check('student: ▶ still counts the lessons recorded and opens the player', /3 videos/.test(await page.textContent('.tl-item.is-current [data-action="video"]')) &&
+    (await page.getAttribute('.tl-item.is-current [data-action="video"]', 'href')).startsWith('watch.html?ws='));
 
   // 📄 Ans Key files the answer key PDF after each lesson, under the day of the class.
   const keyUrl = (day, token) => 'https://firebasestorage.googleapis.com/v0/b/mathgen--app.firebasestorage.app/o/' +
