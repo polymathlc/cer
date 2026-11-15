@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = 'v1.11.0';
+  var APP_VERSION = 'v1.12.0';
   var Core = window.PolymathOnlineCore;
 
   // Who runs the portal. Anyone else signs in as a student or a parent.
@@ -57,6 +57,7 @@
     docsLoading: {},
     recordings: {},            // worksheet id → its recorded lessons, newest first
     adminTab: 'overview',
+    studentTab: Core.studentTab(location.hash),   // 🗂 v1.12.0: worksheets | answers | videos | timeline
     courseId: null,            // the class open in the admin's class view
     preview: null,             // { level, subjects } while an admin previews the student view
     uploads: [],               // [{ name, pct, state }]
@@ -644,10 +645,166 @@
       html += '<div class="card section empty"><div class="big">📚</div><h3>No classes yet</h3><p>Your ' + h(levelWords) + ' worksheets will appear here as soon as the centre sets up your class.</p></div>';
       return html + '</div>';
     }
-    html += '<div class="section">';
-    courses.forEach(function (course) { html += classCardHtml(course); });
+    // 🗂 v1.12.0: three plain tabs (and the full timeline as a fourth), so a
+    // child finds the worksheets first and nothing else gets in the way.
+    html += studentTabsHtml(courses);
+    html += '<div class="section st-panel" role="tabpanel" id="studentPanel" aria-labelledby="st-tab-' + state.studentTab + '">';
+    if (state.studentTab === 'timeline') courses.forEach(function (course) { html += classCardHtml(course); });
+    else courses.forEach(function (course) {
+      html += state.studentTab === 'answers' ? answersTabHtml(course, courses.length > 1)
+        : state.studentTab === 'videos' ? videosTabHtml(course, courses.length > 1)
+        : worksheetsTabHtml(course, courses.length > 1);
+    });
     html += '</div></div>';
     return html;
+  }
+
+  /* ---- 🗂 The student tabs (v1.12.0) ----
+     Big, plain buttons that fit a phone: Worksheets (where a student lands),
+     Answer keys, Videos, and the full Timeline. The choice lives in the
+     address (#answers), so a reload or a shared link keeps it. */
+  function studentTabsHtml(courses) {
+    var counts = { worksheets: 0, answers: 0, videos: 0, timeline: '' };
+    courses.forEach(function (course) {
+      var items = Core.timelineItems(course, state.docs, state.recordings);
+      counts.worksheets += items.length;
+      counts.answers += Core.answerKeyRows(course, items).filter(function (row) { return row.latest; }).length;
+      counts.videos += Core.videoRows(course, items).length;
+    });
+    return '<nav class="st-tabs" role="tablist" aria-label="Choose what to see">' +
+      Core.STUDENT_TABS.map(function (t) {
+        var on = state.studentTab === t[0];
+        var count = counts[t[0]];
+        return '<button class="st-tab" role="tab" type="button" id="st-tab-' + t[0] + '" data-action="student-tab" data-tab="' + t[0] + '" aria-selected="' + on + '" aria-controls="studentPanel">' +
+          '<span class="st-tab-icon" aria-hidden="true">' + t[2] + '</span>' +
+          '<span class="st-tab-label">' + h(t[1]) + '</span>' +
+          (count !== '' && count > 0 ? '<span class="st-tab-count">' + count + '</span>' : '') +
+        '</button>';
+      }).join('') +
+    '</nav>';
+  }
+  function setStudentTab(tab) {
+    tab = Core.studentTab(tab);
+    if (tab === state.studentTab) return;
+    state.studentTab = tab;
+    try { history.replaceState(null, '', location.pathname + location.search + (tab === 'worksheets' ? '' : '#' + tab)); } catch (e) {}
+    render();
+    var bar = document.querySelector('.st-tabs');
+    if (bar && bar.getBoundingClientRect().top < 0) bar.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
+  // The class's name over its rows, only when the student has more than one.
+  function stClassHead(course, many) {
+    if (!many) return '';
+    return '<div class="st-class-head"><span class="st-class-name">' + h(Core.courseTitle(course)) + '</span>' +
+      '<span class="st-class-chips">' + levelChip(course.level) + subjectChip(course.subject) + dayChip(course) + '</span></div>';
+  }
+  function stEmpty(icon, title, text) {
+    return '<div class="st-empty"><div class="st-empty-icon" aria-hidden="true">' + icon + '</div><b>' + h(title) + '</b><p>' + h(text) + '</p></div>';
+  }
+  function stPages(it) {
+    return it.pages ? it.pages + (it.pages === 1 ? ' page' : ' pages') : '';
+  }
+
+  /* 📄 Worksheets: only the worksheets, one per row, with Download and Print
+     (and Open, to look at it on the screen). This lesson and the ones out
+     ahead first, then the earlier ones, the latest first. */
+  function worksheetsTabHtml(course, many) {
+    var items = Core.timelineItems(course, state.docs, state.recordings);
+    var groups = Core.worksheetRows(course, items);
+    var locked = Core.lockedCount(course);
+    var html = '<section class="card st-card" aria-label="Worksheets · ' + h(Core.courseTitle(course)) + '">' + stClassHead(course, many);
+    if (!items.length) {
+      html += stEmpty('📄', 'No worksheets yet', 'Your worksheets appear here as soon as your class starts. Nothing to do.');
+      return html + '</section>';
+    }
+    if (groups.now.length) {
+      html += '<h2 class="st-group">' + (Core.currentIndex(course) >= 0 ? 'This lesson and the next ones' : 'Ready for your class') + '</h2>' +
+        '<ol class="st-rows">' + groups.now.map(worksheetRowHtml).join('') + '</ol>';
+    }
+    if (groups.earlier.length) {
+      html += '<h2 class="st-group">Earlier worksheets</h2>' +
+        '<ol class="st-rows">' + groups.earlier.map(worksheetRowHtml).join('') + '</ol>';
+    }
+    if (locked > 0) {
+      html += '<p class="st-foot">🔒 ' + locked + ' more worksheet' + (locked === 1 ? '' : 's') + ' will appear here later in the term.</p>';
+    }
+    return html + '</section>';
+  }
+  function worksheetRowHtml(it) {
+    var tag = it.when === 'current' ? '<span class="st-tag st-tag-now">This lesson</span>'
+      : it.when === 'next' ? '<span class="st-tag st-tag-next">Next lesson</span>'
+      : it.when === 'ahead' ? '<span class="st-tag">Coming up</span>'
+      : '';
+    var sub = ['Worksheet ' + (it.seq + 1)];
+    if (stPages(it)) sub.push(stPages(it));
+    return '<li class="st-row' + (it.when === 'current' ? ' is-now' : '') + (it.when === 'done' ? ' is-done' : '') + '">' +
+      '<span class="st-num" aria-hidden="true">' + (it.seq + 1) + '</span>' +
+      '<div class="st-main"><div class="st-name">' + h(it.name) + '</div>' +
+        '<div class="st-sub">' + tag + '<span>' + h(sub.join(' · ')) + '</span></div></div>' +
+      '<div class="st-acts">' +
+        '<button class="btn st-btn st-btn-main" type="button" data-action="download" data-id="' + h(it.id) + '" aria-label="Download ' + h(it.name) + '"><span aria-hidden="true">⬇</span> Download</button>' +
+        '<button class="btn st-btn" type="button" data-action="print" data-id="' + h(it.id) + '" aria-label="Print ' + h(it.name) + '"><span aria-hidden="true">🖨</span> Print</button>' +
+        '<button class="btn st-btn st-btn-quiet" type="button" data-action="view" data-id="' + h(it.id) + '" aria-label="Open ' + h(it.name) + '"><span aria-hidden="true">👁</span> Open</button>' +
+      '</div></li>';
+  }
+
+  /* 🔑 Answer keys: one row per worksheet with its newest answer key PDF.
+     Earlier class days' keys sit under it as small links. */
+  function answersTabHtml(course, many) {
+    var items = Core.timelineItems(course, state.docs, state.recordings);
+    var rows = Core.answerKeyRows(course, items);
+    var html = '<section class="card st-card" aria-label="Answer keys · ' + h(Core.courseTitle(course)) + '">' + stClassHead(course, many);
+    if (!rows.length) {
+      html += stEmpty('🔑', 'No answer keys yet', 'Each answer key appears here after its lesson.');
+      return html + '</section>';
+    }
+    html += '<ol class="st-rows">' + rows.map(function (row) {
+      var k = row.latest;
+      var sub = k ? 'After the ' + k.label + ' lesson' + (k.pages ? ' · ' + k.pages + (k.pages === 1 ? ' page' : ' pages') : '') : 'Appears here after the lesson';
+      var earlier = row.earlier.length
+        ? '<div class="st-more"><span>Earlier:</span>' + row.earlier.map(function (e) {
+            return '<a href="' + h(e.url) + '" target="_blank" rel="noopener" data-tooltip="The answer key after the ' + h(e.label) + ' lesson">' + h(e.label) + '</a>';
+          }).join('') + '</div>'
+        : '';
+      return '<li class="st-row' + (row.current ? ' is-now' : '') + '">' +
+        '<span class="st-num" aria-hidden="true">' + (row.seq + 1) + '</span>' +
+        '<div class="st-main"><div class="st-name">' + h(row.name) + '</div>' +
+          '<div class="st-sub">' + (row.current ? '<span class="st-tag st-tag-now">This lesson</span>' : '') + '<span>' + h(sub) + '</span></div>' + earlier + '</div>' +
+        '<div class="st-acts">' +
+          (k ? '<a class="btn st-btn st-btn-main" href="' + h(k.url) + '" target="_blank" rel="noopener" aria-label="Open the answer key for ' + h(row.name) + '"><span aria-hidden="true">🔑</span> Open answer key</a>'
+             : '') +
+        '</div></li>';
+    }).join('') + '</ol>';
+    return html + '</section>';
+  }
+
+  /* ▶ Videos: one row per worksheet with recorded lessons. Watch plays every
+     lesson on it in order on the video page (watch.html), never Ans Key;
+     the class-day links start from that day. */
+  function videosTabHtml(course, many) {
+    var items = Core.timelineItems(course, state.docs, state.recordings);
+    var rows = Core.videoRows(course, items);
+    var html = '<section class="card st-card" aria-label="Videos · ' + h(Core.courseTitle(course)) + '">' + stClassHead(course, many);
+    if (!rows.length) {
+      html += stEmpty('▶', 'No lesson videos yet', 'The videos of each lesson appear here after the class.');
+      return html + '</section>';
+    }
+    html += '<ol class="st-rows">' + rows.map(function (row) {
+      var sub = row.count + (row.count === 1 ? ' video' : ' videos') + (row.seconds ? ' · ' + Core.formatDuration(row.seconds) : '');
+      var days = row.days.length > 1
+        ? '<div class="st-more"><span>Start from:</span>' + row.days.map(function (d) {
+            return '<a href="' + h(watchHref(row.id, course, d.key)) + '" data-tooltip="Play from the ' + h(d.label) + ' lesson">' + h(d.label) + '</a>';
+          }).join('') + '</div>'
+        : '';
+      return '<li class="st-row' + (row.current ? ' is-now' : '') + '">' +
+        '<span class="st-num" aria-hidden="true">' + (row.seq + 1) + '</span>' +
+        '<div class="st-main"><div class="st-name">' + h(row.name) + '</div>' +
+          '<div class="st-sub">' + (row.current ? '<span class="st-tag st-tag-now">This lesson</span>' : '') + '<span>' + h(sub) + '</span></div>' + days + '</div>' +
+        '<div class="st-acts">' +
+          '<a class="btn st-btn st-btn-play" href="' + h(watchHref(row.id, course)) + '" aria-label="Watch the videos of ' + h(row.name) + '"><span aria-hidden="true">▶</span> Watch</a>' +
+        '</div></li>';
+    }).join('') + '</ol>';
+    return html + '</section>';
   }
   function classCardHtml(course) {
     var ids = Core.courseIds(course);
@@ -825,8 +982,9 @@
       Core.releasedWorksheets(c).forEach(function (w) { ids.push(w.id); });
     });
     watchDocs(ids);
-    // The current worksheet is brought into view once, on arrival.
-    if (!scrolledToCurrent) {
+    // The current worksheet is brought into view once, on arrival — on the
+    // Timeline tab only; the other tabs open at the top, where the rows start.
+    if (!scrolledToCurrent && state.studentTab === 'timeline') {
       var cur = document.querySelector('.tl-item.is-current');
       if (cur && cur.scrollIntoView) { scrolledToCurrent = true; setTimeout(function () { cur.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 350); }
     }
@@ -937,7 +1095,7 @@
           '<input id="releaseInput" type="number" min="0" max="' + total + '" value="' + (rel + 1) + '" aria-label="Release up to worksheet">' +
           '<button class="btn btn-xs" type="button" data-action="step" data-target="releaseInput" data-delta="1" aria-label="More">+</button>' +
           '<button class="btn btn-xs btn-primary" type="button" data-action="set-release"' + (total ? '' : ' disabled') + '>Set</button></div>' +
-          '<div class="small muted" style="margin-top:8px">0 hides them all. Never lower than the class position.</div></div>' +
+          '<div class="small muted" style="margin-top:8px">' + (cur >= 0 ? 'Always at least ' + Core.RELEASE_AHEAD + ' ahead of where the class is. Raise it to release more.' : '0 hides them all until the class starts.') + '</div></div>' +
         '<div class="card control"><div class="label">Students see</div><div class="big">' + Core.releasedCount(course) + ' <span class="small muted">of ' + total + '</span></div>' +
           '<div class="small muted" style="margin-top:10px">' + countSeeing(course) + '</div>' +
           '<button class="btn btn-xs" type="button" data-action="preview-course" style="margin-top:10px">👁 Preview as a student</button></div>' +
@@ -1542,8 +1700,10 @@
     var total = Core.courseIds(course).length, cur = Core.currentIndex(course);
     var n = Math.round(Number($('releaseInput').value));
     if (!(n >= 0 && n <= total)) { toast('Choose a number between 0 and ' + total + '.', { error: true }); return; }
-    var rel = Math.max(n - 1, cur);
-    if (rel !== n - 1) toast('Kept at worksheet ' + (cur + 1) + ', where the class is.');
+    // v1.12.0: never less than RELEASE_AHEAD past where the class is.
+    var floor = Math.min(total - 1, Core.releaseFloor(course));
+    var rel = Math.max(n - 1, floor);
+    if (rel !== n - 1) toast('Kept at worksheet ' + (rel + 1) + ': students always have the ' + Core.RELEASE_AHEAD + ' after the one the class is on.');
     busy(button, true);
     try {
       await db.collection(COURSES).doc(course.id).set({ releasedThrough: rel, releasedAt: FieldValue.serverTimestamp(), releasedBy: state.user.email }, { merge: true });
@@ -2243,6 +2403,24 @@
     return { close: close, rerender: rerender };
   }
 
+  // 🗂 A typed or shared #answers / #videos / #timeline picks that tab.
+  window.addEventListener('hashchange', function () {
+    var tab = Core.studentTab(location.hash);
+    if (tab !== state.studentTab) { state.studentTab = tab; render(); }
+  });
+  // ← → move between the student tabs, as a tab list should.
+  document.addEventListener('keydown', function (e) {
+    var el = e.target && e.target.closest ? e.target.closest('.st-tab') : null;
+    if (!el || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+    var tabs = Core.STUDENT_TABS.map(function (t) { return t[0]; });
+    var at = tabs.indexOf(el.dataset.tab);
+    var to = tabs[(at + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+    e.preventDefault();
+    setStudentTab(to);
+    var again = document.getElementById('st-tab-' + to);
+    if (again) again.focus();
+  });
+
   /* ================= One click handler for the page ================= */
   document.addEventListener('click', function (e) {
     var el = e.target.closest('[data-action]');
@@ -2260,6 +2438,7 @@
       case 'print-key': openAnskey(id, 'print-answers'); break;
       // 🎬 'video' / 'video-day' are links to watch.html: the browser follows them.
       case 'tab': state.adminTab = el.dataset.tab; state.courseId = null; render(); break;
+      case 'student-tab': setStudentTab(el.dataset.tab); break;
       case 'new-course': courseForm(null); break;
       case 'open-course': state.courseId = id; state.uploads = []; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); break;
       case 'close-course': state.courseId = null; render(); break;

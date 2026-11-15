@@ -66,7 +66,7 @@ const ann = [
   { id: 'rec-evil', type: 'video', page: 1, url: 'https://evil.example/x.webm', ts: mon2, lessonRecording: { version: 1, duration: 30000 } }
 ];
 const docs = {
-  'onlineCourses/k6': { level: 'P6', subject: 'science', day: 'Monday', slot: 2, title: 'P6 Science · Monday 7:00pm', worksheetIds: ['ws-a', 'ws-b', 'ws-c'], currentIndex: 1, releasedThrough: 1 },
+  'onlineCourses/k6': { level: 'P6', subject: 'science', day: 'Monday', slot: 2, title: 'P6 Science · Monday 7:00pm', worksheetIds: ['ws-a', 'ws-b', 'ws-d', 'ws-e', 'ws-f', 'ws-c'], currentIndex: 1, releasedThrough: 1 },
   'onlineMembers/stu': { level: 'P6', subjects: ['science'], role: 'student', name: 'Mei', email: 'mei@example.com' },
   'pdfAnnotator/ws-a': { name: 'P6 Science WS 1', storagePath: 'pdf-annotator/seed-a.pdf', annotations: '[]' },
   'pdfAnnotator/ws-b': { name: 'P5 Science November WS 1 - Revision', storagePath: 'pdf-annotator/seed-b.pdf', annotations: JSON.stringify(ann) },
@@ -122,7 +122,7 @@ async function open({ user, query, width = 1280, height = 900 }) {
   await page.waitForSelector('#scrPlayer:not([hidden])', { timeout: 10000 });
   check('student: the player is a page of its own, with no Ans Key app in it', (await page.locator('iframe').count()) === 0);
   check('student: the header names the worksheet and its place in the class',
-    (await page.textContent('#wsName')) === 'P5 Science November WS 1 - Revision' && /Worksheet 2 of 3/.test(await page.textContent('#wsSub')) && /3 lessons/.test(await page.textContent('#wsSub')));
+    (await page.textContent('#wsName')) === 'P5 Science November WS 1 - Revision' && /Worksheet 2 of 6/.test(await page.textContent('#wsSub')) && /3 lessons/.test(await page.textContent('#wsSub')));
   const lessons = await page.$$eval('#lessonList .lesson-btn small', (els) => els.map((e) => e.textContent));
   check('student: every lesson is listed, oldest first, foreign files left out', lessons.length === 3, JSON.stringify(lessons));
   const days = await page.$$eval('#lessonList .day-head', (els) => els.map((e) => e.textContent));

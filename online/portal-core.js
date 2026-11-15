@@ -3,15 +3,20 @@
    and by tools/online-portal-tests.mjs (through vm), so every rule that
    decides what a student sees is tested on its own.
 
-   The release rule itself lives in the Ans Key app (polymathlc/anskey,
-   `onlineWorksheetOpened`): opening worksheet n of a class moves the class
-   to n and releases up to n + RELEASE_AHEAD. This file only ever READS it,
-   except for the admin's own "set progress" control, which goes through
-   `progressUpdate` so it obeys the same arithmetic. */
+   The release rule (v1.12.0, Zhi Kai, 15 Nov 2026): a class is always
+   RELEASE_AHEAD = 3 worksheets ahead of the one it is on. On worksheet n,
+   students have every worksheet up to n + 3: the Next worksheet and the two
+   after it. `releasedThrough(course)` works that out from the class's
+   position every time it is read, so a worksheet added to the end of the
+   list later is out at once when it falls within the three; it no longer
+   waits locked for the class to move. The stored `releasedThrough` only
+   adds to it (the admin can release further ahead by hand; a release is
+   never taken back). The Ans Key app (polymathlc/anskey, `onlineReleased`)
+   and the video page (watch-core.js `releasedTo`) apply the same rule. */
 (function (root) {
   'use strict';
 
-  var RELEASE_AHEAD = 5;          // on worksheet n, students have up to n + 5 (3 → 8)
+  var RELEASE_AHEAD = 3;          // on worksheet n, students have up to n + 3 (2 → 5): the next one and the two after it
   var NEXT_COUNT = 2;             // "the next two worksheets"
   var LEVELS = ['P3', 'P4', 'P5', 'P6'];
   var SUBJECTS = [
@@ -109,7 +114,18 @@
   function num(value, fallback) { return typeof value === 'number' && isFinite(value) ? value : fallback; }
   function courseIds(course) { return course && Array.isArray(course.worksheetIds) ? course.worksheetIds : []; }
   function currentIndex(course) { return Math.min(num(course && course.currentIndex, -1), courseIds(course).length - 1); }
-  function releasedThrough(course) { return Math.min(num(course && course.releasedThrough, -1), courseIds(course).length - 1); }
+  // How far the class is released: never less than RELEASE_AHEAD past the
+  // worksheet the class is on (once it has started), plus anything the
+  // admin released further by hand. Worked out on every read, so it holds
+  // for old classes and for worksheets added to the list afterwards.
+  function releaseFloor(course) {
+    var cur = num(course && course.currentIndex, -1);
+    return cur >= 0 ? Math.floor(cur) + RELEASE_AHEAD : -1;
+  }
+  function releasedThrough(course) {
+    var stored = num(course && course.releasedThrough, -1);
+    return Math.min(Math.max(stored, releaseFloor(course)), courseIds(course).length - 1);
+  }
   function releasedCount(course) { return Math.max(0, releasedThrough(course) + 1); }
   function lockedCount(course) { return Math.max(0, courseIds(course).length - releasedCount(course)); }
   function worksheetState(course, index) {
@@ -563,6 +579,89 @@
     });
   }
 
+  /* ---- 🗂 The student's three tabs (v1.12.0) ----
+     Zhi Kai, 15 Nov 2026: students were lost among the many buttons and
+     could not find the worksheets. A student now lands on a Worksheets tab
+     (the worksheets only, in neat rows to download or print), with an
+     Answer keys tab and a Videos tab beside it; the full class timeline
+     stays as a fourth tab. These group one class's timeline items for
+     them, so the page only lays rows out.
+
+     STUDENT_TABS: [value, label, icon]. Worksheets is the default. */
+  var STUDENT_TABS = [
+    ['worksheets', 'Worksheets', '📄'],
+    ['answers', 'Answer keys', '🔑'],
+    ['videos', 'Videos', '▶'],
+    ['timeline', 'Timeline', '🗓']
+  ];
+  function studentTab(value) {
+    var v = String(value || '').replace(/^#/, '').toLowerCase();
+    for (var i = 0; i < STUDENT_TABS.length; i++) if (STUDENT_TABS[i][0] === v) return v;
+    return 'worksheets';
+  }
+  // Worksheets tab: `now` is the one the class is on and the ones released
+  // ahead of it, in teaching order (Current first); `earlier` the ones done,
+  // the latest first. Before the first lesson, everything out is `now`.
+  // Each row says which lesson it is for in plain words (`when`).
+  function worksheetRows(course, items) {
+    var cur = currentIndex(course);
+    var now = [], earlier = [];
+    (items || []).forEach(function (it) {
+      if (cur >= 0 && it.seq < cur) earlier.push(Object.assign({}, it, { when: 'done', whenLabel: 'Done' }));
+      else now.push(it);
+    });
+    var ahead = 0;
+    now = now.map(function (it) {
+      var when, label;
+      if (cur >= 0 && it.seq === cur) { when = 'current'; label = 'This lesson'; }
+      else if (cur < 0) { when = 'ready'; label = 'Ready'; }
+      else { ahead += 1; when = ahead === 1 ? 'next' : 'ahead'; label = ahead === 1 ? 'Next lesson' : 'Coming up'; }
+      return Object.assign({}, it, { when: when, whenLabel: label });
+    });
+    earlier.reverse();
+    return { now: now, earlier: earlier };
+  }
+  // Answer keys tab: every released worksheet that has an answer key PDF,
+  // the one the class is on first, then the rest newest key first. The
+  // worksheet the class is on shows even before its key is out, so a
+  // student knows it comes after the lesson.
+  function answerKeyRows(course, items) {
+    var cur = currentIndex(course);
+    var rows = [];
+    (items || []).forEach(function (it) {
+      var keys = it.answerKeys || [];
+      if (keys.length || (cur >= 0 && it.seq === cur)) {
+        rows.push({ id: it.id, seq: it.seq, name: it.name, current: it.seq === cur, latest: keys[0] || null, earlier: keys.slice(1) });
+      }
+    });
+    return rows.sort(function (p, q) {
+      if (p.current !== q.current) return p.current ? -1 : 1;
+      var pk = p.latest ? p.latest.key : '', qk = q.latest ? q.latest.key : '';
+      if (pk !== qk) return pk < qk ? 1 : -1;
+      return q.seq - p.seq;
+    });
+  }
+  // Videos tab: every released worksheet with recorded lessons, the one the
+  // class is on first, then the latest lesson first. `days` is each class
+  // day with its videos, newest first, for "start from this day".
+  function videoRows(course, items) {
+    var cur = currentIndex(course);
+    var rows = [];
+    (items || []).forEach(function (it) {
+      var recs = it.recordings || [];
+      if (!recs.length) return;
+      var seconds = recs.reduce(function (n, r) { return n + (Number(r.duration) || 0); }, 0);
+      var last = recs.reduce(function (n, r) { return Math.max(n, Number(r.at) || 0); }, 0);
+      var days = (it.days || []).slice().reverse();
+      rows.push({ id: it.id, seq: it.seq, name: it.name, current: it.seq === cur, count: recs.length, seconds: seconds, last: last, days: days });
+    });
+    return rows.sort(function (p, q) {
+      if (p.current !== q.current) return p.current ? -1 : 1;
+      if (p.last !== q.last) return q.last - p.last;
+      return q.seq - p.seq;
+    });
+  }
+
   // Every Polymath Online email goes out as the centre's own address, whichever
   // admin pressed the button. The Trigger Email extension reads `from` and
   // `replyTo` from each mail document, so replies land in the same inbox.
@@ -974,7 +1073,7 @@
   }
 
   var api = {
-    RELEASE_AHEAD: RELEASE_AHEAD, NEXT_COUNT: NEXT_COUNT, LEVELS: LEVELS, SUBJECTS: SUBJECTS, DAYS: DAYS, ROLES: ROLES,
+    releaseFloor: releaseFloor, RELEASE_AHEAD: RELEASE_AHEAD, NEXT_COUNT: NEXT_COUNT, LEVELS: LEVELS, SUBJECTS: SUBJECTS, DAYS: DAYS, ROLES: ROLES,
     SLOTS_WEEKDAY: SLOTS_WEEKDAY, SLOTS_WEEKEND: SLOTS_WEEKEND,
     levelSubjects: levelSubjects, subjectLabel: subjectLabel, cleanSubjects: cleanSubjects, profileSubjectFor: profileSubjectFor,
     slotsForDay: slotsForDay, slotLabel: slotLabel, courseTitle: courseTitle, autoCourseTitle: autoCourseTitle,
@@ -994,6 +1093,7 @@
     memberFromStudentAccess: memberFromStudentAccess, studentAccessLevels: studentAccessLevels,
     moveItem: moveItem, remapProgress: remapProgress,
     toMillis: toMillis, editedMillis: editedMillis, formatDay: formatDay, formatClock: formatClock, parseAnnotations: parseAnnotations,
+    STUDENT_TABS: STUDENT_TABS, studentTab: studentTab, worksheetRows: worksheetRows, answerKeyRows: answerKeyRows, videoRows: videoRows,
     lessonRecordings: lessonRecordings, formatDuration: formatDuration, anskeyLink: anskeyLink, timelineItems: timelineItems,
     SENDER_EMAIL: SENDER_EMAIL, SENDER_NAME: SENDER_NAME, portalMail: portalMail,
     inviteLink: inviteLink, inviteEmail: inviteEmail, mailtoLink: mailtoLink, inviteStatusLabel: inviteStatusLabel,
