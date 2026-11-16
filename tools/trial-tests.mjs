@@ -224,3 +224,15 @@ test('the reminder run emails tomorrow\'s lessons once, with the Zoom link and w
   assert.ok(!summary(result).includes('@'));
   assert.equal((await runReminders({ store: fakeStore([booking('FFFFFF', '2026-11-23')]), now, dryRun: true })).sent, 0);
 });
+
+test('🎥 Join Zoom at the top (v1.2.0): the class Zoom, the same link as /student, never on the code screen', () => {
+  const url = page.match(/const CLASS_ZOOM_URL = '([^']+)';/);
+  assert.ok(url, 'the page names the class Zoom');
+  assert.match(url[1], /^https:\/\/[a-z0-9]+\.zoom\.us\/j\/\d+/);
+  const student = read('student/student-account.js').match(/var CLASS_ZOOM_URL = '([^']+)';/);
+  assert.ok(student && student[1] === url[1], 'the same link as the Join Zoom button on /student');
+  assert.ok(page.includes('id="zoom-top"'), 'the button is in the top bar');
+  assert.match(page, /<a class="zoom-top hidden" id="zoom-top" href="#"/, 'hidden, with no link, until the family is in');
+  assert.match(page, /currentView !== 'gate-view'/, 'not on the access-code screen');
+  assert.ok(!page.includes('Zoom link coming soon'), 'a lesson without its own link uses the class Zoom');
+});

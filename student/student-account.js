@@ -48,7 +48,18 @@
 (function () {
   'use strict';
 
-  var VERSION = 'v1.9.0';
+  var VERSION = 'v1.10.0';
+  // 🎥 Join Zoom (v1.10.0, Zhi Kai 17 Nov 2026): the centre's class Zoom, a button at the top of
+  // /student. Shown only to a signed-in approved family, staff and the admins; never to a visitor
+  // who is signed out, waiting or paused. This file is public on GitHub, so the link (and the
+  // passcode in it) can be read in the source. Keep equal to CLASS_ZOOM_URL in trial/index.html.
+  var CLASS_ZOOM_URL = 'https://us02web.zoom.us/j/3179638363?pwd=htVM9aAllMVNjlLQO06F4How4m4Iml.1';
+  function canJoinZoom(signedIn, gate) {
+    if (!signedIn) return false;
+    if (isAdmin(signedIn)) return true;
+    var phase = gate && gate.phase;
+    return phase === 'approved' || phase === 'subject' || phase === 'staff';
+  }
   var FIREBASE_CONFIG = {
     apiKey: 'AIzaSyAUSI3Uh28IeqASEp0JhH4QPaVt-O3meBo',
     authDomain: 'mathgen--app.firebaseapp.com',
@@ -464,7 +475,7 @@
     };
   }
 
-  var helpers = { esc: esc, isAdmin: isAdmin, statusOf: statusOf, loginCandidates: loginCandidates, accountLabel: accountLabel,
+  var helpers = { CLASS_ZOOM_URL: CLASS_ZOOM_URL, canJoinZoom: canJoinZoom, esc: esc, isAdmin: isAdmin, statusOf: statusOf, loginCandidates: loginCandidates, accountLabel: accountLabel,
     toDate: toDate, sgTime: sgTime, matches: matches, sortRecords: sortRecords, counts: counts, editedRecord: editedRecord,
     subjectsOfChoice: subjectsOfChoice, approvedSubjects: approvedSubjects, appSubjectLabel: appSubjectLabel, subjectsWords: subjectsWords,
     tileSubjects: tileSubjects, tileLocked: tileLocked, onlineAccessFor: onlineAccessFor, onlineMemberPatch: onlineMemberPatch,
@@ -485,6 +496,16 @@
   var adminView = document.getElementById('adminView');
   var appSections = document.querySelectorAll('[data-apps-view]');
   var subjectsNote = document.getElementById('subjectsNote');
+  var zoomButton = document.getElementById('zoomButton');
+
+  // 🎥 Join Zoom at the top: the link goes on only when the button shows.
+  function renderZoom() {
+    if (!zoomButton) return;
+    // Not on the approvals page (#admin): the admin is working there, and a phone has no room for it.
+    var on = canJoinZoom(user, gateState) && !wantsAdmin();
+    zoomButton.hidden = !on;
+    zoomButton.setAttribute('href', on ? CLASS_ZOOM_URL : '#');
+  }
 
   /* ---------------------- subject locks on the tiles ---------------------- */
   // Runs before sign-in is known too (signed out → every tile as it is in the HTML).
@@ -598,6 +619,7 @@
   }
 
   function renderAccount() {
+    renderZoom();
     if (!accountCard) return;
     accountCard.hidden = false;
     if (user) {

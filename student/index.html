@@ -235,6 +235,13 @@
   .button-accent:hover { background: #085740; }
   .button-icon { width: 40px; height: 40px; padding: 0; justify-content: center; }
   .button-icon svg { width: 18px; height: 18px; }
+  /* 🎥 Join Zoom (v1.10.0, Zhi Kai 17 Nov 2026): the class Zoom, top of the page, for a signed-in
+     approved family, staff and the admins (student-account.js shows it). Zoom blue so it reads as Zoom. */
+  .button-zoom { background: #0B5CFF; border-color: #0B5CFF; color: #FFFFFF; }
+  .button-zoom:hover { background: #0848C9; }
+  .button-zoom svg { width: 18px; height: 18px; flex-shrink: 0; }
+  /* A phone keeps just the camera (a round 40px button like Print), so the header never scrolls sideways. */
+  @media (max-width: 520px) { .button-zoom .button-zoom-words { display: none; } .button-zoom { width: 40px; height: 40px; padding: 0; justify-content: center; } }
 
   /* ───────── Greeting ───────── */
   main {
@@ -608,7 +615,7 @@
   .staff-section h3 { margin: 0 0 var(--space-xs, 4px); font-size: 1.05rem; }
   .staff-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md, 12px); flex-wrap: wrap; padding: var(--space-md, 12px) 0; border-top: 1px solid var(--border-subtle); }
   .staff-badge { display: inline-block; margin-left: 6px; padding: 2px 10px; border-radius: 999px; font-size: 0.8rem; background: var(--bg-tertiary, #eef2f7); color: var(--text-secondary); }
-  @media print { .account-card, .admin-view, #adminButton { display: none !important; } }
+  @media print { .account-card, .admin-view, #adminButton, #zoomButton { display: none !important; } }
 
   /* ───────── Print: a sheet of every app and its address, for the fridge ───────── */
   .print-address { display: none; }
@@ -640,6 +647,11 @@
     </span>
   </a>
   <div class="header-actions">
+    <!-- 🎥 Join Zoom (v1.10.0): hidden until student-account.js knows the visitor is approved, staff or an admin -->
+    <a class="button button-zoom" id="zoomButton" href="#" target="_blank" rel="noopener" hidden aria-label="Join the class on Zoom" title="Join the class on Zoom">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="13" height="12" rx="2.5"/><path d="M15 10.5l6-3.5v10l-6-3.5z" fill="currentColor"/></svg>
+      <span class="button-zoom-words">Join Zoom</span>
+    </a>
     <a class="button button-accent" id="adminButton" href="#admin" hidden title="Approve students and change their access">
       <span class="count-badge" hidden>0</span><span>Approve students</span>
     </a>
@@ -832,14 +844,14 @@
   © Polymath Learning Centre · polymathlc.com.sg
 </footer>
 
-<div class="version-badge" id="versionBadge" aria-hidden="true">v1.9.0</div>
+<div class="version-badge" id="versionBadge" aria-hidden="true">v1.10.0</div>
 
 <script>
   /* My Polymath — the little the page does with script. Everything works without it. */
   (function () {
     'use strict';
 
-    var DASHBOARD_VERSION = 'v1.9.0';
+    var DASHBOARD_VERSION = 'v1.10.0';
     var LAST_OPENED_KEY = 'polymath-dashboard-last-opened';
 
     var versionBadge = document.getElementById('versionBadge');
@@ -912,7 +924,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="student-account.js?v=1.9.0"></script>
+<script src="student-account.js?v=1.10.0"></script>
 <script defer src="access-gate.js?v=1.1.0" data-app="student"></script>
 <script defer src="pwa-install.js?v=2.0.0" data-app-name="My Polymath" data-app-key="hub" data-app-icon="assets/app-icons/icon-192.png" data-accent="#0B6B4F" data-sw="sw.js" data-floating="auto"></script>
 </body>

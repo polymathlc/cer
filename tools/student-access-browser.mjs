@@ -484,6 +484,11 @@ await step('the Science-only family\'s My Polymath: the Math tile is locked and 
   await page.waitForSelector('.locked-note');
   assert.match(await page.textContent('.locked-note'), /Math is not one of your Polymath subjects/);
   assert.equal(new URL(page.url()).pathname, '/student/', 'tapping it goes nowhere');
+  // 🎥 Join Zoom (v1.10.0): an approved family gets the class Zoom at the top, and it fits a phone.
+  await page.waitForSelector('#zoomButton:not([hidden])');
+  assert.match(await page.getAttribute('#zoomButton', 'href'), /^https:\/\/us02web\.zoom\.us\/j\/3179638363\?pwd=/);
+  assert.equal(await page.getAttribute('#zoomButton', 'target'), '_blank', 'Zoom opens in a new tab');
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth) <= 390, 'the header still fits a phone');
   if (shots) await page.screenshot({ path: path.join(shots, 'student-science-only-phone.png'), fullPage: false });
   await page.context().close();
 });
@@ -621,11 +626,14 @@ await step('/student for a signed-in student shows who they are and their status
   const page = await newPage(USERS.student, { width: 390, height: 844 });
   await page.goto(SITE + '/student/');
   await waitGate(page, 'Waiting for approval');
+  assert.equal(await page.isVisible('#zoomButton'), false, 'no Join Zoom while waiting for approval');
+  assert.equal(await page.getAttribute('#zoomButton', 'href'), '#', 'and no link in the page');
   await page.context().close();
   const out = await newPage(null, { width: 390, height: 844 });
   await out.goto(SITE + '/student/');
   await out.waitForSelector('#accountCard:not([hidden]) [data-account="google"]');
   assert.equal(await out.locator('.tile-grid .app-tile').count() > 5, true, 'the tiles are still there');
+  assert.equal(await out.isVisible('#zoomButton'), false, 'no Join Zoom when signed out');
   if (shots) await out.screenshot({ path: path.join(shots, 'student-signed-out-phone.png'), fullPage: false });
   const width = await out.evaluate(() => document.documentElement.scrollWidth);
   assert.ok(width <= 390, 'nothing wider than a phone (' + width + ')');

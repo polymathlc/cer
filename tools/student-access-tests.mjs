@@ -372,7 +372,7 @@ test('dashboard helpers: usernames, sorting, search, counts and the admin edit',
 test('/student signs in, shows the admin dashboard and loads the very same gate as every app', () => {
   assert.ok(DASHBOARD.includes('<div class="account-card" id="accountCard" hidden aria-live="polite"></div>'));
   assert.ok(DASHBOARD.includes('<section class="admin-view" id="adminView" hidden aria-labelledby="adminTitle"></section>'));
-  assert.ok(DASHBOARD.includes('<script src="student-account.js?v=1.9.0"></script>'));
+  assert.ok(DASHBOARD.includes('<script src="student-account.js?v=1.10.0"></script>'));
   assert.ok(DASHBOARD.includes('<script defer src="access-gate.js?v=1.1.0" data-app="student"></script>'));
   const at = text => DASHBOARD.indexOf(text);
   assert.ok(at('<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js">') < at('<script src="student-account.js'), 'the SDK first');
@@ -685,4 +685,21 @@ test('Ans Key level: the one-off correction uses the dashboard\'s own rule and c
   assert.equal(counts.alreadyRight, 1); assert.equal(counts.noAnsKeyLevel, 1); assert.equal(counts.staffSkipped, 1);
   const text = planLines(counts, 0).join('\n');
   assert.ok(!/@|\bA\b/.test(text), 'counts only, never a name or email');
+});
+
+test('🎥 Join Zoom (My Polymath v1.10.0): only a signed-in approved family, staff or an admin sees it', () => {
+  const h = loadAccount().helpers;
+  assert.match(ACCOUNT_SOURCE, /var CLASS_ZOOM_URL = 'https:\/\/us02web\.zoom\.us\/j\/3179638363\?pwd=[^']+';/);
+  assert.ok(DASHBOARD.includes('id="zoomButton" href="#"'), 'no link in the page until the script shows it');
+  assert.match(DASHBOARD, /id="zoomButton"[^>]*\shidden\s/, 'hidden at first');
+  {
+    const admin = { email: 'admin@polymathlc.com.sg', emailVerified: true };
+    const parent = { email: 'parent@example.com', emailVerified: true };
+    assert.equal(h.canJoinZoom(null, null), false);
+    assert.equal(h.canJoinZoom(admin, null), true);
+    assert.equal(h.canJoinZoom(parent, { phase: 'approved' }), true);
+    assert.equal(h.canJoinZoom(parent, { phase: 'subject' }), true);
+    assert.equal(h.canJoinZoom(parent, { phase: 'staff' }), true);
+    for (const phase of ['pending', 'revoked', 'form', 'loading', undefined]) assert.equal(h.canJoinZoom(parent, { phase }), false, String(phase));
+  }
 });

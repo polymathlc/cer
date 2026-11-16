@@ -50,6 +50,12 @@
     font-weight:700; font-size:14px; text-decoration:none; white-space:nowrap; box-shadow:0 2px 8px rgba(37,211,102,.28); }
   .wa-btn:hover { background:#1ebe5b; }
   .wa-btn svg { width:18px; height:18px; fill:currentColor; flex:0 0 auto; }
+  /* Join Zoom (v1.2.0, Zhi Kai 17 Nov 2026): the class Zoom at the top of the page, once a family is in
+     (after the access code or a class link, never on the code screen) and for the admins. */
+  .zoom-top { display:inline-flex; align-items:center; gap:7px; background:var(--zoom); color:#fff; border-radius:999px; padding:8px 14px;
+    font-weight:700; font-size:14px; text-decoration:none; white-space:nowrap; box-shadow:0 2px 8px rgba(11,92,255,.28); }
+  .zoom-top:hover { background:#0848c9; }
+  .zoom-top svg { width:18px; height:18px; flex:0 0 auto; }
 
   .wrap { max-width:980px; margin:0 auto; padding:24px 16px 80px; }
 
@@ -230,6 +236,11 @@
   <div class="topbar-inner">
     <a class="brand" href="../"><img src="../assets/branding/polymath-learning-centre.png" alt="Polymath Learning Centre logo"><div class="brand-name">Polymath<span>Learning Centre</span></div></a>
     <div class="topbar-contact">
+      <!-- 🎥 Join Zoom (v1.2.0): shown by setZoomTop() once a family is past the access code -->
+      <a class="zoom-top hidden" id="zoom-top" href="#" target="_blank" rel="noopener" aria-label="Join the class on Zoom" title="Join the class on Zoom">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="13" height="12" rx="2.5"/><path d="M15 10.5l6-3.5v10l-6-3.5z" fill="currentColor"/></svg>
+        <span>Join Zoom</span>
+      </a>
       <a class="wa-btn" href="https://wa.me/6596450588" target="_blank" rel="noopener" aria-label="WhatsApp us at +65 9645 0588" title="WhatsApp +65 9645 0588">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.47 14.38c-.3-.15-1.75-.86-2.02-.96-.27-.1-.47-.15-.67.15-.2.3-.77.96-.94 1.16-.17.2-.35.22-.64.07-.3-.15-1.25-.46-2.38-1.47-.88-.79-1.47-1.76-1.65-2.06-.17-.3-.02-.46.13-.6.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.03-.52-.07-.15-.67-1.61-.92-2.2-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.79.37-.27.3-1.04 1.02-1.04 2.48s1.07 2.88 1.21 3.08c.15.2 2.1 3.2 5.08 4.49.71.31 1.26.49 1.69.63.71.23 1.36.2 1.87.12.57-.09 1.75-.72 2-1.41.25-.69.25-1.29.17-1.41-.07-.12-.27-.2-.57-.35zM12.04 21.5h-.01a9.46 9.46 0 0 1-4.82-1.32l-.35-.21-3.58.94.96-3.49-.23-.36a9.44 9.44 0 0 1-1.45-5.03c0-5.22 4.25-9.47 9.49-9.47a9.4 9.4 0 0 1 6.7 2.78 9.41 9.41 0 0 1 2.77 6.7c0 5.23-4.25 9.47-9.48 9.47zm8.06-17.53A11.33 11.33 0 0 0 12.04.63C5.76.63.65 5.74.65 12.02c0 2 .52 3.96 1.52 5.69L.55 23.6l6.04-1.58a11.36 11.36 0 0 0 5.44 1.39h.01c6.28 0 11.39-5.11 11.39-11.39 0-3.04-1.18-5.9-3.33-8.05z"/></svg>
         <span>WhatsApp</span>
@@ -456,11 +467,18 @@
 //   #b=<key>   → a booked lesson's own page (from the emails), live.
 //   #admin     → the admins' panel (Google sign-in; checked again on the server).
 // Nothing private is in this page or readable from the browser: the codes, links,
-// Zoom links and bookings live in Firestore collections only the functions use.
+// per-class Zoom links and bookings live in Firestore collections only the functions use.
+// The one exception is CLASS_ZOOM_URL below, the centre's class Zoom that Zhi Kai asked
+// for at the top of the page (17 Nov 2026). This file is public on GitHub, so that link
+// (and the passcode in it) can be read by anyone who looks at the source.
 
 // Shown to the signed-in admin in the footer, so a deploy can be checked.
 // Bump it on every change to this page.
-const TRIAL_PAGE_VERSION = 'v1.1.0';
+const TRIAL_PAGE_VERSION = 'v1.2.0';
+// 🎥 The Join Zoom button at the top (v1.2.0). A lesson with its own Zoom link (admin, Classes & Zoom)
+// uses that one; otherwise this, the centre's class Zoom. Keep equal to CLASS_ZOOM_URL in
+// student/student-account.js (a test checks).
+const CLASS_ZOOM_URL = 'https://us02web.zoom.us/j/3179638363?pwd=htVM9aAllMVNjlLQO06F4How4m4Iml.1';
 const API = 'https://us-central1-mathgen--app.cloudfunctions.net/';
 const BOOK_URL = API + 'trialBooking';
 const ADMIN_URL = API + 'trialAdmin';
@@ -641,8 +659,22 @@ function errorText(r, fallback) {
 // Views
 // ═══════════════════════════════════════════════════════════
 const VIEWS = ['gate-view', 'book-view', 'link-view', 'lesson-view'];
+let currentView = '';
+// 🎥 Join Zoom at the top: never on the code screen (a visitor without a code sees nothing), shown
+// once the family is in, and always for a signed-in admin. A lesson's own Zoom link wins.
+function setZoomTop() {
+  const btn = $('zoom-top');
+  if (!btn) return;
+  const isIn = !!currentView && currentView !== 'gate-view';
+  const on = isIn || !!(typeof isAdminUser === 'function' && auth && isAdminUser(auth.currentUser));
+  const url = (currentView === 'lesson-view' && currentLesson && currentLesson.zoomUrl) || CLASS_ZOOM_URL;
+  btn.href = on ? url : '#';
+  btn.classList.toggle('hidden', !on);
+}
 function show(view) {
   VIEWS.forEach(v => $(v).classList.toggle('hidden', v !== view));
+  currentView = view;
+  setZoomTop();
   const heroes = {
     'gate-view': ['Online trial lesson · Zoom', 'Join a Polymath class online', "Choose your child's level and a lesson that suits you. You get the Zoom link and the worksheets the class is using, so your child can join straight in."],
     'book-view': ['Online trial lesson · Zoom', 'Book your online trial lesson', 'Lessons follow our weekly class timetable. Pick the one that suits you.'],
@@ -916,12 +948,14 @@ function showLesson(b, note, justBooked) {
     $('lesson-sub').textContent = slotLabel(b.slot) + ' (Singapore time) · Online on Zoom'
       + (b.accessUntil ? ' · this page works until ' + fmtMs(b.accessUntil, true) : '');
   }
-  $('zoom-box').innerHTML = b.zoomUrl
-    ? '<div class="icon">🎥</div><div class="txt"><b>Join on Zoom</b>' + (b.zoomNote ? escapeHtml(b.zoomNote) + '<br>' : '')
-      + 'Join a few minutes before the lesson starts.<div class="url">' + escapeHtml(b.zoomUrl) + '</div></div>'
-      + '<a class="btn zoom" href="' + escapeHtml(b.zoomUrl) + '" target="_blank" rel="noopener">Open Zoom</a>'
-      + '<button class="btn ghost small" onclick="copyText(currentLesson.zoomUrl, \'Zoom link copied\')">Copy link</button>'
-    : '<div class="icon">🎥</div><div class="txt"><b>Zoom link coming soon</b>We will put it here and email it to you before the lesson.</div>';
+  // v1.2.0: a lesson without its own Zoom link uses the centre's class Zoom (CLASS_ZOOM_URL), the same one
+  // as the Join Zoom button at the top, instead of "coming soon".
+  const zoomUrl = b.zoomUrl || CLASS_ZOOM_URL;
+  $('zoom-box').innerHTML = '<div class="icon">🎥</div><div class="txt"><b>Join on Zoom</b>' + (b.zoomUrl && b.zoomNote ? escapeHtml(b.zoomNote) + '<br>' : '')
+      + 'Join a few minutes before the lesson starts.<div class="url">' + escapeHtml(zoomUrl) + '</div></div>'
+      + '<a class="btn zoom" href="' + escapeHtml(zoomUrl) + '" target="_blank" rel="noopener">Open Zoom</a>'
+      + '<button class="btn ghost small" onclick="copyText(currentLesson.zoomUrl || CLASS_ZOOM_URL, \'Zoom link copied\')">Copy link</button>';
+  setZoomTop();
   const actions = [];
   if (dated) actions.push('<button class="btn ghost small" onclick="downloadIcs()">Add to calendar</button>');
   actions.push('<a class="btn ghost small" href="https://wa.me/6596450588" target="_blank" rel="noopener">WhatsApp us</a>');
@@ -1018,6 +1052,7 @@ function onAuth(user) {
   $('admin-login-link').classList.toggle('hidden', admin);
   $('page-version').textContent = 'Trial page ' + TRIAL_PAGE_VERSION;
   $('page-version').classList.toggle('hidden', !admin);
+  setZoomTop();
   $('admin-who').textContent = admin ? 'Admin: ' + user.email : '';
   adminData = null;
   if (admin) adminLoad();
