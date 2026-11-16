@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = 'v1.13.0';
+  var APP_VERSION = 'v1.14.0';
   var Core = window.PolymathOnlineCore;
 
   // Who runs the portal. Anyone else signs in as a student or a parent.
@@ -737,7 +737,7 @@
       : '';
     var sub = ['Worksheet ' + (it.seq + 1)];
     if (stPages(it)) sub.push(stPages(it));
-    return '<li class="st-row' + (it.when === 'current' ? ' is-now' : '') + (it.when === 'done' ? ' is-done' : '') + '">' +
+    return '<li class="st-row' + (it.when === 'current' ? ' is-now' : it.when === 'next' ? ' is-next' : '') + (it.when === 'done' ? ' is-done' : '') + '">' +
       '<span class="st-num" aria-hidden="true">' + (it.seq + 1) + '</span>' +
       '<div class="st-main"><div class="st-name">' + h(it.name) + '</div>' +
         '<div class="st-sub">' + tag + '<span>' + h(sub.join(' · ')) + '</span></div></div>' +
