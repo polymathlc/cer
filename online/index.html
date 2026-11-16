@@ -440,12 +440,15 @@
     padding: 16px var(--space-lg); border-top: 1px solid var(--border-subtle);
   }
   .st-rows .st-row:first-child { border-top: 0; }
-  .st-row.is-now { background: linear-gradient(90deg, var(--accent-bg), #fff 85%); box-shadow: inset 4px 0 0 var(--accent-base); }
+  /* v1.14.0: This lesson = whole row light green, Next lesson = whole row light blue. */
+  .st-row.is-now { background: #E3F6EC; box-shadow: inset 4px 0 0 #2FA36B; }
+  .st-row.is-next { background: #E6EEFC; box-shadow: inset 4px 0 0 #4C6FD6; }
   .st-num {
     width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center;
     background: var(--bg-tertiary); color: var(--text-secondary); font-weight: 700; font-size: 1.05rem;
   }
-  .st-row.is-now .st-num { background: var(--accent-base); color: #fff; }
+  .st-row.is-now .st-num { background: #2FA36B; color: #fff; }
+  .st-row.is-next .st-num { background: #4C6FD6; color: #fff; }
   .st-row.is-done .st-num { background: var(--ok-bg); color: var(--ok-ink); }
   .st-main { min-width: 0; }
   .st-name { font-weight: 700; font-size: 1.05rem; line-height: 1.35; overflow-wrap: anywhere; }
@@ -454,8 +457,8 @@
     display: inline-flex; align-items: center; padding: 2px 10px; border-radius: var(--radius-full);
     background: var(--bg-tertiary); color: var(--text-secondary); font-size: 0.75rem; font-weight: 700;
   }
-  .st-tag-now { background: var(--accent-base); color: #3d2a08; }
-  .st-tag-next { background: var(--accent-light); color: var(--accent-ink); }
+  .st-tag-now { background: #2FA36B; color: #fff; }
+  .st-tag-next { background: #4C6FD6; color: #fff; }
   .st-acts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
   .st-btn { min-height: 46px; padding: 10px 18px; font-size: 0.98rem; font-weight: 700; border-radius: 12px; text-decoration: none; white-space: nowrap; }
   .st-btn-main { background: var(--accent-light); border-color: var(--accent-base); color: #3d2a08; }
@@ -573,8 +576,13 @@
   .seq-row .ws-num { width: 36px; height: 36px; font-size: 0.82rem; border-radius: 10px; }
   .seq-row.is-current .ws-num { background: var(--text-primary); color: #fff; }
   .seq-row.is-released .ws-num { background: var(--accent-light); color: var(--accent-ink); }
-  .seq-row.ak-current { background: linear-gradient(90deg, #F2FBF7, transparent 70%); }
-  .seq-row.ak-next { background: linear-gradient(90deg, #F5F7FE, transparent 70%); }
+  /* v1.14.0: the whole Current row is light green and the whole Next row
+     light blue, edge to edge, so the class position stands out at a glance. */
+  .seq-row.ak-current { background: #E3F6EC; box-shadow: inset 4px 0 0 #2FA36B; border-bottom-color: #C4E9D5; }
+  .seq-row.ak-next { background: #E6EEFC; box-shadow: inset 4px 0 0 #4C6FD6; border-bottom-color: #CBD8F5; }
+  .seq-row.ak-current .ws-num { background: #2FA36B; color: #fff; }
+  .seq-row.ak-next .ws-num { background: #4C6FD6; color: #fff; }
+  .seq-row.ak-current .name-edit:hover, .seq-row.ak-next .name-edit:hover { border-color: rgba(0,0,0,.12); background: rgba(255,255,255,.55); }
   .btn-finish { margin-top: 10px; width: 100%; justify-content: center; border: 1px dashed #9ED9C3; background: #F5FCF9; color: #0B6B4F; }
   .btn-finish:hover { background: #EAF8F2; }
   .finish-note { margin-top: 10px; }
