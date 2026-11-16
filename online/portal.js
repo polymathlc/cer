@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = 'v1.19.0';
+  var APP_VERSION = 'v1.20.0';
   var Core = window.PolymathOnlineCore;
 
   // Who runs the portal. Anyone else signs in as a student or a parent.
@@ -62,6 +62,7 @@
     preview: null,             // { level, subjects } while an admin previews the student view
     myClasses: {},             // ⭐ v1.19.0: { math: courseId, science: courseId } the student ticked
     previewMyClasses: {},      // the same while an admin previews (never saved)
+    subjectFilter: storedSubjectFilter(),   // 🔍 v1.20.0: '' (all) | 'math' | 'science', kept on this device
     uploads: [],               // [{ name, pct, state }]
     teacherUid: null
   };
@@ -643,6 +644,10 @@
   function studentHtml(member, preview) {
     if (!state.coursesLoaded) return '<div class="loader"><div class="spinner" aria-hidden="true"></div><div>Loading your classes…</div></div>';
     var courses = Core.coursesForMember(state.courses, member);
+    // 🔍 v1.20.0: the Maths / Science buttons narrow the classes in every tab.
+    var allCourses = courses;
+    var subjectFilter = Core.cleanSubjectFilter(state.subjectFilter, allCourses);
+    courses = Core.filterBySubject(allCourses, subjectFilter);
     // ⭐ v1.19.0: the classes the student ticked as "my class" go first.
     var order = Core.myClassOrder(courses, myPicks());
     courses = order.list;
@@ -673,6 +678,7 @@
     }
     // 🗂 v1.12.0: three plain tabs (and the full timeline as a fourth), so a
     // child finds the worksheets first and nothing else gets in the way.
+    html += subjectFilterHtml(allCourses, subjectFilter);
     html += studentTabsHtml(courses);
     html += '<div class="section st-panel" role="tabpanel" id="studentPanel" aria-labelledby="st-tab-' + state.studentTab + '">';
     html += myClassHintHtml(courses);
@@ -685,6 +691,59 @@
     });
     html += '</div></div>';
     return html;
+  }
+
+  /* ---- 🔍 Maths / Science buttons (v1.20.0) ----
+     Two big buttons above the tabs, in the subjects' own colours and with
+     the same pictures as the day bands (+−×÷ for maths, a flask for
+     science). Tap Maths: only maths classes, in every tab. Tap it again, or
+     Show all: everything again. Shown only when the student has classes of
+     both subjects. The choice is kept on this device (it is a view setting,
+     not a fact about the student, so it is not saved to the account). */
+  // A function, not a var: the state object at the top reads it before this line runs.
+  function subjectFilterStoreKey() { return 'polymathOnline.subjectFilter'; }
+  function storedSubjectFilter() {
+    try { return Core.cleanSubjectFilter(localStorage.getItem(subjectFilterStoreKey()) || '', null); } catch (e) { return ''; }
+  }
+  function storeSubjectFilter(value) {
+    try {
+      if (value) localStorage.setItem(subjectFilterStoreKey(), value);
+      else localStorage.removeItem(subjectFilterStoreKey());
+    } catch (e) {}
+  }
+  function subjectFilterHtml(courses, filter) {
+    var counts = Core.subjectFilterCounts(courses);
+    if (!counts.offered) return '';
+    var buttons = Core.SUBJECT_FILTERS.map(function (f) {
+      var key = f[0], on = filter === key;
+      var art = SUBJECT_ART[key];
+      var n = counts[key];
+      return '<button type="button" class="subject-filter-btn subject-filter-' + key + (on ? ' is-on' : filter ? ' is-off' : '') + '"' +
+        ' data-action="subject-filter" data-subject="' + key + '" aria-pressed="' + on + '"' +
+        ' aria-label="' + h(on ? 'Showing only ' + f[1].toLowerCase() + '. Tap to show all classes.' : f[2]) + '">' +
+        '<span class="subject-filter-medal" aria-hidden="true">' + subjectIconSvg(art.badge, 'subject-icon') + '</span>' +
+        '<span class="subject-filter-text"><span class="subject-filter-name">' + h(f[1]) + '</span>' +
+          '<span class="subject-filter-count">' + n + ' class' + (n === 1 ? '' : 'es') + '</span></span>' +
+        '<span class="subject-filter-tick" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>' +
+      '</button>';
+    }).join('');
+    var note = filter
+      ? '<p class="subject-filter-note is-set"><span>Showing only <b>' + (filter === 'math' ? 'maths' : 'science') + '</b>.</span>' +
+          '<button type="button" class="subject-filter-all" data-action="subject-filter" data-subject="all">Show all ' + counts.all + ' classes</button></p>'
+      : '<p class="subject-filter-note"><span>Tap <b>Maths</b> or <b>Science</b> to see only that subject.</span></p>';
+    return '<div class="subject-filter" role="group" aria-label="Show one subject">' +
+      '<div class="subject-filter-row">' + buttons + '</div>' + note + '</div>';
+  }
+  function setSubjectFilter(tapped) {
+    var next = tapped === 'all' ? '' : Core.toggleSubjectFilter(state.subjectFilter, tapped);
+    if (next === state.subjectFilter) return;
+    state.subjectFilter = next;
+    storeSubjectFilter(next);
+    render();
+    toast(next === 'math' ? 'Showing your maths classes only.' : next === 'science' ? 'Showing your science classes only.' : 'Showing all your classes.');
+    // Keep the buttons in view when the page was scrolled down.
+    var box = document.querySelector('.subject-filter');
+    if (box && box.getBoundingClientRect().top < 0) box.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }
 
   /* ---- 🗂 The student tabs (v1.12.0) ----
@@ -3054,6 +3113,7 @@
       case 'tab': state.adminTab = el.dataset.tab; state.courseId = null; render(); break;
       case 'student-tab': setStudentTab(el.dataset.tab); break;
       case 'my-class': toggleMyClass(id); break;
+      case 'subject-filter': setSubjectFilter(el.dataset.subject); break;
       case 'new-course': courseForm(null); break;
       case 'open-course': state.courseId = id; state.uploads = []; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); break;
       case 'close-course': state.courseId = null; render(); break;

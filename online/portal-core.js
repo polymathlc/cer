@@ -190,6 +190,59 @@
       aria: on ? 'This is my ' + word + ' class. Tap to untick.' : 'Tick: this is my ' + word + ' class'
     };
   }
+  /* 🔍 v1.20.0: the Maths and Science buttons at the top of the student
+     view. A student with maths AND science classes taps Maths to see only
+     the maths classes (in every tab), Science for only the science ones, and
+     taps the lit button again (or Show all) to see everything. A class of
+     both subjects shows under either button; a class of another subject
+     (English...) shows only when no button is on. The buttons are offered
+     only when the student has classes of both subjects, because with one
+     subject they would hide nothing. The filter is '' (show all), 'math'
+     or 'science'. */
+  var SUBJECT_FILTERS = [
+    ['math', 'Maths', 'Only my maths classes'],
+    ['science', 'Science', 'Only my science classes']
+  ];
+  function subjectFilterKeys(course) {
+    var key = subjectArt(course && course.subject).key;
+    if (key === 'both') return ['math', 'science'];
+    return key === 'math' || key === 'science' ? [key] : [];
+  }
+  // How many classes each button would show, and whether to offer the buttons.
+  function subjectFilterCounts(courses) {
+    var out = { math: 0, science: 0, all: 0, offered: false };
+    (courses || []).forEach(function (c) {
+      if (!c) return;
+      out.all += 1;
+      subjectFilterKeys(c).forEach(function (k) { out[k] += 1; });
+    });
+    var hasMathOnly = (courses || []).some(function (c) { return c && subjectArt(c.subject).key === 'math'; });
+    var hasScienceOnly = (courses || []).some(function (c) { return c && subjectArt(c.subject).key === 'science'; });
+    // Offered when the two buttons would really show different lists.
+    out.offered = out.math > 0 && out.science > 0 && (hasMathOnly || hasScienceOnly) &&
+      (out.math < out.all || out.science < out.all);
+    return out;
+  }
+  // A stored or tapped value, kept only when it means something here.
+  function cleanSubjectFilter(value, courses) {
+    var v = String(value || '').trim().toLowerCase();
+    if (v === 'maths' || v === 'mathematics') v = 'math';
+    if (v !== 'math' && v !== 'science') return '';
+    if (!courses) return v;
+    var counts = subjectFilterCounts(courses);
+    return counts.offered && counts[v] > 0 ? v : '';
+  }
+  function filterBySubject(courses, filter) {
+    var list = (courses || []).slice();
+    if (filter !== 'math' && filter !== 'science') return list;
+    return list.filter(function (c) { return subjectFilterKeys(c).indexOf(filter) >= 0; });
+  }
+  // Tap a button: the lit one goes off (show all), another one lights up.
+  function toggleSubjectFilter(current, tapped) {
+    var t = cleanSubjectFilter(tapped, null);
+    if (!t || t === 'all') return '';
+    return current === t ? '' : t;
+  }
   function autoCourseTitle(level, subject, day, slot) {
     var bits = [String(level || '').trim() + ' ' + subjectLabel(subject)];
     if (day) bits.push(day + (slotLabel(day, slot) ? ' ' + slotLabel(day, slot) : ''));
@@ -1607,7 +1660,9 @@
     levelSubjects: levelSubjects, subjectLabel: subjectLabel, cleanSubjects: cleanSubjects, profileSubjectFor: profileSubjectFor,
     slotsForDay: slotsForDay, slotLabel: slotLabel, courseTitle: courseTitle, dayBand: dayBand, subjectArt: subjectArt,
     MY_CLASS_SUBJECTS: MY_CLASS_SUBJECTS, myClassSubject: myClassSubject, cleanMyClasses: cleanMyClasses, isMyClass: isMyClass,
-    toggleMyClass: toggleMyClass, myClassOrder: myClassOrder, myClassLabel: myClassLabel, DAY_KEYS: DAY_KEYS, autoCourseTitle: autoCourseTitle,
+    toggleMyClass: toggleMyClass, myClassOrder: myClassOrder, myClassLabel: myClassLabel,
+    SUBJECT_FILTERS: SUBJECT_FILTERS, subjectFilterKeys: subjectFilterKeys, subjectFilterCounts: subjectFilterCounts,
+    cleanSubjectFilter: cleanSubjectFilter, filterBySubject: filterBySubject, toggleSubjectFilter: toggleSubjectFilter, DAY_KEYS: DAY_KEYS, autoCourseTitle: autoCourseTitle,
     normalizeEmail: normalizeEmail, isEmail: isEmail, escapeHtml: escapeHtml, initials: initials,
     naturalCompare: naturalCompare, worksheetNameFromFile: worksheetNameFromFile,
     watchLink: watchLink, VIDEO_PAGE: VIDEO_PAGE, videoPackCode: videoPackCode, videoPlaylistOf: videoPlaylistOf, videoPageLink: videoPageLink,
