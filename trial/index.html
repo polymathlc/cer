@@ -261,14 +261,15 @@
       </span>
     </div>
     <div class="tabs" id="admin-tabs" role="tablist">
-      <button class="tab on" data-tab="bookings">Bookings &amp; visits<span class="count" id="count-bookings">0</span></button>
+      <!-- v1.3.0 (Zhi Kai 16 Nov 2026): making a class link is the most used job, so Class links is the first tab and opens by default -->
+      <button class="tab on" data-tab="links">Class links<span class="count" id="count-links">0</span></button>
+      <button class="tab" data-tab="bookings">Bookings &amp; visits<span class="count" id="count-bookings">0</span></button>
       <button class="tab" data-tab="codes">Access codes<span class="count" id="count-codes">0</span></button>
-      <button class="tab" data-tab="links">Class links<span class="count" id="count-links">0</span></button>
       <button class="tab" data-tab="classes">Classes &amp; Zoom</button>
       <button class="tab" data-tab="password">Password</button>
     </div>
 
-    <div class="card admin-pane" id="pane-bookings">
+    <div class="card admin-pane hidden" id="pane-bookings">
       <h2>Bookings and class-link visits</h2>
       <p class="lead">Everyone who booked a date with a code, and everyone who opened a class link. Check the level, the class and the month each parent chose.</p>
       <div class="admin-stats" id="admin-stats"></div>
@@ -306,7 +307,7 @@
       <div id="code-list"></div>
     </div>
 
-    <div class="card admin-pane hidden" id="pane-links">
+    <div class="card admin-pane" id="pane-links">
       <h2>Class links (one week)</h2>
       <p class="lead">A link for one class opens its Zoom link and its Current and Next worksheets straight away, after asking for an email and WhatsApp number. Each link stops working 7 days after you make it.</p>
       <div class="admin-tools">
@@ -474,7 +475,7 @@
 
 // Shown to the signed-in admin in the footer, so a deploy can be checked.
 // Bump it on every change to this page.
-const TRIAL_PAGE_VERSION = 'v1.2.0';
+const TRIAL_PAGE_VERSION = 'v1.3.0';
 // 🎥 The Join Zoom button at the top (v1.2.0). A lesson with its own Zoom link (admin, Classes & Zoom)
 // uses that one; otherwise this, the centre's class Zoom. Keep equal to CLASS_ZOOM_URL in
 // student/student-account.js (a test checks).
@@ -1001,7 +1002,7 @@ function downloadIcs() {
 // Admin: /trial/#admin (Google sign-in; the server checks the account again)
 // ═══════════════════════════════════════════════════════════
 const ADMIN_EMAILS = ['chungzhikai@gmail.com', 'admin@polymathlc.com.sg', 'elsielcr@gmail.com', 'support@polymathlc.com.sg'];
-let auth = null, adminData = null, adminTab = 'bookings', bookingFilter = 'upcoming', codeFilter = 'active', freshCodes = [];
+let auth = null, adminData = null, adminTab = 'links', bookingFilter = 'upcoming', codeFilter = 'active', freshCodes = [];
 function firebaseReady() {
   if (auth) return true;
   if (!window.firebase || !firebase.initializeApp) return false;
