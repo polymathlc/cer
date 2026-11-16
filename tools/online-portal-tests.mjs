@@ -1089,6 +1089,31 @@ test('📅 v1.16.0: the day band names the class day in big letters, in its own 
   assert.match(portal, /class="card class-card"[^\n]*\n\s*dayBandHtml\(course\)/, 'the Timeline card opens with the band too');
 });
 
+test('🧮🧪 v1.18.0: the day band shows the subject as pictures, so same-day classes tell apart', () => {
+  const maths = Core.dayBand({ level: 'P6', subject: 'math', day: 'Monday', slot: 1 });
+  const sci = Core.dayBand({ level: 'P6', subject: 'science', day: 'Monday', slot: 2 });
+  assert.equal(maths.key, sci.key, 'same day, same colour');
+  assert.equal(maths.subjectKey, 'math');
+  assert.equal(maths.subjectWord, 'MATHS');
+  assert.equal(sci.subjectKey, 'science');
+  assert.equal(sci.subjectWord, 'SCIENCE');
+  assert.equal(Core.subjectArt('Mathematics').key, 'math', 'loose spellings still count');
+  assert.equal(Core.subjectArt('both').key, 'both');
+  assert.equal(Core.subjectArt('').key, 'general', 'no subject: plain study pictures, never a wrong subject');
+  assert.equal(Core.subjectArt('english').key, 'general');
+  assert.equal(Core.subjectArt('english').word, 'ENGLISH');
+  assert.equal(Core.dayBand(null).subjectKey, 'general');
+  const portal = fs.readFileSync(new URL('../online/portal.js', import.meta.url), 'utf8');
+  for (const key of ['math', 'science', 'both', 'general']) assert.match(portal, new RegExp('\\n    ' + key + ': \\{ badge: '), 'pictures for ' + key);
+  assert.match(portal, /subjectPatternSvg\(band\.subjectKey\)/, 'the band carries the pattern');
+  assert.match(portal, /day-subject-medal/, 'and the subject medallion');
+  assert.match(portal, /day-subject-tag/, 'and the MATHS / SCIENCE tag');
+  const page = fs.readFileSync(new URL('../online/index.html', import.meta.url), 'utf8');
+  assert.match(page, /\.day-band\.subject-math \{ --subject-ink: var\(--math-ink\); \}/);
+  assert.match(page, /\.day-band\.subject-science \{ --subject-ink: var\(--science-ink\); \}/);
+  assert.match(page, /\.day-band \{[^}]*position: sticky/, 'still sticks under the tabs');
+});
+
 /* ---------------- 🔗 v1.17.0: one class's answer keys and videos for another ---------------- */
 {
   const TOKEN = '0b5e4a5c-1f6c-4c1e-9a7e-2c1d3e4f5a6b';

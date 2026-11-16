@@ -531,16 +531,54 @@
   .day-class { margin: 0; font-size: 1.15rem; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; color: #fff; }
   .day-sub { margin-top: 2px; font-size: var(--font-size-sm); font-weight: 600; color: rgba(255,255,255,0.92); }
   .day-chips .chip { background: rgba(255,255,255,0.22); color: #fff; border-color: transparent; }
-  .day-chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+  .day-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; justify-content: flex-end; }
+
+  /* ===== 🧮🧪 Subject pictures on the day band (v1.18.0) =====
+     Two classes on the same day share one colour, so the band also shows the
+     subject as pictures: a white medallion with the subject icon (maths
+     signs in green, a flask in blue), a big white MATHS / SCIENCE tag, and a
+     faint pattern of that subject's symbols across the bar. The pattern
+     fades out on the left so the day and class name stay easy to read. */
+  .day-band { grid-template-columns: auto auto 1fr auto; overflow: hidden; isolation: isolate; }
+  .day-band > :not(.day-pattern) { position: relative; z-index: 1; }
+  .day-pattern {
+    position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none;
+    color: #fff; opacity: 0.42;
+    -webkit-mask-image: linear-gradient(to right, transparent 0, transparent 22%, #000 48%);
+            mask-image: linear-gradient(to right, transparent 0, transparent 22%, #000 48%);
+  }
+  .day-band { --subject-ink: #3B4250; }
+  .day-band.subject-math { --subject-ink: var(--math-ink); }
+  .day-band.subject-science { --subject-ink: var(--science-ink); }
+  .day-band.subject-both { --subject-ink: #4A3A8C; }
+  .day-subject-medal {
+    width: 56px; height: 56px; flex: none; border-radius: 50%;
+    display: grid; place-items: center;
+    background: #fff; color: var(--subject-ink);
+    box-shadow: 0 0 0 4px rgba(255,255,255,0.28), 0 4px 10px -4px rgba(0,0,0,0.45);
+  }
+  .day-subject-medal .subject-icon { width: 34px; height: 34px; display: block; }
+  .day-subject-tag {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 7px 14px 7px 10px; border-radius: 999px;
+    background: #fff; color: var(--subject-ink);
+    font-size: 1rem; font-weight: 800; letter-spacing: 0.08em; line-height: 1; white-space: nowrap;
+    box-shadow: 0 3px 8px -4px rgba(0,0,0,0.45);
+  }
+  .day-subject-tag .subject-icon { width: 22px; height: 22px; flex: none; display: block; }
   /* Rows under a band: the band already draws the top line. */
   .day-band + .st-group { margin-top: var(--space-md); }
   .class-card .day-band + .class-top { padding-top: var(--space-md); }
   @media (max-width: 640px) {
-    .day-band { grid-template-columns: auto 1fr; padding: 10px var(--space-md); gap: 4px 12px; }
-    .day-badge { min-width: 104px; padding: 7px 12px 8px; border-radius: 12px; }
+    .day-band { grid-template-columns: auto auto 1fr; padding: 10px 12px; gap: 4px 8px; }
+    .day-sub { display: none; }   /* the badge beside it already says the day and time */
+    .day-subject-medal { width: 38px; height: 38px; box-shadow: 0 0 0 3px rgba(255,255,255,0.28), 0 3px 8px -4px rgba(0,0,0,0.45); }
+    .day-subject-medal .subject-icon { width: 24px; height: 24px; }
+    .day-pattern { opacity: 0.36; -webkit-mask-image: linear-gradient(to right, transparent 0, transparent 62%, #000 88%); mask-image: linear-gradient(to right, transparent 0, transparent 62%, #000 88%); }
+    .day-badge { min-width: 96px; padding: 7px 10px 8px; border-radius: 12px; }
     .day-badge .day-name { font-size: 1.12rem; }
     .day-badge .day-time { font-size: 0.78rem; }
-    .day-class { font-size: 1rem; }
+    .day-class { font-size: 0.95rem; overflow-wrap: break-word; }
     .day-sub { font-size: 0.8rem; }
     .day-chips { display: none; }
   }
@@ -548,6 +586,8 @@
     .day-band { position: static; box-shadow: none; border-left: 6px solid var(--day); }
     .day-band, .day-class, .day-sub { background: none; color: #000; }
     .day-badge { background: none; color: #000; padding: 0; }
+    .day-pattern { display: none; }
+    .day-subject-medal, .day-subject-tag { box-shadow: none; border: 1px solid #999; }
   }
 
   /* ===== Admin ===== */
@@ -979,9 +1019,9 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
-<script src="lesson-clock.js?v=1.17.0"></script>
-<script src="portal-core.js?v=1.17.0"></script>
-<script src="portal.js?v=1.17.0"></script>
+<script src="lesson-clock.js?v=1.18.0"></script>
+<script src="portal-core.js?v=1.18.0"></script>
+<script src="portal.js?v=1.18.0"></script>
 <script defer src="pwa-install.js?v=2.0.0" data-app-name="Polymath Worksheets" data-app-key="online" data-app-icon="assets/app-icons/icon-192.png" data-accent="#00695C" data-sw="sw.js" data-floating="auto"></script>
 <!-- 🔐 Polymath student access (v1.0.0): the enrolment pop-up every Polymath app shares. A signed-in student is
      blocked here until an admin approves them at polymathlc.com.sg/student/#admin. Source: polymathlc/cer student/access-gate.js -->

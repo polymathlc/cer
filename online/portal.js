@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = 'v1.17.0';
+  var APP_VERSION = 'v1.18.0';
   var Core = window.PolymathOnlineCore;
 
   // Who runs the portal. Anyone else signs in as a student or a parent.
@@ -710,26 +710,109 @@
     var bar = document.querySelector('.st-tabs');
     if (bar && bar.getBoundingClientRect().top < 0) bar.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }
+  /* 🧮🧪 v1.18.0: subject pictures on the day band. Two classes on the same
+     day share one solid colour, so the band also carries the subject as
+     pictures: a white medallion with the subject's own icon beside the class
+     name, a big MATHS / SCIENCE tag at the right, and a faint pattern of
+     maths symbols (plus, divide, pi, ruler, fractions...) or science ones
+     (flask, atom, leaf, magnet, bulb...) across the bar. All inline SVG, so
+     it looks the same on every phone and computer (emoji differ by device).
+     Every icon is drawn on a 24 x 24 grid with round strokes; `fill` lists
+     the small dots drawn solid (the divide sign's dots, the atom's core). */
+  var SUBJECT_ICONS = {
+    // Maths
+    plus: { d: 'M12 5v14M5 12h14' },
+    minus: { d: 'M5 12h14' },
+    times: { d: 'M6.5 6.5l11 11M17.5 6.5l-11 11' },
+    divide: { d: 'M5 12h14', fill: [[12, 6.2, 1.7], [12, 17.8, 1.7]] },
+    equals: { d: 'M5 9h14M5 15h14' },
+    pi: { d: 'M4 7.5h16M9 7.5V19M15 7.5v8.5c0 2 1 3 3 3' },
+    sqrt: { d: 'M3 13.5l2.6-1 3.4 8L14.2 4H21' },
+    ruler: { d: 'M3.5 16.5L16.5 3.5l4 4-13 13zM7.5 12.5l2 2M10.5 9.5l2 2M13.5 6.5l2 2' },
+    triangle: { d: 'M12 4l9 16H3zM12 4v16' },
+    fraction: { d: 'M9.5 5.2L12 4v6M6 13h12M9.5 16h5l-5 4.5h5' },
+    protractor: { d: 'M3 18.5a9 9 0 0 1 18 0zM12 18.5l5.5-6.5M12 13.5v2' },
+    percent: { d: 'M18.5 5.5l-13 13', fill: [[7, 7, 2.3], [17, 17, 2.3]] },
+    ops: { d: 'M7.5 3.5v7M4 7h7M13.5 7h7M4.5 14.5l6 6M10.5 14.5l-6 6M13.5 17.5h7', fill: [[17, 14.3, 1.4], [17, 20.7, 1.4]] },
+    // Science
+    flask: { d: 'M9 3h6M10 3v6.5L4.6 18.8A1.5 1.5 0 0 0 5.9 21h12.2a1.5 1.5 0 0 0 1.3-2.2L14 9.5V3M7.2 15h9.6', fill: [[10.5, 17.6, 1.1], [13.6, 18.4, 0.9]] },
+    atom: { d: 'M2 12a10 4 0 1 0 20 0a10 4 0 1 0-20 0M7 3.34a10 4 60 1 0 10 17.32a10 4 60 1 0-10-17.32M17 3.34a10 4 -60 1 0-10 17.32a10 4 -60 1 0 10-17.32', fill: [[12, 12, 1.8]] },
+    leaf: { d: 'M5 19C5 10 11 5 20 5c0 9-5 14-14 14zM5 19l8.5-8.5' },
+    magnet: { d: 'M5 3h4.5v9a2.5 2.5 0 0 0 5 0V3H19v9a7 7 0 0 1-14 0zM5 7.5h4.5M14.5 7.5H19' },
+    bulb: { d: 'M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.8.8 1 1.6 1 2.5h6c0-.9.2-1.7 1-2.5A6 6 0 0 0 12 3z' },
+    tube: { d: 'M8.5 3h7M10 3v14.5a2 2 0 0 0 4 0V3M10 11h4' },
+    bolt: { d: 'M13.5 2.5L5 14h6l-1 7.5L18.5 10h-6z' },
+    dna: { d: 'M7 3c0 5 10 6 10 9s-10 4-10 9M17 3c0 5-10 6-10 9s10 4 10 9M8.5 6.5h7M8.5 17.5h7' },
+    planet: { d: 'M7 12a5 5 0 1 0 10 0a5 5 0 1 0-10 0M2.6 15.42a10 3.2 -20 1 0 18.8-6.84a10 3.2 -20 1 0-18.8 6.84' },
+    // Any other subject
+    book: { d: 'M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5zM4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5' },
+    pencil: { d: 'M4 20l1-4.5L16 4.5l3.5 3.5L8.5 19zM14 6.5l3.5 3.5' },
+    star: { d: 'M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8L3.5 9.7l5.9-.8z' }
+  };
+  // The big icon in the medallion, and the pictures scattered across the bar.
+  var SUBJECT_ART = {
+    math: { badge: 'ops', pattern: ['plus', 'divide', 'pi', 'ruler', 'fraction', 'times', 'sqrt', 'triangle', 'percent', 'equals', 'protractor', 'minus'] },
+    science: { badge: 'flask', pattern: ['atom', 'flask', 'leaf', 'magnet', 'bulb', 'tube', 'bolt', 'dna', 'planet', 'atom', 'leaf', 'magnet'] },
+    both: { badge: 'atom', pattern: ['plus', 'flask', 'pi', 'atom', 'ruler', 'leaf', 'divide', 'magnet', 'fraction', 'bulb', 'times', 'dna'] },
+    general: { badge: 'book', pattern: ['book', 'pencil', 'star', 'bulb', 'book', 'pencil', 'star', 'book', 'pencil', 'star', 'bulb', 'book'] }
+  };
+  // Where the twelve pattern pictures sit on the bar's 720 x 100 canvas:
+  // x, y (top left of the picture), size and tilt. Spread so none touch, and
+  // weighted to the right: the day badge and class name live on the left.
+  var SUBJECT_SPOTS = [
+    [250, 52, 30, -12], [292, 12, 34, 10], [344, 54, 30, 18], [392, 14, 38, -8],
+    [444, 56, 30, 6], [488, 12, 34, -16], [532, 50, 36, 12], [582, 12, 32, 20],
+    [622, 56, 32, -10], [664, 16, 34, 8], [704, 58, 28, -18], [706, 10, 26, 14]
+  ];
+  function subjectIconSvg(name, cls) {
+    var icon = SUBJECT_ICONS[name] || SUBJECT_ICONS.book;
+    return '<svg class="' + (cls || 'subject-icon') + '" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+      subjectIconInner(icon) + '</svg>';
+  }
+  function subjectIconInner(icon) {
+    var out = '<path d="' + icon.d + '" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+    (icon.fill || []).forEach(function (dot) {
+      out += '<circle cx="' + dot[0] + '" cy="' + dot[1] + '" r="' + dot[2] + '" fill="currentColor"/>';
+    });
+    return out;
+  }
+  function subjectPatternSvg(key) {
+    var art = SUBJECT_ART[key] || SUBJECT_ART.general;
+    var pics = '';
+    SUBJECT_SPOTS.forEach(function (spot, i) {
+      var icon = SUBJECT_ICONS[art.pattern[i % art.pattern.length]] || SUBJECT_ICONS.book;
+      var scale = spot[2] / 24;
+      pics += '<g transform="translate(' + spot[0] + ' ' + spot[1] + ') rotate(' + spot[3] + ' ' + (spot[2] / 2) + ' ' + (spot[2] / 2) + ') scale(' + scale.toFixed(3) + ')">' +
+        subjectIconInner(icon) + '</g>';
+    });
+    return '<svg class="day-pattern" viewBox="0 0 740 100" preserveAspectRatio="xMaxYMid meet" aria-hidden="true" focusable="false">' + pics + '</svg>';
+  }
+
   /* 📅 v1.16.0: every class segment, in all four tabs, opens with its class
      DAY in big letters at the top left (MONDAY, in that day's own colour),
      the time under it and the class beside it. The band sticks under the
      tabs while that segment scrolls past, so a student scrolling a long list,
      or in two classes, always knows whose worksheets, answer keys and videos
      they are looking at. Shown even with one class: the day is how children
-     name their class. */
+     name their class. v1.18.0 adds the subject pictures (see above). */
   function dayBandHtml(course) {
     var band = Core.dayBand(course);
     var name = band.className;
-    return '<header class="day-band day-' + h(band.key) + '" data-day="' + h(band.day || '') + '">' +
+    var art = SUBJECT_ART[band.subjectKey] || SUBJECT_ART.general;
+    return '<header class="day-band day-' + h(band.key) + ' subject-' + h(band.subjectKey) + '" data-day="' + h(band.day || '') + '" data-subject="' + h(band.subjectKey) + '">' +
+      subjectPatternSvg(band.subjectKey) +
       (band.day
         ? '<div class="day-badge" aria-hidden="true"><span class="day-name">' + h(band.dayUpper) + '</span>' +
             (band.time ? '<span class="day-time">' + h(band.time) + '</span>' : '') + '</div>'
         : '<div class="day-badge day-badge-none" aria-hidden="true"><span class="day-name">CLASS</span></div>') +
+      '<div class="day-subject-medal" role="img" aria-label="' + h(band.subjectName) + '">' + subjectIconSvg(art.badge, 'subject-icon') + '</div>' +
       '<div class="day-text">' +
         '<h2 class="day-class">' + h(name) + '</h2>' +
         '<div class="day-sub">' + h(band.sentence) + '</div>' +
       '</div>' +
-      '<div class="day-chips">' + levelChip(course.level) + subjectChip(course.subject) + '</div>' +
+      '<div class="day-chips">' + levelChip(course.level) +
+        '<span class="day-subject-tag">' + subjectIconSvg(art.badge, 'subject-icon') + '<span>' + h(band.subjectWord) + '</span></span>' +
+      '</div>' +
     '</header>';
   }
   // The class's day band over its rows (v1.16.0: always, not only with two classes).

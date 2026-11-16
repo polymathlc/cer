@@ -92,7 +92,11 @@
       ? (String(course.level || '').trim() + ' ' + subjectLabel(course.subject)).trim()
       : String(course.title);
     if (!className) className = 'Your class';
+    var art = subjectArt(course.subject);
     return {
+      subjectKey: art.key,
+      subjectWord: art.word,
+      subjectName: art.name,
       key: at >= 0 ? DAY_KEYS[at] : 'none',
       day: day,
       dayUpper: day.toUpperCase(),
@@ -100,6 +104,29 @@
       className: className,
       sentence: day ? day + ' class' + (time ? ' · ' + time : '') : 'No class day set yet'
     };
+  }
+  /* 🧮🧪 v1.18.0: which pictures a class's day band carries, so two classes
+     on the same day (the same colour) still tell apart at a glance: maths
+     symbols (plus, divide, pi, ruler...) or science ones (flask, atom, leaf,
+     magnet...). A class of both subjects mixes them; any other subject, or
+     none, gets plain study pictures (book, pencil, star) instead of a wrong
+     subject's. `word` is the big label on the band, `name` is for screen
+     readers. Subjects are matched loosely (math, maths, mathematics, sci...)
+     because an admin's own data may not use the exact values. */
+  function subjectArt(subject) {
+    var raw = String(subject == null ? '' : subject).trim().toLowerCase();
+    if (raw === 'math' || raw === 'maths' || raw === 'mathematics' || /^math/.test(raw)) {
+      return { key: 'math', word: 'MATHS', name: 'Mathematics' };
+    }
+    if (raw === 'science' || /^sci/.test(raw)) {
+      return { key: 'science', word: 'SCIENCE', name: 'Science' };
+    }
+    if (raw === 'both' || (/math/.test(raw) && /sci/.test(raw))) {
+      return { key: 'both', word: 'MATHS + SCIENCE', name: 'Mathematics and Science' };
+    }
+    if (!raw) return { key: 'general', word: 'CLASS', name: 'Class' };
+    var label = subjectLabel(subject, true) || String(subject);
+    return { key: 'general', word: String(label).toUpperCase(), name: String(label) };
   }
   function autoCourseTitle(level, subject, day, slot) {
     var bits = [String(level || '').trim() + ' ' + subjectLabel(subject)];
@@ -1516,7 +1543,7 @@
     releaseFloor: releaseFloor, RELEASE_AHEAD: RELEASE_AHEAD, NEXT_COUNT: NEXT_COUNT, LEVELS: LEVELS, SUBJECTS: SUBJECTS, DAYS: DAYS, ROLES: ROLES,
     SLOTS_WEEKDAY: SLOTS_WEEKDAY, SLOTS_WEEKEND: SLOTS_WEEKEND,
     levelSubjects: levelSubjects, subjectLabel: subjectLabel, cleanSubjects: cleanSubjects, profileSubjectFor: profileSubjectFor,
-    slotsForDay: slotsForDay, slotLabel: slotLabel, courseTitle: courseTitle, dayBand: dayBand, DAY_KEYS: DAY_KEYS, autoCourseTitle: autoCourseTitle,
+    slotsForDay: slotsForDay, slotLabel: slotLabel, courseTitle: courseTitle, dayBand: dayBand, subjectArt: subjectArt, DAY_KEYS: DAY_KEYS, autoCourseTitle: autoCourseTitle,
     normalizeEmail: normalizeEmail, isEmail: isEmail, escapeHtml: escapeHtml, initials: initials,
     naturalCompare: naturalCompare, worksheetNameFromFile: worksheetNameFromFile,
     watchLink: watchLink, VIDEO_PAGE: VIDEO_PAGE, videoPackCode: videoPackCode, videoPlaylistOf: videoPlaylistOf, videoPageLink: videoPageLink,
