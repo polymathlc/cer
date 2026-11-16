@@ -796,8 +796,8 @@ test('watch: the link, the query and the remembered spot', () => {
   for (const [id, o] of [['ws1', {}], ['ws1', { day: '2026-11-09' }], ['w-2', { rec: 'r1', t: 75.6, course: 'k9' }]]) {
     assert.equal(Core.watchLink(id, o), W.watchLink(id, o), 'the portal and the player build the same link');
   }
-  assert.deepEqual(plainList(W.readQuery('?ws=ws1&day=2026-11-09&rec=r1&t=90&c=k1')), { ws: 'ws1', day: '2026-11-09', rec: 'r1', t: 90, course: 'k1' });
-  assert.deepEqual(plainList(W.readQuery('?ws=<x>&day=9&rec=a b&t=-4')), { ws: '', day: '', rec: '', t: 0, course: '' });
+  assert.deepEqual(plainList(W.readQuery('?ws=ws1&day=2026-11-09&rec=r1&t=90&c=k1')), { ws: 'ws1', day: '2026-11-09', rec: 'r1', t: 90, course: 'k1', src: '' });
+  assert.deepEqual(plainList(W.readQuery('?ws=<x>&day=9&rec=a b&t=-4')), { ws: '', day: '', rec: '', t: 0, course: '', src: '' });
   const lessons = W.lessonsOf([lessonAnn('a', 1e12), lessonAnn('b', 1e12 + 5)]);
   assert.deepEqual(plainList(W.readSpot(JSON.stringify({ rec: 'b', t: 120 }), lessons)), { rec: 'b', index: 1, t: 120 });
   assert.equal(W.readSpot(JSON.stringify({ rec: 'b', t: 595 }), lessons).t, 0, 'nearly finished: from the top');
@@ -1088,3 +1088,128 @@ test('📅 v1.16.0: the day band names the class day in big letters, in its own 
   assert.match(portal, /function stClassHead\(course\) \{\s*return dayBandHtml\(course\);/, 'every tab opens a class with the band, even with one class');
   assert.match(portal, /class="card class-card"[^\n]*\n\s*dayBandHtml\(course\)/, 'the Timeline card opens with the band too');
 });
+
+/* ---------------- 🔗 v1.17.0: one class's answer keys and videos for another ---------------- */
+{
+  const TOKEN = '0b5e4a5c-1f6c-4c1e-9a7e-2c1d3e4f5a6b';
+  const keyUrl = (id, day) => 'https://firebasestorage.googleapis.com/v0/b/b/o/' +
+    encodeURIComponent('pdf-annotator/lesson-key-' + id + '-' + day + '.pdf') + '?alt=media&token=' + TOKEN;
+  const SG = (iso) => Date.parse(iso + '+08:00');
+  // Monday 7pm P6 Science has the lessons; Tuesday 5pm and Saturday 9am do the same worksheets.
+  const mon = { id: 'mon', level: 'P6', subject: 'science', day: 'Monday', slot: 2, worksheetIds: ['m1', 'm2', 'm3'], currentIndex: 2, releasedThrough: 2 };
+  const tue = { id: 'tue', level: 'P6', subject: 'science', day: 'Tuesday', slot: 1, worksheetIds: ['t1', 't2', 't3'], currentIndex: 1, releasedThrough: 2, shareFrom: 'mon' };
+  const sat = { id: 'sat', level: 'P6', subject: 'science', day: 'Saturday', slot: 0, worksheetIds: ['s0', 's2'], currentIndex: 1, releasedThrough: 1 };
+  const courses = { mon, tue, sat };
+  const docs = {
+    m1: { name: 'P5 Science November WS 1 - Revision', storagePath: 'x', answerKeys: { '2026-11-09': { url: keyUrl('m1', '2026-11-09'), pages: 4 } } },
+    m2: { name: 'P5 Science November Worksheet 2 - Revision', storagePath: 'x', answerKeys: { '2026-11-16': { url: keyUrl('m2', '2026-11-16'), pages: 4 } } },
+    m3: { name: 'P6 Science Worksheet 3', storagePath: 'x' },
+    t1: { name: 'P5 Science November WS 1 - Revision', storagePath: 'x', onlineCopiedFrom: 'm1' },
+    t2: { name: 'p5 science november ws 2 – revision', storagePath: 'x' },
+    t3: { name: 'Something else', storagePath: 'x' },
+    s0: { name: 'Saturday only', storagePath: 'x' },
+    s2: { name: 'P5 Science November Worksheet 2 - Revision', storagePath: 'x' }
+  };
+  const rec = (id, iso) => ({ id, title: 'Lesson', at: SG(iso), duration: 3000, video: true, page: 1 });
+  const recordings = {
+    m1: [rec('r1', '2026-11-09T19:30:00'), rec('r0', '2026-11-02T19:30:00')],
+    m2: [rec('r2', '2026-11-16T19:30:00')]
+  };
+  const LATER = SG('2026-11-20T12:00:00');
+
+  test('🔗 shared: a worksheet is matched by copy, then by name; a pin or "keep own" wins', () => {
+    assert.equal(Core.shareMatch(tue, 't1', mon, docs), 'm1', 'a copy of the same original');
+    assert.equal(Core.shareMatch(tue, 't2', mon, docs), 'm2', 'the same name, whatever the case, dash or "Worksheet"/"WS"');
+    assert.equal(Core.shareMatch(tue, 't3', mon, docs), '', 'no match: nothing is shared');
+    assert.equal(Core.shareNameKey('P5 Science November Worksheet 2 - Revision'), Core.shareNameKey('p5 science november ws 2 – revision'));
+    const src = Core.shareSourceOf(tue, 't2', courses, docs);
+    assert.equal(src.course.id, 'mon'); assert.equal(src.ws, 'm2'); assert.equal(src.mode, 'fill'); assert.equal(src.pinned, false);
+    assert.equal(Core.shareSourceOf(mon, 'm1', courses, docs), null, 'a class that shares from nobody');
+    const pinned = { ...tue, sharedKeys: { t3: { course: 'sat', ws: 's2' }, t1: { own: true } } };
+    assert.equal(Core.shareSourceOf(pinned, 't3', courses, docs).ws, 's2', 'set by hand to any class');
+    assert.equal(Core.shareSourceOf(pinned, 't3', courses, docs).mode, 'replace');
+    assert.equal(Core.shareSourceOf(pinned, 't1', courses, docs), null, 'keep own');
+    assert.equal(Core.shareSourceOf({ ...tue, shareFrom: 'gone' }, 't1', courses, docs), null, 'a class that no longer exists');
+    assert.equal(Core.shareSourceOf({ ...tue, shareFrom: 'tue' }, 't1', courses, docs), null, 'never from itself');
+    assert.deepEqual(Core.shareSourceIds(pinned, courses, docs), ['m1', 'm2', 'm3', 's2']);
+  });
+
+  test('🔗 shared: students see them only after their own class finished the worksheet', () => {
+    const items = Core.timelineItems(tue, docs, recordings, { courses, now: LATER });
+    const t1 = items.find((i) => i.id === 't1'), t2 = items.find((i) => i.id === 't2'), t3 = items.find((i) => i.id === 't3');
+    assert.equal(t1.recordings.length, 2, 'worksheet 1 is done in Tuesday: Monday\'s two videos');
+    assert.equal(t1.answerKeys.length, 1);
+    assert.equal(t1.shared.courseId, 'mon'); assert.equal(t1.shared.videos, true); assert.equal(t1.shared.keys, true);
+    assert.equal(t2.recordings.length, 0, 'Tuesday is on worksheet 2: not yet');
+    assert.equal(t2.answerKeys.length, 0);
+    assert.equal(t2.shared.waiting, true);
+    assert.equal(t3.shared, null);
+    const admin = Core.timelineItems(tue, docs, recordings, { courses, now: LATER, all: true });
+    assert.equal(admin.find((i) => i.id === 't2').recordings.length, 1, 'admins see them at once');
+    // Once Tuesday's lesson on worksheet 2 is over (the class moves on), they are out.
+    const moved = Core.timelineItems({ ...tue, currentIndex: 2 }, docs, recordings, { courses, now: LATER });
+    assert.equal(moved.find((i) => i.id === 't2').recordings.length, 1);
+    // Not before the lesson they were recorded in was over in Monday's class.
+    const early = Core.timelineItems({ ...tue, currentIndex: 2 }, docs, recordings, { courses, now: SG('2026-11-16T20:00:00') });
+    assert.equal(early.find((i) => i.id === 't2').recordings.length, 0, 'Monday 7pm lesson still on at 8pm');
+    assert.equal(early.find((i) => i.id === 't2').answerKeys.length, 0);
+    const not = Core.timelineItems({ ...tue, currentIndex: -1, releasedThrough: 2 }, docs, recordings, { courses, now: LATER });
+    assert.ok(not.every((i) => !i.recordings.length), 'a class that has not started sees none');
+  });
+
+  test('🔗 shared: own lessons first, unless "Always"; the class\'s own archive still hides', () => {
+    const own = { ...recordings, t1: [rec('own', '2026-11-10T17:30:00')] };
+    let it = Core.timelineItems(tue, docs, own, { courses, now: LATER }).find((i) => i.id === 't1');
+    assert.deepEqual(it.recordings.map((r) => r.id), ['own'], 'fill: its own video stays');
+    assert.equal(it.answerKeys.length, 1, '...and the missing answer key comes from Monday');
+    assert.equal(it.shared.videos, false); assert.equal(it.shared.keys, true);
+    it = Core.timelineItems({ ...tue, shareMode: 'replace' }, docs, own, { courses, now: LATER }).find((i) => i.id === 't1');
+    assert.deepEqual(it.recordings.map((r) => r.id), ['r1', 'r0'], 'replace: Monday\'s instead');
+    const dayKey = Core.lessonDayKey(SG('2026-11-09T19:30:00'));
+    it = Core.timelineItems({ ...tue, archivedDays: ['t1|' + dayKey] }, docs, recordings, { courses, now: LATER }).find((i) => i.id === 't1');
+    assert.deepEqual(it.recordings.map((r) => r.id), ['r0'], 'a class day archived here hides that shared day');
+    const archived = Core.timelineItems({ ...tue, archivedWorksheets: ['t1'] }, docs, recordings, { courses, now: LATER });
+    assert.ok(!archived.find((i) => i.id === 't1'), 'an archived worksheet stays hidden');
+    // The rows the tabs draw carry where the videos come from.
+    const items = Core.timelineItems(tue, docs, recordings, { courses, now: LATER });
+    const vrow = Core.videoRows(tue, items).find((r) => r.id === 't1');
+    assert.equal(vrow.shared.ws, 'm1');
+    assert.equal(Core.answerKeyRows(tue, items).find((r) => r.id === 't1').shared.courseId, 'mon');
+    assert.equal(Core.watchLink('t1', { course: 'tue', src: 'm1' }), 'watch.html?ws=t1&c=tue&src=m1');
+    assert.equal(Core.watchLink('t1', { course: 'tue', src: 'm1' }), W.watchLink('t1', { course: 'tue', src: 'm1' }));
+    assert.equal(Core.watchLink('t1', { src: 't1' }), 'watch.html?ws=t1', 'never itself');
+    assert.equal(W.readQuery('?ws=t1&c=tue&src=m1').src, 'm1');
+    assert.equal(W.readQuery('?ws=t1&src=a b').src, '');
+  });
+
+  test('🔗 shared: the admin\'s writes, the rows, missing worksheets and the video page check', () => {
+    assert.deepEqual(Core.shareUpdate(mon, { kind: 'follow', from: 'tue' }), { shareFrom: 'tue', shareMode: 'fill' });
+    assert.equal(Core.shareUpdate(tue, { kind: 'follow', from: 'mon' }), null, 'already');
+    assert.deepEqual(Core.shareUpdate(tue, { kind: 'follow', from: '' }), { shareFrom: '', shareMode: 'fill' }, 'stop sharing');
+    assert.equal(Core.shareUpdate(tue, { kind: 'follow', from: 'tue' }), null, 'not itself');
+    assert.deepEqual(Core.shareUpdate(tue, { kind: 'mode', mode: 'replace' }), { shareMode: 'replace' });
+    assert.equal(Core.shareUpdate(tue, { kind: 'mode', mode: 'nonsense' }), null);
+    assert.deepEqual(Core.shareUpdate(tue, { kind: 'pin', ws: 't3', from: { course: 'sat', ws: 's2' } }), { sharedKeys: { t3: { course: 'sat', ws: 's2' } } });
+    assert.equal(Core.shareUpdate(tue, { kind: 'pin', ws: 'zz', from: { course: 'sat', ws: 's2' } }), null, 'only a worksheet of this class');
+    const withPin = { ...tue, sharedKeys: { t3: { course: 'sat', ws: 's2' } } };
+    assert.deepEqual(Core.shareUpdate(withPin, { kind: 'own', ws: 't1' }), { sharedKeys: { t3: { course: 'sat', ws: 's2' }, t1: { own: true } } });
+    assert.deepEqual(Core.shareUpdate(withPin, { kind: 'clear', ws: 't3' }), { sharedKeys: {} });
+    assert.equal(Core.shareUpdate(withPin, { kind: 'clear', ws: 't1' }), null, 'nothing to clear');
+    const rows = Core.shareRows(tue, courses, docs, recordings);
+    assert.deepEqual(rows.map((r) => r.uses), ['shared', 'shared', 'own']);
+    assert.equal(rows[0].open, true); assert.equal(rows[1].open, false);
+    assert.equal(rows[0].sourceVideos, 2); assert.equal(rows[0].source.seq, 0);
+    assert.deepEqual(Core.shareMissing({ ...sat, shareFrom: 'mon' }, courses, docs), ['m1', 'm3'], 'Saturday lacks worksheets 1 and 3');
+    assert.deepEqual(Core.shareChoices(tue, courses).map((c) => c.id).sort(), ['mon', 'sat']);
+    assert.equal(Core.shareAllows(tue, 't1', 'm1', courses).id, 'mon');
+    assert.equal(Core.shareAllows(tue, 't1', 's2', courses), null, 'not where it shares from');
+    assert.equal(Core.shareAllows({ ...tue, sharedKeys: { t1: { own: true } } }, 't1', 'm1', courses), null);
+    assert.equal(Core.shareAllows(withPin, 't3', 's2', courses).id, 'sat');
+    assert.equal(Core.sharedOpen(tue, 0), true); assert.equal(Core.sharedOpen(tue, 1), false);
+    const watch = fs.readFileSync(new URL('../online/watch.js', import.meta.url), 'utf8');
+    assert.match(watch, /Core\.shareAllows\(state\.found\.course, query\.ws, query\.src/, 'the video page checks the class shares it');
+    assert.match(watch, /Core\.sharedOpen\(openFor, seq\) && Core\.recordingOpen\(sharedFrom, at\)/);
+    const portal = fs.readFileSync(new URL('../online/portal.js', import.meta.url), 'utf8');
+    assert.ok(!/Core\.timelineItems\(course, state\.docs, state\.recordings\)/.test(portal), 'every tab passes the classes, for sharing');
+  });
+}

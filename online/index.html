@@ -759,6 +759,31 @@
   .arch-fold > summary { cursor: pointer; padding: 10px 14px; font-weight: 600; color: #455A64; }
   .arch-fold .arch-row { padding: 8px 14px; }
   @media (max-width: 560px) { .arch-row { grid-template-columns: 1fr; gap: 4px; } .arch-row .btn { justify-self: start; } }
+
+  /* ===== 🔗 Shared answer keys and videos (v1.17.0) ===== */
+  .chip-share { background: #E8EAF6; color: #3949AB; margin-left: 4px; }
+  .chip-share.is-on { background: #3949AB; color: #fff; }
+  .chip-share-own { background: #F3E5F5; color: #6A1B9A; margin-left: 4px; }
+  .st-shared { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: var(--radius-full); background: #E8EAF6; color: #3949AB; font-weight: 600; font-size: .78rem; }
+  .share-card { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+  .share-now { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px 16px; padding: 12px 14px; border-radius: 12px; background: #EEF0FB; border: 1px solid #C5CAE9; }
+  .share-now .label { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #3949AB; }
+  .share-from { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0; font-size: 1.05rem; }
+  .share-pick .row { gap: 8px; flex-wrap: wrap; }
+  .share-select { min-height: 38px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--border-subtle); background: #fff; font: inherit; max-width: 100%; }
+  .share-missing { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 12px; background: #FFF8E1; border: 1px solid #FFE082; }
+  .share-missing .row { gap: 8px; flex-wrap: wrap; }
+  .share-fold > summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+  .share-list { list-style: none; margin: 8px 0 0; padding: 0; }
+  .share-row { display: grid; grid-template-columns: 34px 1fr auto; gap: 8px 12px; align-items: center; padding: 10px 4px; border-top: 1px solid var(--border-subtle); }
+  .share-row .ws-num { width: 28px; height: 28px; font-size: .8rem; }
+  .share-row.is-shared .ws-num { background: #3949AB; color: #fff; }
+  .share-main { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+  .share-main b { overflow-wrap: anywhere; }
+  .share-uses { font-size: var(--font-size-sm); }
+  .share-uses.is-on { color: #3949AB; font-weight: 600; }
+  .share-acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  @media (max-width: 560px) { .share-row { grid-template-columns: 30px 1fr; } .share-acts { grid-column: 2; justify-content: flex-start; } }
   .tl-group { display: inline-flex; align-items: center; gap: 6px; padding: 4px 4px 4px 10px; border-radius: 12px; background: #F7F7F5; }
   .tl-group-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-tertiary); margin-right: 2px; }
   .btn-video { background: #1A1A1A; color: #fff; border-color: #1A1A1A; }
@@ -954,9 +979,9 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
-<script src="lesson-clock.js?v=1.16.0"></script>
-<script src="portal-core.js?v=1.16.0"></script>
-<script src="portal.js?v=1.16.0"></script>
+<script src="lesson-clock.js?v=1.17.0"></script>
+<script src="portal-core.js?v=1.17.0"></script>
+<script src="portal.js?v=1.17.0"></script>
 <script defer src="pwa-install.js?v=2.0.0" data-app-name="Polymath Worksheets" data-app-key="online" data-app-icon="assets/app-icons/icon-192.png" data-accent="#00695C" data-sw="sw.js" data-floating="auto"></script>
 <!-- 🔐 Polymath student access (v1.0.0): the enrolment pop-up every Polymath app shares. A signed-in student is
      blocked here until an admin approves them at polymathlc.com.sg/student/#admin. Source: polymathlc/cer student/access-gate.js -->

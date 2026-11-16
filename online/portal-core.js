@@ -297,6 +297,251 @@
     }).sort(function (p, q) { return p.key < q.key ? 1 : p.key > q.key ? -1 : (p.seq - q.seq); });
     return { worksheets: worksheets, days: days, count: worksheets.length + days.length };
   }
+  /* ---- 🔗 Shared answer keys and videos (v1.17.0) ----
+     Zhi Kai, 16 Nov 2026: the three P6 Science classes (Monday 7pm, Tuesday
+     5pm, Saturday 9am) do the same worksheets, but the answer key and the
+     lesson videos made in one class only showed in that class, so Tuesday
+     and Saturday had "No lesson videos yet". "Have an option to set one
+     class's answer key for other classes, as they may have slower
+     progression or something happened to the pdf or video recordings."
+
+     A class can now use another class's answer key PDFs and lesson videos.
+     Nothing is copied and nothing is deleted: the class only POINTS at the
+     other class, so whatever that class records later shows here too, and
+     taking the setting off puts everything back as it was. Three settings
+     on the class (onlineCourses/{id}):
+
+       shareFrom: '<class id>'   follow that class. Each worksheet of this
+                                 class is matched with the same worksheet
+                                 there (`shareMatch`: a copy of the same
+                                 original, or the same name).
+       shareMode: 'fill'         (default) only where this class has no
+                                 videos / no answer key PDF of its own, so
+                                 its own lessons always win;
+                  'replace'      always that class's, instead of its own.
+       sharedKeys: { '<worksheet id>': { course, ws } }
+                                 one worksheet set by hand to one worksheet
+                                 of any class (always used instead of its
+                                 own), or { own: true } to keep its own even
+                                 while the class follows another.
+
+     When students see a shared answer key or video (the lesson clock rule):
+     only once THEIR OWN class has finished that worksheet (`sharedOpen`), so
+     a slower class never sees the answers before its own lesson, and each
+     item only once it was out in the class it comes from. This class's own
+     archive (whole worksheet or class day) still hides it here: archiving
+     stays per class. Admins see everything. */
+  var SHARE_MODES = ['fill', 'replace'];
+  function shareMode(course) { return course && course.shareMode === 'replace' ? 'replace' : 'fill'; }
+  function courseById(courses, id) {
+    if (!courses || !id) return null;
+    if (Array.isArray(courses)) { for (var i = 0; i < courses.length; i++) if (courses[i] && courses[i].id === id) return courses[i]; return null; }
+    var c = courses[id];
+    return c ? (c.id ? c : Object.assign({ id: id }, c)) : null;
+  }
+  function sharedEntries(course) {
+    var map = course && course.sharedKeys && typeof course.sharedKeys === 'object' && !Array.isArray(course.sharedKeys) ? course.sharedKeys : {};
+    var out = {};
+    Object.keys(map).forEach(function (id) {
+      var e = map[id];
+      if (!ARCHIVE_ID_RE.test(id) || !e || typeof e !== 'object') return;
+      if (e.own === true) { out[id] = { own: true }; return; }
+      var c = String(e.course || ''), ws = String(e.ws || '');
+      if (ARCHIVE_ID_RE.test(c) && ARCHIVE_ID_RE.test(ws) && !(ws === id && c === (course && course.id))) out[id] = { course: c, ws: ws };
+    });
+    return out;
+  }
+  function followedCourseId(course) {
+    var id = course && typeof course.shareFrom === 'string' ? course.shareFrom : '';
+    return ARCHIVE_ID_RE.test(id) && id !== (course && course.id) ? id : '';
+  }
+  // A worksheet name as two classes would both write it: case, spaces,
+  // punctuation and "Worksheet"/"WS" do not matter.
+  function shareNameKey(name) {
+    return String(name || '').toLowerCase().replace(/\.pdf$/, '').replace(/\bworksheets?\b/g, 'ws')
+      .replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+  /* The worksheet of `source` that is the same as `wsId` of `course`: the
+     same id, a copy of the same original (Duplicate class, Browse Ans Key),
+     or the same name. With several, the one at the same place in the list. */
+  function shareMatch(course, wsId, source, docs) {
+    var ids = courseIds(source);
+    if (!ids.length || !wsId) return '';
+    if (ids.indexOf(wsId) >= 0) return wsId;
+    docs = docs || {};
+    var seq = courseIds(course).indexOf(wsId);
+    function pick(list) {
+      if (!list.length) return '';
+      if (seq >= 0 && list.indexOf(ids[seq]) >= 0) return ids[seq];
+      return list[0];
+    }
+    if (docs[wsId]) {
+      var root = copyRoot(wsId, docs);
+      var family = ids.filter(function (id) { return copyRoot(id, docs) === root; });
+      if (family.length) return pick(family);
+    }
+    var key = docs[wsId] && !docs[wsId].missing ? shareNameKey(docs[wsId].name) : '';
+    if (!key) return '';
+    return pick(ids.filter(function (id) { return docs[id] && !docs[id].missing && shareNameKey(docs[id].name) === key; }));
+  }
+  /* Where one worksheet of a class takes its shared answer key and videos
+     from: { course, ws, mode: 'fill'|'replace', pinned }, or null. */
+  function shareSourceOf(course, wsId, courses, docs) {
+    if (!course || !wsId) return null;
+    var entry = sharedEntries(course)[wsId];
+    if (entry && entry.own) return null;
+    if (entry) {
+      var pinnedCourse = courseById(courses, entry.course);
+      if (pinnedCourse && courseIds(pinnedCourse).indexOf(entry.ws) >= 0) return { course: pinnedCourse, ws: entry.ws, mode: 'replace', pinned: true };
+      return null;
+    }
+    var followed = courseById(courses, followedCourseId(course));
+    if (!followed) return null;
+    var ws = shareMatch(course, wsId, followed, docs);
+    return ws ? { course: followed, ws: ws, mode: shareMode(course), pinned: false } : null;
+  }
+  // Every worksheet a class's students need read for its shared items.
+  function shareSourceIds(course, courses, docs) {
+    var out = [];
+    var followed = courseById(courses, followedCourseId(course));
+    if (followed) courseIds(followed).forEach(function (id) { if (out.indexOf(id) < 0) out.push(id); });
+    var entries = sharedEntries(course);
+    Object.keys(entries).forEach(function (id) { var e = entries[id]; if (e.ws && out.indexOf(e.ws) < 0) out.push(e.ws); });
+    return out;
+  }
+  // Students of `course` see the shared items of worksheet `seq` once their
+  // class has finished it (moved past it, by the lesson clock or Finished).
+  function sharedOpen(course, seq) {
+    var cur = currentIndex(course);
+    return seq >= 0 && cur >= 0 && seq < cur;
+  }
+  /* What one worksheet shows, own and shared together:
+       { recordings, answerKeys, shared: null | { courseId, courseTitle, ws,
+         videos: bool, keys: bool, pinned, mode, waiting } }
+     `opts.all` (admins): every item at once. */
+  function sharedView(course, w, docs, recordings, courses, opts) {
+    docs = docs || {}; recordings = recordings || {};
+    var now = opts && opts.now, all = !!(opts && opts.all);
+    var d = docs[w.id] || null;
+    var ownRecs = visibleRecordings(course, w.id, recordings[w.id] || [], now, opts);
+    var ownKeys = visibleAnswerKeys(course, w.id, d, now, opts);
+    var src = shareSourceOf(course, w.id, courses, docs);
+    if (!src) return { recordings: ownRecs, answerKeys: ownKeys, shared: null };
+    var hidden = archivedDaysOf(course, w.id);
+    // "Has its own": anything of its own at all, out yet or not, so the
+    // class's own lesson is never swapped for another class's mid-lesson.
+    var hasOwnRecs = (recordings[w.id] || []).some(function (r) { return r && hidden.indexOf(lessonDayKey(r.at)) < 0; });
+    var hasOwnKeys = answerKeysOf(d, now).some(function (k) { return hidden.indexOf(k.key) < 0; });
+    var takeRecs = src.mode === 'replace' || !hasOwnRecs;
+    var takeKeys = src.mode === 'replace' || !hasOwnKeys;
+    var open = all || sharedOpen(course, w.seq);
+    var srcRecs = (recordings[src.ws] || []).filter(function (r) {
+      if (!r || hidden.indexOf(lessonDayKey(r.at)) >= 0) return false;
+      return all || (open && (!Clock || Clock.recordingOpen(src.course, r.at, now)));
+    });
+    var srcKeys = answerKeysOf(docs[src.ws], now).filter(function (k) {
+      if (hidden.indexOf(k.key) >= 0) return false;
+      return all || (open && (!Clock || Clock.dayOpen(src.course, k.key, now)));
+    });
+    var usedRecs = takeRecs && srcRecs.length;
+    var usedKeys = takeKeys && srcKeys.length;
+    var waiting = !all && !open && ((takeRecs && (recordings[src.ws] || []).length) || (takeKeys && answerKeysOf(docs[src.ws], now).length)) ? true : false;
+    return {
+      recordings: usedRecs ? srcRecs : ownRecs,
+      answerKeys: usedKeys ? srcKeys : ownKeys,
+      shared: (usedRecs || usedKeys || waiting) ? {
+        courseId: src.course.id, courseTitle: courseTitle(src.course), ws: src.ws,
+        videos: !!usedRecs, keys: !!usedKeys, pinned: src.pinned, mode: src.mode, waiting: waiting
+      } : null
+    };
+  }
+  /* The admin's list for the Shared answer keys section of a class: every
+     worksheet of the class with what it uses. */
+  function shareRows(course, courses, docs, recordings) {
+    docs = docs || {}; recordings = recordings || {};
+    var entries = sharedEntries(course);
+    return courseIds(course).map(function (id, seq) {
+      var src = shareSourceOf(course, id, courses, docs);
+      var ownRecs = (recordings[id] || []).length;
+      var ownKeys = answerKeysOf(docs[id]).length;
+      var srcRecs = src ? (recordings[src.ws] || []).length : 0;
+      var srcKeys = src ? answerKeysOf(docs[src.ws]).length : 0;
+      var uses = !src ? 'own' : src.mode === 'replace' ? 'shared' : (!ownRecs && srcRecs) || (!ownKeys && srcKeys) ? 'shared' : 'own';
+      return {
+        id: id, seq: seq, name: docs[id] && docs[id].name ? String(docs[id].name) : 'Worksheet ' + (seq + 1),
+        kept: !!(entries[id] && entries[id].own), pinned: !!(src && src.pinned),
+        source: src ? { courseId: src.course.id, courseTitle: courseTitle(src.course), ws: src.ws, seq: courseIds(src.course).indexOf(src.ws),
+          name: docs[src.ws] && docs[src.ws].name ? String(docs[src.ws].name) : 'Worksheet ' + (courseIds(src.course).indexOf(src.ws) + 1) } : null,
+        ownVideos: ownRecs, ownKeys: ownKeys, sourceVideos: srcRecs, sourceKeys: srcKeys, uses: uses,
+        open: sharedOpen(course, seq)
+      };
+    });
+  }
+  // Worksheets of the followed class that this class does not have at all,
+  // in that class's order: they can be added here (as copies of the PDF).
+  function shareMissing(course, courses, docs) {
+    var followed = courseById(courses, followedCourseId(course));
+    if (!followed) return [];
+    var matched = {};
+    courseIds(course).forEach(function (id) { var m = shareMatch(course, id, followed, docs); if (m) matched[m] = true; });
+    return courseIds(followed).filter(function (id) { return !matched[id] && docs && docs[id] && !docs[id].missing; });
+  }
+  // Other classes this one can follow, the same level and subject first.
+  function shareChoices(course, courses) {
+    var list = Array.isArray(courses) ? courses.slice() : Object.keys(courses || {}).map(function (k) { return courseById(courses, k); });
+    return list.filter(function (c) { return c && c.id && c.id !== course.id; }).map(function (c) {
+      return { id: c.id, title: courseTitle(c), same: c.level === course.level && c.subject === course.subject, count: courseIds(c).length, archived: !!c.archived };
+    }).sort(function (p, q) {
+      if (p.same !== q.same) return p.same ? -1 : 1;
+      if (p.archived !== q.archived) return p.archived ? 1 : -1;
+      return compareCourses(courseById(courses, p.id), courseById(courses, q.id));
+    });
+  }
+  /* The fields to write for a sharing change (one transaction with the
+     live class), or null when nothing changes.
+       { kind: 'follow', from: '<class id>'|'', mode }
+       { kind: 'mode', mode }
+       { kind: 'pin', ws, from: { course, ws } }
+       { kind: 'own', ws }        keep this worksheet's own
+       { kind: 'clear', ws }      back to the class setting */
+  function shareUpdate(course, change) {
+    if (!course || !change) return null;
+    if (change.kind === 'follow') {
+      var from = String(change.from || '');
+      if (from && (!ARCHIVE_ID_RE.test(from) || from === course.id)) return null;
+      var mode = SHARE_MODES.indexOf(change.mode) >= 0 ? change.mode : shareMode(course);
+      if (from === followedCourseId(course) && mode === shareMode(course)) return null;
+      return { shareFrom: from, shareMode: mode };
+    }
+    if (change.kind === 'mode') {
+      if (SHARE_MODES.indexOf(change.mode) < 0 || change.mode === shareMode(course)) return null;
+      return { shareMode: change.mode };
+    }
+    var ws = String(change.ws || '');
+    if (!ARCHIVE_ID_RE.test(ws) || courseIds(course).indexOf(ws) < 0) return null;
+    var map = sharedEntries(course), had = JSON.stringify(map[ws] || null);
+    if (change.kind === 'pin') {
+      var f = change.from || {};
+      if (!ARCHIVE_ID_RE.test(String(f.course || '')) || !ARCHIVE_ID_RE.test(String(f.ws || ''))) return null;
+      if (f.ws === ws && f.course === course.id) return null;
+      map[ws] = { course: String(f.course), ws: String(f.ws) };
+    } else if (change.kind === 'own') map[ws] = { own: true };
+    else if (change.kind === 'clear') delete map[ws];
+    else return null;
+    if (JSON.stringify(map[ws] || null) === had) return null;
+    return { sharedKeys: map };
+  }
+  // Is `srcWs` really where `course` shares worksheet `wsId` from? The video
+  // page checks a link with it before playing another class's lessons.
+  function shareAllows(course, wsId, srcWs, courses) {
+    if (!course || !wsId || !srcWs) return null;
+    var entry = sharedEntries(course)[wsId];
+    if (entry && entry.own) return null;
+    if (entry) return entry.ws === srcWs ? courseById(courses, entry.course) : null;
+    var followed = courseById(courses, followedCourseId(course));
+    return followed && courseIds(followed).indexOf(srcWs) >= 0 ? followed : null;
+  }
+
   function worksheetState(course, index) {
     var cur = currentIndex(course), rel = releasedThrough(course);
     if (index === cur) return 'current';
@@ -579,6 +824,8 @@
     if (opts.rec && /^[A-Za-z0-9_-]{1,120}$/.test(String(opts.rec))) url += '&rec=' + encodeURIComponent(opts.rec);
     if (opts.t > 0) url += '&t=' + Math.floor(opts.t);
     if (opts.course && WATCH_WS_RE.test(String(opts.course))) url += '&c=' + encodeURIComponent(opts.course);
+    // 🔗 v1.17.0: the lessons are another class's (shared), on worksheet `src`.
+    if (opts.src && opts.src !== wsId && WATCH_WS_RE.test(String(opts.src))) url += '&src=' + encodeURIComponent(opts.src);
     return url;
   }
   /* ---- 🎬 The worksheet's video page: the SAME page as the QR code ----
@@ -732,13 +979,17 @@
   // are the lesson videos and answer keys of archived class days, so every
   // tab built from these items (Worksheets, Answer keys, Videos, Timeline)
   // hides them alike.
-  function timelineItems(course, docs, recordings) {
+  // 🔗 v1.17.0: `ctx` = { courses, now, all } also brings in the answer
+  // keys and videos a class shares from another (sharedView).
+  function timelineItems(course, docs, recordings, ctx) {
     docs = docs || {}; recordings = recordings || {};
     return releasedWorksheets(course).map(function (w) {
       var d = docs[w.id] || null;
-      var recs = visibleRecordings(course, w.id, recordings[w.id] || []);
-      var keys = visibleAnswerKeys(course, w.id, d);
+      var view = sharedView(course, w, docs, recordings, ctx && ctx.courses, ctx);
+      var recs = view.recordings;
+      var keys = view.answerKeys;
       return {
+        shared: view.shared,
         id: w.id, seq: w.seq, state: w.state,
         name: d && d.name ? String(d.name) : 'Worksheet ' + (w.seq + 1),
         edited: editedMillis(d),
@@ -813,7 +1064,8 @@
     (items || []).forEach(function (it) {
       var keys = it.answerKeys || [];
       if (keys.length || (cur >= 0 && it.seq === cur)) {
-        rows.push({ id: it.id, seq: it.seq, name: it.name, current: it.seq === cur, latest: keys[0] || null, earlier: keys.slice(1) });
+        rows.push({ id: it.id, seq: it.seq, name: it.name, current: it.seq === cur, latest: keys[0] || null, earlier: keys.slice(1),
+          shared: it.shared && it.shared.keys ? it.shared : null });
       }
     });
     return rows.sort(function (p, q) {
@@ -835,7 +1087,9 @@
       var seconds = recs.reduce(function (n, r) { return n + (Number(r.duration) || 0); }, 0);
       var last = recs.reduce(function (n, r) { return Math.max(n, Number(r.at) || 0); }, 0);
       var days = (it.days || []).slice().reverse();
-      rows.push({ id: it.id, seq: it.seq, name: it.name, current: it.seq === cur, count: recs.length, seconds: seconds, last: last, days: days });
+      rows.push({ id: it.id, seq: it.seq, name: it.name, current: it.seq === cur, count: recs.length, seconds: seconds, last: last, days: days,
+        // 🔗 v1.17.0: videos another class shares: the video page plays that worksheet.
+        shared: it.shared && it.shared.videos ? it.shared : null });
     });
     return rows.sort(function (p, q) {
       if (p.current !== q.current) return p.current ? -1 : 1;
@@ -1290,7 +1544,10 @@
     keepsTyping: keepsTyping, uploadStateLabel: uploadStateLabel, uploadSummary: uploadSummary,
     duplicateCourseData: duplicateCourseData, stripLessonRecordings: stripLessonRecordings, worksheetCopy: worksheetCopy,
     pdfCacheKey: pdfCacheKey, copyRoot: copyRoot, copyFamily: copyFamily, copyTargets: copyTargets,
-    replacementUpdate: replacementUpdate, pageChangeNote: pageChangeNote, replaceSummary: replaceSummary
+    replacementUpdate: replacementUpdate, pageChangeNote: pageChangeNote, replaceSummary: replaceSummary,
+    SHARE_MODES: SHARE_MODES, shareMode: shareMode, sharedEntries: sharedEntries, followedCourseId: followedCourseId, shareNameKey: shareNameKey,
+    shareMatch: shareMatch, shareSourceOf: shareSourceOf, shareSourceIds: shareSourceIds, sharedOpen: sharedOpen, sharedView: sharedView,
+    shareRows: shareRows, shareMissing: shareMissing, shareChoices: shareChoices, shareUpdate: shareUpdate, shareAllows: shareAllows
   };
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.PolymathOnlineCore = api;
