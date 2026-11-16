@@ -128,6 +128,68 @@
     var label = subjectLabel(subject, true) || String(subject);
     return { key: 'general', word: String(label).toUpperCase(), name: String(label) };
   }
+  /* ⭐ v1.19.0: "This is my class". A student in several classes of the same
+     subject (P6 Science on Monday, Tuesday and Saturday) ticks the one they
+     attend. At most ONE maths class and ONE science class can be ticked:
+     ticking another class of the same subject moves the tick there, and
+     ticking a ticked class again clears it. Ticked classes go first (maths,
+     then science, as the classes are listed), the others follow, quieter.
+     `picks` is { math: courseId, science: courseId }; a class of both
+     subjects, or of another subject, has no tick box. */
+  var MY_CLASS_SUBJECTS = ['math', 'science'];
+  function myClassSubject(course) {
+    var key = subjectArt(course && course.subject).key;
+    return MY_CLASS_SUBJECTS.indexOf(key) >= 0 ? key : '';
+  }
+  // Keep only picks that still point at one of these classes, of that subject.
+  function cleanMyClasses(picks, courses) {
+    var out = {};
+    if (!picks || typeof picks !== 'object') return out;
+    var list = Array.isArray(courses) ? courses : Object.keys(courses || {}).map(function (k) { return courses[k]; });
+    MY_CLASS_SUBJECTS.forEach(function (subject) {
+      var id = picks[subject];
+      if (typeof id !== 'string' || !id) return;
+      if (!courses) { out[subject] = id; return; }
+      var found = list.filter(function (c) { return c && c.id === id && myClassSubject(c) === subject; })[0];
+      if (found) out[subject] = id;
+    });
+    return out;
+  }
+  function isMyClass(picks, course) {
+    var subject = myClassSubject(course);
+    return !!(subject && course && course.id && picks && picks[subject] === course.id);
+  }
+  // Tick or untick one class. Returns the new picks (a new object), or null
+  // when the class cannot be ticked (no id, or not a maths/science class).
+  function toggleMyClass(picks, course) {
+    var subject = myClassSubject(course);
+    if (!subject || !course || !course.id) return null;
+    var out = cleanMyClasses(picks, null);
+    if (out[subject] === course.id) delete out[subject];
+    else out[subject] = course.id;
+    return out;
+  }
+  // The classes in the order a student sees them: ticked ones first (in
+  // their usual order), then the rest. `mine` says whether anything here is
+  // ticked, so the page only quietens the others when there is a choice.
+  function myClassOrder(courses, picks) {
+    var list = (courses || []).slice();
+    var first = list.filter(function (c) { return isMyClass(picks, c); });
+    var rest = list.filter(function (c) { return !isMyClass(picks, c); });
+    return { list: first.concat(rest), mine: first.length, others: rest.length };
+  }
+  // Short words for the tick box and for a toast after a tap.
+  function myClassLabel(picks, course) {
+    var on = isMyClass(picks, course);
+    var subject = myClassSubject(course);
+    var word = subject === 'math' ? 'maths' : subject === 'science' ? 'science' : '';
+    return {
+      on: on,
+      text: on ? 'My class' : 'Tick if this is my class',
+      short: on ? 'My class' : 'My class?',
+      aria: on ? 'This is my ' + word + ' class. Tap to untick.' : 'Tick: this is my ' + word + ' class'
+    };
+  }
   function autoCourseTitle(level, subject, day, slot) {
     var bits = [String(level || '').trim() + ' ' + subjectLabel(subject)];
     if (day) bits.push(day + (slotLabel(day, slot) ? ' ' + slotLabel(day, slot) : ''));
@@ -1543,7 +1605,9 @@
     releaseFloor: releaseFloor, RELEASE_AHEAD: RELEASE_AHEAD, NEXT_COUNT: NEXT_COUNT, LEVELS: LEVELS, SUBJECTS: SUBJECTS, DAYS: DAYS, ROLES: ROLES,
     SLOTS_WEEKDAY: SLOTS_WEEKDAY, SLOTS_WEEKEND: SLOTS_WEEKEND,
     levelSubjects: levelSubjects, subjectLabel: subjectLabel, cleanSubjects: cleanSubjects, profileSubjectFor: profileSubjectFor,
-    slotsForDay: slotsForDay, slotLabel: slotLabel, courseTitle: courseTitle, dayBand: dayBand, subjectArt: subjectArt, DAY_KEYS: DAY_KEYS, autoCourseTitle: autoCourseTitle,
+    slotsForDay: slotsForDay, slotLabel: slotLabel, courseTitle: courseTitle, dayBand: dayBand, subjectArt: subjectArt,
+    MY_CLASS_SUBJECTS: MY_CLASS_SUBJECTS, myClassSubject: myClassSubject, cleanMyClasses: cleanMyClasses, isMyClass: isMyClass,
+    toggleMyClass: toggleMyClass, myClassOrder: myClassOrder, myClassLabel: myClassLabel, DAY_KEYS: DAY_KEYS, autoCourseTitle: autoCourseTitle,
     normalizeEmail: normalizeEmail, isEmail: isEmail, escapeHtml: escapeHtml, initials: initials,
     naturalCompare: naturalCompare, worksheetNameFromFile: worksheetNameFromFile,
     watchLink: watchLink, VIDEO_PAGE: VIDEO_PAGE, videoPackCode: videoPackCode, videoPlaylistOf: videoPlaylistOf, videoPageLink: videoPageLink,

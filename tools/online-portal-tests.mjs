@@ -1086,7 +1086,7 @@ test('📅 v1.16.0: the day band names the class day in big letters, in its own 
   assert.match(page, /\.day-band \{[^}]*position: sticky/, 'the band sticks while its segment scrolls');
   const portal = fs.readFileSync(new URL('../online/portal.js', import.meta.url), 'utf8');
   assert.match(portal, /function stClassHead\(course\) \{\s*return dayBandHtml\(course\);/, 'every tab opens a class with the band, even with one class');
-  assert.match(portal, /class="card class-card"[^\n]*\n\s*dayBandHtml\(course\)/, 'the Timeline card opens with the band too');
+  assert.match(portal, /class="card class-card[^\n]*\n\s*dayBandHtml\(course\)/, 'the Timeline card opens with the band too');
 });
 
 test('🧮🧪 v1.18.0: the day band shows the subject as pictures, so same-day classes tell apart', () => {
@@ -1238,3 +1238,66 @@ test('🧮🧪 v1.18.0: the day band shows the subject as pictures, so same-day 
     assert.ok(!/Core\.timelineItems\(course, state\.docs, state\.recordings\)/.test(portal), 'every tab passes the classes, for sharing');
   });
 }
+
+test('⭐ v1.19.0: a student ticks "my class" (one maths, one science); it goes first and the rest go quiet', () => {
+  const sciMon = { id: 'sci-mon', level: 'P6', subject: 'science', day: 'Monday', slot: 3 };
+  const sciTue = { id: 'sci-tue', level: 'P6', subject: 'science', day: 'Tuesday', slot: 2 };
+  const sciSat = { id: 'sci-sat', level: 'P6', subject: 'science', day: 'Saturday', slot: 0 };
+  const mathMon = { id: 'math-mon', level: 'P6', subject: 'math', day: 'Monday', slot: 2 };
+  const both = { id: 'both', level: 'P6', subject: 'both', day: 'Friday', slot: 2 };
+  const courses = [mathMon, sciMon, sciTue, sciSat, both];
+  assert.equal(Core.myClassSubject(sciMon), 'science');
+  assert.equal(Core.myClassSubject(mathMon), 'math');
+  assert.equal(Core.myClassSubject({ subject: 'Mathematics' }), 'math', 'subjects matched loosely, like the band');
+  assert.equal(Core.myClassSubject(both), '', 'a class of both subjects has no tick box');
+  assert.equal(Core.myClassSubject({ subject: 'english' }), '');
+  // Nothing ticked: the order is the usual one and nothing is quiet.
+  const plain = Core.myClassOrder(courses, {});
+  assert.deepEqual(plain.list.map((c) => c.id), courses.map((c) => c.id));
+  assert.equal(plain.mine, 0);
+  // Tick Tuesday science: it goes first.
+  let picks = Core.toggleMyClass({}, sciTue);
+  assert.deepEqual(picks, { science: 'sci-tue' });
+  assert.equal(Core.isMyClass(picks, sciTue), true);
+  assert.equal(Core.isMyClass(picks, sciMon), false);
+  let order = Core.myClassOrder(courses, picks);
+  assert.deepEqual(order.list.map((c) => c.id), ['sci-tue', 'math-mon', 'sci-mon', 'sci-sat', 'both']);
+  assert.equal(order.mine, 1); assert.equal(order.others, 4);
+  // Tick Saturday science: the tick MOVES (only one science class).
+  picks = Core.toggleMyClass(picks, sciSat);
+  assert.deepEqual(picks, { science: 'sci-sat' });
+  // Tick a maths class too: both ticked classes lead, in the usual order (maths first).
+  picks = Core.toggleMyClass(picks, mathMon);
+  assert.deepEqual(picks, { science: 'sci-sat', math: 'math-mon' });
+  order = Core.myClassOrder(courses, picks);
+  assert.deepEqual(order.list.map((c) => c.id), ['math-mon', 'sci-sat', 'sci-mon', 'sci-tue', 'both']);
+  assert.equal(order.mine, 2);
+  // Ticking a ticked class again unticks it.
+  picks = Core.toggleMyClass(picks, sciSat);
+  assert.deepEqual(picks, { math: 'math-mon' });
+  assert.equal(Core.toggleMyClass(picks, both), null, 'no tick for a class of both subjects');
+  assert.equal(Core.toggleMyClass(picks, { subject: 'math' }), null, 'no tick without a class id');
+  // Cleaning: wrong subject, missing classes and junk are dropped.
+  assert.deepEqual(Core.cleanMyClasses({ math: 'sci-mon', science: 'sci-tue', english: 'x' }, courses), { science: 'sci-tue' });
+  assert.deepEqual(Core.cleanMyClasses({ science: 'gone' }, courses), {});
+  assert.deepEqual(Core.cleanMyClasses('nonsense', courses), {});
+  assert.deepEqual(Core.cleanMyClasses({ math: 5 }, null), {});
+  // A pick for a class that has gone ticks nothing, so nothing goes quiet.
+  assert.equal(Core.myClassOrder(courses, { science: 'gone' }).mine, 0);
+  // Words on the box.
+  assert.equal(Core.myClassLabel({}, sciMon).on, false);
+  assert.match(Core.myClassLabel({}, sciMon).aria, /my science class/);
+  assert.equal(Core.myClassLabel({ science: 'sci-mon' }, sciMon).text, 'My class');
+  // The page: a box in every band, the order on every tab, saved per student.
+  const portal = fs.readFileSync(new URL('../online/portal.js', import.meta.url), 'utf8');
+  assert.match(portal, /myClassBoxHtml\(course\) \+\s*'<\/header>'/, 'the tick box sits in the day band');
+  assert.match(portal, /Core\.myClassOrder\(courses, myPicks\(\)\)/, 'every tab lists ticked classes first');
+  assert.match(portal, /onlineMyClasses: picks/, 'saved in the student profile, for every device');
+  assert.match(portal, /state\.previewMyClasses = picks/, 'an admin preview never saves');
+  for (const kind of ['Worksheets', 'Answer keys', 'Videos']) {
+    assert.ok(portal.includes('class="card st-card\' + myCardClass(course) + \'" aria-label="' + kind), kind + ' tab marks mine / other');
+  }
+  const page = fs.readFileSync(new URL('../online/index.html', import.meta.url), 'utf8');
+  assert.match(page, /\.is-other-class \{[^}]*saturate/, 'other classes lose their colour');
+  assert.match(page, /\.my-class-box \{[^}]*min-height: 48px/, 'a big box to tap on a phone');
+});
