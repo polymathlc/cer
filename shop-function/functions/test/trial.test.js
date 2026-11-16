@@ -447,14 +447,20 @@ test('a class link asks for email and WhatsApp, then opens the class straight aw
 
 test('a revoked or unknown link opens nothing', async () => {
   const h = harness();
-  const { link } = (await h.admin({ action: 'createLink', slot: 'SAT-3', label: '' })).body;
+  const { link } = (await h.admin({ action: 'createLink', slot: 'SAT-3', label: 'Mrs Tan' })).body;
   const open = await h.call({ action: 'linkOpen', link: link.token, email: 'a@example.test', whatsapp: '91234567' });
   assert.equal(open.statusCode, 201);
   await h.admin({ action: 'revokeLink', token: link.token });
   assert.equal((await h.call({ action: 'linkInfo', link: link.token })).body.error, 'link-revoked');
   assert.equal((await h.call({ action: 'view', access: open.body.booking.access })).statusCode, 410);
   assert.equal((await h.call({ action: 'linkInfo', link: 'x'.repeat(24) })).body.error, 'link-unknown');
-  assert.equal((await h.admin({ action: 'createLink', slot: 'TUE-1', label: '' })).body.error, 'session-unavailable');
+  assert.equal((await h.admin({ action: 'createLink', slot: 'TUE-1', label: 'Mrs Tan' })).body.error, 'session-unavailable');
+  // Who the link is for is required, so staff never have to tell links apart by class alone
+  for (const label of ['', ' ', 'A', undefined]) {
+    const made = await h.admin(label === undefined ? { action: 'createLink', slot: 'SAT-3' } : { action: 'createLink', slot: 'SAT-3', label });
+    assert.equal(made.statusCode, 400, JSON.stringify(label));
+    assert.equal(made.body.error, 'link-name-required');
+  }
 });
 
 /* ─── The admin panel ─── */

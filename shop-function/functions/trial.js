@@ -1019,8 +1019,12 @@ function createTrialService({ store, http, hashIp, verifyIdToken = async () => {
         const { config } = await store.loadContext();
         const slot = trialSlot(config, slotId);
         if (!slot) throw new ShopError(409, 'session-unavailable');
+        // Who the link is for (Zhi Kai, 17 Nov 2026): required, so every link in the admin list is told
+        // apart by the parent or student it was made for, not only by its class.
+        const label = oneLine(typeof body.label === 'string' ? body.label : '', 80);
+        if (label.length < 2) throw new ShopError(400, 'link-name-required');
         const link = { token: randomToken(24, randomBytesImpl), slot: slotId, level: slot.level, subject: slot.subject,
-          label: oneLine(body.label, 80), createdAtMs: at, expiresAtMs: at + LINK_DAYS * DAY, createdBy: email,
+          label, createdAtMs: at, expiresAtMs: at + LINK_DAYS * DAY, createdBy: email,
           opens: 0, people: 0, revoked: false };
         await store.createLink(link);
         return res.status(201).json({ ok: true, link: publicLink(link, at) });

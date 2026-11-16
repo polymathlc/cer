@@ -236,3 +236,13 @@ test('🎥 Join Zoom at the top (v1.2.0): the class Zoom, the same link as /stud
   assert.match(page, /currentView !== 'gate-view'/, 'not on the access-code screen');
   assert.ok(!page.includes('Zoom link coming soon'), 'a lesson without its own link uses the class Zoom');
 });
+
+test('class links (v1.4.0): a name is required, a new link is sent from its own box, old links are folded away', () => {
+  assert.match(page, /id="link-label"[^>]*required/, 'who the link is for is required');
+  assert.ok(page.includes('id="link-ready"') && page.includes('onclick="copyReady()"') && page.includes('onclick="whatsappReady()"'), 'the Ready to send box with Copy message and Open WhatsApp');
+  assert.match(page, /<details class="link-old" id="link-old">/, 'links already made stay folded until opened');
+  assert.ok(!/<details class="link-old" id="link-old" open/.test(page), 'and start closed');
+  assert.ok(page.includes("(!slot || l.slot === slot)"), 'the list shows only the class chosen above');
+  assert.ok(!page.includes("copyText(window.__links["), 'no Copy link button in the list rows');
+  assert.ok(page.includes("'link-name-required'"), 'the server refusal has words');
+});
