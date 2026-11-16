@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = 'v1.15.0';
+  var APP_VERSION = 'v1.16.0';
   var Core = window.PolymathOnlineCore;
 
   // Who runs the portal. Anyone else signs in as a student or a parent.
@@ -710,11 +710,50 @@
     var bar = document.querySelector('.st-tabs');
     if (bar && bar.getBoundingClientRect().top < 0) bar.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }
-  // The class's name over its rows, only when the student has more than one.
-  function stClassHead(course, many) {
-    if (!many) return '';
-    return '<div class="st-class-head"><span class="st-class-name">' + h(Core.courseTitle(course)) + '</span>' +
-      '<span class="st-class-chips">' + levelChip(course.level) + subjectChip(course.subject) + dayChip(course) + '</span></div>';
+  /* 📅 v1.16.0: every class segment, in all four tabs, opens with its class
+     DAY in big letters at the top left (MONDAY, in that day's own colour),
+     the time under it and the class beside it. The band sticks under the
+     tabs while that segment scrolls past, so a student scrolling a long list,
+     or in two classes, always knows whose worksheets, answer keys and videos
+     they are looking at. Shown even with one class: the day is how children
+     name their class. */
+  function dayBandHtml(course) {
+    var band = Core.dayBand(course);
+    var name = band.className;
+    return '<header class="day-band day-' + h(band.key) + '" data-day="' + h(band.day || '') + '">' +
+      (band.day
+        ? '<div class="day-badge" aria-hidden="true"><span class="day-name">' + h(band.dayUpper) + '</span>' +
+            (band.time ? '<span class="day-time">' + h(band.time) + '</span>' : '') + '</div>'
+        : '<div class="day-badge day-badge-none" aria-hidden="true"><span class="day-name">CLASS</span></div>') +
+      '<div class="day-text">' +
+        '<h2 class="day-class">' + h(name) + '</h2>' +
+        '<div class="day-sub">' + h(band.sentence) + '</div>' +
+      '</div>' +
+      '<div class="day-chips">' + levelChip(course.level) + subjectChip(course.subject) + '</div>' +
+    '</header>';
+  }
+  // The class's day band over its rows (v1.16.0: always, not only with two classes).
+  function stClassHead(course) {
+    return dayBandHtml(course);
+  }
+  // The band sticks just under the sticky header and tabs, whatever their
+  // height on this screen (they wrap differently on phones and tablets).
+  function measureDayBandTop() {
+    var header = document.querySelector('.polymath-header');
+    var tabs = document.querySelector('.st-tabs');
+    if (!tabs) return;
+    var top = (header ? header.getBoundingClientRect().height : 0) + tabs.getBoundingClientRect().height;
+    var stickTop = parseFloat(getComputedStyle(tabs).top) || 0;
+    if (stickTop) top = stickTop + tabs.getBoundingClientRect().height;
+    document.documentElement.style.setProperty('--day-band-top', Math.round(top) + 'px');
+  }
+  var dayBandResizeHooked = false;
+  function watchDayBandTop() {
+    measureDayBandTop();
+    if (dayBandResizeHooked) return;
+    dayBandResizeHooked = true;
+    window.addEventListener('resize', measureDayBandTop);
+    window.addEventListener('orientationchange', function () { setTimeout(measureDayBandTop, 250); });
   }
   function stEmpty(icon, title, text) {
     return '<div class="st-empty"><div class="st-empty-icon" aria-hidden="true">' + icon + '</div><b>' + h(title) + '</b><p>' + h(text) + '</p></div>';
@@ -730,7 +769,7 @@
     var items = Core.timelineItems(course, state.docs, state.recordings);
     var groups = Core.worksheetRows(course, items);
     var locked = Core.lockedCount(course);
-    var html = '<section class="card st-card" aria-label="Worksheets · ' + h(Core.courseTitle(course)) + '">' + stClassHead(course, many);
+    var html = '<section class="card st-card" aria-label="Worksheets · ' + h(Core.courseTitle(course)) + '">' + stClassHead(course);
     if (!items.length) {
       html += stEmpty('📄', 'No worksheets yet', 'Your worksheets appear here as soon as your class starts. Nothing to do.');
       return html + '</section>';
@@ -771,7 +810,7 @@
   function answersTabHtml(course, many) {
     var items = Core.timelineItems(course, state.docs, state.recordings);
     var rows = Core.answerKeyRows(course, items);
-    var html = '<section class="card st-card" aria-label="Answer keys · ' + h(Core.courseTitle(course)) + '">' + stClassHead(course, many);
+    var html = '<section class="card st-card" aria-label="Answer keys · ' + h(Core.courseTitle(course)) + '">' + stClassHead(course);
     if (!rows.length) {
       html += stEmpty('🔑', 'No answer keys yet', 'Each answer key appears here after its lesson.');
       return html + '</section>';
@@ -802,7 +841,7 @@
   function videosTabHtml(course, many) {
     var items = Core.timelineItems(course, state.docs, state.recordings);
     var rows = Core.videoRows(course, items);
-    var html = '<section class="card st-card" aria-label="Videos · ' + h(Core.courseTitle(course)) + '">' + stClassHead(course, many);
+    var html = '<section class="card st-card" aria-label="Videos · ' + h(Core.courseTitle(course)) + '">' + stClassHead(course);
     if (!rows.length) {
       html += stEmpty('▶', 'No lesson videos yet', 'The videos of each lesson appear here after the class.');
       return html + '</section>';
@@ -837,6 +876,7 @@
       ? 'Class is on worksheet ' + (cur + 1) + ' of ' + total + ' · ' + released.length + ' released'
       : released.length ? released.length + ' worksheet' + (released.length === 1 ? '' : 's') + ' ready before the first lesson' : 'Worksheets are released as lessons begin';
     var html = '<article class="card class-card" aria-label="' + h(Core.courseTitle(course)) + '">' +
+      dayBandHtml(course) +
       '<div class="class-top">' +
         '<div class="ring" role="img" aria-label="' + pct + '% through the class list">' +
           '<svg viewBox="0 0 74 74"><circle class="track" cx="37" cy="37" r="30" fill="none" stroke-width="7"/>' +
@@ -1079,6 +1119,8 @@
       });
       if (archivedIds.length) ensureDocs(archivedIds);
     }
+    // 📅 v1.16.0: the day bands stick just under the tabs.
+    watchDayBandTop();
     // The current worksheet is brought into view once, on arrival — on the
     // Timeline tab only; the other tabs open at the top, where the rows start.
     if (!scrolledToCurrent && state.studentTab === 'timeline') {

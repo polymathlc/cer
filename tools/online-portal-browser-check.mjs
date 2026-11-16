@@ -273,6 +273,12 @@ let studentDb = null;
     /Next lesson/.test(await page.textContent('.st-rows .st-row:nth-child(2)')));
   check('worksheets tab: the locked ones are counted, not named', /2 more worksheets/.test(await page.textContent('.st-foot')) && !(await page.textContent('body')).includes('Worksheet 9'));
   check('worksheets tab: the address goes back to plain /online', (await page.evaluate(() => location.hash)) === '');
+  // 📅 v1.16.0: the class day, big, at the top left of the segment, in every tab.
+  const bandOf = () => page.$$eval('#studentPanel .day-band', (els) => els.map((e) => ({ day: (e.querySelector('.day-name') || {}).textContent || '', left: Math.round(e.querySelector('.day-badge').getBoundingClientRect().left - e.closest('.card').getBoundingClientRect().left), big: parseFloat(getComputedStyle(e.querySelector('.day-name')).fontSize) })));
+  const studentDayUpper = (await page.evaluate(() => { const c = Object.values(window.__fake.db).find((d) => d && Array.isArray(d.worksheetIds)); return String((c && c.day) || '').toUpperCase(); }));
+  const wsBand = await bandOf();
+  check('day band: the Worksheets tab opens the class with its day, big, at the top left',
+    wsBand.length === 1 && (studentDayUpper ? wsBand[0].day === studentDayUpper : wsBand[0].day === 'CLASS') && wsBand[0].left < 40 && wsBand[0].big >= 20, JSON.stringify(wsBand) + ' ' + studentDayUpper);
   await page.screenshot({ path: path.join(shots, '04h-tab-worksheets.png'), fullPage: true });
 
   await page.click('#st-tab-answers');
@@ -284,6 +290,7 @@ let studentDb = null;
     (await page.getAttribute('a.st-btn-main', 'target')) === '_blank' && (await page.$$eval('#studentPanel a', (els) => els.filter((a) => /\/anskey\//.test(a.getAttribute('href') || '')).length)) === 0);
   check('answer keys tab: no Download or Print buttons for worksheets here', (await page.locator('#studentPanel [data-action="download"], #studentPanel [data-action="print"]').count()) === 0);
   check('answer keys tab: kept in the address', (await page.evaluate(() => location.hash)) === '#answers');
+  check('day band: the Answer keys tab shows the same day band', JSON.stringify(await bandOf()) === JSON.stringify(wsBand));
   await page.screenshot({ path: path.join(shots, '04i-tab-answer-keys.png'), fullPage: true });
 
   await page.click('#st-tab-videos');
@@ -292,9 +299,11 @@ let studentDb = null;
   check('videos tab: one row per worksheet with videos, Watch opens the lesson video page',
     vRows.length === 1 && vRows[0].name === 'Worksheet 3' && /3 videos/.test(vRows[0].sub) && vRows[0].watch.startsWith('watch.html?ws=' + encodeURIComponent(ws3Id)) && !/anskey/.test(vRows[0].watch), JSON.stringify(vRows));
   check('videos tab: each class day can be started from', vRows[0].days === 2);
+  check('day band: the Videos tab shows the same day band', JSON.stringify(await bandOf()) === JSON.stringify(wsBand));
   await page.screenshot({ path: path.join(shots, '04j-tab-videos.png'), fullPage: true });
   await page.click('#st-tab-timeline');
   await page.waitForFunction(() => document.querySelectorAll('.tl-item').length === 8);
+  check('day band: the Timeline tab shows the same day band', JSON.stringify(await bandOf()) === JSON.stringify(wsBand));
   check('timeline tab: the full timeline is still there', true);
 
   // The teacher opens worksheet 5 in Ans Key: the class moves and 9, 10 come out live.
@@ -321,6 +330,13 @@ let studentDb = null;
   check('student phone: Download and Print are big and on the screen', (await page.$$eval('.st-row .st-btn', (els) => els.every((e) => { const b = e.getBoundingClientRect(); return b.left >= 0 && b.right <= innerWidth + 0.5 && b.height >= 44; }))));
   check('student phone: the worksheets fit with no sideways scroll', !(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)));
   await page.screenshot({ path: path.join(shots, '04k-phone-worksheets.png'), fullPage: true });
+  // 📅 Scrolled down a long list, the day band stays in view just under the tabs.
+  await page.evaluate(() => window.scrollTo(0, document.querySelector('.st-rows .st-row:last-child').getBoundingClientRect().top + window.scrollY - 300));
+  await page.waitForTimeout(150);
+  const stuck = await page.evaluate(() => { const b = document.querySelector('.day-band').getBoundingClientRect(); const t = document.querySelector('.st-tabs').getBoundingClientRect(); return { band: Math.round(b.top), tabsBottom: Math.round(t.bottom), w: Math.round(b.right) }; });
+  check('student phone: the day band stays just under the tabs while scrolling', Math.abs(stuck.band - stuck.tabsBottom) <= 2 && stuck.w <= 390, JSON.stringify(stuck));
+  await page.screenshot({ path: path.join(shots, '04n-phone-day-band-stuck.png') });
+  await page.evaluate(() => window.scrollTo(0, 0));
   await page.click('#st-tab-answers');
   await page.waitForSelector('#st-tab-answers[aria-selected="true"]');
   check('student phone: answer keys fit with no sideways scroll', !(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)));

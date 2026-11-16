@@ -1063,3 +1063,28 @@ test('clock: Polymath Online uses it for the timeline, and the trial service has
   assert.match(portal, /state\.rawCourses = next;\s*applyClock\(\);/);
   assert.match(portal, /clockAt: FieldValue\.serverTimestamp\(\)/);
 });
+
+test('📅 v1.16.0: the day band names the class day in big letters, in its own colour', () => {
+  const mon = Core.dayBand({ level: 'P6', subject: 'science', day: 'Monday', slot: 2 });
+  assert.equal(mon.key, 'mon');
+  assert.equal(mon.dayUpper, 'MONDAY');
+  assert.equal(mon.time, Core.slotLabel('Monday', 2));
+  assert.equal(mon.className, 'P6 Science', 'the automatic title loses its day and time: the badge shows those');
+  assert.equal(mon.sentence, 'Monday class · ' + Core.slotLabel('Monday', 2));
+  const sat = Core.dayBand({ level: 'P5', subject: 'math', day: 'Saturday', slot: 0, title: 'P5 Maths Booster' });
+  assert.equal(sat.key, 'sat');
+  assert.equal(sat.className, 'P5 Maths Booster', 'an admin\'s own title is kept as typed');
+  const keys = Core.DAYS.map((day) => Core.dayBand({ level: 'P4', subject: 'math', day, slot: 0 }).key);
+  assert.equal(new Set(keys).size, 7, 'every day has its own colour');
+  const none = Core.dayBand({ level: 'P3', subject: 'math' });
+  assert.equal(none.key, 'none');
+  assert.equal(none.day, '');
+  assert.equal(none.sentence, 'No class day set yet');
+  assert.equal(Core.dayBand(null).className, 'Your class');
+  const page = fs.readFileSync(new URL('../online/index.html', import.meta.url), 'utf8');
+  for (const key of [...keys, 'none']) assert.match(page, new RegExp('--day-' + key + ':'), 'a colour for ' + key);
+  assert.match(page, /\.day-band \{[^}]*position: sticky/, 'the band sticks while its segment scrolls');
+  const portal = fs.readFileSync(new URL('../online/portal.js', import.meta.url), 'utf8');
+  assert.match(portal, /function stClassHead\(course\) \{\s*return dayBandHtml\(course\);/, 'every tab opens a class with the band, even with one class');
+  assert.match(portal, /class="card class-card"[^\n]*\n\s*dayBandHtml\(course\)/, 'the Timeline card opens with the band too');
+});
