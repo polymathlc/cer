@@ -954,5 +954,112 @@ test('archive: the page wires Archive and Restore, and the class card key skips 
   assert.match(portal, /Core\.visibleAnswerKeys\(course, ids\[cur\]/);
   assert.ok(!/Core\.answerKeysOf\(state\.docs\[ids\[cur\]\]\)/.test(portal), 'the class card key must not bypass the archive');
   const watch = fs.readFileSync(new URL('../online/watch.js', import.meta.url), 'utf8');
-  assert.match(watch, /W\.lessonsOf\(annotations, !admin && state\.found \? W\.archivedDaysIn\(state\.found\.course, query\.ws\) : \[\]\)/);
+  assert.match(watch, /var openFor = !admin && state\.found \? state\.found\.course : null;/);
+  assert.match(watch, /W\.lessonsOf\(annotations, openFor \? W\.archivedDaysIn\(openFor, query\.ws\) : \[\],/);
+});
+
+/* ---------------- ⏰ The lesson clock (lesson-clock.js, portal v1.15.0) ----------------
+   Zhi Kai, 16 Nov 2026: the answer key and videos of a lesson come out right
+   after the lesson, at the end of the lesson timing (5pm for 3 to 4:45pm),
+   and the class's Current and Next worksheets move on by themselves. */
+const Clock = require('../online/lesson-clock.js');
+const sg = (s) => Date.parse(s + '+08:00');
+
+test('clock: a lesson is over at the next lesson time, in Singapore time', () => {
+  const mon = Clock.lessonOn('Monday', 0, '2026-11-16');
+  assert.equal(mon.start, sg('2026-11-16T15:00:00'));
+  assert.equal(mon.end, sg('2026-11-16T16:45:00'));
+  assert.equal(mon.release, sg('2026-11-16T17:00:00'), '3 to 4:45pm is out at 5pm');
+  assert.equal(Clock.lessonOn('Saturday', 0, '2026-11-14').release, sg('2026-11-14T11:00:00'), '9 to 10:45am is out at 11am');
+  assert.equal(Clock.lessonOn('Saturday', 2, '2026-11-14').release, sg('2026-11-14T15:00:00'));
+  assert.equal(Clock.lessonOn('Monday', 2, '2026-11-16').release, sg('2026-11-16T21:00:00'));
+  assert.equal(Clock.lessonOn('Monday', 0, '2026-11-17'), null, 'not on the class day');
+  assert.equal(Clock.lessonOn('Monday', 5, '2026-11-16'), null);
+  assert.equal(Clock.nextRelease('Saturday', 0, sg('2026-11-16T21:27:00')), sg('2026-11-21T11:00:00'));
+  assert.equal(Clock.sgDayKey(Date.parse('2026-11-15T17:30:00Z')), '2026-11-16', 'past midnight in Singapore');
+});
+
+test('clock: the class moves one worksheet on for each lesson that is over', () => {
+  const sat = { id: 's', day: 'Saturday', slot: 0, worksheetIds: ['a', 'b', 'c', 'd', 'e', 'f'], currentIndex: 1, releasedThrough: 4,
+    progressAt: sg('2026-11-07T09:20:00') };
+  // The screenshot's case: last moved during the 7 Nov lesson, nobody pressed Finished since.
+  const now = Clock.courseNow(sat, sg('2026-11-16T21:27:00'));
+  assert.equal(now.currentIndex, 3, 'over on 7 Nov and on 14 Nov: two worksheets on');
+  assert.equal(now.currentDocId, 'd');
+  assert.equal(now.autoMoved, 2);
+  assert.equal(Clock.courseNow(now, sg('2026-11-16T21:27:00')), now, 'counting again moves nothing');
+  // During the lesson nothing moves; at 11am exactly it does.
+  const during = { ...sat, progressAt: sg('2026-11-14T09:05:00') };
+  assert.equal(Clock.courseNow(during, sg('2026-11-14T10:59:59')), during);
+  assert.equal(Clock.courseNow(during, sg('2026-11-14T11:00:00')).currentIndex, 2);
+  // Moved by hand after the lesson: that place holds until the next lesson is over.
+  const after = { ...sat, progressAt: sg('2026-11-14T12:00:00') };
+  assert.equal(Clock.courseNow(after, sg('2026-11-21T10:00:00')), after);
+  assert.equal(Clock.courseNow(after, sg('2026-11-21T11:00:00')).currentIndex, 2);
+  // clockAt (every writer since v1.15.0) counts as the place being written.
+  assert.equal(Clock.courseNow({ ...sat, clockAt: sg('2026-11-14T11:30:00') }, sg('2026-11-16T12:00:00')).currentIndex, 1);
+});
+
+test('clock: Finished during a lesson is that lesson\'s move; manual Next goes first; the end of the list stays', () => {
+  const base = { day: 'Monday', slot: 1, worksheetIds: ['a', 'b', 'c', 'd'], currentIndex: 2 };
+  const fin = { ...base, progressAt: sg('2026-11-16T18:30:00'), finishedAt: sg('2026-11-16T18:30:00') };
+  assert.equal(Clock.courseNow(fin, sg('2026-11-16T19:30:00')), fin, 'Finished at 6:30 in the 5pm lesson: no second move at 7pm');
+  assert.equal(Clock.courseNow(fin, sg('2026-11-23T19:00:00')).currentIndex, 3, 'the next week moves it again');
+  const manual = { ...base, currentIndex: 0, nextIndex: 2, progressAt: sg('2026-11-10T12:00:00') };
+  const m = Clock.courseNow(manual, sg('2026-11-16T19:00:00'));
+  assert.equal(m.currentIndex, 2, 'the Next set by hand becomes current');
+  assert.equal(m.nextIndex, undefined, 'and is used up');
+  const last = { ...base, currentIndex: 3, progressAt: sg('2026-11-02T12:00:00') };
+  assert.equal(Clock.courseNow(last, sg('2026-11-16T19:00:00')), last, 'the last worksheet stays current');
+  const capped = Clock.courseNow({ ...base, currentIndex: 1, progressAt: sg('2026-10-01T12:00:00') }, sg('2026-11-16T19:00:00'));
+  assert.equal(capped.currentIndex, 3, 'many weeks later it stops at the last one');
+});
+
+test('clock: classes that do not move by themselves', () => {
+  const at = sg('2026-11-16T21:00:00');
+  const c = { day: 'Saturday', slot: 0, worksheetIds: ['a', 'b', 'c'], currentIndex: 0, progressAt: sg('2026-11-01T12:00:00') };
+  assert.equal(Clock.courseNow({ ...c, currentIndex: -1 }, at).currentIndex, -1, 'not started: waits for the teacher');
+  assert.equal(Clock.courseNow({ ...c, archived: true }, at).currentIndex, 0);
+  assert.equal(Clock.courseNow({ ...c, day: '' }, at).currentIndex, 0, 'no lesson day');
+  assert.equal(Clock.courseNow({ ...c, slot: null }, at).currentIndex, 0, 'no lesson time');
+  assert.equal(Clock.courseNow({ ...c, progressAt: null }, at).currentIndex, 0, 'never placed: no time to count from');
+  // Firestore Timestamps are read too.
+  assert.equal(Clock.courseNow({ ...c, progressAt: { toMillis: () => sg('2026-11-01T12:00:00') } }, at).currentIndex, 2);
+});
+
+test('clock: a class day\'s answer key and videos reach students at the end of the lesson', () => {
+  const mon3 = { day: 'Monday', slot: 0 };
+  assert.equal(Clock.dayOpen(mon3, '2026-11-16', sg('2026-11-16T16:59:00')), false);
+  assert.equal(Clock.dayOpen(mon3, '2026-11-16', sg('2026-11-16T17:00:00')), true, '5pm for 3 to 4:45pm');
+  assert.equal(Clock.dayOpen(mon3, '2026-11-09', sg('2026-11-16T15:30:00')), true, 'last week\'s is out');
+  assert.equal(Clock.dayOpen({ day: '', slot: null }, '2026-11-16', sg('2026-11-16T15:30:00')), true, 'no lesson time: out at once');
+  assert.equal(Clock.recordingOpen(mon3, sg('2026-11-16T15:40:00'), sg('2026-11-16T16:00:00')), false, 'recorded in the lesson, lesson not over');
+  assert.equal(Clock.recordingOpen(mon3, sg('2026-11-16T15:40:00'), sg('2026-11-16T17:00:00')), true);
+  assert.equal(Clock.recordingOpen(mon3, sg('2026-11-16T18:10:00'), sg('2026-11-16T18:11:00')), true, 'recorded after the lesson: out at once');
+});
+
+test('clock: Polymath Online uses it for the timeline, and the trial service has the same file', () => {
+  const ids = ['a', 'b', 'c', 'd', 'e', 'f'];
+  const k = course({ day: 'Monday', slot: 0, worksheetIds: ids, currentIndex: 1, progressAt: sg('2026-11-09T15:30:00') });
+  const now = Core.courseNow(k, sg('2026-11-16T17:00:00'));
+  assert.equal(Core.currentIndex(now), 3, 'over on 9 Nov and 16 Nov');
+  assert.equal(Core.releasedThrough(now), 5, 'released 3 ahead of where it is now');
+  assert.deepEqual(['current', 'next', 'queued'].map((s, i) => Core.ansKeyState(now, 3 + i)), ['current', 'next', 'queued']);
+  const doc = { answerKeys: {
+    '2026-11-16': { url: 'https://firebasestorage.googleapis.com/v0/b/x/o/pdf-annotator%2Flesson-key-c-2026-11-16.pdf?alt=media&token=12345678-1234-1234-1234-123456789abc' },
+    '2026-11-09': { url: 'https://firebasestorage.googleapis.com/v0/b/x/o/pdf-annotator%2Flesson-key-c-2026-11-09.pdf?alt=media&token=12345678-1234-1234-1234-123456789abc' }
+  } };
+  assert.deepEqual(Core.visibleAnswerKeys(k, 'c', doc, sg('2026-11-16T16:30:00')).map(x => x.key), ['2026-11-09']);
+  assert.deepEqual(Core.visibleAnswerKeys(k, 'c', doc, sg('2026-11-16T17:00:00')).map(x => x.key), ['2026-11-16', '2026-11-09']);
+  assert.deepEqual(Core.visibleAnswerKeys(k, 'c', doc, sg('2026-11-16T16:30:00'), { all: true }).length, 2, 'the admin sees all');
+  const recs = [{ id: 'r1', at: sg('2026-11-16T15:20:00') }, { id: 'r0', at: sg('2026-11-09T15:20:00') }];
+  assert.deepEqual(Core.visibleRecordings(k, 'c', recs, sg('2026-11-16T16:00:00')).map(r => r.id), ['r0']);
+  assert.deepEqual(Core.visibleRecordings(k, 'c', recs, sg('2026-11-16T17:01:00')).map(r => r.id), ['r1', 'r0']);
+  assert.equal(fs.readFileSync(new URL('../shop-function/functions/lesson-clock.js', import.meta.url), 'utf8'),
+    fs.readFileSync(new URL('../online/lesson-clock.js', import.meta.url), 'utf8'), 'the trial service\'s copy is the same file');
+  const page = fs.readFileSync(new URL('../online/index.html', import.meta.url), 'utf8');
+  assert.ok(page.indexOf('lesson-clock.js') > 0 && page.indexOf('lesson-clock.js') < page.indexOf('portal-core.js?v'), 'the clock loads before the core');
+  const portal = fs.readFileSync(new URL('../online/portal.js', import.meta.url), 'utf8');
+  assert.match(portal, /state\.rawCourses = next;\s*applyClock\(\);/);
+  assert.match(portal, /clockAt: FieldValue\.serverTimestamp\(\)/);
 });

@@ -10,7 +10,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = 'v1.1.0';
+  var APP_VERSION = 'v1.2.0';
   var W = window.PolymathWatchCore;
   var Core = window.PolymathOnlineCore;
 
@@ -135,7 +135,9 @@
   async function classesFor(user, admin) {
     var snap = await db.collection(COURSES).get();
     var all = [];
-    snap.forEach(function (doc) { all.push(Object.assign({ id: doc.id }, doc.data())); });
+    // ⏰ Each class as it stands now: moved on after every lesson that is over.
+    var now = Date.now();
+    snap.forEach(function (doc) { all.push(Core.courseNow(Object.assign({ id: doc.id }, doc.data()), now)); });
     if (admin) return all;
     var member = await memberOf(user);
     return member ? Core.coursesForMember(all, member) : null;
@@ -163,10 +165,14 @@
     var annotations = await readAnnotations(state.doc);
     // 🗄 v1.13.0: a student never gets the lessons of a class day the admin
     // archived in the class this is watched from. Admins see every lesson.
-    state.lessons = W.lessonsOf(annotations, !admin && state.found ? W.archivedDaysIn(state.found.course, query.ws) : []);
+    // ⏰ v1.15.0: and a lesson's videos only once the lesson is over (5pm for
+    // a 3 to 4:45pm class). Admins see every lesson at once.
+    var openFor = !admin && state.found ? state.found.course : null;
+    state.lessons = W.lessonsOf(annotations, openFor ? W.archivedDaysIn(openFor, query.ws) : [],
+      openFor ? function (at) { return Core.recordingOpen(openFor, at); } : null);
     renderHead();
     if (!state.lessons.length) {
-      message('🎬', 'No lesson recorded yet', 'Lessons are recorded during class. Come back after the lesson to watch it here.');
+      message('🎬', 'No lesson recorded yet', 'Lessons are recorded during class and appear here when the lesson is over. Come back after the lesson to watch it here.');
       return;
     }
     setScreen('scrPlayer');

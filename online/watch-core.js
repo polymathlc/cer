@@ -140,13 +140,17 @@
   // `skipDays` (['YYYY-MM-DD']): class days archived for students in the
   // class it is watched from (portal-core.js `archivedDaysOf`); their lessons
   // are left out before the lessons are numbered.
-  function lessonsOf(annotations, skipDays) {
+  // ⏰ v1.15.0: `isOpen(at)`, when given, leaves out a lesson that is not
+  // over yet (portal-core.js `recordingOpen`, the lesson clock): a student
+  // gets a lesson's videos at the end of the lesson, as with the timeline.
+  function lessonsOf(annotations, skipDays, isOpen) {
     var list = [], seen = {};
     var skip = Array.isArray(skipDays) ? skipDays : [];
     parseAnnotations(annotations).forEach(function (a, i) {
       var l = lessonFrom(a);
       if (!l || seen[l.id]) return;
       if (skip.length && skip.indexOf(dayKey(l.at)) >= 0) return;
+      if (typeof isOpen === 'function' && !isOpen(l.at)) return;
       seen[l.id] = true;
       l.order = i;
       list.push(l);
@@ -502,7 +506,8 @@
       var ids = c && Array.isArray(c.worksheetIds) ? c.worksheetIds : [];
       var rel = c && typeof c.releasedThrough === 'number' && isFinite(c.releasedThrough) ? Math.floor(c.releasedThrough) : -1;
       // v1.12.0: a class is always RELEASE_AHEAD worksheets ahead of the one
-      // it is on (portal-core.js `releasedThrough`, the same rule).
+      // it is on (portal-core.js `releasedThrough`, the same rule). ⏰ v1.15.0:
+      // the page hands in each class as it stands now (Core.courseNow).
       var cur = c && typeof c.currentIndex === 'number' && isFinite(c.currentIndex) ? Math.floor(c.currentIndex) : -1;
       if (cur >= 0) rel = Math.max(rel, cur + RELEASE_AHEAD);
       var at = ids.indexOf(wsId);

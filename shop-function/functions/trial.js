@@ -36,6 +36,9 @@ const { randomBytes, scryptSync, timingSafeEqual, createHash, createHmac } = req
 const { ShopError, newOrderCode } = require('./service');
 const { slotLabel, readSlot, isMaster, slotModes } = require('./booking');
 const { SENDER_EMAIL, SENDER_NAME, escapeHtml, validEmail } = require('./receipt');
+// ⏰ The lesson clock (a copy of online/lesson-clock.js, kept identical by the
+// tests): a class moves one worksheet on at the end of each of its lessons.
+const LessonClock = require('./lesson-clock');
 
 const TRIAL_SETTINGS_DOC = Object.freeze(['trialSettings', 'main']);
 const TRIAL_BOOKINGS = 'trialBookings';
@@ -208,15 +211,18 @@ function num(value, fallback) { return typeof value === 'number' && Number.isFin
 function courseIds(course) { return course && Array.isArray(course.worksheetIds) ? course.worksheetIds.filter(id => typeof id === 'string' && id) : []; }
 // online/portal-core.js ansKeyAt: the worksheet the class is on and has yet to
 // finish (worksheet 1 before the first lesson), or -1 for an empty class.
-function ansKeyAt(course) {
+// ⏰ Since portal v1.15.0 the class as it stands now: one worksheet on for
+// every lesson that is over since its place was written (lesson-clock.js).
+function ansKeyAt(course, now) {
+  course = course ? LessonClock.courseNow(course, now) : course;
   const ids = courseIds(course);
   if (!ids.length) return -1;
   const cur = num(course && course.currentIndex, -1);
   if (cur < 0) return 0;
   return Math.min(Math.floor(cur), ids.length - 1);
 }
-function currentAndNext(course) {
-  const ids = courseIds(course), at = ansKeyAt(course);
+function currentAndNext(course, now) {
+  const ids = courseIds(course), at = ansKeyAt(course, now);
   return { current: at >= 0 ? ids[at] : '', next: at >= 0 && at + 1 < ids.length ? ids[at + 1] : '' };
 }
 const courseSlotIndex = course => {
