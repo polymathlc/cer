@@ -220,7 +220,41 @@ try {
   await page.waitForSelector('#drawer.show');
   assert.ok(await page.locator('#drawer >> text=Aisyah Rahman').isVisible());
   await shot(page, '06-timetable-class');
+
+  // v1.15.0 — 👋 a student who has withdrawn leaves the class at once, moves to
+  // the Withdrawn list under the timetable, and is restored from there.
+  await page.click('#drawer tr:has-text("Aisyah Rahman") [data-act="withdrawStudent"]');
+  await page.waitForFunction(() => /^1/.test((document.querySelector('[data-act="openSlot"][data-id="MON-2"] .cnt') || {}).textContent || ''));
+  assert.equal(await page.locator('#drawer >> text=Aisyah Rahman').count(), 0, 'out of the class list');
+  all = await store(page);
+  const aisyahFam = docsIn(all, 'officeFamilies').find(f => (f.students || []).some(s => s.name === 'Aisyah Rahman'));
+  const aisyahGone = aisyahFam.status === 'withdrawn' || aisyahFam.students.find(s => s.name === 'Aisyah Rahman').status === 'left';
+  assert.ok(aisyahGone, 'saved as withdrawn');
   await page.keyboard.press('Escape');
+  await page.waitForSelector('#withdrawn-list');
+  await page.click('#withdrawn-list [data-act="wdToggle"]');
+  await page.waitForSelector('#withdrawn-list table.wd');
+  assert.ok(await page.locator('#withdrawn-list >> text=Aisyah Rahman').isVisible(), 'on the Withdrawn list');
+  await shot(page, '06b-timetable-withdrawn-list');
+  // The Students tab hides her under Active, shows her under Withdrawn.
+  await page.click('#tabs [data-view="students"]');
+  await settle(page);
+  assert.equal(await page.locator('#view table.t >> text=Aisyah Rahman').count(), 0, 'not an active student');
+  await page.click('[data-act="stuFilter"][data-k="status"][data-v="left"]');
+  await settle(page);
+  assert.ok(await page.locator('#view table.t >> text=Aisyah Rahman').isVisible(), 'listed under Withdrawn');
+  await shot(page, '06c-students-withdrawn');
+  await page.click('[data-act="stuFilter"][data-k="status"][data-v="active"]');
+  // Restore: back in Monday 5 pm, exactly as before.
+  await page.click('#tabs [data-view="timetable"]');
+  await page.waitForSelector('#withdrawn-list table.wd');
+  await page.click('#withdrawn-list tr:has-text("Aisyah Rahman") [data-act="restoreStudent"]');
+  await page.waitForFunction(() => /^2/.test((document.querySelector('[data-act="openSlot"][data-id="MON-2"] .cnt') || {}).textContent || ''));
+  all = await store(page);
+  const back = docsIn(all, 'officeFamilies').find(f => f._id === aisyahFam._id || f.parentName === aisyahFam.parentName);
+  assert.equal(back.status, 'active');
+  assert.equal(back.students.find(s => s.name === 'Aisyah Rahman').status, 'active');
+  assert.equal(await page.locator('#withdrawn-list').count(), 0, 'nobody withdrawn any more');
 
   // The students table filters by level and subject.
   await page.click('#tabs [data-view="students"]');
