@@ -838,5 +838,99 @@ let studentDb = null;
   await stu.context.close();
 }
 
+/* ---- ⭐ v1.19.0: "This is my class" ----
+   Zhi Kai, 16 Nov 2026: a student in P6 Science on Monday 7pm, Tuesday 5pm
+   and Saturday 9am, plus P6 Maths on Monday 5pm, ticks the classes they
+   attend (one maths, one science). Those go to the top; the rest go grey
+   but still open. */
+{
+  const ws = (id, subject, extra) => Object.assign({ name: (subject === 'math' ? 'P6 Maths' : 'P6 Science') + ' Worksheet ' + id.slice(-1), level: 'P6', subject, storagePath: 'pdf-annotator/seed-' + id + '.pdf', pageCount: 4, annotations: '' }, extra || {});
+  const cls = (subject, day, slot, ids) => ({ level: 'P6', subject, day, slot, worksheetIds: ids, currentIndex: 1, releasedThrough: ids.length - 1 });
+  const docs = {
+    'onlineCourses/mmon': cls('math', 'Monday', 1, ['mm1', 'mm2', 'mm3']),
+    'onlineCourses/smon': cls('science', 'Monday', 2, ['sm1', 'sm2', 'sm3']),
+    'onlineCourses/stue': cls('science', 'Tuesday', 1, ['st1', 'st2', 'st3']),
+    'onlineCourses/ssat': cls('science', 'Saturday', 0, ['ss1', 'ss2', 'ss3']),
+    'onlineMembers/p6x': { level: 'P6', subjects: ['math', 'science'], role: 'student', name: 'Ryan Tan', email: 'ryan@example.com' }
+  };
+  for (const [c, prefix, subject] of [['mmon', 'mm', 'math'], ['smon', 'sm', 'science'], ['stue', 'st', 'science'], ['ssat', 'ss', 'science']]) {
+    for (let i = 1; i <= 3; i++) docs['pdfAnnotator/' + prefix + i] = ws(prefix + i, subject, { onlineCourseId: c });
+  }
+  const student = { uid: 'p6x', email: 'ryan@example.com', displayName: 'Ryan Tan' };
+  const bandDays = (page) => page.$$eval('#studentPanel > .st-card .day-name, #studentPanel > .class-card .day-name', (els) => els.map((e) => e.textContent + ''));
+  const cardIds = (page) => page.$$eval('#studentPanel [data-action="my-class"]', (els) => els.map((e) => e.dataset.id));
+
+  let s = await open({ user: student, docs, width: 1180 });
+  await s.page.waitForFunction(() => document.querySelectorAll('.st-card .my-class-box').length === 4, null, { timeout: 8000 });
+  check('my class: every maths and science band has a tick box', (await s.page.locator('.day-band .my-class-box').count()) === 4);
+  check('my class: before any tick, nothing is greyed and the usual order holds', (await s.page.locator('.is-other-class').count()) === 0 && (await cardIds(s.page)).join() === 'mmon,smon,stue,ssat');
+  check('my class: a line tells the student what the box is for', /Tick/.test(await s.page.textContent('.my-class-hint')));
+  await s.page.screenshot({ path: path.join(shots, '40-my-class-before.png'), fullPage: true });
+
+  await s.page.click('[data-action="my-class"][data-id="stue"]');
+  await s.page.waitForFunction(() => document.querySelectorAll('.is-other-class').length === 3);
+  check('my class: ticking Tuesday science puts it first', (await cardIds(s.page))[0] === 'stue');
+  check('my class: it gets the gold ring, the box shows ticked', (await s.page.locator('.st-card.is-my-class [data-action="my-class"][aria-checked="true"]').count()) === 1);
+  check('my class: the others sit under "Other classes"', /Other classes/.test(await s.page.textContent('.other-classes-head')));
+  let prof = await s.page.evaluate(() => window.__fake.db['studentProfiles/p6x']);
+  check('my class: saved in the student profile', prof && prof.onlineMyClasses && prof.onlineMyClasses.science === 'stue');
+  const greyBand = await s.page.$eval('.is-other-class .day-band', (el) => getComputedStyle(el).backgroundColor);
+  check('my class: other classes have a grey band', greyBand === 'rgb(140, 146, 156)');
+
+  await s.page.click('[data-action="my-class"][data-id="ssat"]');
+  await s.page.waitForFunction(() => document.querySelector('#studentPanel [data-action="my-class"]').dataset.id === 'ssat');
+  check('my class: ticking Saturday science MOVES the tick (one science class only)', (await s.page.locator('[data-action="my-class"][aria-checked="true"]').count()) === 1);
+  await s.page.click('[data-action="my-class"][data-id="mmon"]');
+  await s.page.waitForFunction(() => document.querySelectorAll('.is-my-class').length === 2);
+  check('my class: one maths and one science, both at the top', (await cardIds(s.page)).slice(0, 2).join() === 'mmon,ssat');
+  prof = await s.page.evaluate(() => window.__fake.db['studentProfiles/p6x']);
+  check('my class: both saved', prof.onlineMyClasses.math === 'mmon' && prof.onlineMyClasses.science === 'ssat');
+  // The other classes still work.
+  check('my class: a greyed class still has its Download buttons', (await s.page.locator('.is-other-class [data-action="download"]').count()) > 0);
+  await s.page.evaluate(() => window.scrollTo(0, 0));
+  await s.page.screenshot({ path: path.join(shots, '41-my-class-desktop.png'), fullPage: true });
+  for (const tab of ['answers', 'videos', 'timeline']) {
+    await s.page.click('#st-tab-' + tab);
+    await s.page.waitForFunction((t) => document.querySelector('#st-tab-' + t + '[aria-selected="true"]'), tab);
+    check('my class: the ' + tab + ' tab lists the ticked classes first too', (await cardIds(s.page)).slice(0, 2).join() === 'mmon,ssat');
+  }
+  check('my class (desktop): no script errors', s.errors.length === 0 || (console.log(s.errors), false));
+  const after = await s.page.evaluate(() => window.__fake.db);
+  await s.context.close();
+
+  // Another device (nothing on it yet): the profile brings the ticks along.
+  s = await open({ user: student, docs: after, width: 390 });
+  await s.page.waitForFunction(() => document.querySelectorAll('.is-my-class').length === 2, null, { timeout: 8000 });
+  check('my class: another device shows the same ticks', (await cardIds(s.page)).slice(0, 2).join() === 'mmon,ssat');
+  const box = await s.page.locator('[data-action="my-class"]').first().boundingBox();
+  check('my class (phone): the tick box is big enough for a finger', box && box.height >= 44 && box.width >= 44);
+  const bandFits = await s.page.$$eval('.day-band', (els) => els.every((b) => b.scrollWidth <= b.clientWidth + 1));
+  check('my class (phone): the band still fits the screen', bandFits);
+  await s.page.screenshot({ path: path.join(shots, '42-my-class-phone.png'), fullPage: true });
+  await s.page.screenshot({ path: path.join(shots, '43-my-class-phone-top.png') });
+  // Untick both: back to normal.
+  await s.page.click('[data-action="my-class"][data-id="mmon"]');
+  await s.page.waitForFunction(() => document.querySelectorAll('.is-my-class').length === 1);
+  await s.page.click('[data-action="my-class"][data-id="ssat"]');
+  await s.page.waitForFunction(() => document.querySelectorAll('.is-other-class').length === 0);
+  check('my class: unticking everything brings the usual order and colours back', (await cardIds(s.page)).join() === 'mmon,smon,stue,ssat');
+  check('my class (phone): no script errors', s.errors.length === 0 || (console.log(s.errors), false));
+  await s.context.close();
+
+  // An admin's preview: ticking works there but is never saved.
+  const a = await open({ user: admin, docs, width: 1180 });
+  await a.page.waitForSelector('.tabs');
+  await a.page.click('[data-action="preview-start"]');
+  await a.page.selectOption('#previewLevel', 'P6');
+  await a.page.waitForSelector('[data-action="my-class"]');
+  await a.page.click('[data-action="my-class"][data-id="stue"]');
+  await a.page.waitForFunction(() => document.querySelectorAll('.is-my-class').length === 1);
+  const adminProf = await a.page.evaluate(() => window.__fake.db['studentProfiles/admin-1']);
+  check('my class (preview): ticks for the admin to see, saves nothing', !adminProf || !adminProf.onlineMyClasses);
+  check('my class (preview): no script errors', a.errors.length === 0 || (console.log(a.errors), false));
+  await a.context.close();
+  void bandDays;
+}
+
 await browser.close();
 console.log(`Passed ${checks} Polymath Online browser checks.`);

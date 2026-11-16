@@ -640,16 +640,13 @@
   .my-class-hint.is-set { background: #FFF3C4; }
   @media (max-width: 640px) {
     .day-band { grid-template-columns: auto auto 1fr auto; }
-    .my-class-box { min-height: 48px; padding: 5px 10px 5px 6px; gap: 6px; font-size: 0.9rem; border-radius: 12px; }
+    /* Phone: a square box with a small word under it, so the class name keeps its room. */
+    .my-class-box { flex-direction: column; justify-content: center; min-height: 52px; min-width: 52px; padding: 4px 6px 3px; gap: 2px; font-size: 0.66rem; letter-spacing: 0; border-radius: 12px; }
     .my-class-check { width: 30px; height: 30px; border-radius: 8px; }
     .my-class-long { display: none; }
     .my-class-short { display: inline; }
     .my-class-box.is-on .my-class-text::before { content: ''; }
     .is-other-class .day-badge .day-name { font-size: 1rem; }
-  }
-  @media (max-width: 380px) {
-    .my-class-text { display: none; }
-    .my-class-box { padding: 6px; }
   }
   @media print {
     .my-class-box, .my-class-hint, .other-classes-head { display: none !important; }
