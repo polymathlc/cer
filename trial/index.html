@@ -212,6 +212,35 @@
   .toast.show { transform:translateX(-50%) translateY(0); opacity:1; }
   .toast.err { background:var(--danger); }
   .footer { text-align:center; font-size:12px; color:var(--gray-500); margin-top:32px; padding-top:20px; border-top:1px solid var(--line); }
+  /* Class links (v1.4.0, Zhi Kai 17 Nov 2026): a new link is sent from its own "Ready to send" box, never picked
+     out of the list, and older links are folded away and filtered to the chosen class, so staff do not copy
+     the wrong row for a parent. */
+  .link-make { display:grid; grid-template-columns:1.2fr 1fr auto; gap:10px; align-items:end; margin-bottom:14px; }
+  .link-make .field { margin:0; }
+  .link-make .btn { height:44px; }
+  .link-ready { border:2px solid var(--pink); border-radius:14px; padding:16px 18px; margin-bottom:16px; background:#fff7fb; }
+  .link-ready .ready-tag { display:inline-block; font-size:11px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--plum); margin-bottom:4px; }
+  .link-ready .ready-class { font-size:22px; font-weight:800; color:var(--ink); line-height:1.25; }
+  .link-ready .ready-when { font-size:15px; color:var(--gray-700); margin-top:2px; }
+  .link-ready .ready-for { font-size:15px; margin-top:8px; }
+  .link-ready .ready-for b { color:var(--deep); }
+  .link-ready .ready-url { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; color:var(--gray-600); word-break:break-all; background:#fff; border:1px dashed var(--line); border-radius:8px; padding:6px 8px; margin-top:10px; }
+  .link-ready .ready-send { display:grid; grid-template-columns:1fr auto auto; gap:8px; align-items:end; margin-top:12px; }
+  .link-ready .ready-send .field { margin:0; }
+  .link-ready .ready-send .btn { height:44px; }
+  .btn.whatsapp { background:#1fa855; border-color:#1fa855; }
+  .btn.whatsapp:hover { background:#178a45; border-color:#178a45; }
+  .link-ready .ready-foot { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  details.link-old { border:1px solid var(--line); border-radius:12px; background:#fff; }
+  details.link-old > summary { cursor:pointer; padding:12px 14px; font-weight:700; list-style:none; display:flex; align-items:center; gap:8px; }
+  details.link-old > summary::-webkit-details-marker { display:none; }
+  details.link-old > summary::before { content:'▸'; color:var(--gray-500); transition:transform .15s; }
+  details.link-old[open] > summary::before { transform:rotate(90deg); }
+  details.link-old > summary .muted { font-weight:400; }
+  details.link-old .link-old-body { padding:0 14px 14px; }
+  .link-filter-note { font-size:13px; color:var(--gray-600); margin:-4px 0 10px; }
+  .link-filter-note b { color:var(--ink); }
+  table.list td .link-who { font-weight:800; font-size:14px; color:var(--ink); }
   .link-btn { background:none; border:none; color:var(--gray-600); text-decoration:underline; cursor:pointer; font-size:12px; }
   .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; z-index:150; padding:16px; }
   .modal { background:#fff; border-radius:var(--radius); max-width:380px; width:100%; padding:24px; text-align:center; }
@@ -227,6 +256,8 @@
     .card { padding:18px; }
     .summary div { grid-template-columns:110px 1fr; }
     .gate form { flex-direction:column; }
+    .link-make, .link-ready .ready-send { grid-template-columns:1fr; }
+    .link-ready .ready-class { font-size:19px; }
   }
 </style>
 </head>
@@ -310,12 +341,42 @@
     <div class="card admin-pane" id="pane-links">
       <h2>Class links (one week)</h2>
       <p class="lead">A link for one class opens its Zoom link and its Current and Next worksheets straight away, after asking for an email and WhatsApp number. Each link stops working 7 days after you make it.</p>
-      <div class="admin-tools">
-        <select id="link-slot" aria-label="Class"></select>
-        <input type="text" id="link-label" maxlength="80" placeholder="Note, e.g. who you are sending it to">
-        <button class="btn small" onclick="createLink()">Make link</button>
+      <!-- v1.4.0 (Zhi Kai 17 Nov 2026): who the link is for is required, the new link is sent from the
+           "Ready to send" box below, and links already made stay folded away so nobody copies the wrong row. -->
+      <form class="link-make" id="link-make" onsubmit="createLink(); return false;">
+        <div class="field"><label for="link-slot">1. Class</label><select id="link-slot"></select></div>
+        <div class="field"><label for="link-label">2. Who is this for?</label><input type="text" id="link-label" maxlength="80" autocomplete="off" placeholder="Parent or student name, e.g. Mrs Tan (Ethan)" required></div>
+        <button class="btn" type="submit" id="link-make-btn">Make link</button>
+      </form>
+
+      <div class="link-ready hidden" id="link-ready" aria-live="polite">
+        <span class="ready-tag">Ready to send · check the class</span>
+        <div class="ready-class" id="ready-class"></div>
+        <div class="ready-when" id="ready-when"></div>
+        <div class="ready-for">For <b id="ready-for"></b></div>
+        <div class="ready-url" id="ready-url"></div>
+        <div class="ready-send">
+          <div class="field"><label for="ready-whatsapp">Parent's WhatsApp (optional)</label><input type="tel" id="ready-whatsapp" inputmode="tel" autocomplete="off" placeholder="e.g. 9123 4567"></div>
+          <button class="btn ghost" type="button" onclick="copyReady()">Copy message</button>
+          <button class="btn whatsapp" type="button" onclick="whatsappReady()">Open WhatsApp</button>
+        </div>
+        <div class="ready-foot">
+          <span class="muted" id="ready-until"></span>
+          <button class="link-btn" type="button" onclick="closeReady()">Done, close this</button>
+        </div>
       </div>
-      <div id="link-list"></div>
+
+      <details class="link-old" id="link-old">
+        <summary>Links already made <span class="muted" id="link-old-count"></span></summary>
+        <div class="link-old-body">
+          <div class="admin-tools">
+            <input type="search" id="link-search" placeholder="Search by name" aria-label="Search links by name" oninput="renderLinkList()">
+            <label class="muted"><input type="checkbox" id="link-ended" onchange="renderLinkList()"> Show ended links</label>
+          </div>
+          <div class="link-filter-note" id="link-filter-note"></div>
+          <div id="link-list"></div>
+        </div>
+      </details>
     </div>
 
     <div class="card admin-pane hidden" id="pane-classes">
@@ -475,7 +536,7 @@
 
 // Shown to the signed-in admin in the footer, so a deploy can be checked.
 // Bump it on every change to this page.
-const TRIAL_PAGE_VERSION = 'v1.3.0';
+const TRIAL_PAGE_VERSION = 'v1.4.0';
 // 🎥 The Join Zoom button at the top (v1.2.0). A lesson with its own Zoom link (admin, Classes & Zoom)
 // uses that one; otherwise this, the centre's class Zoom. Keep equal to CLASS_ZOOM_URL in
 // student/student-account.js (a test checks).
@@ -1066,7 +1127,8 @@ async function adminCall(body) {
     const words = { 'admin-only': 'This account is not a trial admin.', 'sign-in-required': 'Please sign in again.', 'invalid-zoom-link': 'A Zoom link must start with https://',
       'weak-password': 'The password needs 4 to 64 characters.', 'invalid-count': 'Make between 1 and 30 codes at a time.',
       'session-unavailable': 'That class is not open for online trials on the schedule.', 'reminder-just-sent': 'A reminder was just sent. Try again in a minute.',
-      'materials-just-sent': 'That email was just sent. Try again in a minute.', 'booking-cancelled': 'That booking is cancelled.' };
+      'materials-just-sent': 'That email was just sent. Try again in a minute.', 'booking-cancelled': 'That booking is cancelled.',
+      'link-name-required': 'Type who this link is for (the parent or student name).' };
     toast(words[r.error] || ('Failed: ' + (r.error || 'error')), true);
   }
   return r;
@@ -1245,36 +1307,106 @@ async function revokeCode(code) {
 }
 
 // ─── Class links ───
+// v1.4.0 (Zhi Kai 17 Nov 2026): staff were picking the wrong row out of a long list of look-alike links.
+// Now every link needs a name (who it is for), a new link is sent from its own "Ready to send" box with the
+// class in large type, and links already made are folded away, filtered to the chosen class and searchable.
+let readyLink = null;
+function linkClassName(l) { return levelName(l.level) + ' ' + subjectName(l.subject); }
 function linkMessage(l) {
-  return 'Here is your Polymath ' + levelName(l.level) + ' ' + subjectName(l.subject) + ' class link (' + l.slotLabel + '). It has the Zoom link and worksheets: ' + l.url;
+  return 'Here is your Polymath ' + linkClassName(l) + ' class link (' + l.slotLabel + '). It has the Zoom link and worksheets: ' + l.url;
+}
+// A WhatsApp number for wa.me: 8 Singapore digits get 65 in front; + and a country code are kept; else ''.
+function whatsappDigits(raw) {
+  const text = String(raw || '').trim();
+  if (!text) return '';
+  const digits = text.replace(/[^\d]/g, '');
+  if (/^[3689]\d{7}$/.test(digits) && !text.startsWith('+')) return '65' + digits;
+  if (/^\d{8,15}$/.test(digits) && (text.startsWith('+') || digits.startsWith('65'))) return digits;
+  return null;
+}
+function whatsappUrl(number, text) {
+  return 'https://wa.me/' + (number || '') + '?text=' + encodeURIComponent(text);
 }
 async function createLink() {
-  const slot = $('link-slot').value, label = $('link-label').value.trim();
-  if (!slot) { toast('Choose a class', true); return; }
+  const slot = $('link-slot').value, label = $('link-label').value.trim().replace(/\s+/g, ' ');
+  if (!slot) { toast('Choose a class first', true); $('link-slot').focus(); return; }
+  if (label.length < 2) { toast('Type who this link is for (the parent or student name)', true); $('link-label').focus(); return; }
+  const btn = $('link-make-btn');
+  btn.disabled = true;
   const r = await adminCall({ action: 'createLink', slot, label });
+  btn.disabled = false;
   if (!r.ok) return;
   $('link-label').value = '';
-  copyText(r.link.url, 'Link made and copied. It works for 7 days.');
-  adminLoad();
+  showReady(r.link);
+  await adminLoad();
+}
+function showReady(link) {
+  readyLink = link;
+  $('ready-class').textContent = linkClassName(link);
+  $('ready-when').textContent = link.slotLabel || '';
+  $('ready-for').textContent = link.label || '';
+  $('ready-url').textContent = link.url;
+  $('ready-until').textContent = 'Works for 7 days, until ' + fmtMs(link.expiresAtMs, true) + '.';
+  $('ready-whatsapp').value = '';
+  $('link-ready').classList.remove('hidden');
+  $('link-ready').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  toast('Link made. Send it from the pink box.');
+}
+function closeReady() {
+  readyLink = null;
+  $('link-ready').classList.add('hidden');
+  // The next link starts from a fresh class choice, so the last class is never reused by accident
+  $('link-slot').value = '';
+  renderLinkList();
+}
+function copyReady() {
+  if (!readyLink) return;
+  copyText(linkMessage(readyLink), 'Message copied: ' + linkClassName(readyLink) + ' for ' + (readyLink.label || 'this parent'));
+}
+function whatsappReady() {
+  if (!readyLink) return;
+  const number = whatsappDigits($('ready-whatsapp').value);
+  if (number === null) { toast('That WhatsApp number does not look right. Use 8 digits, or + and the country code.', true); $('ready-whatsapp').focus(); return; }
+  window.open(whatsappUrl(number, linkMessage(readyLink)), '_blank', 'noopener');
 }
 function renderLinks() {
-  $('link-slot').innerHTML = '<option value="">Choose a class…</option>' + adminData.slots.map(s => '<option value="' + s.slot + '">'
+  const chosen = $('link-slot').value;
+  $('link-slot').innerHTML = '<option value="">Choose a class…</option>' + adminData.slots.map(s => '<option value="' + escapeHtml(s.slot) + '">'
     + escapeHtml(s.level + ' ' + subjectName(s.subject) + ' · ' + s.label) + '</option>').join('');
-  const list = adminData.links;
-  if (!list.length) { $('link-list').innerHTML = '<div class="state">No class links yet.</div>'; return; }
+  if (chosen && adminData.slots.some(s => s.slot === chosen)) $('link-slot').value = chosen;
+  renderLinkList();
+}
+function renderLinkList() {
+  if (!adminData) return;
+  const all = adminData.links;
+  const active = all.filter(l => l.state === 'active').length;
+  $('link-old-count').textContent = '(' + active + ' active' + (all.length > active ? ', ' + (all.length - active) + ' ended' : '') + ')';
+  const slot = $('link-slot').value;
+  const q = $('link-search').value.trim().toLowerCase();
+  const ended = $('link-ended').checked;
+  const slotInfo = adminData.slots.find(s => s.slot === slot);
+  const list = all.filter(l => (!slot || l.slot === slot) && (ended || l.state === 'active')
+    && (!q || String(l.label || '').toLowerCase().includes(q)));
+  $('link-filter-note').innerHTML = slot
+    ? 'Showing links for <b>' + escapeHtml(slotInfo ? slotInfo.level + ' ' + subjectName(slotInfo.subject) + ' · ' + slotInfo.label : slot) + '</b> only (the class chosen above).'
+    : 'Showing links for all classes. Choose a class above to see only that class.';
   window.__links = list;
-  $('link-list').innerHTML = '<div class="table-wrap"><table class="list"><thead><tr><th>Class</th><th>Note</th><th>Status</th><th>Opened</th><th>Made</th><th></th></tr></thead><tbody>'
-    + list.map((l, i) => '<tr><td><b>' + escapeHtml(l.level + ' ' + subjectName(l.subject)) + '</b><div class="muted">' + escapeHtml(l.slotLabel) + '</div></td>'
-      + '<td>' + escapeHtml(l.label || '—') + '</td>'
+  if (!list.length) {
+    $('link-list').innerHTML = '<div class="state">' + (all.length ? 'No links match. ' + (ended ? '' : 'Tick "Show ended links" to see older ones.') : 'No class links yet.') + '</div>';
+    return;
+  }
+  $('link-list').innerHTML = '<div class="table-wrap"><table class="list"><thead><tr><th>For</th><th>Class</th><th>Status</th><th>Opened</th><th>Made</th><th></th></tr></thead><tbody>'
+    + list.map((l, i) => '<tr><td>' + (l.label ? '<div class="link-who">' + escapeHtml(l.label) + '</div>' : '<span class="muted">(no name)</span>') + '</td>'
+      + '<td><b>' + escapeHtml(l.level + ' ' + subjectName(l.subject)) + '</b><div class="muted">' + escapeHtml(l.slotLabel) + '</div></td>'
       + '<td><span class="badge ' + l.state + '">' + l.state + '</span><div class="muted">' + (l.state === 'active' ? daysLeft(l.expiresAtMs) + ' · until ' + escapeHtml(fmtMs(l.expiresAtMs, true)) : 'ended ' + escapeHtml(fmtMs(l.expiresAtMs))) + '</div></td>'
       + '<td>' + l.people + ' ' + (l.people === 1 ? 'person' : 'people') + '<div class="muted">' + l.opens + ' opens</div></td>'
       + '<td>' + escapeHtml(fmtMs(l.createdAtMs, true)) + '<div class="muted">' + escapeHtml(l.createdBy) + '</div></td>'
       + '<td><div class="acts-cell">' + (l.state === 'active'
-        ? '<button class="btn small" onclick="copyText(window.__links[' + i + '].url, \'Link copied\')">Copy link</button>'
-          + '<button class="btn small ghost" onclick="copyText(linkMessage(window.__links[' + i + ']), \'Message copied\')">Copy message</button>'
-          + '<button class="btn small danger" onclick="revokeLink(\'' + l.token + '\')">Stop</button>' : '') + '</div></td></tr>').join('')
+        ? '<button class="btn small" onclick="showReady(window.__links[' + i + '])">Send again</button>'
+          + '<button class="btn small danger" onclick="revokeLink(\'' + escapeHtml(l.token) + '\')">Stop</button>' : '') + '</div></td></tr>').join('')
     + '</tbody></table></div>';
 }
+$('link-slot').addEventListener('change', renderLinkList);
 async function revokeLink(token) {
   if (!confirm('Stop this link now? Anyone using it loses the Zoom link and worksheets.')) return;
   const r = await adminCall({ action: 'revokeLink', token });
