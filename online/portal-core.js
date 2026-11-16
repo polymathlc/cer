@@ -16,6 +16,15 @@
 (function (root) {
   'use strict';
 
+  /* ⏰ v1.15.0 (Zhi Kai, 16 Nov 2026): the lesson clock (lesson-clock.js).
+     A class moves one worksheet on when each of its lessons is over (at the
+     next lesson time: 5pm for 3 to 4:45pm), and a class day's answer key
+     and videos reach students at that same moment. `courseNow` gives the
+     class as it stands now; the page keeps every class through it. */
+  var Clock = (typeof module === 'object' && module.exports && typeof require === 'function')
+    ? require('./lesson-clock.js') : root.PolymathLessonClock;
+  function courseNow(course, now) { return Clock && course ? Clock.courseNow(course, now) : course; }
+
   var RELEASE_AHEAD = 3;          // on worksheet n, students have up to n + 3 (2 → 5): the next one and the two after it
   var NEXT_COUNT = 2;             // "the next two worksheets"
   var LEVELS = ['P3', 'P4', 'P5', 'P6'];
@@ -222,16 +231,25 @@
   }
   // Recorded lessons a student may see on one worksheet of one class: the
   // ones not taught on an archived class day.
-  function visibleRecordings(course, id, recordings) {
+  // ⏰ v1.15.0: and only lessons that are over (see lesson-clock.js). The
+  // admin's page passes `opts.all` to see everything at once.
+  function visibleRecordings(course, id, recordings, now, opts) {
     var hidden = archivedDaysOf(course, id);
     var list = Array.isArray(recordings) ? recordings : [];
-    if (!hidden.length) return list;
-    return list.filter(function (r) { return !(r && hidden.indexOf(lessonDayKey(r.at)) >= 0); });
+    var all = !!(opts && opts.all) || !Clock;
+    return list.filter(function (r) {
+      if (!r) return false;
+      if (hidden.length && hidden.indexOf(lessonDayKey(r.at)) >= 0) return false;
+      return all || Clock.recordingOpen(course, r.at, now);
+    });
   }
   // A worksheet's answer key PDFs a student may see in one class, newest first.
-  function visibleAnswerKeys(course, id, doc, now) {
+  function visibleAnswerKeys(course, id, doc, now, opts) {
     var hidden = archivedDaysOf(course, id);
-    return answerKeysOf(doc, now).filter(function (k) { return hidden.indexOf(k.key) < 0; });
+    var all = !!(opts && opts.all) || !Clock;
+    return answerKeysOf(doc, now).filter(function (k) {
+      return hidden.indexOf(k.key) < 0 && (all || Clock.dayOpen(course, k.key, now));
+    });
   }
   // What the admin's Archived list shows for a class: the archived
   // worksheets in teaching order, then the archived class days, newest day
@@ -1213,6 +1231,10 @@
   }
 
   var api = {
+    Clock: Clock, courseNow: courseNow,
+    nextChange: function (courses, now) { return Clock ? Clock.nextChange(courses, now) : 0; },
+    dayOpen: function (course, key, now) { return !Clock || Clock.dayOpen(course, key, now); },
+    recordingOpen: function (course, at, now) { return !Clock || Clock.recordingOpen(course, at, now); },
     releaseFloor: releaseFloor, RELEASE_AHEAD: RELEASE_AHEAD, NEXT_COUNT: NEXT_COUNT, LEVELS: LEVELS, SUBJECTS: SUBJECTS, DAYS: DAYS, ROLES: ROLES,
     SLOTS_WEEKDAY: SLOTS_WEEKDAY, SLOTS_WEEKEND: SLOTS_WEEKEND,
     levelSubjects: levelSubjects, subjectLabel: subjectLabel, cleanSubjects: cleanSubjects, profileSubjectFor: profileSubjectFor,

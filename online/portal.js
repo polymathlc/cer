@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = 'v1.14.0';
+  var APP_VERSION = 'v1.15.0';
   var Core = window.PolymathOnlineCore;
 
   // Who runs the portal. Anyone else signs in as a student or a parent.
@@ -317,7 +317,7 @@
     unsubscribers.forEach(function (fn) { try { fn(); } catch (e) {} });
     unsubscribers = [];
     stopWatchingDocs();
-    state.courses = {}; state.coursesLoaded = false; state.invites = []; state.members = [];
+    state.courses = {}; state.rawCourses = null; state.coursesLoaded = false; state.invites = []; state.members = [];
   }
 
   auth.onAuthStateChanged(function (user) {
@@ -487,11 +487,29 @@
   }
 
   /* ================= Live data ================= */
+  /* ⏰ v1.15.0: every class is kept as it stands NOW (Core.courseNow, the
+     lesson clock): when one of its lessons is over the class has moved one
+     worksheet on, and that lesson's answer key and videos are out. The page
+     redraws by itself at the next end of a lesson, and whenever it comes
+     back into view, so nobody has to reload at 5pm. Nothing is written. */
+  var clockTimer = null;
+  function applyClock() {
+    var now = Date.now(), raw = state.rawCourses || {}, out = {};
+    Object.keys(raw).forEach(function (k) { out[k] = Core.courseNow(raw[k], now); });
+    state.courses = out;
+    clearTimeout(clockTimer);
+    var at = Core.nextChange(raw, now);
+    if (at) clockTimer = setTimeout(function () { applyClock(); queueRender(); }, Math.max(1000, at - now + 1500));
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible' && state.rawCourses) { applyClock(); queueRender(); }
+  });
   function listenCourses() {
     unsubscribers.push(db.collection(COURSES).onSnapshot(function (snap) {
       var next = {};
       snap.forEach(function (doc) { next[doc.id] = Object.assign({ id: doc.id }, doc.data()); });
-      state.courses = next;
+      state.rawCourses = next;
+      applyClock();
       state.coursesLoaded = true;
       queueRender();
     }, function (err) { fail('Classes could not be loaded', err); state.coursesLoaded = true; queueRender(); }));
@@ -1259,11 +1277,11 @@
       var moved = await db.runTransaction(async function (tx) {
         var snap = await tx.get(ref);
         if (!snap.exists) return null;
-        var live = Object.assign({ id: course.id }, snap.data());
+        var live = Core.courseNow(Object.assign({ id: course.id }, snap.data()));
         if (Core.ansKeyAt(live) !== update.lastFinishedIndex) return null;
         var fresh = Core.finishUpdate(live);
         if (!fresh) return null;
-        tx.set(ref, Object.assign({}, fresh, { progressAt: FieldValue.serverTimestamp(), finishedAt: FieldValue.serverTimestamp(), progressBy: state.user.email }), { merge: true });
+        tx.set(ref, Object.assign({}, fresh, { progressAt: FieldValue.serverTimestamp(), finishedAt: FieldValue.serverTimestamp(), clockAt: FieldValue.serverTimestamp(), progressBy: state.user.email }), { merge: true });
         return fresh;
       });
       busy(button, false);
@@ -1562,6 +1580,12 @@
         var data = { title: (typed || Core.autoCourseTitle(draft.level, draft.subject, draft.day, draft.slot)).slice(0, 80), level: draft.level, subject: draft.subject, day: draft.day || '', slot: (draft.slot === 0 || draft.slot === 1 || draft.slot === 2) ? draft.slot : null, updatedAt: FieldValue.serverTimestamp() };
         busy(t, true);
         var write;
+        // ⏰ A class moved to another day or lesson time keeps the worksheet it
+        // is on now; the new lesson times count from here, never backwards.
+        if (course && (course.day !== data.day || course.slot !== data.slot) && Core.currentIndex(course) >= 0) {
+          data.currentIndex = Core.currentIndex(course); data.currentDocId = Core.courseIds(course)[data.currentIndex] || null;
+          data.clockAt = FieldValue.serverTimestamp();
+        }
         if (course) write = db.collection(COURSES).doc(course.id).set(data, { merge: true });
         else {
           var ref = db.collection(COURSES).doc();
@@ -1734,13 +1758,17 @@
     var outcome = await db.runTransaction(async function (tx) {
       var snap = await tx.get(ref);
       if (!snap.exists) throw new Error('This class no longer exists.');
-      var course = Object.assign({ id: snap.id }, snap.data());
+      // ⏰ The class as it stands now: the place written below is where it is.
+      var course = Core.courseNow(Object.assign({ id: snap.id }, snap.data()));
       var oldIds = Core.courseIds(course);
       var newIds = makeIds(oldIds.slice(), course);
       // 📂 Previous worksheets move the class past them; anything else keeps
       // the class on the worksheet it is on.
       var progress = opts.progress ? opts.progress(course, newIds) : Core.remapProgress(course, newIds);
-      tx.set(ref, Object.assign({ worksheetIds: newIds, updatedAt: FieldValue.serverTimestamp() }, progress), { merge: true });
+      var write = Object.assign({ worksheetIds: newIds, updatedAt: FieldValue.serverTimestamp() }, progress);
+      if (Object.prototype.hasOwnProperty.call(progress || {}, 'currentIndex')) write.clockAt = FieldValue.serverTimestamp();
+      if (course.autoMoved) { write.nextIndex = FieldValue.delete(); write.nextDocId = FieldValue.delete(); }
+      tx.set(ref, write, { merge: true });
       return { oldIds: oldIds, newIds: newIds };
     });
     var removed = outcome.oldIds.filter(function (id) { return outcome.newIds.indexOf(id) < 0; });
@@ -1782,7 +1810,7 @@
     if (!update) { toast('Choose a worksheet between 1 and ' + Core.courseIds(course).length + '.', { error: true }); return; }
     busy(button, true);
     try {
-      await db.collection(COURSES).doc(course.id).set(Object.assign({}, update, { progressAt: FieldValue.serverTimestamp(), progressBy: state.user.email }), { merge: true });
+      await db.collection(COURSES).doc(course.id).set(Object.assign({}, update, { progressAt: FieldValue.serverTimestamp(), clockAt: FieldValue.serverTimestamp(), progressBy: state.user.email }), { merge: true });
       busy(button, false); done(button, 'Set');
     } catch (err) { busy(button, false); fail('Could not set the class position', err); }
   }
