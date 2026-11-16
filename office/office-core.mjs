@@ -40,7 +40,7 @@
         payment, last PayNow screenshot the parent sent).
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export const OFFICE_CORE_VERSION = '1.14.0';
+export const OFFICE_CORE_VERSION = '1.15.0';
 // The centre's logo for emails: a small copy of assets/branding/polymath-learning-centre.png,
 // served from the website so Gmail and other mail apps can show it (v1.13.0).
 export const EMAIL_LOGO_URL = 'https://polymathlc.com.sg/assets/branding/polymath-logo-email.png';
@@ -112,6 +112,10 @@ export const CLASS_MODE_META = Object.freeze({
 });
 export function classModeLabel(mode) { const m = CLASS_MODE_META[mode]; return m ? m.icon + ' ' + m.label : String(mode || ''); }
 export const STUDENT_STATUSES = ['active', 'paused', 'left'];
+// v1.15.0: a student who has 'left' is shown as Withdrawn everywhere — the key
+// stays 'left' so older records and links keep working.
+export const STUDENT_STATUS_LABEL = Object.freeze({ active: 'Active', paused: 'Paused', left: 'Withdrawn' });
+export function studentStatusLabel(status) { return STUDENT_STATUS_LABEL[status] || 'Active'; }
 
 export function slotId(dayCode, n) { return dayCode + '-' + n; }
 export function slotParts(id) {
@@ -648,6 +652,134 @@ export function familyStateIn(family, period) {
 }
 // A family still with the centre (active or paused) this month — not one that has left.
 export function familyIsCurrent(family, period) { return familyStateIn(family, period) !== 'withdrawn'; }
+
+/* ── Withdrawn means out of every class list at once (v1.15.0) ──
+   Two different questions used to share one answer:
+     • Billing — is the family still billed for a month? familyStateIn() says
+       so, and a withdrawn family IS billed up to its last month.
+     • Class lists — is the child still in the class? Once a family is marked
+       Withdrawn, no: the child leaves the timetable, the Students list, the
+       statistics and the "Active" announcements straight away, even while the
+       last month is still being billed (marking a family withdrawn fills in
+       this month as the last month, which used to keep the child in every
+       list until the month was over).
+   A family that has given notice for a LATER month (last month March, marked
+   in November) is still coming to class: it stays in the lists until its last
+   month begins, then leaves them. Past months keep their history: the
+   statistics of a month before this one still count a withdrawn family that
+   was billed in it. A single child can be withdrawn too (student status
+   'left'), while brothers and sisters stay. */
+export function familyHasWithdrawn(family) {
+  if (!family) return false;
+  return normalizeFamily(family).status === 'withdrawn';
+}
+// The family's state for CLASS LISTS in a month: 'active' / 'paused' / 'withdrawn'.
+// nowMonth is "this month" (YYYY-MM), so tests and the statistics month picker
+// can say which month is the present one.
+export function familyRosterState(family, period, nowMonth) {
+  const f = normalizeFamily(family);
+  const now = isPeriod(nowMonth) ? nowMonth : sgMonthKey();
+  const p = isPeriod(period) ? period : now;
+  if (f.status === 'withdrawn' && p >= now) {
+    // Already gone: no last month, or the last month is this month or earlier.
+    if (!f.lastMonth || f.lastMonth <= now) return 'withdrawn';
+    // Notice given for a later month: in class until that month begins.
+    return p >= f.lastMonth ? 'withdrawn' : 'active';
+  }
+  return familyStateIn(f, p);
+}
+// A child is withdrawn when they left on their own, or their whole family did.
+export function studentHasWithdrawn(family, student) {
+  if (!student) return false;
+  if (student.status === 'left') return true;
+  return familyHasWithdrawn(family);
+}
+// Why a child is on the withdrawn list: 'family' (the whole family withdrew),
+// 'student' (only this child), or '' when they have not withdrawn (yet).
+export function withdrawnBy(family, student, nowMonth) {
+  if (familyRosterState(family, nowMonth, nowMonth) === 'withdrawn') return 'family';
+  if (student && student.status === 'left') return 'student';
+  return '';
+}
+// Everyone who has withdrawn, for the Withdrawn list: one row per child, newest
+// last month first, then by name. A withdrawn family with no named child still
+// gets one row, so it can be restored from the list. A family that has only
+// given notice for a later month is still in class, so not on this list yet.
+export function withdrawnStudents(families, schedule, nowMonth) {
+  const rows = [];
+  const now = isPeriod(nowMonth) ? nowMonth : sgMonthKey();
+  (families || []).forEach(raw => {
+    const f = normalizeFamily(raw);
+    const famLeft = familyRosterState(f, now, now) === 'withdrawn';
+    const kids = f.students.filter(st => st.name && (famLeft || st.status === 'left'));
+    if (famLeft && !kids.length) {
+      rows.push({ familyId: f.id, studentId: '', name: '', level: '', parentName: f.parentName, whatsapp: f.whatsapp, code: f.code,
+        by: 'family', lastMonth: f.lastMonth, lastMonthLabel: f.lastMonth ? periodLabel(f.lastMonth) : '', classes: [], siblingsStaying: 0 });
+      return;
+    }
+    const staying = f.students.filter(st => st.name && st.status !== 'left').length;
+    kids.forEach(st => {
+      rows.push({
+        familyId: f.id, studentId: st.id, name: st.name, level: st.level, school: st.school,
+        parentName: f.parentName, whatsapp: f.whatsapp, code: f.code,
+        by: famLeft ? 'family' : 'student',
+        lastMonth: famLeft ? f.lastMonth : '',
+        lastMonthLabel: famLeft && f.lastMonth ? periodLabel(f.lastMonth) : '',
+        classes: st.classes.map(c => c.custom ? (c.label || 'Other arrangement') : slotShortLabel(c.slotId) + ' · ' + slotTitle(scheduleSlot(schedule, c.slotId))),
+        siblingsStaying: famLeft ? 0 : staying
+      });
+    });
+  });
+  return rows.sort((a, b) => String(b.lastMonth || '').localeCompare(String(a.lastMonth || '')) || byText(a.name, b.name) || byText(a.parentName, b.parentName));
+}
+// What "Restore" changes, worked out before anything is written, so the app can
+// say exactly what will happen and the tests can hold it:
+//   • a whole family that withdrew → status active, no last month; children who
+//     had left on their own stay left unless they are the one being restored
+//   • one child who left → that child is active again, the family untouched
+// Returns { family: the updated family, changed: true/false, text }.
+export function restorePlan(family, studentId) {
+  const f = normalizeFamily(family);
+  const out = Object.assign({}, f, { students: f.students.map(st => Object.assign({}, st)) });
+  const st = studentId ? out.students.find(x => x.id === studentId) : null;
+  const words = [];
+  let changed = false;
+  if (out.status === 'withdrawn') {
+    out.status = 'active'; out.withdrawn = false; out.lastMonth = '';
+    words.push(f.parentName ? f.parentName + '\'s family is active again' : 'The family is active again');
+    changed = true;
+  }
+  if (st && st.status === 'left') {
+    st.status = 'active';
+    words.push((st.name || 'The child') + ' is back in ' + (st.classes.length ? plural(st.classes.length, 'class', 'classes') : 'no class yet'));
+    changed = true;
+  }
+  if (changed) words.push('billed again from ' + periodLabel(sgMonthKey()));
+  return { family: out, changed, text: words.join(', ') + (words.length ? '.' : '') };
+}
+// What "Withdraw" changes for one child from a class list:
+//   • the family's only child still with us → the whole family is withdrawn,
+//     billed up to `lastMonth` (this month unless given)
+//   • a child with brothers or sisters staying → only that child leaves; the
+//     family is billed for the others from next month's invoice on
+export function withdrawPlan(family, studentId, lastMonth) {
+  const f = normalizeFamily(family);
+  const out = Object.assign({}, f, { students: f.students.map(st => Object.assign({}, st)) });
+  const st = out.students.find(x => x.id === studentId);
+  if (!st) return { family: out, changed: false, whole: false, text: 'That child is not in this family.' };
+  const others = out.students.filter(x => x.id !== studentId && x.name && x.status !== 'left');
+  if (!others.length) {
+    out.status = 'withdrawn'; out.withdrawn = true;
+    out.lastMonth = isPeriod(lastMonth) ? lastMonth : sgMonthKey();
+    out.pauseFrom = ''; out.pauseUntil = '';
+    return { family: out, changed: f.status !== 'withdrawn', whole: true,
+      text: (st.name || 'The child') + ' is the family\'s only child with us, so the whole family is marked Withdrawn (billed up to ' + periodLabel(out.lastMonth) + ', nothing after).' };
+  }
+  const was = st.status;
+  st.status = 'left';
+  return { family: out, changed: was !== 'left', whole: false,
+    text: (st.name || 'The child') + ' is withdrawn; ' + listJoin(others.map(x => x.name)) + ' stay' + (others.length === 1 ? 's' : '') + ' in their classes.' };
+}
 export function pauseText(f) {
   if (!f || f.status !== 'paused') return '';
   const from = f.pauseFrom ? monthShort(f.pauseFrom) + ' ' + f.pauseFrom.slice(0, 4) : '';
@@ -2326,10 +2458,13 @@ export function studentRows(families, schedule) {
         const slot = scheduleSlot(schedule, c.slotId);
         return { slotId: c.slotId, title: slotTitle(slot), subject: slot.subject || '', level: slot.level || '', mode: classMode(c, schedule), when: slotShortLabel(c.slotId), fee: feeNum(c.rate) || monthlyFeeFor(slot, c.mode, schedule) };
       });
-      const famNow = familyStateIn(f, sgMonthKey());
+      // v1.15.0: a family marked Withdrawn takes its children out of the class
+      // lists at once — even while its last month is still being billed.
+      const famNow = familyRosterState(f, sgMonthKey());
       out.push({
         familyId: f.id, family: f, studentId: st.id, name: st.name, level: st.level, school: st.school,
         status: famNow === 'withdrawn' ? 'left' : (famNow === 'paused' && st.status === 'active' ? 'paused' : st.status),
+        withdrawnBy: withdrawnBy(f, st),
         parentName: f.parentName, whatsapp: f.whatsapp, email: f.email, code: f.code, classes,
         subjects: [...new Set(classes.map(c => c.subject).filter(Boolean))],
         modes: [...new Set(classes.map(c => c.mode))],
@@ -2340,7 +2475,8 @@ export function studentRows(families, schedule) {
   });
   return out;
 }
-// Who sits in each timetable slot (active students only).
+// Who sits in each timetable slot (active students only — never one who has
+// withdrawn, or whose family has).
 export function slotRoster(families, schedule) {
   const map = new Map();
   studentRows(families, schedule).forEach(r => {
@@ -3194,10 +3330,16 @@ export function familyStats(families, ctx) {
     categories: cats
   };
   const famIds = new Set();
+  const nowMonth = c.today ? String(c.today).slice(0, 7) : sgMonthKey();
   (families || []).forEach(raw => {
     const f = normalizeFamily(raw);
-    const state = familyStateIn(f, period);
-    if (state === 'withdrawn') return;
+    // v1.15.0: a withdrawn family's children are not counted from this month
+    // on; money it is still billed for its last month is still collected.
+    const state = familyRosterState(f, period, nowMonth);
+    if (state === 'withdrawn') {
+      if (familyStateIn(f, period) === 'active') famIds.add(f.id);
+      return;
+    }
     const kids = (f.students || []).filter(st => st.status !== 'left' && (!c.kidFilter || c.kidFilter(st)));
     // A paused family: its children are counted as paused, not in the totals.
     if (state === 'paused') { out.paused += kids.length; if (kids.length) out.pausedFamilies++; return; }
@@ -3351,10 +3493,12 @@ export function announceAudience(families, sel, ctx) {
   const rows = [];
   const taken = new Map();   // email → parent who already gets it
   sortFamilies((families || []).map(normalizeFamily), 'parent').forEach(f => {
-    // This month's state: a family that has withdrawn but still has a month to
-    // go counts as active; a pause that has not started yet too.
+    // This month's state: a pause that has not started yet counts as active.
+    // v1.15.0: a family marked Withdrawn is withdrawn from the day it is marked,
+    // even while its last month is still billed — it is no longer "active".
     const want = s.status === 'inactive' ? 'withdrawn' : s.status;
-    if (want !== 'all' && familyStateIn(f, c.today ? String(c.today).slice(0, 7) : sgMonthKey()) !== want) return;
+    const nowMonth = c.today ? String(c.today).slice(0, 7) : sgMonthKey();
+    if (want !== 'all' && familyRosterState(f, nowMonth, nowMonth) !== want) return;
     if (s.type && !(f.students || []).some(st => st.status !== 'left' && studentHasLessonType(st, s.type, c.schedule))) return;
     if (!familyMatchesFilters(f, F, { schedule: c.schedule, invoices: c.invoices, payments: c.payments, today: c.today, record: c.record ? c.record(f) : undefined })) return;
     if (words.length) {
@@ -3451,7 +3595,7 @@ export function categoryStudents(families, key, ctx) {
   const rows = [];
   (families || []).forEach(raw => {
     const f = normalizeFamily(raw);
-    if (familyStateIn(f, period) !== 'active') return;
+    if (familyRosterState(f, period, c.today ? String(c.today).slice(0, 7) : sgMonthKey()) !== 'active') return;
     activeStudents(f).filter(st => !c.kidFilter || c.kidFilter(st)).forEach(st => {
       const cls = statClasses(st).map(cl => {
         const cat = classCategories(cl, schedule);

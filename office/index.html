@@ -148,6 +148,12 @@
   .iconbtn { display:inline-grid; place-items:center; width:34px; height:34px; border-radius:9px; border:1px solid var(--line); background:var(--white); font-size:15px; }
   .iconbtn:hover { background:var(--paper); }
   .linkbtn { background:none; border:none; color:var(--deep); font-weight:700; text-decoration:underline; padding:0; }
+  /* 👋 The withdrawn list under the timetable (v1.15.0) */
+  .wd-card .wd-head { display:flex; gap:12px; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; }
+  .wd-card .wd-head h2 { margin:0 0 4px; }
+  .wd-card .table-wrap { margin-top:12px; }
+  .wd-card table.wd td { vertical-align:top; }
+  .btn.small { padding:7px 12px; font-size:13px; }
   .busy { position:relative; color:transparent !important; pointer-events:none; }
   .busy::after { content:''; position:absolute; width:16px; height:16px; border-radius:50%; border:2px solid rgba(255,255,255,.5); border-top-color:#fff; animation:spin .7s linear infinite; }
   .btn.ghost.busy::after { border-color:var(--line); border-top-color:var(--deep); }

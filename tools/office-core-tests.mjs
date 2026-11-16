@@ -1024,7 +1024,10 @@ test('family statistics: students and fees by subject and type of lesson, collec
     { id: 'e', parentName: 'Eng', status: 'inactive', students: [{ id: 'e1', name: 'E', level: 'P5', status: 'active', classes: [{ slotId: 'FRI-2', mode: 'Physical' }] }] },
     { id: 'g', parentName: 'Fong', status: 'active', students: [{ id: 'g1', name: 'Gus', level: 'P3', status: 'active', monthlyFee: 150, classes: [] }, { id: 'g2', name: 'Pau', status: 'paused', classes: [{ slotId: 'TUE-3', mode: 'Physical' }] }] }
   ];
-  const st = C.familyStats(fams, { schedule: sched, period: '2026-11', invoices: [] });
+  // Seen from March 2027, November 2026 is history: Chua (withdrawn, billed to
+  // December 2026) still counts in it. From November 2026 itself, see below.
+  const LATER = '2027-03-01';
+  const st = C.familyStats(fams, { schedule: sched, period: '2026-11', invoices: [], today: LATER });
   assert.equal(st.families, 4, 'Ang, Bala, Chua, Fong');
   assert.equal(st.students, 5);
   assert.equal(st.paused, 1);
@@ -1039,7 +1042,7 @@ test('family statistics: students and fees by subject and type of lesson, collec
   assert.equal(st.discounts, 20);
   assert.equal(st.net, 1470);
   // Chua has left after December.
-  const jan = C.familyStats(fams, { schedule: sched, period: '2027-01' });
+  const jan = C.familyStats(fams, { schedule: sched, period: '2027-01', today: LATER });
   assert.equal(jan.families, 3);
   assert.equal(jan.students, 4, 'Zoe, Ben, Bea, Gus');
   // An own monthly fee is shared over the child's classes by the schedule fees.
@@ -1053,7 +1056,7 @@ test('family statistics: students and fees by subject and type of lesson, collec
   const other = { familyId: 'a', period: '2026-10', status: 'sent', total: 540, paid: 540, lines: [] };
   const voided = { familyId: 'a', period: '2026-11', status: 'void', total: 540, paid: 540, lines: [] };
   const hand = { familyId: 'g', period: '2026-11', status: 'sent', total: 150, paid: 150, lines: [{ studentId: 'g1', desc: 'Monthly tuition fees', detail: '', kind: 'student-fee', amount: 150 }] };
-  const c2 = C.familyStats(fams, { schedule: sched, period: '2026-11', invoices: [inv, other, voided, hand] });
+  const c2 = C.familyStats(fams, { schedule: sched, period: '2026-11', invoices: [inv, other, voided, hand], today: LATER });
   assert.equal(c2.invoices, 2);
   assert.equal(c2.billed, 530);
   assert.equal(c2.collected, 340);
@@ -1064,7 +1067,7 @@ test('family statistics: students and fees by subject and type of lesson, collec
   assert.equal(c2.categories.physical.collected, 104.5);
   assert.equal(c2.unsortedCollected, 150);
   // Filtered to P6 children: only they count, in fees and in money collected.
-  const p6 = C.familyStats(fams, { schedule: sched, period: '2026-11', invoices: [inv], kidFilter: s => C.normalizeLevel(s.level) === 'P6' });
+  const p6 = C.familyStats(fams, { schedule: sched, period: '2026-11', invoices: [inv], kidFilter: s => C.normalizeLevel(s.level) === 'P6', today: LATER });
   assert.equal(p6.students, 2);
   assert.equal(p6.categories.math.fees, 440);
   assert.equal(p6.categories.online.students, 0);
@@ -1116,6 +1119,7 @@ test('announcements: who gets it — filters, ticks, no email, a shared email se
   ];
   const ctx = { schedule: REC_SCHEDULE, invoices: [], payments: [], today: '2026-11-12' };
   const aud = C.announceAudience(fams, {}, ctx);
+  // Chua has given notice for December, so is still an active family in November.
   assert.deepEqual(aud.rows.map(r => r.familyId), ['a', 'b', 'c', 'd', 'f', 'g'], 'active families, parent A–Z');
   assert.equal(aud.noEmail, 1, 'Goh has no email');
   const foo = aud.rows.find(r => r.familyId === 'f');
@@ -1647,4 +1651,125 @@ test('months paid by one payment are marked with its id, are not invoiced, and c
   // allocatePayment still takes a single month, and now a list.
   const invs = [{ id: 'a', period: '2026-09', total: 100, paid: 0, sentAt: 1 }, { id: 'b', period: '2026-10', total: 100, paid: 0, sentAt: 1 }, { id: 'c', period: '2026-11', total: 100, paid: 0, sentAt: 1 }];
   assert.deepEqual(C.allocatePayment(200, invs, ['2026-11', '2026-10']).allocations.map(a => a.period), ['2026-11', '2026-10']);
+});
+
+/* ---- 👋 Withdrawn students leave every class list at once (v1.15.0) ---- */
+// Zhi Kai: "wayne has withdrawn but his name is still in the list. it should be
+// placed in the withdrawn list and not be in the timetable or other view."
+// Marking a family Withdrawn fills in this month as the last month billed, and
+// that month used to keep the child in the timetable until it was over.
+test('a withdrawn family leaves the timetable and every class list at once, while its last month is still billed (v1.15.0)', () => {
+  const NOW = C.sgMonthKey();
+  const NEXT = C.addMonths(NOW, 1);
+  const PREV = C.addMonths(NOW, -1);
+  const wayne = { id: 'w', parentName: 'Yap', email: 'w@x.com', status: 'withdrawn', withdrawn: true, lastMonth: NOW,
+    students: [{ id: 'w1', name: 'Wayne Lee', level: 'P6', status: 'active', classes: [{ slotId: 'TUE-3', mode: 'Online' }] }] };
+  const stay = { id: 's', parentName: 'Sim', email: 's@x.com', status: 'active',
+    students: [{ id: 's1', name: 'Haashini', level: 'P6', status: 'active', classes: [{ slotId: 'TUE-3', mode: 'Physical' }] }] };
+  const fams = [wayne, stay];
+  // Billing is unchanged: the last month is still billed, nothing after it.
+  assert.equal(C.familyStateIn(wayne, NOW), 'active', 'billed for the last month');
+  assert.equal(C.familyIsBillable(wayne, NOW), true);
+  assert.equal(C.familyIsBillable(wayne, NEXT), false);
+  // Class lists: out from the moment the family is marked withdrawn.
+  assert.equal(C.familyRosterState(wayne, NOW), 'withdrawn');
+  assert.equal(C.familyRosterState(wayne, NEXT), 'withdrawn');
+  assert.equal(C.familyRosterState(wayne, PREV), 'active', 'history: the month before still had him');
+  assert.equal(C.familyRosterState(stay, NOW), 'active');
+  // Notice given for a later month: still in class until that month begins.
+  const LAST = C.addMonths(NOW, 3);
+  const notice = Object.assign({}, wayne, { id: 'n', lastMonth: LAST });
+  assert.deepEqual([NOW, C.addMonths(NOW, 2), LAST, C.addMonths(NOW, 4)].map(p => C.familyRosterState(notice, p)), ['active', 'active', 'withdrawn', 'withdrawn']);
+  assert.equal(C.familyRosterState(notice, LAST, LAST), 'withdrawn', 'gone once the last month has come');
+  assert.deepEqual(C.slotRoster([notice], SCHEDULE).get('TUE-3').map(r => r.name), ['Wayne Lee'], 'still in Tuesday 5 pm until then');
+  assert.equal(C.withdrawnStudents([notice], SCHEDULE).length, 0, 'not on the withdrawn list yet');
+  assert.equal(C.withdrawnStudents([notice], SCHEDULE, LAST).length, 1, '…and on it when the last month comes');
+  // No last month at all: gone.
+  assert.equal(C.familyRosterState(Object.assign({}, wayne, { lastMonth: '' }), NOW), 'withdrawn');
+  assert.equal(C.familyHasWithdrawn(wayne), true);
+  assert.equal(C.familyHasWithdrawn({ status: 'inactive' }), true, 'the older "Not active" too');
+  assert.equal(C.familyHasWithdrawn(stay), false);
+  assert.equal(C.familyHasWithdrawn(null), false);
+  // The timetable: Wayne is not in Tuesday 5 pm any more; Haashini is.
+  const roster = C.slotRoster(fams, SCHEDULE);
+  assert.deepEqual((roster.get('TUE-3') || []).map(r => r.name), ['Haashini']);
+  // The Students list: Wayne reads Withdrawn, and says why.
+  const rows = C.studentRows(fams, SCHEDULE);
+  assert.deepEqual(rows.map(r => r.name + ':' + r.status + ':' + r.withdrawnBy), ['Wayne Lee:left:family', 'Haashini:active:']);
+  assert.equal(C.studentStatusLabel('left'), 'Withdrawn');
+  assert.equal(C.studentStatusLabel('paused'), 'Paused');
+  assert.equal(C.studentStatusLabel('odd'), 'Active');
+  // Statistics this month: Wayne is not counted as a student, but the money
+  // his family still pays for its last month is still collected.
+  const inv = { familyId: 'w', period: NOW, status: 'sent', total: 148, paid: 148, lines: [{ studentId: 'w1', slotId: 'TUE-3', mode: 'Online', kind: 'class', amount: 148 }] };
+  const st = C.familyStats(fams, { schedule: REC_SCHEDULE, period: NOW, invoices: [inv] });
+  assert.deepEqual([st.families, st.students], [1, 1], 'only Haashini\'s family');
+  assert.equal(st.collected, 148, 'the last month\'s fee is still collected');
+  // …and seen from a later month, the month he was billed for keeps him.
+  const later = C.familyStats(fams, { schedule: REC_SCHEDULE, period: NOW, invoices: [inv], today: NEXT + '-02' });
+  assert.equal(later.students, 2);
+  // Statistics categories (click a tile) match the tiles.
+  assert.deepEqual(C.categoryStudents(fams, 'all', { schedule: REC_SCHEDULE, period: NOW }).map(r => r.name), ['Haashini']);
+  // Announcements: not an active family; listed under Withdrawn.
+  const today = NOW + '-16';
+  const aud = s => C.announceAudience(fams, { status: s }, { schedule: REC_SCHEDULE, invoices: [], payments: [], today }).rows.map(r => r.familyId).join('');
+  assert.deepEqual([aud('active'), aud('withdrawn'), aud('all')], ['s', 'w', 'sw']);
+});
+
+test('the withdrawn list: whole families and single children, newest first; restore and withdraw say what they change (v1.15.0)', () => {
+  const NOW = C.sgMonthKey();
+  const wayne = { id: 'w', parentName: 'Yap', code: 'AB12CD', status: 'withdrawn', lastMonth: NOW,
+    students: [{ id: 'w1', name: 'Wayne Lee', level: 'P6', status: 'active', classes: [{ slotId: 'TUE-3', mode: 'Online' }] }] };
+  const older = { id: 'o', parentName: 'Ong', status: 'withdrawn', lastMonth: '2026-01',
+    students: [{ id: 'o1', name: 'Olivia', level: 'P5', status: 'active', classes: [] }] };
+  const sibs = { id: 'b', parentName: 'Bala', status: 'active',
+    students: [{ id: 'b1', name: 'Ben', level: 'P4', status: 'left', classes: [{ slotId: 'WED-1', mode: 'Online' }] },
+      { id: 'b2', name: 'Bea', level: 'P6', status: 'active', classes: [{ slotId: 'TUE-3', mode: 'Physical' }] }] };
+  const empty = { id: 'e', parentName: 'Eng', status: 'inactive', students: [] };
+  const list = C.withdrawnStudents([wayne, older, sibs, empty], SCHEDULE);
+  assert.deepEqual(list.map(r => (r.name || '(' + r.parentName + ')') + ':' + r.by), ['Wayne Lee:family', 'Olivia:family', '(Eng):family', 'Ben:student'],
+    'newest last month first; a family with no child still listed');
+  assert.equal(list[0].lastMonthLabel, C.periodLabel(NOW));
+  assert.equal(list[0].classes.length, 1);
+  assert.ok(list[0].classes[0].startsWith('Tue'), list[0].classes[0]);
+  assert.equal(list[3].siblingsStaying, 1, 'Bea stays');
+  assert.equal(C.withdrawnBy(sibs, sibs.students[0]), 'student');
+  assert.equal(C.withdrawnBy(sibs, sibs.students[1]), '');
+  assert.equal(C.studentHasWithdrawn(wayne, wayne.students[0]), true);
+  assert.equal(C.studentHasWithdrawn(sibs, sibs.students[1]), false);
+  // Restore a whole family: active again, no last month; a child who had left
+  // on their own stays left unless they are the one restored.
+  const r1 = C.restorePlan(wayne, 'w1');
+  assert.equal(r1.changed, true);
+  assert.deepEqual([r1.family.status, r1.family.withdrawn, r1.family.lastMonth], ['active', false, '']);
+  assert.match(r1.text, /Yap's family is active again/);
+  assert.equal(C.slotRoster([r1.family], SCHEDULE).get('TUE-3')[0].name, 'Wayne Lee', 'back in the timetable');
+  const mixed = { id: 'm', parentName: 'Mak', status: 'withdrawn', lastMonth: NOW,
+    students: [{ id: 'm1', name: 'Max', status: 'left', classes: [] }, { id: 'm2', name: 'Mia', status: 'active', classes: [] }] };
+  assert.deepEqual(C.restorePlan(mixed, 'm2').family.students.map(s => s.status), ['left', 'active']);
+  assert.deepEqual(C.restorePlan(mixed, 'm1').family.students.map(s => s.status), ['active', 'active']);
+  // Restore one child: the family is untouched.
+  const r2 = C.restorePlan(sibs, 'b1');
+  assert.deepEqual(r2.family.students.map(s => s.status), ['active', 'active']);
+  assert.equal(r2.family.status, 'active');
+  assert.match(r2.text, /Ben is back in 1 class/);
+  assert.equal(C.restorePlan(sibs, 'b2').changed, false, 'already active');
+  // The input is never changed.
+  assert.equal(sibs.students[0].status, 'left');
+  assert.equal(wayne.status, 'withdrawn');
+  // Withdraw from a class list: the only child → the whole family, billed to this month.
+  const solo = { id: 's', parentName: 'Sim', status: 'active', students: [{ id: 's1', name: 'Haashini', status: 'active', classes: [] }] };
+  const w1 = C.withdrawPlan(solo, 's1');
+  assert.deepEqual([w1.whole, w1.changed, w1.family.status, w1.family.withdrawn, w1.family.lastMonth], [true, true, 'withdrawn', true, NOW]);
+  assert.match(w1.text, /whole family is marked Withdrawn/);
+  assert.equal(C.withdrawPlan(solo, 's1', '2027-02').family.lastMonth, '2027-02');
+  assert.equal(C.withdrawPlan(wayne, 'w1').changed, false, 'already withdrawn');
+  // …a child with a sister staying → only that child.
+  const two = { id: 't', parentName: 'Tan', status: 'active', students: [{ id: 't1', name: 'Tom', status: 'active', classes: [] }, { id: 't2', name: 'Tia', status: 'active', classes: [] }] };
+  const w2 = C.withdrawPlan(two, 't1');
+  assert.deepEqual([w2.whole, w2.family.status, w2.family.students.map(s => s.status).join()], [false, 'active', 'left,active']);
+  assert.match(w2.text, /Tom is withdrawn; Tia stays in their classes/);
+  assert.equal(C.withdrawPlan(two, 'nobody').changed, false);
+  // A child withdrawn on their own is not billed; the sister still is.
+  assert.deepEqual(C.activeStudents(C.normalizeFamily(w2.family)).map(s => s.name), ['Tia']);
 });
