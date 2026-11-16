@@ -491,6 +491,65 @@
   }
   @media print { .st-tabs, .st-acts { display: none !important; } }
 
+  /* ===== 📅 Day band (v1.16.0) =====
+     The class DAY in big letters at the top left of every class segment, in
+     every student tab, on a solid bar in that day's own colour. It sticks under the tabs
+     (--day-band-top is measured by portal.js) while its segment scrolls past.
+     The cards clip instead of hiding overflow, because overflow: hidden stops
+     position: sticky; browsers without clip just show the band unstuck. */
+  :root {
+    --day-band-top: 138px;
+    --day-mon: #D9483B; --day-tue: #E07B1F; --day-wed: #A27500; --day-thu: #7A55E8;
+    --day-fri: #CF3F7C; --day-sat: #0E8486; --day-sun: #4F5B6E; --day-none: #8A8F98;
+  }
+  @supports (overflow: clip) { .st-card, .class-card { overflow: clip; } }
+  .st-card { padding-top: 0; }
+  .day-band {
+    --day: var(--day-none);
+    position: sticky; top: var(--day-band-top); z-index: 4;
+    display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 6px var(--space-md);
+    padding: 12px var(--space-lg); margin: 0;
+    background: var(--day); color: #fff;
+    box-shadow: 0 6px 14px -10px rgba(0,0,0,0.45);
+  }
+  .day-band.day-mon { --day: var(--day-mon); }
+  .day-band.day-tue { --day: var(--day-tue); }
+  .day-band.day-wed { --day: var(--day-wed); }
+  .day-band.day-thu { --day: var(--day-thu); }
+  .day-band.day-fri { --day: var(--day-fri); }
+  .day-band.day-sat { --day: var(--day-sat); }
+  .day-band.day-sun { --day: var(--day-sun); }
+  .day-badge {
+    display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
+    min-width: 132px; padding: 8px 16px 9px; border-radius: 14px;
+    background: rgba(0,0,0,0.18); color: #fff; line-height: 1.05;
+  }
+  .day-badge .day-name { font-size: 1.45rem; font-weight: 800; letter-spacing: 0.06em; }
+  .day-badge .day-time { margin-top: 3px; font-size: 0.86rem; font-weight: 700; opacity: 0.92; letter-spacing: 0.02em; }
+  .day-badge-none .day-name { font-size: 1.05rem; }
+  .day-text { min-width: 0; }
+  .day-class { margin: 0; font-size: 1.15rem; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; color: #fff; }
+  .day-sub { margin-top: 2px; font-size: var(--font-size-sm); font-weight: 600; color: rgba(255,255,255,0.92); }
+  .day-chips .chip { background: rgba(255,255,255,0.22); color: #fff; border-color: transparent; }
+  .day-chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+  /* Rows under a band: the band already draws the top line. */
+  .day-band + .st-group { margin-top: var(--space-md); }
+  .class-card .day-band + .class-top { padding-top: var(--space-md); }
+  @media (max-width: 640px) {
+    .day-band { grid-template-columns: auto 1fr; padding: 10px var(--space-md); gap: 4px 12px; }
+    .day-badge { min-width: 104px; padding: 7px 12px 8px; border-radius: 12px; }
+    .day-badge .day-name { font-size: 1.12rem; }
+    .day-badge .day-time { font-size: 0.78rem; }
+    .day-class { font-size: 1rem; }
+    .day-sub { font-size: 0.8rem; }
+    .day-chips { display: none; }
+  }
+  @media print {
+    .day-band { position: static; box-shadow: none; border-left: 6px solid var(--day); }
+    .day-band, .day-class, .day-sub { background: none; color: #000; }
+    .day-badge { background: none; color: #000; padding: 0; }
+  }
+
   /* ===== Admin ===== */
   .tabs { display: inline-flex; gap: 4px; padding: 4px; border-radius: 14px; background: var(--bg-tertiary); margin-top: var(--space-lg); flex-wrap: wrap; }
   .tab {
@@ -895,9 +954,9 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
-<script src="lesson-clock.js?v=1.15.0"></script>
-<script src="portal-core.js?v=1.15.0"></script>
-<script src="portal.js?v=1.15.0"></script>
+<script src="lesson-clock.js?v=1.16.0"></script>
+<script src="portal-core.js?v=1.16.0"></script>
+<script src="portal.js?v=1.16.0"></script>
 <script defer src="pwa-install.js?v=2.0.0" data-app-name="Polymath Worksheets" data-app-key="online" data-app-icon="assets/app-icons/icon-192.png" data-accent="#00695C" data-sw="sw.js" data-floating="auto"></script>
 <!-- 🔐 Polymath student access (v1.0.0): the enrolment pop-up every Polymath app shares. A signed-in student is
      blocked here until an admin approves them at polymathlc.com.sg/student/#admin. Source: polymathlc/cer student/access-gate.js -->

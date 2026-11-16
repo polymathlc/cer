@@ -77,6 +77,30 @@
     if (course.title) return course.title;
     return autoCourseTitle(course.level, course.subject, course.day, course.slot);
   }
+  /* 📅 v1.16.0: what the big day band at the top left of each class segment
+     shows. `key` picks the day's colour (mon … sun, or none). `className` is
+     the class without its day and time when the title is the automatic one
+     ("P6 Science"), or the admin's own title as typed. */
+  var DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+  function dayBand(course) {
+    course = course || {};
+    var at = DAYS.indexOf(course.day);
+    var day = at >= 0 ? DAYS[at] : '';
+    var time = day ? slotLabel(day, course.slot) : '';
+    var auto = !course.title || course.title === autoCourseTitle(course.level, course.subject, course.day, course.slot);
+    var className = auto
+      ? (String(course.level || '').trim() + ' ' + subjectLabel(course.subject)).trim()
+      : String(course.title);
+    if (!className) className = 'Your class';
+    return {
+      key: at >= 0 ? DAY_KEYS[at] : 'none',
+      day: day,
+      dayUpper: day.toUpperCase(),
+      time: time,
+      className: className,
+      sentence: day ? day + ' class' + (time ? ' · ' + time : '') : 'No class day set yet'
+    };
+  }
   function autoCourseTitle(level, subject, day, slot) {
     var bits = [String(level || '').trim() + ' ' + subjectLabel(subject)];
     if (day) bits.push(day + (slotLabel(day, slot) ? ' ' + slotLabel(day, slot) : ''));
@@ -1238,7 +1262,7 @@
     releaseFloor: releaseFloor, RELEASE_AHEAD: RELEASE_AHEAD, NEXT_COUNT: NEXT_COUNT, LEVELS: LEVELS, SUBJECTS: SUBJECTS, DAYS: DAYS, ROLES: ROLES,
     SLOTS_WEEKDAY: SLOTS_WEEKDAY, SLOTS_WEEKEND: SLOTS_WEEKEND,
     levelSubjects: levelSubjects, subjectLabel: subjectLabel, cleanSubjects: cleanSubjects, profileSubjectFor: profileSubjectFor,
-    slotsForDay: slotsForDay, slotLabel: slotLabel, courseTitle: courseTitle, autoCourseTitle: autoCourseTitle,
+    slotsForDay: slotsForDay, slotLabel: slotLabel, courseTitle: courseTitle, dayBand: dayBand, DAY_KEYS: DAY_KEYS, autoCourseTitle: autoCourseTitle,
     normalizeEmail: normalizeEmail, isEmail: isEmail, escapeHtml: escapeHtml, initials: initials,
     naturalCompare: naturalCompare, worksheetNameFromFile: worksheetNameFromFile,
     watchLink: watchLink, VIDEO_PAGE: VIDEO_PAGE, videoPackCode: videoPackCode, videoPlaylistOf: videoPlaylistOf, videoPageLink: videoPageLink,
