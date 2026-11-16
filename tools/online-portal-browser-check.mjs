@@ -746,5 +746,97 @@ let studentDb = null;
   await back.context.close();
 }
 
+/* ---- 🔗 v1.17.0: one class's answer keys and videos for the other classes ----
+   Zhi Kai, 16 Nov 2026: Monday 7pm P6 Science had the videos of the two P5
+   Science revision worksheets; Tuesday and Saturday, doing the same
+   worksheets, showed "No lesson videos yet". */
+{
+  const T = '0b5e4a5c-1f6c-4c1e-9a7e-2c1d3e4f5a6b';
+  const keyUrl = (id, day) => 'https://firebasestorage.googleapis.com/v0/b/mathgen--app.firebasestorage.app/o/' +
+    encodeURIComponent('pdf-annotator/lesson-key-' + id + '-' + day + '.pdf') + '?alt=media&token=' + T;
+  const lesson = (id, iso) => ({ id, type: 'video', url: 'https://a/' + id + '.webm', ts: Date.parse(iso + '+08:00'), lessonRecording: { version: 1, video: true, duration: 2400000, title: 'Lesson' } });
+  const ws = (id, name, extra) => Object.assign({ name, level: 'P6', subject: 'science', storagePath: 'pdf-annotator/seed-' + id + '.pdf', pageCount: 6, annotations: '' }, extra || {});
+  const cls = (day, slot, ids, cur, extra) => Object.assign({ level: 'P6', subject: 'science', day, slot, worksheetIds: ids, currentIndex: cur, releasedThrough: ids.length - 1 }, extra || {});
+  const docs = {
+    'onlineCourses/mon': cls('Monday', 2, ['m1', 'm2', 'm3'], 2),
+    'onlineCourses/tue': cls('Tuesday', 1, ['t1', 't2', 't3'], 2),
+    'onlineCourses/sat': cls('Saturday', 0, ['s1'], 1, { releasedThrough: 0 }),
+    'pdfAnnotator/m1': ws('m1', 'P5 Science November WS 1 - Revision', { onlineCourseId: 'mon', annotations: JSON.stringify([lesson('a1', '2026-11-02T19:30:00'), lesson('a2', '2026-11-09T19:30:00')]),
+      answerKeys: { '2026-11-09': { url: keyUrl('m1', '2026-11-09'), pages: 6 } } }),
+    'pdfAnnotator/m2': ws('m2', 'P5 Science November Worksheet 2 - Revision', { onlineCourseId: 'mon', annotations: JSON.stringify([lesson('b1', '2026-11-07T09:30:00'), lesson('b2', '2026-11-14T09:30:00'), lesson('b3', '2026-11-14T10:10:00')]) }),
+    'pdfAnnotator/m3': ws('m3', 'P6 Science Worksheet 1', { onlineCourseId: 'mon' }),
+    'pdfAnnotator/t1': ws('t1', 'P5 Science November WS 1 - Revision', { onlineCourseId: 'tue', onlineCopiedFrom: 'm1' }),
+    'pdfAnnotator/t2': ws('t2', 'P5 Science November Worksheet 2 - Revision', { onlineCourseId: 'tue' }),
+    'pdfAnnotator/t3': ws('t3', 'P6 Science Worksheet 1', { onlineCourseId: 'tue' }),
+    'pdfAnnotator/s1': ws('s1', 'P6 Science Worksheet 1', { onlineCourseId: 'sat' }),
+    'onlineMembers/p6s': { level: 'P6', subjects: ['science'], role: 'student', name: 'Mei', email: 'mei@example.com' }
+  };
+  // Before: Tuesday's student has no videos, as in Zhi Kai's screenshot.
+  const student = { uid: 'p6s', email: 'mei@example.com', displayName: 'Mei' };
+  let stu = await open({ user: student, docs, query: '#videos', width: 1100 });
+  await stu.page.waitForSelector('.st-card');
+  const tueCard = () => stu.page.locator('.st-card', { has: stu.page.locator('.day-band', { hasText: /TUESDAY/ }) });
+  check('share (before): Tuesday has no lesson videos', /No lesson videos yet/.test(await tueCard().textContent()));
+  await stu.context.close();
+
+  // The admin turns it on in Tuesday's class page.
+  const { page, context, errors } = await open({ user: admin, docs, width: 1180 });
+  await page.waitForSelector('.tabs');
+  await page.click('[data-action="open-course"][data-id="tue"]');
+  await page.waitForSelector('#shareSection');
+  check('share: the class page has a Shared answer keys and videos section', /Shared answer keys and videos/.test(await page.textContent('#shareSection')));
+  check('share: the same level and subject classes are offered first', (await page.$$eval('#shareFromSelect option', (o) => o.map((x) => x.value)))[0] === 'mon');
+  await page.selectOption('#shareFromSelect', 'mon');
+  await page.click('[data-action="share-follow"]');
+  await page.waitForFunction(() => /Using answer keys and videos from/.test(document.querySelector('#shareSection').textContent));
+  let tue = await page.evaluate(() => window.__fake.db['onlineCourses/tue']);
+  check('share: Tuesday now follows Monday, only where it has none of its own', tue.shareFrom === 'mon' && tue.shareMode === 'fill');
+  await page.waitForFunction(() => document.querySelectorAll('.share-row.is-shared').length === 2);
+  check('share: both revision worksheets match Monday\'s (a copy, and the same name)', (await page.locator('.share-row.is-shared').count()) === 2);
+  check('share: the teaching order marks the shared worksheets', (await page.locator('.seq-row .chip-share.is-on').count()) === 2);
+  await page.locator('#shareSection').screenshot({ path: path.join(shots, '30-share-admin.png') });
+  // Keep own on worksheet 3, then back: one tap each, nothing else changes.
+  await page.click('.share-row:nth-child(1) [data-action="share-own"]');
+  await page.waitForFunction(() => { const c = window.__fake.db['onlineCourses/tue']; return c.sharedKeys && c.sharedKeys.t1 && c.sharedKeys.t1.own; });
+  await page.click('.share-row:nth-child(1) [data-action="share-clear"]');
+  await page.waitForFunction(() => { const c = window.__fake.db['onlineCourses/tue']; return c.sharedKeys && !c.sharedKeys.t1; });
+  check('share: Keep own and back to the class setting', true);
+  // Saturday lacks the two revision worksheets altogether: add them from Monday.
+  await page.click('[data-action="close-course"]');
+  await page.click('[data-action="open-course"][data-id="sat"]');
+  await page.waitForSelector('#shareFromSelect');
+  await page.selectOption('#shareFromSelect', 'mon');
+  await page.click('[data-action="share-follow"]');
+  await page.waitForSelector('[data-action="share-add-missing"][data-mode="previous"]');
+  check('share: Saturday is told which of Monday\'s worksheets it lacks', /2 worksheets in .* are not in this class/.test(await page.textContent('.share-missing')));
+  await page.locator('#shareSection').screenshot({ path: path.join(shots, '31-share-missing.png') });
+  await page.click('[data-action="share-add-missing"][data-mode="previous"]');
+  await page.waitForFunction(() => (window.__fake.db['onlineCourses/sat'].worksheetIds || []).length === 3, null, { timeout: 10000 });
+  const sat = await page.evaluate(() => window.__fake.db['onlineCourses/sat']);
+  check('share: the missing two join Saturday as done worksheets, before the one it is on', sat.currentIndex === 2 && sat.worksheetIds[2] === 's1');
+  await page.waitForFunction(() => document.querySelectorAll('.share-row.is-shared').length === 2);
+  check('share: and they take Monday\'s answer key and videos', (await page.locator('.share-row.is-shared').count()) === 2);
+  check('share (admin): no script errors', errors.length === 0 || (console.log(errors), false));
+  const after = await page.evaluate(() => window.__fake.db);
+  await context.close();
+
+  // After: Tuesday's and Saturday's students see Monday's videos and answer key.
+  stu = await open({ user: student, docs: after, query: '#videos', width: 1100 });
+  await stu.page.waitForFunction(() => document.querySelectorAll('.st-card .st-row').length >= 4, null, { timeout: 8000 });
+  const tueRows = await tueCard().locator('.st-row').count();
+  check('share (student): Tuesday now lists both worksheets\' videos', tueRows === 2);
+  check('share (student): each says it comes from the Monday class', /From .*Monday/.test(await tueCard().locator('.st-shared').first().textContent()));
+  const href = await tueCard().locator('.st-btn-play').first().getAttribute('href');
+  check('share (student): Watch plays Monday\'s worksheet for Tuesday\'s class', /ws=t\d&c=tue&src=m\d/.test(href));
+  const satCard = stu.page.locator('.st-card', { has: stu.page.locator('.day-band', { hasText: /SATURDAY/ }) });
+  check('share (student): Saturday has them too', (await satCard.locator('.st-row').count()) === 2);
+  await stu.page.screenshot({ path: path.join(shots, '32-share-student-videos.png'), fullPage: true });
+  await stu.page.click('#st-tab-answers');
+  await stu.page.waitForFunction(() => document.querySelector('#st-tab-answers[aria-selected="true"]'));
+  check('share (student): Monday\'s answer key PDF shows for Tuesday', (await tueCard().locator('a.st-btn-main').count()) === 1);
+  check('share (student): no script errors', stu.errors.length === 0 || (console.log(stu.errors), false));
+  await stu.context.close();
+}
+
 await browser.close();
 console.log(`Passed ${checks} Polymath Online browser checks.`);

@@ -10,7 +10,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = 'v1.2.0';
+  var APP_VERSION = 'v1.3.0';
   var W = window.PolymathWatchCore;
   var Core = window.PolymathOnlineCore;
 
@@ -162,14 +162,39 @@
     var snap = await db.collection(WORKSHEETS).doc(query.ws).get();
     if (!snap.exists) { message('🗂', 'Worksheet not found', 'It may have been removed. Go back to Polymath Online and try another one.'); return; }
     state.doc = snap.data() || {};
-    var annotations = await readAnnotations(state.doc);
+    // 🔗 v1.3.0 (portal v1.17.0): a class can use another class's lesson
+    // videos for the same worksheet. The link names that worksheet (`src`);
+    // it is played only when the class really shares it, and for a student
+    // only once their own class has finished the worksheet, and each lesson
+    // only once it was over in the class it was recorded in.
+    var sharedFrom = null;
+    if (query.src && state.found) {
+      var all = admin ? courses : await classesFor(user, true).catch(function () { return courses; });
+      sharedFrom = Core.shareAllows(state.found.course, query.ws, query.src, all || courses);
+    }
+    if (query.src && !sharedFrom) {
+      message('🔒', 'These videos are not shared with your class',
+        'Go back to Polymath Online and open the videos from your class\'s Videos tab.');
+      return;
+    }
+    var annotations;
+    if (sharedFrom) {
+      var srcSnap = await db.collection(WORKSHEETS).doc(query.src).get();
+      if (!srcSnap.exists) { message('🗂', 'Videos not found', 'The class they were shared from may have removed them.'); return; }
+      annotations = await readAnnotations(srcSnap.data() || {});
+      state.sharedFrom = sharedFrom;
+    } else annotations = await readAnnotations(state.doc);
     // 🗄 v1.13.0: a student never gets the lessons of a class day the admin
     // archived in the class this is watched from. Admins see every lesson.
     // ⏰ v1.15.0: and a lesson's videos only once the lesson is over (5pm for
     // a 3 to 4:45pm class). Admins see every lesson at once.
     var openFor = !admin && state.found ? state.found.course : null;
-    state.lessons = W.lessonsOf(annotations, openFor ? W.archivedDaysIn(openFor, query.ws) : [],
-      openFor ? function (at) { return Core.recordingOpen(openFor, at); } : null);
+    var isOpen = null;
+    if (openFor && sharedFrom) {
+      var seq = state.found.seq;
+      isOpen = function (at) { return Core.sharedOpen(openFor, seq) && Core.recordingOpen(sharedFrom, at); };
+    } else if (openFor) isOpen = function (at) { return Core.recordingOpen(openFor, at); };
+    state.lessons = W.lessonsOf(annotations, openFor ? W.archivedDaysIn(openFor, query.ws) : [], isOpen);
     renderHead();
     if (!state.lessons.length) {
       message('🎬', 'No lesson recorded yet', 'Lessons are recorded during class and appear here when the lesson is over. Come back after the lesson to watch it here.');
@@ -206,6 +231,8 @@
     }
     var n = state.lessons.length;
     if (n) bits.push(n + (n === 1 ? ' lesson' : ' lessons') + ' · ' + W.formatTime(W.totalSeconds(state.lessons)) + ' in all');
+    // 🔗 Lessons shared from another class say so.
+    if (state.sharedFrom) bits.push('🔗 recorded in ' + Core.courseTitle(state.sharedFrom));
     $('wsSub').textContent = bits.filter(Boolean).join(' · ');
 
   }

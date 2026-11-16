@@ -30,7 +30,7 @@
 (function (root) {
   'use strict';
 
-  var VERSION = '1.1.0';
+  var VERSION = '1.3.0';
   var BUCKETS = ['mathgen--app.firebasestorage.app', 'mathgen--app.appspot.com'];
   var STORAGE_HOST = 'firebasestorage.googleapis.com';
   var STORAGE_DIR = 'pdf-annotator/';
@@ -465,20 +465,25 @@
     if (opts.rec && REC_RE.test(str(opts.rec))) url += '&rec=' + encodeURIComponent(opts.rec);
     if (opts.t > 0) url += '&t=' + Math.floor(opts.t);
     if (opts.course && WS_RE.test(str(opts.course))) url += '&c=' + encodeURIComponent(opts.course);
+    if (opts.src && opts.src !== wsId && WS_RE.test(str(opts.src))) url += '&src=' + encodeURIComponent(opts.src);
     return url;
   }
   // The page's own query: { ws, day, rec, t, course } — anything malformed is dropped.
   function readQuery(search) {
     var q;
     try { q = new URLSearchParams(str(search)); } catch (e) { q = { get: function () { return null; } }; }
-    var ws = str(q.get('ws')), day = str(q.get('day')), rec = str(q.get('rec')), c = str(q.get('c'));
+    var ws = str(q.get('ws')), day = str(q.get('day')), rec = str(q.get('rec')), c = str(q.get('c')), src = str(q.get('src'));
     var t = Math.floor(num(q.get('t'), 0));
     return {
       ws: WS_RE.test(ws) ? ws : '',
       day: DAY_RE.test(day) ? day : '',
       rec: REC_RE.test(rec) ? rec : '',
       t: t > 0 && t < MS_MAX / 1000 ? t : 0,
-      course: /^[A-Za-z0-9_-]{1,128}$/.test(c) ? c : ''
+      course: /^[A-Za-z0-9_-]{1,128}$/.test(c) ? c : '',
+      // 🔗 v1.3.0 (portal v1.17.0): the lessons are another class's, recorded
+      // on worksheet `src`, which the class of `ws` shares. Only ever honoured
+      // when that class really shares it (portal-core `shareAllows`).
+      src: WS_RE.test(src) && src !== ws ? src : ''
     };
   }
   // "Where was I" on this device: { rec, t } per worksheet, kept small.

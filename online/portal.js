@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = 'v1.16.0';
+  var APP_VERSION = 'v1.17.0';
   var Core = window.PolymathOnlineCore;
 
   // Who runs the portal. Anyone else signs in as a student or a parent.
@@ -684,7 +684,7 @@
   function studentTabsHtml(courses) {
     var counts = { worksheets: 0, answers: 0, videos: 0, timeline: '' };
     courses.forEach(function (course) {
-      var items = Core.timelineItems(course, state.docs, state.recordings);
+      var items = Core.timelineItems(course, state.docs, state.recordings, shareCtx());
       counts.worksheets += items.length;
       counts.answers += Core.answerKeyRows(course, items).filter(function (row) { return row.latest; }).length;
       counts.videos += Core.videoRows(course, items).length;
@@ -766,7 +766,7 @@
      (and Open, to look at it on the screen). This lesson and the ones out
      ahead first, then the earlier ones, the latest first. */
   function worksheetsTabHtml(course, many) {
-    var items = Core.timelineItems(course, state.docs, state.recordings);
+    var items = Core.timelineItems(course, state.docs, state.recordings, shareCtx());
     var groups = Core.worksheetRows(course, items);
     var locked = Core.lockedCount(course);
     var html = '<section class="card st-card" aria-label="Worksheets · ' + h(Core.courseTitle(course)) + '">' + stClassHead(course);
@@ -808,7 +808,7 @@
   /* 🔑 Answer keys: one row per worksheet with its newest answer key PDF.
      Earlier class days' keys sit under it as small links. */
   function answersTabHtml(course, many) {
-    var items = Core.timelineItems(course, state.docs, state.recordings);
+    var items = Core.timelineItems(course, state.docs, state.recordings, shareCtx());
     var rows = Core.answerKeyRows(course, items);
     var html = '<section class="card st-card" aria-label="Answer keys · ' + h(Core.courseTitle(course)) + '">' + stClassHead(course);
     if (!rows.length) {
@@ -826,7 +826,7 @@
       return '<li class="st-row' + (row.current ? ' is-now' : '') + '">' +
         '<span class="st-num" aria-hidden="true">' + (row.seq + 1) + '</span>' +
         '<div class="st-main"><div class="st-name">' + h(row.name) + '</div>' +
-          '<div class="st-sub">' + (row.current ? '<span class="st-tag st-tag-now">This lesson</span>' : '') + '<span>' + h(sub) + '</span></div>' + earlier + '</div>' +
+          '<div class="st-sub">' + (row.current ? '<span class="st-tag st-tag-now">This lesson</span>' : '') + '<span>' + h(sub) + '</span>' + sharedNoteHtml(row.shared, 'answer key') + '</div>' + earlier + '</div>' +
         '<div class="st-acts">' +
           (k ? '<a class="btn st-btn st-btn-main" href="' + h(k.url) + '" target="_blank" rel="noopener" aria-label="Open the answer key for ' + h(row.name) + '"><span aria-hidden="true">🔑</span> Open answer key</a>'
              : '') +
@@ -839,7 +839,7 @@
      lesson on it in order on the video page (watch.html), never Ans Key;
      the class-day links start from that day. */
   function videosTabHtml(course, many) {
-    var items = Core.timelineItems(course, state.docs, state.recordings);
+    var items = Core.timelineItems(course, state.docs, state.recordings, shareCtx());
     var rows = Core.videoRows(course, items);
     var html = '<section class="card st-card" aria-label="Videos · ' + h(Core.courseTitle(course)) + '">' + stClassHead(course);
     if (!rows.length) {
@@ -850,15 +850,15 @@
       var sub = row.count + (row.count === 1 ? ' video' : ' videos') + (row.seconds ? ' · ' + Core.formatDuration(row.seconds) : '');
       var days = row.days.length > 1
         ? '<div class="st-more"><span>Start from:</span>' + row.days.map(function (d) {
-            return '<a href="' + h(watchHref(row.id, course, d.key)) + '" data-tooltip="Play from the ' + h(d.label) + ' lesson">' + h(d.label) + '</a>';
+            return '<a href="' + h(watchHref(row.id, course, d.key, row.shared && row.shared.ws)) + '" data-tooltip="Play from the ' + h(d.label) + ' lesson">' + h(d.label) + '</a>';
           }).join('') + '</div>'
         : '';
       return '<li class="st-row' + (row.current ? ' is-now' : '') + '">' +
         '<span class="st-num" aria-hidden="true">' + (row.seq + 1) + '</span>' +
         '<div class="st-main"><div class="st-name">' + h(row.name) + '</div>' +
-          '<div class="st-sub">' + (row.current ? '<span class="st-tag st-tag-now">This lesson</span>' : '') + '<span>' + h(sub) + '</span></div>' + days + '</div>' +
+          '<div class="st-sub">' + (row.current ? '<span class="st-tag st-tag-now">This lesson</span>' : '') + '<span>' + h(sub) + '</span>' + sharedNoteHtml(row.shared, 'lesson videos') + '</div>' + days + '</div>' +
         '<div class="st-acts">' +
-          '<a class="btn st-btn st-btn-play" href="' + h(watchHref(row.id, course)) + '" aria-label="Watch the videos of ' + h(row.name) + '"><span aria-hidden="true">▶</span> Watch</a>' +
+          '<a class="btn st-btn st-btn-play" href="' + h(watchHref(row.id, course, '', row.shared && row.shared.ws)) + '" aria-label="Watch the videos of ' + h(row.name) + '"><span aria-hidden="true">▶</span> Watch</a>' +
         '</div></li>';
     }).join('') + '</ol>';
     return html + '</section>';
@@ -926,7 +926,7 @@
      changed it in Ans Key, its recorded lessons, and the worksheet and its
      answer key to view or print. */
   function timelineHtml(course) {
-    var items = Core.timelineItems(course, state.docs, state.recordings);
+    var items = Core.timelineItems(course, state.docs, state.recordings, shareCtx());
     // 🗄 v1.13.0: an admin previewing the student view archives from here.
     var admin = state.isAdmin && !!state.preview;
     var html = '<section class="timeline" aria-label="Worksheets, in the order they are taught">' +
@@ -948,7 +948,7 @@
       // never the Ans Key app.
       var videoCount = recs.length;
       var videoBtn = videoCount
-        ? '<a class="btn btn-sm btn-video" href="' + h(watchHref(it.id, course)) + '" data-action="video" data-id="' + h(it.id) + '" data-tooltip="Every lesson on this worksheet, one after another, with each question marked">▶ ' + (videoCount === 1 ? 'Video' : videoCount + ' videos') + '</a>'
+        ? '<a class="btn btn-sm btn-video" href="' + h(watchHref(it.id, course, '', sharedSrc(it))) + '" data-action="video" data-id="' + h(it.id) + '" data-tooltip="Every lesson on this worksheet, one after another, with each question marked">▶ ' + (videoCount === 1 ? 'Video' : videoCount + ' videos') + '</a>'
         : '';
       // 📅 Every class day, newest first: that day's lesson videos beside the
       // answer key exactly as it stood after that lesson (a PDF Ans Key filed
@@ -958,7 +958,7 @@
         return '<li class="tl-cday' + (i === 0 ? ' is-latest' : '') + '">' +
           '<span class="tl-cday-date"><b>' + h(d.label) + '</b>' + (i === 0 ? '<span class="tl-cday-new">Latest</span>' : '') + '</span>' +
           '<span class="tl-cday-acts">' +
-            (v ? '<a class="tl-day" href="' + h(watchHref(it.id, course, d.key)) + '" data-action="video-day" data-id="' + h(it.id) + '" data-day="' + h(d.key) + '" data-tooltip="Play from the ' + h(d.label) + ' lesson">' +
+            (v ? '<a class="tl-day" href="' + h(watchHref(it.id, course, d.key, sharedSrc(it))) + '" data-action="video-day" data-id="' + h(it.id) + '" data-day="' + h(d.key) + '" data-tooltip="Play from the ' + h(d.label) + ' lesson">' +
                 '<span class="tl-day-play" aria-hidden="true">▶</span><span><b>' + (v.count === 1 ? 'Video' : v.count + ' videos') + '</b>' +
                 (v.seconds ? '<small>' + h(Core.formatDuration(v.seconds)) + '</small>' : '') + '</span></a>'
               : '<span class="tl-cday-none">No video</span>') +
@@ -992,7 +992,8 @@
           '<div class="tl-title-row"><div class="tl-name">' + h(it.name) + '</div>' + tag + '</div>' +
           '<div class="tl-sub"><span>Worksheet ' + (it.seq + 1) + '</span>' + (it.pages ? '<span>· ' + it.pages + (it.pages === 1 ? ' page' : ' pages') + '</span>' : '') +
             (recs.length ? '<span>· ' + recs.length + ' recorded lesson' + (recs.length === 1 ? '' : 's') + (recs[0].duration ? ' (' + h(Core.formatDuration(recs[0].duration)) + ')' : '') + '</span>' : '') +
-            (page && page.at ? '<span>· videos updated ' + h(Core.formatDay(page.at)) + '</span>' : '') + '</div>' +
+            (page && page.at && !it.shared ? '<span>· videos updated ' + h(Core.formatDay(page.at)) + '</span>' : '') +
+            (it.shared && !it.shared.waiting ? sharedNoteHtml(it.shared, (it.shared.videos && it.shared.keys ? 'answer key and lesson videos' : it.shared.videos ? 'lesson videos' : 'answer key')) : '') + '</div>' +
           daysRow +
           '<div class="tl-actions">' +
             videoBtn +
@@ -1072,6 +1073,247 @@
     } catch (err) { busy(button, false); fail(archive ? 'Could not archive it' : 'Could not restore it', err); }
   }
 
+  /* ---- 🔗 Shared answer keys and videos (v1.17.0) ----
+     Zhi Kai, 16 Nov 2026: classes doing the same worksheets (the three P6
+     Science classes) should be able to use one class's answer key and lesson
+     videos, because a class may be slower, or its own PDF or recording went
+     wrong. The class page gets a "Shared answer keys and videos" section:
+       · Use another class: every worksheet of this class takes that class's
+         answer key PDFs and videos for the same worksheet. "Only where this
+         class has none" (default) keeps the class's own lessons first;
+         "Always" uses the other class's instead.
+       · Per worksheet: Keep own, or Choose… any worksheet of any class.
+       · Worksheets the other class has and this one lacks can be added here.
+     Students see shared items only after their own class has finished the
+     worksheet (Core.sharedView). Nothing is copied or deleted: Stop sharing
+     puts the class back exactly as it was. Rules: portal-core.js. */
+  function shareChipHtml(row) {
+    if (!row) return '';
+    if (row.kept) return '<span class="chip chip-share-own" data-tooltip="Uses its own answer key and videos, even though the class shares another class\'s">✋ Own key</span>';
+    if (!row.source) return '';
+    var what = row.uses === 'shared' ? '🔗 ' + (row.pinned ? 'Set to ' : 'Shared from ') + row.source.courseTitle : '🔗 Own first · ' + row.source.courseTitle + ' if missing';
+    return '<span class="chip chip-share' + (row.uses === 'shared' ? ' is-on' : '') + '" data-tooltip="' + h(row.uses === 'shared'
+      ? 'Students get the answer key and videos of “' + row.source.name + '” from ' + row.source.courseTitle + ' once this class has finished the worksheet'
+      : 'This class has its own answer key and videos; ' + row.source.courseTitle + '\'s fill in whatever is missing') + '">' + h(what) + '</span>';
+  }
+  function shareSectionHtml(course) {
+    var ids = Core.courseIds(course);
+    var followed = Core.followedCourseId(course);
+    var source = followed ? state.courses[followed] : null;
+    var mode = Core.shareMode(course);
+    var rows = Core.shareRows(course, state.courses, state.docs, state.recordings);
+    var pins = rows.filter(function (r) { return r.pinned || r.kept; }).length;
+    var html = '<div class="section" id="shareSection"><div class="section-head"><div><h2 class="section-heading">🔗 Shared answer keys and videos' +
+      (source || pins ? ' <span class="count-pill">On</span>' : '') + '</h2>' +
+      '<div class="section-note">For classes doing the same worksheets: this class can use another class\'s answer key PDFs and lesson videos. ' +
+      'Students only see them after their own class has finished that worksheet. Nothing is copied or deleted, and Stop sharing puts everything back.</div></div></div>';
+    html += '<div class="card share-card">';
+    var modeChoice = '<div class="choice-row share-mode" role="group" aria-label="When to use the other class\'s">' +
+      '<button type="button" class="choice" data-action="share-mode" data-mode="fill" aria-pressed="' + (mode === 'fill') + '" data-tooltip="This class\'s own answer key and videos first; the other class\'s only where this class has none">Only where this class has none</button>' +
+      '<button type="button" class="choice" data-action="share-mode" data-mode="replace" aria-pressed="' + (mode === 'replace') + '" data-tooltip="Always the other class\'s answer key and videos, instead of this class\'s own (when its own PDF or recording went wrong)">Always, instead of its own</button></div>';
+    if (followed && !source) {
+      html += '<div class="share-now"><div><b>The class this one shared from no longer exists.</b><div class="small muted">Its answer keys and videos are not shown here. Choose another class or stop sharing.</div></div>' +
+        '<button class="btn btn-sm" type="button" data-action="share-follow" data-from="">Stop sharing</button></div>';
+    } else if (source) {
+      var shared = rows.filter(function (r) { return r.uses === 'shared'; }).length;
+      var matched = rows.filter(function (r) { return r.source && !r.pinned; }).length;
+      html += '<div class="share-now"><div><div class="label">Using answer keys and videos from</div>' +
+        '<div class="share-from">' + dayChip(source) + ' <b>' + h(Core.courseTitle(source)) + '</b></div>' +
+        '<div class="small muted">' + matched + ' of ' + ids.length + ' worksheet' + (ids.length === 1 ? '' : 's') + ' matched with that class · ' + shared + ' use' + (shared === 1 ? 's' : '') + ' its answer key or videos now</div></div>' +
+        '<button class="btn btn-sm" type="button" data-action="share-follow" data-from="" data-tooltip="Back to this class\'s own answer keys and videos only">Stop sharing</button></div>' + modeChoice;
+      var missing = Core.shareMissing(course, state.courses, state.docs);
+      if (missing.length) {
+        html += '<div class="share-missing"><div><b>' + missing.length + ' worksheet' + (missing.length === 1 ? '' : 's') + ' in ' + h(Core.courseTitle(source)) + ' ' + (missing.length === 1 ? 'is' : 'are') + ' not in this class:</b> ' +
+          missing.map(function (id) { return '“' + h(docName(id)) + '”'; }).join(', ') + '</div>' +
+          '<div class="row"><button class="btn btn-sm btn-primary" type="button" data-action="share-add-missing" data-mode="previous" data-tooltip="Copies of the PDF go in before the worksheet the class is on, done and released; their answer key and videos come from ' + h(Core.courseTitle(source)) + '">Add as done worksheets</button>' +
+          '<button class="btn btn-sm" type="button" data-action="share-add-missing" data-mode="future" data-tooltip="Copies of the PDF go at the end of the list, to come">Add at the end</button></div></div>';
+      }
+    } else {
+      var choices = Core.shareChoices(course, state.courses).filter(function (c) { return !c.archived; });
+      if (!choices.length) html += '<p class="muted small">There is no other class to share from yet.</p>';
+      else {
+        html += '<div class="share-pick"><label class="label" for="shareFromSelect">Use the answer keys and videos of</label>' +
+          '<div class="row"><select id="shareFromSelect" class="share-select">' + choices.map(function (c, i) {
+            return '<option value="' + h(c.id) + '"' + (i === 0 ? ' selected' : '') + '>' + h(c.title) + (c.same ? '' : ' (other level or subject)') + ' · ' + c.count + ' worksheet' + (c.count === 1 ? '' : 's') + '</option>';
+          }).join('') + '</select>' +
+          '<button class="btn btn-sm btn-primary" type="button" data-action="share-follow" data-tooltip="Each worksheet here is matched with the same worksheet in that class">Use this class</button></div>' +
+          '<div class="small muted" style="margin-top:6px">Only where this class has no answer key or videos of its own. You can change that after.</div></div>';
+      }
+    }
+    if (ids.length) {
+      html += '<details class="share-fold"' + (source || pins ? ' open' : '') + '><summary>Per worksheet' + (pins ? ' · ' + pins + ' set by hand' : '') + '</summary><ol class="share-list">' +
+        rows.map(function (r) {
+          var what;
+          if (r.kept) what = '<span class="share-uses">✋ Its own answer key and videos</span>';
+          else if (!r.source) what = '<span class="share-uses muted">' + (source ? 'No match in ' + h(Core.courseTitle(source)) + ' · its own' : 'Its own') + '</span>';
+          else what = '<span class="share-uses' + (r.uses === 'shared' ? ' is-on' : '') + '">' + (r.uses === 'shared' ? '🔗 ' : '') + h(r.source.courseTitle) + ' · ' + h(r.source.name) + '</span>' +
+            '<small class="muted">' + r.sourceVideos + ' video' + (r.sourceVideos === 1 ? '' : 's') + ', ' + r.sourceKeys + ' key PDF' + (r.sourceKeys === 1 ? '' : 's') + ' there · ' +
+            r.ownVideos + ' video' + (r.ownVideos === 1 ? '' : 's') + ', ' + r.ownKeys + ' key PDF' + (r.ownKeys === 1 ? '' : 's') + ' here' +
+            (r.uses === 'shared' ? (r.open ? ' · students see it' : ' · students see it after this class finishes it') : '') + '</small>';
+          var acts = '<button class="btn btn-xs" type="button" data-action="share-pick" data-id="' + h(r.id) + '" data-tooltip="Choose the class and worksheet whose answer key and videos this one uses">Choose…</button>';
+          if (r.pinned || r.kept) acts += '<button class="btn btn-xs" type="button" data-action="share-clear" data-id="' + h(r.id) + '" data-tooltip="' + (source ? 'Back to the class setting' : 'Back to its own') + '">↩ ' + (source ? 'Class setting' : 'Own') + '</button>';
+          else if (r.source) acts += '<button class="btn btn-xs" type="button" data-action="share-own" data-id="' + h(r.id) + '" data-tooltip="Keep this worksheet\'s own answer key and videos only">Keep own</button>';
+          return '<li class="share-row' + (r.uses === 'shared' ? ' is-shared' : '') + '"><span class="ws-num">' + (r.seq + 1) + '</span>' +
+            '<span class="share-main"><b>' + h(r.name) + '</b>' + what + '</span><span class="share-acts">' + acts + '</span></li>';
+        }).join('') + '</ol></details>';
+    }
+    return html + '</div></div>';
+  }
+  // Every sharing change is one transaction with the live class.
+  async function writeShare(courseId, change, button, done) {
+    if (!state.isAdmin || !courseId) return;
+    if (button) busy(button, true);
+    try {
+      var ref = db.collection(COURSES).doc(courseId);
+      var result = await db.runTransaction(async function (tx) {
+        var snap = await tx.get(ref);
+        if (!snap.exists) return null;
+        var update = Core.shareUpdate(Object.assign({ id: courseId }, snap.data()), change);
+        if (!update) return 'same';
+        tx.set(ref, Object.assign({ shareAt: FieldValue.serverTimestamp(), shareBy: state.user.email }, update), { merge: true });
+        return update;
+      });
+      if (button) busy(button, false);
+      if (!result) { toast('That class no longer exists.', { error: true }); return; }
+      if (result === 'same') { toast('Already set that way.'); return; }
+      if (done) toast(done);
+    } catch (err) { if (button) busy(button, false); fail('Could not change the sharing', err); }
+  }
+  function shareFollow(button) {
+    var course = state.courses[state.courseId];
+    if (!course) return;
+    var from = button.dataset.from;
+    if (from == null) { var sel = $('shareFromSelect'); from = sel ? sel.value : ''; }
+    var title = from && state.courses[from] ? Core.courseTitle(state.courses[from]) : '';
+    if (!from && !confirm('Stop using ' + (Core.followedCourseId(course) && state.courses[Core.followedCourseId(course)] ? Core.courseTitle(state.courses[Core.followedCourseId(course)]) + '\'s' : 'the other class\'s') +
+      ' answer keys and videos? This class goes back to its own. Worksheets set by hand with Choose… keep theirs.')) return;
+    writeShare(course.id, { kind: 'follow', from: from, mode: from ? Core.shareMode(course) : undefined }, button,
+      from ? 'This class now uses ' + title + '\'s answer keys and videos where it has none of its own. Students see them after their class finishes each worksheet.' : 'Sharing stopped. This class shows only its own answer keys and videos again.');
+    if (from) loadShareRecordings(course, from);
+  }
+  function setShareMode(button) {
+    var course = state.courses[state.courseId];
+    if (!course) return;
+    var mode = button.dataset.mode;
+    writeShare(course.id, { kind: 'mode', mode: mode }, button, mode === 'replace'
+      ? 'This class now always uses the other class\'s answer keys and videos, instead of its own.'
+      : 'This class now uses its own answer keys and videos first, and the other class\'s only where it has none.');
+  }
+  function shareOwn(id, button) {
+    writeShare(state.courseId, { kind: 'own', ws: id }, button, '“' + docName(id) + '” keeps its own answer key and videos.');
+  }
+  function shareClear(id, button) {
+    writeShare(state.courseId, { kind: 'clear', ws: id }, button, '“' + docName(id) + '” follows the class setting again.');
+  }
+  // The admin's counts need the recorded lessons of both classes' worksheets.
+  var shareLoaded = {};
+  function loadShareRecordings(course, fromId) {
+    var ids = Core.courseIds(course).slice();
+    var from = fromId ? state.courses[fromId] : null;
+    if (from) ids = ids.concat(Core.courseIds(from));
+    Core.shareSourceIds(course, state.courses, state.docs).forEach(function (id) { if (ids.indexOf(id) < 0) ids.push(id); });
+    ensureDocs(ids).then(function () {
+      var changed = false;
+      ids.forEach(function (id) {
+        var d = state.docs[id];
+        if (!d || d.missing) return;
+        var key = id + '#' + (d.annotationsPath || '') + '#' + (d.annotationsStamp || Core.editedMillis(d));
+        if (shareLoaded[id] === key) return;
+        shareLoaded[id] = key;
+        changed = true;
+        readRecordings(id, d);
+      });
+      // Only when something new was read: this runs after every render.
+      if (changed) queueRender();
+    });
+  }
+  // Choose…: any worksheet of any other class, for one worksheet here.
+  function sharePick(targetId) {
+    var course = state.courses[state.courseId];
+    if (!course || !targetId) return;
+    var choices = Core.shareChoices(course, state.courses);
+    var current = Core.shareSourceOf(course, targetId, state.courses, state.docs);
+    var ui = { course: current ? current.course.id : (choices[0] ? choices[0].id : ''), ws: current ? current.ws : '' };
+    var seq = Core.courseIds(course).indexOf(targetId);
+    function load() {
+      var c = state.courses[ui.course];
+      if (!c) return;
+      ensureDocs(Core.courseIds(c)).then(function () { loadShareRecordings(c, ''); modal.rerender(); });
+    }
+    var modal = openModal(function () {
+      var c = state.courses[ui.course];
+      var guess = c ? Core.shareMatch(course, targetId, c, state.docs) : '';
+      var list = c ? Core.courseIds(c).map(function (id, i) {
+        var recs = (state.recordings[id] || []).length, keys = Core.answerKeysOf(state.docs[id]).length;
+        return '<label class="pick-row lib-row' + (ui.ws === id ? ' is-picked' : '') + '"><input type="radio" name="sharePick" data-ws="' + h(id) + '"' + (ui.ws === id ? ' checked' : '') + '>' +
+          '<div class="lib-text"><div class="lib-name">' + (i + 1) + '. ' + h(docName(id)) + (id === guess ? ' <span class="lib-badge ok">Same worksheet</span>' : '') + '</div>' +
+          '<div class="lib-badges">' + (recs ? '<span class="lib-badge video">▶ ' + recs + (recs === 1 ? ' video' : ' videos') + '</span>' : '<span class="lib-badge">No videos</span>') +
+          (keys ? '<span class="lib-badge">📄 ' + keys + ' key PDF' + (keys === 1 ? '' : 's') + '</span>' : '<span class="lib-badge">No key PDF</span>') + '</div></div></label>';
+      }).join('') : '';
+      return '<div class="modal-head"><div><div class="eyebrow">🔗 Answer key and videos · worksheet ' + (seq + 1) + '</div><h2>' + h(docName(targetId)) + '</h2>' +
+        '<div class="small muted" style="margin-top:4px">Choose the class and the worksheet whose answer key PDFs and lesson videos this one uses, instead of its own. Students see them after their class has finished this worksheet.</div></div>' +
+        '<button class="btn btn-ghost btn-icon" type="button" data-modal-close aria-label="Close">✕</button></div>' +
+        '<div class="lib-tools"><select id="sharePickClass" class="share-select" aria-label="Class">' + choices.map(function (x) {
+          return '<option value="' + h(x.id) + '"' + (x.id === ui.course ? ' selected' : '') + '>' + h(x.title) + (x.same ? '' : ' (other level or subject)') + '</option>';
+        }).join('') + '</select></div>' +
+        (list ? '<div class="pick-list lib-list" id="libList">' + list + '</div>' : '<div class="empty"><p>' + (c ? 'That class has no worksheets.' : 'There is no other class.') + '</p></div>') +
+        '<div class="modal-foot"><button class="btn btn-ghost" type="button" data-modal-close>Cancel</button>' +
+        '<button class="btn btn-primary" type="button" data-m="use"' + (ui.ws ? '' : ' disabled') + '>Use this one</button></div>';
+    }, function (e, rerender, close) {
+      var radio = e.target.closest('[data-ws]');
+      if (radio) { ui.ws = radio.dataset.ws; rerender(); return; }
+      var t = e.target.closest('[data-m]');
+      if (t && t.dataset.m === 'use' && ui.ws) {
+        close();
+        var from = state.courses[ui.course];
+        writeShare(course.id, { kind: 'pin', ws: targetId, from: { course: ui.course, ws: ui.ws } }, null,
+          '“' + docName(targetId) + '” now uses the answer key and videos of “' + docName(ui.ws) + '” from ' + (from ? Core.courseTitle(from) : 'the other class') + '.');
+      }
+    }, function () {
+      var sel = $('sharePickClass');
+      if (sel) sel.addEventListener('change', function () {
+        ui.course = sel.value;
+        var c = state.courses[ui.course];
+        ui.ws = c ? Core.shareMatch(course, targetId, c, state.docs) : '';
+        modal.rerender();
+        load();
+      });
+    });
+    if (!ui.ws && state.courses[ui.course]) ui.ws = Core.shareMatch(course, targetId, state.courses[ui.course], state.docs);
+    load();
+  }
+  // The worksheets the followed class has and this one lacks: copies of their
+  // PDF only (no writing, no videos), so they match and share at once.
+  async function shareAddMissing(button) {
+    var course = state.courses[state.courseId];
+    if (!course) return;
+    var mode = button.dataset.mode === 'future' ? 'future' : 'previous';
+    var missing = Core.shareMissing(course, state.courses, state.docs);
+    if (!missing.length) return;
+    busy(button, true);
+    var made = [], failed = [];
+    for (var i = 0; i < missing.length; i++) {
+      try { made.push(await copyWorksheet(missing[i], course.id, course, Core.courseIds(course).length + i, { answers: false, videos: false })); }
+      catch (err) { failed.push(docName(missing[i]) + ': ' + ((err && err.message) || err)); console.error('Could not copy', missing[i], err); }
+    }
+    try {
+      if (made.length) {
+        await saveOrder(course.id, function (ids, live) { return Core.placeWorksheets(live, made, mode).worksheetIds; }, {
+          quiet: true,
+          progress: function (live) {
+            var plan = Core.placeWorksheets(live, made, mode);
+            var out = { currentIndex: plan.currentIndex, currentDocId: plan.currentDocId, releasedThrough: plan.releasedThrough };
+            if (mode === 'previous') { out.progressAt = FieldValue.serverTimestamp(); out.progressBy = state.user.email; }
+            return out;
+          }
+        });
+      }
+      busy(button, false);
+      if (failed.length) toast(failed.length + ' could not be added. ' + failed[0], { error: true, ms: 9000 });
+      if (made.length) toast(made.length + ' worksheet' + (made.length === 1 ? '' : 's') + ' added ' + (mode === 'previous' ? 'as done, before the one the class is on' : 'at the end') + '. Their answer keys and videos come from the shared class.', { ms: 6000 });
+    } catch (err) { busy(button, false); fail('The copies were made, but the class list could not be saved', err); }
+  }
+
   /* ---- Ans Key inside the portal ----
      The answer key and the lesson replays are Ans Key's own (the writing
      follows the voice), so they open in a window over the portal. Same site,
@@ -1100,15 +1342,37 @@
      one after another, with the question and page marks on its timeline.
      `day` starts it at that class day's first lesson. Plain links, so a
      long press or a middle click opens them in a new tab too. */
-  function watchHref(id, course, day) {
-    return Core.watchLink(id, { day: day, course: course && course.id });
+  // 🔗 v1.17.0: `src` is the worksheet of another class whose lessons this
+  // one shares; the video page checks the class really shares it.
+  function watchHref(id, course, day, src) {
+    return Core.watchLink(id, { day: day, course: course && course.id, src: src || '' });
+  }
+  function shareCtx() { return { courses: state.courses }; }
+  function sharedSrc(it) { return it && it.shared && it.shared.videos ? it.shared.ws : ''; }
+  // "From the Monday 7:00pm class" under a row a class shares from another.
+  function sharedNoteHtml(shared, what) {
+    if (!shared) return '';
+    return '<span class="st-shared" data-tooltip="' + h('The ' + what + ' from ' + shared.courseTitle + ', which does the same worksheet') + '">🔗 From ' + h(shared.courseTitle) + '</span>';
   }
 
   function afterStudentRender(member) {
-    var ids = [];
+    var ids = [], sourceIds = [];
     Core.coursesForMember(state.courses, member).forEach(function (c) {
       Core.releasedWorksheets(c).forEach(function (w) { ids.push(w.id); });
+      // 🔗 v1.17.0: a class sharing another's answer keys and videos reads
+      // that class's worksheets (names first, to match them), then follows
+      // the matched ones live like its own.
+      Core.shareSourceIds(c, state.courses, state.docs).forEach(function (id) { sourceIds.push(id); });
     });
+    if (sourceIds.length) {
+      ensureDocs(sourceIds);
+      Core.coursesForMember(state.courses, member).forEach(function (c) {
+        Core.releasedWorksheets(c).forEach(function (w) {
+          var src = Core.shareSourceOf(c, w.id, state.courses, state.docs);
+          if (src && ids.indexOf(src.ws) < 0) ids.push(src.ws);
+        });
+      });
+    }
     watchDocs(ids);
     // 🗄 The admin's Archived fold names its worksheets.
     if (state.isAdmin) {
@@ -1251,6 +1515,8 @@
     if (!total) html += '<div class="card empty"><p>No worksheets in this class yet.</p></div>';
     else {
       html += '<div class="card seq-list">';
+      var shareById = {};
+      Core.shareRows(course, state.courses, state.docs, state.recordings).forEach(function (r) { shareById[r.id] = r; });
       ids.forEach(function (id, i) {
         var st = Core.worksheetState(course, i);
         var status = seqStatusHtml(course, i);
@@ -1263,7 +1529,8 @@
             '<div class="ws-sub" style="padding-left:8px">' + (pagesLabel(id) ? h(pagesLabel(id)) : '') + '</div></div>' +
           '<div class="seq-status">' + status +
             (archived ? '<span class="chip chip-archived" data-tooltip="Hidden from students. Ans Key and the class position are unchanged.">🗄 Archived</span>' : '') +
-            (!archived && dayCount ? '<span class="chip chip-archived" data-tooltip="Class days whose videos and answer key are hidden from students">🗄 ' + dayCount + ' day' + (dayCount === 1 ? '' : 's') + ' archived</span>' : '') + '</div>' +
+            (!archived && dayCount ? '<span class="chip chip-archived" data-tooltip="Class days whose videos and answer key are hidden from students">🗄 ' + dayCount + ' day' + (dayCount === 1 ? '' : 's') + ' archived</span>' : '') +
+            shareChipHtml(shareById[id]) + '</div>' +
           '<div class="seq-tools">' +
             '<button class="btn btn-xs" type="button" data-action="move" data-index="' + i + '" data-delta="-1" aria-label="Move up"' + (i === 0 ? ' disabled' : '') + '>↑</button>' +
             '<button class="btn btn-xs" type="button" data-action="move" data-index="' + i + '" data-delta="1" aria-label="Move down"' + (i === total - 1 ? ' disabled' : '') + '>↓</button>' +
@@ -1278,6 +1545,8 @@
       html += '</div>';
     }
     html += '</div>';
+    // 🔗 v1.17.0: answer keys and videos from another class.
+    html += shareSectionHtml(course);
     // 🗄 v1.13.0: everything archived in this class, each with Restore.
     var arch = Core.archivedItems(course, state.docs);
     html += '<div class="section" id="archivedSection"><div class="section-head"><div><h2 class="section-heading">🗄 Archived' + (arch.count ? ' <span class="count-pill">' + arch.count + '</span>' : '') + '</h2>' +
@@ -1359,6 +1628,8 @@
   function afterAdminRender() {
     if (state.courseId && state.courses[state.courseId]) {
       ensureDocs(Core.courseIds(state.courses[state.courseId]));
+      // 🔗 v1.17.0: the Shared section counts both classes' videos and keys.
+      loadShareRecordings(state.courses[state.courseId], Core.followedCourseId(state.courses[state.courseId]));
       var input = $('fileInput'), zone = $('dropzone');
       if (input) input.addEventListener('change', function () {
         var chosen = Array.from(input.files || []);
@@ -2612,6 +2883,12 @@
       case 'restore-item': setArchived(el, false); break;
       case 'browse-anskey': browseAnsKey(); break;
       case 'link-anskey': linkFromAnsKey(id); break;
+      case 'share-follow': shareFollow(el); break;
+      case 'share-mode': setShareMode(el); break;
+      case 'share-own': shareOwn(id, el); break;
+      case 'share-clear': shareClear(id, el); break;
+      case 'share-pick': sharePick(id); break;
+      case 'share-add-missing': shareAddMissing(el); break;
       case 'step': {
         var input = $(el.dataset.target);
         if (input) input.value = Math.max(Number(input.min || 0), Math.min(Number(input.max || 999), Number(input.value || 0) + Number(el.dataset.delta)));
