@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = 'v1.18.0';
+  var APP_VERSION = 'v1.19.0';
   var Core = window.PolymathOnlineCore;
 
   // Who runs the portal. Anyone else signs in as a student or a parent.
@@ -60,6 +60,8 @@
     studentTab: Core.studentTab(location.hash),   // 🗂 v1.12.0: worksheets | answers | videos | timeline
     courseId: null,            // the class open in the admin's class view
     preview: null,             // { level, subjects } while an admin previews the student view
+    myClasses: {},             // ⭐ v1.19.0: { math: courseId, science: courseId } the student ticked
+    previewMyClasses: {},      // the same while an admin previews (never saved)
     uploads: [],               // [{ name, pct, state }]
     teacherUid: null
   };
@@ -327,6 +329,8 @@
     state.member = null;
     state.accessError = '';
     state.studentLevels = [];
+    state.myClasses = {};
+    state.previewMyClasses = {};
     renderHeader();
     if (!state.user) {
       if (state.inviteId && !state.invitePreview) loadInvitePreview();
@@ -338,7 +342,7 @@
     resolveMembership(state.user).then(function (member) {
       if (state.user !== user) return;
       state.member = member;
-      if (member) listenCourses();
+      if (member) { listenCourses(); loadMyClasses(user); }
       render();
     }).catch(function (err) {
       if (state.user !== user) return;
@@ -639,6 +643,10 @@
   function studentHtml(member, preview) {
     if (!state.coursesLoaded) return '<div class="loader"><div class="spinner" aria-hidden="true"></div><div>Loading your classes…</div></div>';
     var courses = Core.coursesForMember(state.courses, member);
+    // ⭐ v1.19.0: the classes the student ticked as "my class" go first.
+    var order = Core.myClassOrder(courses, myPicks());
+    courses = order.list;
+    myClassView = { mine: order.mine, others: order.others };
     // One chip group per (level, subjects) the member may see: an approved
     // family with two children has two.
     var pairs = Core.accessPairs(member);
@@ -667,8 +675,10 @@
     // child finds the worksheets first and nothing else gets in the way.
     html += studentTabsHtml(courses);
     html += '<div class="section st-panel" role="tabpanel" id="studentPanel" aria-labelledby="st-tab-' + state.studentTab + '">';
-    if (state.studentTab === 'timeline') courses.forEach(function (course) { html += classCardHtml(course); });
-    else courses.forEach(function (course) {
+    html += myClassHintHtml(courses);
+    if (state.studentTab === 'timeline') courses.forEach(function (course, i) { html += otherClassesHeadHtml(i) + classCardHtml(course); });
+    else courses.forEach(function (course, i) {
+      html += otherClassesHeadHtml(i);
       html += state.studentTab === 'answers' ? answersTabHtml(course, courses.length > 1)
         : state.studentTab === 'videos' ? videosTabHtml(course, courses.length > 1)
         : worksheetsTabHtml(course, courses.length > 1);
@@ -813,7 +823,96 @@
       '<div class="day-chips">' + levelChip(course.level) +
         '<span class="day-subject-tag">' + subjectIconSvg(art.badge, 'subject-icon') + '<span>' + h(band.subjectWord) + '</span></span>' +
       '</div>' +
+      myClassBoxHtml(course) +
     '</header>';
+  }
+  /* ⭐ v1.19.0: "This is my class". A big white tick box at the right end of
+     each maths or science band. Ticking it puts that class first and makes
+     the other classes quieter (grey band, faded colours) so a student sees
+     their own class at a glance, while every other class still opens and
+     works as before. One maths and one science class at most: ticking
+     another class of the same subject moves the tick. The choice is kept on
+     this device at once and in the student's profile, so it follows them to
+     another phone or computer. An admin's preview keeps it only until they
+     leave the preview. */
+  var myClassView = { mine: 0, others: 0 };
+  var MY_CLASS_STORE = 'polymathOnline.myClasses.';
+  function myPicks() {
+    return state.isAdmin && state.preview ? state.previewMyClasses : state.myClasses;
+  }
+  function myCardClass(course) {
+    if (!myClassView.mine) return '';
+    return Core.isMyClass(myPicks(), course) ? ' is-my-class' : ' is-other-class';
+  }
+  function myClassBoxHtml(course) {
+    if (!Core.myClassSubject(course) || !course.id) return '';
+    var label = Core.myClassLabel(myPicks(), course);
+    return '<button type="button" class="my-class-box' + (label.on ? ' is-on' : '') + '" data-action="my-class" data-id="' + h(course.id) + '"' +
+      ' role="checkbox" aria-checked="' + label.on + '" aria-label="' + h(label.aria) + '" data-tooltip="' + h(label.on ? 'Tap to untick' : 'Tick to put this class first') + '">' +
+      '<span class="my-class-check" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>' +
+      '<span class="my-class-text"><span class="my-class-long">' + h(label.text) + '</span><span class="my-class-short">' + h(label.short) + '</span></span>' +
+    '</button>';
+  }
+  // One line above the classes: what the tick box is for (before any tick),
+  // or which classes are ticked (after).
+  function myClassHintHtml(courses) {
+    var pickable = courses.filter(function (c) { return Core.myClassSubject(c) && c.id; });
+    if (pickable.length < 2) return '';
+    if (myClassView.mine) {
+      return '<p class="my-class-hint is-set"><span aria-hidden="true">⭐</span> Your class' + (myClassView.mine > 1 ? 'es are' : ' is') + ' at the top. The other classes are below, in grey, if you need them.</p>';
+    }
+    return '<p class="my-class-hint"><span aria-hidden="true">☑️</span> Tick <b>My class?</b> on your own class to put it at the top. One maths class and one science class.</p>';
+  }
+  function otherClassesHeadHtml(i) {
+    if (!myClassView.mine || !myClassView.others || i !== myClassView.mine) return '';
+    return '<h2 class="other-classes-head"><span>Other classes</span><small>You can still open them</small></h2>';
+  }
+  function storedMyClasses(uid) {
+    try { return Core.cleanMyClasses(JSON.parse(localStorage.getItem(MY_CLASS_STORE + uid) || '{}'), null); } catch (e) { return {}; }
+  }
+  function storeMyClasses(uid, picks) {
+    try { localStorage.setItem(MY_CLASS_STORE + uid, JSON.stringify(picks || {})); } catch (e) {}
+  }
+  // On arrival: this device's choice at once, then the profile's (from any device).
+  function loadMyClasses(user) {
+    state.myClasses = storedMyClasses(user.uid);
+    db.collection(PROFILES).doc(user.uid).get().then(function (snap) {
+      if (state.user !== user) return;
+      var saved = snap.exists ? snap.data().onlineMyClasses : null;
+      if (!saved || typeof saved !== 'object') return;
+      var picks = Core.cleanMyClasses(saved, null);
+      if (JSON.stringify(picks) === JSON.stringify(state.myClasses)) return;
+      state.myClasses = picks;
+      storeMyClasses(user.uid, picks);
+      render();
+    }).catch(function (err) { console.warn('myClasses', err && err.code); });
+  }
+  function toggleMyClass(courseId) {
+    var course = state.courses[courseId];
+    if (!course) return;
+    var before = myPicks();
+    var subject = Core.myClassSubject(course);
+    var picks = Core.toggleMyClass(before, course);
+    if (!picks) return;
+    var moved = before[subject] && before[subject] !== course.id;
+    if (state.isAdmin && state.preview) {
+      state.previewMyClasses = picks;
+    } else if (state.user) {
+      state.myClasses = picks;
+      storeMyClasses(state.user.uid, picks);
+      var update = { onlineMyClasses: picks, updatedAt: FieldValue.serverTimestamp() };
+      db.collection(PROFILES).doc(state.user.uid).set(update, { merge: true }).catch(function (err) { console.warn('myClasses save', err && err.code); });
+    }
+    var band = Core.dayBand(course);
+    var on = Core.isMyClass(picks, course);
+    toast(on ? (moved ? 'Moved your tick to ' : 'Ticked ') + band.className + (band.day ? ' on ' + band.day : '') + '. It is at the top now.'
+      : 'Unticked. All your classes look the same again.');
+    render();
+    // Bring the class the student just ticked into view at the top.
+    if (on) {
+      var bar = document.querySelector('.st-tabs');
+      if (bar && bar.getBoundingClientRect().top < 0) bar.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }
   }
   // The class's day band over its rows (v1.16.0: always, not only with two classes).
   function stClassHead(course) {
@@ -852,7 +951,7 @@
     var items = Core.timelineItems(course, state.docs, state.recordings, shareCtx());
     var groups = Core.worksheetRows(course, items);
     var locked = Core.lockedCount(course);
-    var html = '<section class="card st-card" aria-label="Worksheets · ' + h(Core.courseTitle(course)) + '">' + stClassHead(course);
+    var html = '<section class="card st-card' + myCardClass(course) + '" aria-label="Worksheets · ' + h(Core.courseTitle(course)) + '">' + stClassHead(course);
     if (!items.length) {
       html += stEmpty('📄', 'No worksheets yet', 'Your worksheets appear here as soon as your class starts. Nothing to do.');
       return html + '</section>';
@@ -893,7 +992,7 @@
   function answersTabHtml(course, many) {
     var items = Core.timelineItems(course, state.docs, state.recordings, shareCtx());
     var rows = Core.answerKeyRows(course, items);
-    var html = '<section class="card st-card" aria-label="Answer keys · ' + h(Core.courseTitle(course)) + '">' + stClassHead(course);
+    var html = '<section class="card st-card' + myCardClass(course) + '" aria-label="Answer keys · ' + h(Core.courseTitle(course)) + '">' + stClassHead(course);
     if (!rows.length) {
       html += stEmpty('🔑', 'No answer keys yet', 'Each answer key appears here after its lesson.');
       return html + '</section>';
@@ -924,7 +1023,7 @@
   function videosTabHtml(course, many) {
     var items = Core.timelineItems(course, state.docs, state.recordings, shareCtx());
     var rows = Core.videoRows(course, items);
-    var html = '<section class="card st-card" aria-label="Videos · ' + h(Core.courseTitle(course)) + '">' + stClassHead(course);
+    var html = '<section class="card st-card' + myCardClass(course) + '" aria-label="Videos · ' + h(Core.courseTitle(course)) + '">' + stClassHead(course);
     if (!rows.length) {
       html += stEmpty('▶', 'No lesson videos yet', 'The videos of each lesson appear here after the class.');
       return html + '</section>';
@@ -958,7 +1057,7 @@
     var summary = cur >= 0
       ? 'Class is on worksheet ' + (cur + 1) + ' of ' + total + ' · ' + released.length + ' released'
       : released.length ? released.length + ' worksheet' + (released.length === 1 ? '' : 's') + ' ready before the first lesson' : 'Worksheets are released as lessons begin';
-    var html = '<article class="card class-card" aria-label="' + h(Core.courseTitle(course)) + '">' +
+    var html = '<article class="card class-card' + myCardClass(course) + '" aria-label="' + h(Core.courseTitle(course)) + '">' +
       dayBandHtml(course) +
       '<div class="class-top">' +
         '<div class="ring" role="img" aria-label="' + pct + '% through the class list">' +
@@ -2954,6 +3053,7 @@
       // 🎬 'video' / 'video-day' are links to watch.html: the browser follows them.
       case 'tab': state.adminTab = el.dataset.tab; state.courseId = null; render(); break;
       case 'student-tab': setStudentTab(el.dataset.tab); break;
+      case 'my-class': toggleMyClass(id); break;
       case 'new-course': courseForm(null); break;
       case 'open-course': state.courseId = id; state.uploads = []; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); break;
       case 'close-course': state.courseId = null; render(); break;
@@ -3005,7 +3105,7 @@
         state.preview = { level: c.level, subjects: [c.subject], name: 'Student', role: 'student' };
         render(); window.scrollTo({ top: 0 }); break;
       }
-      case 'preview-exit': state.preview = null; render(); break;
+      case 'preview-exit': state.preview = null; state.previewMyClasses = {}; render(); break;
       case 'preview-subject': {
         var p = state.preview, sub = el.dataset.subject, i = p.subjects.indexOf(sub);
         if (i >= 0) { if (p.subjects.length > 1) p.subjects.splice(i, 1); } else p.subjects.push(sub);

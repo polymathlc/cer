@@ -590,6 +590,69 @@
     .day-subject-medal, .day-subject-tag { box-shadow: none; border: 1px solid #999; }
   }
 
+  /* ===== ⭐ "This is my class" (v1.19.0) =====
+     A big white tick box at the right end of each maths / science band.
+     Ticked classes go first with a gold ring; the other classes follow under
+     "Other classes", quieter: grey band, faded colours, still fully usable
+     (they brighten again under the finger or mouse). */
+  .day-band { grid-template-columns: auto auto 1fr auto auto; }
+  .my-class-box {
+    display: inline-flex; align-items: center; gap: 10px;
+    min-height: 48px; padding: 6px 16px 6px 8px; border-radius: 14px;
+    border: 2px solid rgba(255,255,255,0.95); background: rgba(0,0,0,0.16); color: #fff;
+    font: inherit; font-size: 1rem; font-weight: 800; letter-spacing: 0.01em; line-height: 1.1;
+    cursor: pointer; white-space: nowrap; -webkit-tap-highlight-color: transparent;
+    transition: background 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
+  }
+  .my-class-box:hover { background: rgba(0,0,0,0.26); }
+  .my-class-box:active { transform: scale(0.96); }
+  .my-class-box:focus-visible { outline: 3px solid #FFD84D; outline-offset: 2px; }
+  .my-class-check {
+    width: 32px; height: 32px; flex: none; border-radius: 9px;
+    display: grid; place-items: center;
+    background: #fff; color: transparent;
+    box-shadow: inset 0 0 0 2px rgba(0,0,0,0.12);
+  }
+  .my-class-check svg { width: 24px; height: 24px; display: block; }
+  .my-class-short { display: none; }
+  .my-class-box.is-on { background: #fff; color: var(--day); border-color: #fff; box-shadow: 0 0 0 3px #F2B705, 0 4px 10px -4px rgba(0,0,0,0.5); }
+  .my-class-box.is-on .my-class-check { background: #F2B705; color: #fff; box-shadow: none; }
+  .my-class-box.is-on .my-class-text::before { content: '⭐ '; }
+  /* The ticked classes: a gold ring round the whole class. */
+  .is-my-class { box-shadow: 0 0 0 3px #F2B705, var(--shadow-sm, 0 2px 8px rgba(0,0,0,0.08)); }
+  /* The other classes: grey band, faded colours, a little see-through. */
+  .is-other-class { filter: saturate(0.25); opacity: 0.78; transition: filter 0.2s ease, opacity 0.2s ease; }
+  .is-other-class:hover, .is-other-class:focus-within { filter: saturate(0.7); opacity: 1; }
+  .is-other-class .day-band { --day: #8C929C; box-shadow: none; }
+  .is-other-class .day-band .day-pattern { opacity: 0.22; }
+  .is-other-class .day-badge .day-name { font-size: 1.15rem; }
+  .other-classes-head {
+    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+    margin: var(--space-xl, 32px) 0 var(--space-sm, 8px); padding-top: var(--space-md, 16px);
+    border-top: 2px dashed var(--border-subtle, #D9DCE1);
+    font-size: 1.05rem; font-weight: 800; color: var(--text-secondary, #5B616B);
+  }
+  .other-classes-head small { font-size: 0.85rem; font-weight: 600; color: var(--text-tertiary, #8A8F98); }
+  .my-class-hint {
+    margin: 0 0 var(--space-md, 16px); padding: 10px 14px; border-radius: 12px;
+    background: #FFF7DB; color: #5C4A00; font-size: 0.95rem; font-weight: 600; line-height: 1.4;
+  }
+  .my-class-hint.is-set { background: #FFF3C4; }
+  @media (max-width: 640px) {
+    .day-band { grid-template-columns: auto auto 1fr auto; }
+    /* Phone: a square box with a small word under it, so the class name keeps its room. */
+    .my-class-box { flex-direction: column; justify-content: center; min-height: 52px; min-width: 52px; padding: 4px 6px 3px; gap: 2px; font-size: 0.66rem; letter-spacing: 0; border-radius: 12px; }
+    .my-class-check { width: 30px; height: 30px; border-radius: 8px; }
+    .my-class-long { display: none; }
+    .my-class-short { display: inline; }
+    .my-class-box.is-on .my-class-text::before { content: ''; }
+    .is-other-class .day-badge .day-name { font-size: 1rem; }
+  }
+  @media print {
+    .my-class-box, .my-class-hint, .other-classes-head { display: none !important; }
+    .is-other-class { filter: none; opacity: 1; }
+  }
+
   /* ===== Admin ===== */
   .tabs { display: inline-flex; gap: 4px; padding: 4px; border-radius: 14px; background: var(--bg-tertiary); margin-top: var(--space-lg); flex-wrap: wrap; }
   .tab {
@@ -1019,9 +1082,9 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
-<script src="lesson-clock.js?v=1.18.0"></script>
-<script src="portal-core.js?v=1.18.0"></script>
-<script src="portal.js?v=1.18.0"></script>
+<script src="lesson-clock.js?v=1.19.0"></script>
+<script src="portal-core.js?v=1.19.0"></script>
+<script src="portal.js?v=1.19.0"></script>
 <script defer src="pwa-install.js?v=2.0.0" data-app-name="Polymath Worksheets" data-app-key="online" data-app-icon="assets/app-icons/icon-192.png" data-accent="#00695C" data-sw="sw.js" data-floating="auto"></script>
 <!-- 🔐 Polymath student access (v1.0.0): the enrolment pop-up every Polymath app shares. A signed-in student is
      blocked here until an admin approves them at polymathlc.com.sg/student/#admin. Source: polymathlc/cer student/access-gate.js -->
