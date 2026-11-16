@@ -1301,3 +1301,54 @@ test('⭐ v1.19.0: a student ticks "my class" (one maths, one science); it goes 
   assert.match(page, /\.is-other-class \{[^}]*saturate/, 'other classes lose their colour');
   assert.match(page, /\.my-class-box \{[^}]*min-height: 48px/, 'a big box to tap on a phone');
 });
+
+test('🔍 v1.20.0: Maths and Science buttons show one subject in every tab, offered only with both subjects', () => {
+  const mathMon = { id: 'math-mon', level: 'P6', subject: 'math', day: 'Monday', slot: 2 };
+  const sciMon = { id: 'sci-mon', level: 'P6', subject: 'science', day: 'Monday', slot: 3 };
+  const sciTue = { id: 'sci-tue', level: 'P6', subject: 'Science', day: 'Tuesday', slot: 2 };
+  const both = { id: 'both', level: 'P6', subject: 'both', day: 'Friday', slot: 2 };
+  const english = { id: 'eng', level: 'P6', subject: 'english', day: 'Sunday', slot: 0 };
+  const courses = [mathMon, sciMon, sciTue, both, english];
+  assert.deepEqual(Core.SUBJECT_FILTERS.map((f) => f[0]), ['math', 'science']);
+  assert.deepEqual(Core.subjectFilterKeys(both), ['math', 'science'], 'a class of both shows under either button');
+  assert.deepEqual(Core.subjectFilterKeys(english), [], 'another subject only shows with no button on');
+  // Counts and whether to offer the buttons.
+  const counts = Core.subjectFilterCounts(courses);
+  assert.equal(counts.math, 2); assert.equal(counts.science, 3); assert.equal(counts.all, 5);
+  assert.equal(counts.offered, true);
+  assert.equal(Core.subjectFilterCounts([sciMon, sciTue]).offered, false, 'only science: nothing to filter');
+  assert.equal(Core.subjectFilterCounts([mathMon]).offered, false);
+  assert.equal(Core.subjectFilterCounts([both]).offered, false, 'one class of both: both buttons would show the same');
+  assert.equal(Core.subjectFilterCounts([]).offered, false);
+  assert.equal(Core.subjectFilterCounts([mathMon, sciMon]).offered, true);
+  // Filtering keeps the usual order.
+  assert.deepEqual(Core.filterBySubject(courses, 'math').map((c) => c.id), ['math-mon', 'both']);
+  assert.deepEqual(Core.filterBySubject(courses, 'science').map((c) => c.id), ['sci-mon', 'sci-tue', 'both']);
+  assert.deepEqual(Core.filterBySubject(courses, '').map((c) => c.id), courses.map((c) => c.id));
+  assert.deepEqual(Core.filterBySubject(courses, 'junk').length, 5);
+  // A stored value is kept only when it means something for these classes.
+  assert.equal(Core.cleanSubjectFilter('maths', courses), 'math');
+  assert.equal(Core.cleanSubjectFilter('science', courses), 'science');
+  assert.equal(Core.cleanSubjectFilter('science', [mathMon]), '', 'no science class: show everything');
+  assert.equal(Core.cleanSubjectFilter('math', [sciMon, sciTue]), '');
+  assert.equal(Core.cleanSubjectFilter('<b>', courses), '');
+  assert.equal(Core.cleanSubjectFilter('science', null), 'science');
+  // Tapping: light one, switch to the other, tap the lit one to show all.
+  assert.equal(Core.toggleSubjectFilter('', 'math'), 'math');
+  assert.equal(Core.toggleSubjectFilter('math', 'science'), 'science');
+  assert.equal(Core.toggleSubjectFilter('science', 'science'), '');
+  assert.equal(Core.toggleSubjectFilter('math', 'all'), '');
+  // Works with "my class": the order is worked out inside the filtered list.
+  const order = Core.myClassOrder(Core.filterBySubject(courses, 'science'), { science: 'sci-tue', math: 'math-mon' });
+  assert.deepEqual(order.list.map((c) => c.id), ['sci-tue', 'sci-mon', 'both']);
+  assert.equal(order.mine, 1);
+  // The page: buttons above the tabs, the filter feeds every tab, kept on this device.
+  const portal = fs.readFileSync(new URL('../online/portal.js', import.meta.url), 'utf8');
+  assert.match(portal, /subjectFilterHtml\(allCourses, subjectFilter\);\s*html \+= studentTabsHtml\(courses\)/, 'buttons sit just above the tabs');
+  assert.match(portal, /courses = Core\.filterBySubject\(allCourses, subjectFilter\);[\s\S]{0,200}Core\.myClassOrder\(courses, myPicks\(\)\)/, 'filter first, then my class order');
+  assert.match(portal, /case 'subject-filter': setSubjectFilter/);
+  assert.match(portal, /localStorage\.setItem\(subjectFilterStoreKey\(\), value\)/);
+  const page = fs.readFileSync(new URL('../online/index.html', import.meta.url), 'utf8');
+  assert.match(page, /\.subject-filter-btn \{[^}]*min-height: 68px/, 'big buttons');
+  assert.match(page, /\.subject-filter-btn\.is-on \{[^}]*background: var\(--sf-ink\)/, 'the lit button is solid');
+});

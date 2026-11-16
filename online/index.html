@@ -393,6 +393,65 @@
   .empty h3 { color: var(--text-primary); margin-top: var(--space-sm); font-size: 1.1rem; }
   .empty p { margin-top: 6px; line-height: 1.6; }
 
+  /* ===== 🔍 Maths / Science buttons (v1.20.0) =====
+     Two big buttons above the tabs, in the subjects' own colours. Lit: solid
+     colour, white text and a tick. The other one fades while one is lit. */
+  .subject-filter { margin-top: var(--space-lg); }
+  .subject-filter-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .subject-filter-btn {
+    --sf-ink: var(--math-ink); --sf-bg: var(--math-bg); --sf-line: var(--math-light);
+    position: relative; display: flex; align-items: center; gap: 12px;
+    min-height: 68px; padding: 10px 16px 10px 12px; border-radius: 18px; cursor: pointer;
+    border: 2px solid var(--sf-line); background: var(--sf-bg); color: var(--sf-ink);
+    font: inherit; text-align: left;
+    transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast), opacity var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+  }
+  .subject-filter-science { --sf-ink: var(--science-ink); --sf-bg: var(--science-bg); --sf-line: var(--science-light); }
+  .subject-filter-btn:hover { border-color: var(--sf-ink); box-shadow: var(--shadow-sm); }
+  .subject-filter-btn:active { transform: scale(0.98); }
+  .subject-filter-btn:focus-visible { outline: 3px solid var(--accent-base); outline-offset: 2px; }
+  .subject-filter-medal {
+    flex: none; width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center;
+    background: #fff; color: var(--sf-ink); box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+  }
+  .subject-filter-medal .subject-icon { width: 28px; height: 28px; }
+  .subject-filter-text { display: flex; flex-direction: column; min-width: 0; }
+  .subject-filter-name { font-size: 1.3rem; font-weight: 800; line-height: 1.1; letter-spacing: 0.01em; }
+  .subject-filter-count { font-size: 0.82rem; font-weight: 600; opacity: 0.8; margin-top: 2px; }
+  .subject-filter-tick {
+    margin-left: auto; flex: none; width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
+    border: 2px solid var(--sf-line); background: #fff; color: transparent;
+  }
+  .subject-filter-tick svg { width: 20px; height: 20px; }
+  .subject-filter-btn.is-on { background: var(--sf-ink); border-color: var(--sf-ink); color: #fff; box-shadow: 0 4px 14px rgba(0,0,0,0.16); }
+  .subject-filter-btn.is-on .subject-filter-count { opacity: 0.92; }
+  .subject-filter-btn.is-on .subject-filter-tick { border-color: #fff; color: var(--sf-ink); }
+  .subject-filter-btn.is-off { opacity: 0.55; filter: saturate(0.4); }
+  .subject-filter-btn.is-off:hover, .subject-filter-btn.is-off:focus-visible { opacity: 0.9; filter: none; }
+  .subject-filter-note {
+    display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 4px 12px;
+    margin: 8px 0 0; font-size: 0.9rem; color: var(--text-secondary); text-align: center;
+  }
+  .subject-filter-note.is-set { color: var(--text-primary); }
+  .subject-filter-all {
+    border: 0; background: none; padding: 6px 4px; cursor: pointer;
+    font: inherit; font-weight: 700; color: var(--accent-ink, #1F5B92); text-decoration: underline; text-underline-offset: 3px;
+  }
+  .subject-filter-all:focus-visible { outline: 3px solid var(--accent-base); outline-offset: 1px; border-radius: 6px; }
+  @media (max-width: 640px) {
+    .subject-filter { margin-top: var(--space-md); }
+    .subject-filter-row { gap: 8px; }
+    .subject-filter-btn { min-height: 64px; gap: 8px; padding: 8px 10px 8px 8px; border-radius: 16px; }
+    .subject-filter-medal { width: 40px; height: 40px; }
+    .subject-filter-medal .subject-icon { width: 24px; height: 24px; }
+    .subject-filter-name { font-size: 1.12rem; }
+    .subject-filter-count { font-size: 0.75rem; }
+    .subject-filter-tick { width: 26px; height: 26px; border-radius: 8px; }
+    .subject-filter-tick svg { width: 17px; height: 17px; }
+  }
+  @media (max-width: 360px) { .subject-filter-tick { display: none; } }
+  @media print { .subject-filter { display: none !important; } }
+
   /* ===== 🗂 Student tabs (v1.12.0) =====
      Plain and obvious for primary school children: four big buttons, then
      rows with one name and two or three large buttons each. */
@@ -1082,9 +1141,9 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
-<script src="lesson-clock.js?v=1.19.0"></script>
-<script src="portal-core.js?v=1.19.0"></script>
-<script src="portal.js?v=1.19.0"></script>
+<script src="lesson-clock.js?v=1.20.0"></script>
+<script src="portal-core.js?v=1.20.0"></script>
+<script src="portal.js?v=1.20.0"></script>
 <script defer src="pwa-install.js?v=2.0.0" data-app-name="Polymath Worksheets" data-app-key="online" data-app-icon="assets/app-icons/icon-192.png" data-accent="#00695C" data-sw="sw.js" data-floating="auto"></script>
 <!-- 🔐 Polymath student access (v1.0.0): the enrolment pop-up every Polymath app shares. A signed-in student is
      blocked here until an admin approves them at polymathlc.com.sg/student/#admin. Source: polymathlc/cer student/access-gate.js -->
