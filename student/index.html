@@ -7,7 +7,7 @@
 <title>My Polymath — Student Dashboard | Polymath Learning Centre</title>
 <meta name="description" content="Every Polymath Learning Centre app in one place: Science, Science PSLE, Math, Answer Keys, Study Buddy, Rewards, Worksheets, Chinese, English and Mind Map.">
 <!--
-  MY POLYMATH — the student dashboard at polymathlc.com.sg/student  (v1.9.0)
+  MY POLYMATH — the student dashboard at polymathlc.com.sg/student  (v1.11.0)
   ------------------------------------------------------------------------
   One page of square tiles, one per student app. Each tile is a plain link to
   the app's own published address, so the tiles need no script to work.
@@ -242,6 +242,21 @@
   .button-zoom svg { width: 18px; height: 18px; flex-shrink: 0; }
   /* A phone keeps just the camera (a round 40px button like Print), so the header never scrolls sideways. */
   @media (max-width: 520px) { .button-zoom .button-zoom-words { display: none; } .button-zoom { width: 40px; height: 40px; padding: 0; justify-content: center; } }
+  /* 🔴 Live (v1.11.0, Zhi Kai 17 Nov 2026): the same lesson inside Ans Key's live class, with performance
+     tracking for parents. Beside Join Zoom, for the same people. A red dot so it reads as "live". */
+  .button-live { background: #FFFFFF; border-color: #E0483E; color: #B3261E; }
+  .button-live:hover { background: #FFF3F1; }
+  .live-dot { width: 10px; height: 10px; border-radius: 50%; background: #E0483E; box-shadow: 0 0 0 3px rgba(224,72,62,.18); flex-shrink: 0; }
+  @media (max-width: 520px) { .button-live { padding: 0 12px; height: 40px; } }
+  /* The line under the greeting that says either button gets you into the lesson. */
+  .join-note {
+    display: flex; gap: 10px; align-items: flex-start; margin: 14px 0 0; padding: 12px 14px;
+    border-radius: var(--radius-md); background: var(--bg-tertiary); border: 1px solid var(--border-subtle);
+    font-size: var(--font-size-sm); line-height: 1.5; color: var(--text-secondary); max-width: 680px;
+  }
+  .join-note[hidden] { display: none; }
+  .join-note b { color: var(--text-primary); }
+  .join-note a { color: #B3261E; font-weight: 700; }
 
   /* ───────── Greeting ───────── */
   main {
@@ -615,7 +630,7 @@
   .staff-section h3 { margin: 0 0 var(--space-xs, 4px); font-size: 1.05rem; }
   .staff-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md, 12px); flex-wrap: wrap; padding: var(--space-md, 12px) 0; border-top: 1px solid var(--border-subtle); }
   .staff-badge { display: inline-block; margin-left: 6px; padding: 2px 10px; border-radius: 999px; font-size: 0.8rem; background: var(--bg-tertiary, #eef2f7); color: var(--text-secondary); }
-  @media print { .account-card, .admin-view, #adminButton, #zoomButton { display: none !important; } }
+  @media print { .account-card, .admin-view, #adminButton, #zoomButton, #liveButton, #joinNote { display: none !important; } }
 
   /* ───────── Print: a sheet of every app and its address, for the fridge ───────── */
   .print-address { display: none; }
@@ -652,6 +667,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="13" height="12" rx="2.5"/><path d="M15 10.5l6-3.5v10l-6-3.5z" fill="currentColor"/></svg>
       <span class="button-zoom-words">Join Zoom</span>
     </a>
+    <!-- 🔴 Live (v1.11.0): the same lesson inside Ans Key's live class, with performance tracking; same people as Zoom -->
+    <a class="button button-live" id="liveButton" href="#" target="_blank" rel="noopener" hidden aria-label="Join the live lesson (with performance tracking)" title="Join the live lesson in Ans Key — tracks your answers so your parent gets a report">
+      <span class="live-dot" aria-hidden="true"></span><span>Live</span>
+    </a>
     <a class="button button-accent" id="adminButton" href="#admin" hidden title="Approve students and change their access">
       <span class="count-badge" hidden>0</span><span>Approve students</span>
     </a>
@@ -669,6 +688,8 @@
     <div class="greeting-eyebrow" id="greetingLine">Welcome back</div>
     <h1 class="page-title" id="pageTitle">Your Polymath apps</h1>
     <p class="page-subtitle">Tap a tile to open it. You only need to sign in once — every app knows you.</p>
+    <!-- 🔴 v1.11.0: shown with the Zoom and Live buttons -->
+    <p class="join-note" id="joinNote" hidden><span aria-hidden="true">🎥</span><span><b>Joining your lesson?</b> Use either button at the top: <b>Join Zoom</b> or <b>Live</b>. Both take you into the same lesson. <b>Live</b> also tracks how you do — when you joined, your answers, how quickly you answer and whether you stay on the lesson screen — so your parent gets a progress report after class. <a href="https://polymathlc.com.sg/live/" target="_blank" rel="noopener">More about Live</a></span></p>
     <div class="account-card" id="accountCard" hidden aria-live="polite"></div>
   </section>
 
@@ -844,14 +865,14 @@
   © Polymath Learning Centre · polymathlc.com.sg
 </footer>
 
-<div class="version-badge" id="versionBadge" aria-hidden="true">v1.10.0</div>
+<div class="version-badge" id="versionBadge" aria-hidden="true">v1.11.0</div>
 
 <script>
   /* My Polymath — the little the page does with script. Everything works without it. */
   (function () {
     'use strict';
 
-    var DASHBOARD_VERSION = 'v1.10.0';
+    var DASHBOARD_VERSION = 'v1.11.0';
     var LAST_OPENED_KEY = 'polymath-dashboard-last-opened';
 
     var versionBadge = document.getElementById('versionBadge');
@@ -924,7 +945,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="student-account.js?v=1.10.0"></script>
+<script src="student-account.js?v=1.11.0"></script>
 <script defer src="access-gate.js?v=1.1.0" data-app="student"></script>
 <script defer src="pwa-install.js?v=2.0.0" data-app-name="My Polymath" data-app-key="hub" data-app-icon="assets/app-icons/icon-192.png" data-accent="#0B6B4F" data-sw="sw.js" data-floating="auto"></script>
 </body>

@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="robots" content="noindex">  <!-- 🔎 student page: kept out of search results -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Live Lesson | Polymath Learning Centre</title>
+<meta name="description" content="Join your Polymath live lesson on a phone, tablet or computer.">
+<meta name="theme-color" content="#FFFFFF">
+<link rel="icon" type="image/png" sizes="32x32" href="../student/assets/app-icons/favicon-32.png">
+<link rel="apple-touch-icon" href="../student/assets/app-icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://polymathlc.github.io">
+<link rel="preconnect" href="https://firestore.googleapis.com">
+<!--
+  POLYMATH LIVE LESSON — polymathlc.com.sg/live  (v1.0.0, 17 Nov 2026, Zhi Kai)
+  ------------------------------------------------------------------------------
+  One job: get a student into the live lesson. The lesson itself is the
+  🎥 Live class inside Ans Key (polymathlc/anskey, live-class.js) — video,
+  the worksheet, questions that pop up, and the teacher's performance report
+  to the parent. This page does not run the class; it is the simplest
+  dependable door to it, on a phone or a computer:
+
+    • "Join live lesson" opens  https://polymathlc.github.io/anskey/?live
+      (Ans Key's own address, where the student's sign-in already lives). Ans
+      Key then waits for the class if it has not started and asks "Who are
+      you?" from the /office class list, exactly as before.
+    • A student's PERSONAL LINK code (the teacher's 🔗 Links & PINs) can come
+      here as  /live/?c=<code>  (or ?live=<code>, or #<code>). It is kept on
+      this device, so next time one tap opens "You are <name> — Join".
+    • "I have a PIN" opens Ans Key on the 🔢 PIN tab  (…/anskey/?live&pin).
+    • A dot at the top says whether a class is live now, read from the public
+      mirror liveClassRooms/main (the same one Ans Key's 🎥 button glows from).
+      It decides nothing: who may join, and when, is the live class server's
+      (roster, lesson-time door, personal link / PIN checks).
+
+  Who may come in is decided by the live class itself, not here: the /office
+  class list for this month, the lesson-time door, and the personal link or
+  PIN — the same checks as before. My Polymath (/student) shows the Live
+  button only to approved families, staff and admins, beside Join Zoom.
+
+  Lives in polymathlc/cer under live/ and reaches polymathlc.com.sg/live
+  through the website sync. Tests: tools/live-page-tests.mjs.
+-->
+<style>
+  @font-face {
+    font-family: 'PolymathQuestion';
+    src: local('Roboto'), local('Roboto-Regular'), local('Arial'), local('Helvetica');
+    unicode-range: U+003F;
+  }
+  :root {
+    --bg: #FFFFFF;
+    --bg-soft: #FAFAFA;
+    --bg-card: #FFFFFF;
+    --bg-tint: #F3F3F0;
+    --line: #E8E8E4;
+    --line-strong: #D4D4CF;
+    --ink: #1A1A1A;
+    --ink-soft: #5C5C5C;
+    --ink-faint: #8A8A8A;
+    --live: #E0483E;
+    --live-ink: #B3261E;
+    --live-wash: #FFF3F1;
+    --green: #0B6B4F;
+    --green-wash: #F1F8F5;
+    --shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.06);
+    --shadow-big: 0 4px 6px rgba(0,0,0,0.05), 0 10px 30px rgba(0,0,0,0.1);
+    --radius: 16px;
+    --font: 'PolymathQuestion', 'Century Gothic', CenturyGothic, AppleGothic, sans-serif;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121212; --bg-soft: #181818; --bg-card: #1E1E1E; --bg-tint: #232323;
+      --line: #2E2E2E; --line-strong: #3A3A3A; --ink: #F2F2F2; --ink-soft: #BDBDBD; --ink-faint: #8C8C8C;
+      --live-ink: #FF8A80; --live-wash: #2A1715; --green: #7FD3B0; --green-wash: #14231D;
+      --shadow: 0 1px 3px rgba(0,0,0,0.4); --shadow-big: 0 10px 30px rgba(0,0,0,0.5);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121212; --bg-soft: #181818; --bg-card: #1E1E1E; --bg-tint: #232323;
+    --line: #2E2E2E; --line-strong: #3A3A3A; --ink: #F2F2F2; --ink-soft: #BDBDBD; --ink-faint: #8C8C8C;
+    --live-ink: #FF8A80; --live-wash: #2A1715; --green: #7FD3B0; --green-wash: #14231D;
+    --shadow: 0 1px 3px rgba(0,0,0,0.4); --shadow-big: 0 10px 30px rgba(0,0,0,0.5);
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg-soft); color: var(--ink); font-family: var(--font);
+    font-size: 16px; line-height: 1.55; -webkit-font-smoothing: antialiased;
+    min-height: 100vh; display: flex; flex-direction: column;
+  }
+  a { color: inherit; }
+  .top {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 12px max(16px, env(safe-area-inset-left)); background: var(--bg);
+    border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; min-width: 0; }
+  .brand img { height: 36px; width: auto; }
+  .brand-words { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
+  .brand-name { font-weight: 700; font-size: 1rem; }
+  .brand-sub { font-size: .8rem; color: var(--ink-soft); }
+  .status {
+    display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px;
+    border: 1px solid var(--line); background: var(--bg-card); font-size: .85rem; font-weight: 700; white-space: nowrap;
+    color: var(--ink-soft);
+  }
+  .status .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ink-faint); flex-shrink: 0; }
+  .status.is-live { color: var(--live-ink); border-color: var(--live); background: var(--live-wash); }
+  .status.is-live .dot { background: var(--live); animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(224,72,62,.45); } 50% { box-shadow: 0 0 0 7px rgba(224,72,62,0); } }
+  @media (prefers-reduced-motion: reduce) { .status.is-live .dot { animation: none; } }
+
+  main { width: 100%; max-width: 760px; margin: 0 auto; padding: 28px 16px 48px; flex: 1; }
+  .hero {
+    background: var(--bg-card); border: 1px solid var(--line); border-radius: 22px; box-shadow: var(--shadow-big);
+    padding: 28px 24px; text-align: center;
+  }
+  .eyebrow { font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: var(--live-ink); font-weight: 700; }
+  h1 { font-size: clamp(1.7rem, 5vw, 2.3rem); line-height: 1.15; margin: 8px 0 8px; }
+  .lead { color: var(--ink-soft); margin: 0 auto 22px; max-width: 520px; }
+  .who {
+    display: none; margin: 0 auto 16px; max-width: 460px; padding: 10px 14px; border-radius: 12px;
+    background: var(--green-wash); color: var(--green); font-size: .92rem;
+  }
+  .who.is-on { display: block; }
+  .who button { border: 0; background: none; color: inherit; text-decoration: underline; font: inherit; cursor: pointer; padding: 0 0 0 4px; }
+  .join {
+    display: inline-flex; align-items: center; justify-content: center; gap: 12px; width: 100%; max-width: 420px;
+    padding: 18px 26px; border-radius: 999px; border: 0; background: var(--live); color: #FFFFFF;
+    font: 700 1.2rem/1.2 var(--font); text-decoration: none; cursor: pointer;
+    box-shadow: 0 2px 4px rgba(224,72,62,.25), 0 8px 24px rgba(224,72,62,.28);
+    transition: transform .15s ease, box-shadow .15s ease;
+  }
+  .join:hover { transform: translateY(-1px); box-shadow: 0 4px 8px rgba(224,72,62,.3), 0 12px 30px rgba(224,72,62,.32); }
+  .join:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+  .join .dot { width: 12px; height: 12px; border-radius: 50%; background: #FFFFFF; flex-shrink: 0; }
+  .alt { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 14px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 999px;
+    border: 1px solid var(--line-strong); background: var(--bg-card); color: var(--ink); text-decoration: none;
+    font: 700 .95rem/1.2 var(--font); cursor: pointer;
+  }
+  .chip:hover { background: var(--bg-tint); }
+  .hint { margin: 14px 0 0; font-size: .85rem; color: var(--ink-faint); }
+
+  h2 { font-size: 1.2rem; margin: 34px 0 6px; }
+  .section-lead { color: var(--ink-soft); margin: 0 0 14px; }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--bg-card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 16px; display: flex; gap: 12px; align-items: flex-start;
+  }
+  .card .ico { font-size: 1.5rem; line-height: 1; flex-shrink: 0; }
+  .card b { display: block; margin-bottom: 2px; }
+  .card p { margin: 0; color: var(--ink-soft); font-size: .92rem; }
+  .compare { width: 100%; border-collapse: collapse; background: var(--bg-card); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; font-size: .95rem; }
+  .compare th, .compare td { padding: 12px 14px; text-align: left; border-top: 1px solid var(--line); }
+  .compare thead th { border-top: 0; background: var(--bg-tint); font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); }
+  .compare td.yes { color: var(--green); font-weight: 700; }
+  .compare td.no { color: var(--ink-faint); }
+  .steps { margin: 0; padding: 0; list-style: none; counter-reset: s; display: flex; flex-direction: column; gap: 10px; }
+  .steps li {
+    counter-increment: s; background: var(--bg-card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px 12px 52px; position: relative;
+  }
+  .steps li::before {
+    content: counter(s); position: absolute; left: 14px; top: 12px; width: 26px; height: 26px; border-radius: 50%;
+    background: var(--live-wash); color: var(--live-ink); font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: .85rem;
+  }
+  details { background: var(--bg-card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-top: 10px; }
+  summary { cursor: pointer; font-weight: 700; }
+  details p { margin: 8px 0 0; color: var(--ink-soft); }
+  footer { text-align: center; padding: 20px 16px 32px; color: var(--ink-faint); font-size: .8rem; }
+  footer a { color: var(--ink-soft); }
+  .version { font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <a class="brand" href="https://polymathlc.com.sg/student/" aria-label="My Polymath">
+    <img src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Polymath Learning Centre" onerror="this.style.display='none'">
+    <span class="brand-words"><span class="brand-name">Live lesson</span><span class="brand-sub">Polymath Learning Centre</span></span>
+  </a>
+  <span class="status" id="status" role="status" aria-live="polite"><span class="dot" aria-hidden="true"></span><span id="statusWords">Checking…</span></span>
+</header>
+
+<main>
+  <section class="hero" aria-labelledby="title">
+    <div class="eyebrow">🔴 Polymath Live</div>
+    <h1 id="title">Join your live lesson</h1>
+    <p class="lead" id="lead">See and hear your teacher, follow the worksheet, and answer the questions that pop up on your screen — all in one window, on a phone, tablet or computer.</p>
+    <p class="who" id="who" aria-live="polite"></p>
+    <a class="join" id="joinButton" href="https://polymathlc.github.io/anskey/?live" rel="noopener">
+      <span class="dot" aria-hidden="true"></span><span>Join live lesson</span>
+    </a>
+    <div class="alt">
+      <a class="chip" id="pinButton" href="https://polymathlc.github.io/anskey/?live&amp;pin" rel="noopener">🔢 I have a PIN</a>
+      <a class="chip" href="https://polymathlc.com.sg/student/">🏠 My Polymath (Zoom is there too)</a>
+    </div>
+    <p class="hint" id="hint">The lesson opens a little before it starts. If you are early, the page waits and lets you in by itself.</p>
+  </section>
+
+  <h2>Live or Zoom?</h2>
+  <p class="section-lead">Both get you into the same lesson with the same teacher. Use whichever works for you — <b>Live</b> also keeps track of how you do, so your parent gets a progress report after class.</p>
+  <table class="compare">
+    <thead><tr><th scope="col"></th><th scope="col">Live</th><th scope="col">Zoom</th></tr></thead>
+    <tbody>
+      <tr><th scope="row">See and hear the lesson</th><td class="yes">✓</td><td class="yes">✓</td></tr>
+      <tr><th scope="row">Worksheet and questions on your screen</th><td class="yes">✓</td><td class="no">—</td></tr>
+      <tr><th scope="row">Performance tracking</th><td class="yes">✓</td><td class="no">—</td></tr>
+      <tr><th scope="row">Progress report to your parent</th><td class="yes">✓</td><td class="no">—</td></tr>
+    </tbody>
+  </table>
+
+  <h2>What Live keeps track of</h2>
+  <p class="section-lead">Only things the lesson can measure. Your teacher checks the report before it is sent.</p>
+  <div class="grid">
+    <div class="card"><span class="ico" aria-hidden="true">🕒</span><div><b>Attendance</b><p>When you joined and how long you stayed in the lesson.</p></div></div>
+    <div class="card"><span class="ico" aria-hidden="true">✍️</span><div><b>Answers</b><p>Every question you answered, and which ones your teacher marked right.</p></div></div>
+    <div class="card"><span class="ico" aria-hidden="true">⏱</span><div><b>Answer speed</b><p>How long you took from a question popping up to sending your answer.</p></div></div>
+    <div class="card"><span class="ico" aria-hidden="true">👀</span><div><b>Focus</b><p>How much of the lesson you kept the lesson screen open, instead of other apps or tabs.</p></div></div>
+  </div>
+
+  <h2>Before you join</h2>
+  <ol class="steps">
+    <li>Charge your phone, tablet or computer, and sit somewhere quiet.</li>
+    <li>Use headphones if you can, so the class does not echo.</li>
+    <li>When the browser asks, press <b>Allow</b> for the camera and microphone.</li>
+    <li>Tap <b>Join live lesson</b>, then find your name (or use your own link or PIN) and press <b>Join</b>.</li>
+    <li>Keep the lesson screen open until the class ends — it counts towards your focus.</li>
+  </ol>
+
+  <h2>Help</h2>
+  <details>
+    <summary>I can't find my name</summary>
+    <p>Tap <b>I have a PIN</b> and type the four numbers your teacher gave you. Still stuck? Tell your teacher, or WhatsApp us at <a href="https://wa.me/6596450588">+65 9645 0588</a>. You can also join on Zoom from My Polymath.</p>
+  </details>
+  <details>
+    <summary>It says the lesson has not started</summary>
+    <p>That is fine: leave the page open. It lets you in by itself when your teacher opens the class.</p>
+  </details>
+  <details>
+    <summary>Which browser should I use?</summary>
+    <p>Chrome or Safari, up to date. On an iPhone or iPad, use Safari. If the video freezes, close other apps and come back to the lesson.</p>
+  </details>
+  <details>
+    <summary>My teacher sent me my own link</summary>
+    <p>Open it once on this device. Next time, this page remembers it and <b>Join live lesson</b> goes straight to “You are … — Join”.</p>
+  </details>
+</main>
+
+<footer>
+  <span>Polymath Learning Centre · <a href="https://wa.me/6596450588">WhatsApp +65 9645 0588</a></span><br>
+  <span class="version" id="version">v1.0.0</span>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  var VERSION = 'v1.0.0';
+  // Ans Key's own address: the students' sign-in lives on this origin.
+  var ANSKEY_LIVE = 'https://polymathlc.github.io/anskey/?live';
+  // The public mirror the live class writes ({open, slot, startedAt, letIn}). It decides nothing.
+  var MIRROR_URL = 'https://firestore.googleapis.com/v1/projects/mathgen--app/databases/(default)/documents/liveClassRooms/main?key=AIzaSyAUSI3Uh28IeqASEp0JhH4QPaVt-O3meBo';
+  var CODE_KEY = 'polymath.live.code.v1';
+  var NAME_KEY = 'polymath.live.name.v1';
+  // The same shape as Ans Key's personal link code (live-class.js PASS_CODE_RE).
+  var CODE_RE = /^[A-Za-z0-9-]{1,60}_[A-Za-z0-9-]{1,60}\.\d{1,6}\.[A-Za-z0-9_-]{16}$/;
+  var DAYS = { MON: 'Monday', TUE: 'Tuesday', WED: 'Wednesday', THU: 'Thursday', FRI: 'Friday', SAT: 'Saturday', SUN: 'Sunday' };
+
+  function cleanCode(v) {
+    var t = String(v == null ? '' : v).trim();
+    try { t = decodeURIComponent(t); } catch (e) { return ''; }
+    return CODE_RE.test(t) ? t : '';
+  }
+  // ?c=<code>, ?live=<code> or #<code> → the code ('' when none, or not a code).
+  function codeFrom(search, hash) {
+    var out = '';
+    String(search || '').replace(/^\?/, '').split('&').forEach(function (part) {
+      var i = part.indexOf('=');
+      if (i < 0 || out) return;
+      var k = part.slice(0, i);
+      if (k === 'c' || k === 'live' || k === 'code') out = cleanCode(part.slice(i + 1).replace(/\+/g, ' '));
+    });
+    if (!out) out = cleanCode(String(hash || '').replace(/^#/, ''));
+    return out;
+  }
+  function joinUrl(code) {
+    var c = cleanCode(code);
+    return c ? ANSKEY_LIVE + '=' + encodeURIComponent(c) : ANSKEY_LIVE;
+  }
+  function pinUrl() { return ANSKEY_LIVE + '&pin'; }
+  // Firestore REST: one field's value, whatever its type.
+  function fieldOf(doc, name) {
+    var f = doc && doc.fields && doc.fields[name];
+    if (!f) return null;
+    if ('booleanValue' in f) return !!f.booleanValue;
+    if ('integerValue' in f) return Number(f.integerValue);
+    if ('doubleValue' in f) return Number(f.doubleValue);
+    if ('stringValue' in f) return String(f.stringValue);
+    return null;
+  }
+  function mirrorState(doc) {
+    return { open: fieldOf(doc, 'open') === true, slot: String(fieldOf(doc, 'slot') || ''), letIn: fieldOf(doc, 'letIn') === true };
+  }
+  // 'WED-2' → 'Wednesday lesson' (the slot's time is the schedule's; the day is enough here).
+  function slotWords(slot) {
+    var m = /^([A-Z]{3})-\d+$/.exec(String(slot || ''));
+    return m && DAYS[m[1]] ? DAYS[m[1]] + ' lesson' : '';
+  }
+
+  var helpers = { VERSION: VERSION, ANSKEY_LIVE: ANSKEY_LIVE, cleanCode: cleanCode, codeFrom: codeFrom, joinUrl: joinUrl, pinUrl: pinUrl, fieldOf: fieldOf, mirrorState: mirrorState, slotWords: slotWords, CODE_KEY: CODE_KEY };
+  window.PolymathLive = { version: VERSION, helpers: helpers };
+  if (typeof document === 'undefined' || !document.getElementById) return;
+
+  function store() { try { return window.localStorage; } catch (e) { return null; } }
+  function readCode() { var s = store(); try { return s ? cleanCode(s.getItem(CODE_KEY) || '') : ''; } catch (e) { return ''; } }
+  function writeCode(c) { var s = store(); try { if (s) { if (c) s.setItem(CODE_KEY, c); else s.removeItem(CODE_KEY); } } catch (e) {} }
+
+  var joinButton = document.getElementById('joinButton');
+  var pinButton = document.getElementById('pinButton');
+  var who = document.getElementById('who');
+  var status = document.getElementById('status');
+  var statusWords = document.getElementById('statusWords');
+  var hint = document.getElementById('hint');
+  document.getElementById('version').textContent = VERSION;
+
+  // A personal link that arrived here is kept, and taken out of the address bar.
+  var arrived = codeFrom(location.search, location.hash);
+  if (arrived) {
+    writeCode(arrived);
+    try { history.replaceState(null, '', location.pathname); } catch (e) {}
+  }
+  function paintCode() {
+    var code = readCode();
+    joinButton.setAttribute('href', joinUrl(code));
+    pinButton.setAttribute('href', pinUrl());
+    who.textContent = '';
+    who.classList.toggle('is-on', !!code);
+    if (code) {
+      who.appendChild(document.createTextNode('✓ Your own class link is saved on this device: Join goes straight to your name.'));
+      var forget = document.createElement('button');
+      forget.type = 'button';
+      forget.textContent = 'Not you?';
+      forget.addEventListener('click', function () { writeCode(''); paintCode(); });
+      who.appendChild(forget);
+    }
+  }
+  paintCode();
+
+  // 🔴 Is a class live now? Checked now, every 20 s, and when the student comes back.
+  var timer = 0;
+  function paintStatus(st) {
+    status.classList.toggle('is-live', !!(st && st.open));
+    if (!st) { statusWords.textContent = 'Live lesson'; return; }
+    if (st.open) {
+      var words = slotWords(st.slot);
+      statusWords.textContent = 'Live now' + (words ? ' · ' + words : '');
+      hint.textContent = 'Your class is on. Tap Join live lesson.';
+    } else {
+      statusWords.textContent = 'Not live yet';
+      hint.textContent = 'The lesson opens a little before it starts. If you are early, the page waits and lets you in by itself.';
+    }
+  }
+  function check() {
+    clearTimeout(timer);
+    if (!window.fetch) return;
+    fetch(MIRROR_URL, { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (doc) { paintStatus(doc ? mirrorState(doc) : null); }, function () { paintStatus(null); })
+      .then(function () { timer = setTimeout(check, 20000); });
+  }
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') check(); });
+  check();
+})();
+</script>
+</body>
+</html>
