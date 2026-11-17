@@ -488,6 +488,10 @@ await step('the Science-only family\'s My Polymath: the Math tile is locked and 
   await page.waitForSelector('#zoomButton:not([hidden])');
   assert.match(await page.getAttribute('#zoomButton', 'href'), /^https:\/\/us02web\.zoom\.us\/j\/3179638363\?pwd=/);
   assert.equal(await page.getAttribute('#zoomButton', 'target'), '_blank', 'Zoom opens in a new tab');
+  // 🔴 Live (v1.11.0) beside it, with the line that says either works.
+  assert.equal(await page.getAttribute('#liveButton', 'href'), 'https://polymathlc.com.sg/live/');
+  assert.equal(await page.isHidden('#liveButton'), false);
+  assert.match(await page.textContent('#joinNote'), /Both take you into the same lesson/);
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth) <= 390, 'the header still fits a phone');
   if (shots) await page.screenshot({ path: path.join(shots, 'student-science-only-phone.png'), fullPage: false });
   await page.context().close();

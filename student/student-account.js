@@ -48,12 +48,16 @@
 (function () {
   'use strict';
 
-  var VERSION = 'v1.10.0';
+  var VERSION = 'v1.11.0';
   // 🎥 Join Zoom (v1.10.0, Zhi Kai 17 Nov 2026): the centre's class Zoom, a button at the top of
   // /student. Shown only to a signed-in approved family, staff and the admins; never to a visitor
   // who is signed out, waiting or paused. This file is public on GitHub, so the link (and the
   // passcode in it) can be read in the source. Keep equal to CLASS_ZOOM_URL in trial/index.html.
   var CLASS_ZOOM_URL = 'https://us02web.zoom.us/j/3179638363?pwd=htVM9aAllMVNjlLQO06F4How4m4Iml.1';
+  // 🔴 Live (v1.11.0, Zhi Kai 17 Nov 2026): the same lesson, joined inside Ans Key's live class
+  // through polymathlc.com.sg/live, which tracks how the child does for a parent's report. Shown
+  // beside Join Zoom to exactly the same people (canJoinZoom), with a line saying either works.
+  var LIVE_LESSON_URL = 'https://polymathlc.com.sg/live/';
   function canJoinZoom(signedIn, gate) {
     if (!signedIn) return false;
     if (isAdmin(signedIn)) return true;
@@ -475,7 +479,7 @@
     };
   }
 
-  var helpers = { CLASS_ZOOM_URL: CLASS_ZOOM_URL, canJoinZoom: canJoinZoom, esc: esc, isAdmin: isAdmin, statusOf: statusOf, loginCandidates: loginCandidates, accountLabel: accountLabel,
+  var helpers = { CLASS_ZOOM_URL: CLASS_ZOOM_URL, LIVE_LESSON_URL: LIVE_LESSON_URL, canJoinZoom: canJoinZoom, esc: esc, isAdmin: isAdmin, statusOf: statusOf, loginCandidates: loginCandidates, accountLabel: accountLabel,
     toDate: toDate, sgTime: sgTime, matches: matches, sortRecords: sortRecords, counts: counts, editedRecord: editedRecord,
     subjectsOfChoice: subjectsOfChoice, approvedSubjects: approvedSubjects, appSubjectLabel: appSubjectLabel, subjectsWords: subjectsWords,
     tileSubjects: tileSubjects, tileLocked: tileLocked, onlineAccessFor: onlineAccessFor, onlineMemberPatch: onlineMemberPatch,
@@ -497,6 +501,8 @@
   var appSections = document.querySelectorAll('[data-apps-view]');
   var subjectsNote = document.getElementById('subjectsNote');
   var zoomButton = document.getElementById('zoomButton');
+  var liveButton = document.getElementById('liveButton');
+  var joinNote = document.getElementById('joinNote');
 
   // 🎥 Join Zoom at the top: the link goes on only when the button shows.
   function renderZoom() {
@@ -505,6 +511,12 @@
     var on = canJoinZoom(user, gateState) && !wantsAdmin();
     zoomButton.hidden = !on;
     zoomButton.setAttribute('href', on ? CLASS_ZOOM_URL : '#');
+    // 🔴 Live sits beside it for the same people, and the note says either way works.
+    if (liveButton) {
+      liveButton.hidden = !on;
+      liveButton.setAttribute('href', on ? LIVE_LESSON_URL : '#');
+    }
+    if (joinNote) joinNote.hidden = !on;
   }
 
   /* ---------------------- subject locks on the tiles ---------------------- */

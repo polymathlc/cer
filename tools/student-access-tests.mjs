@@ -372,7 +372,7 @@ test('dashboard helpers: usernames, sorting, search, counts and the admin edit',
 test('/student signs in, shows the admin dashboard and loads the very same gate as every app', () => {
   assert.ok(DASHBOARD.includes('<div class="account-card" id="accountCard" hidden aria-live="polite"></div>'));
   assert.ok(DASHBOARD.includes('<section class="admin-view" id="adminView" hidden aria-labelledby="adminTitle"></section>'));
-  assert.ok(DASHBOARD.includes('<script src="student-account.js?v=1.10.0"></script>'));
+  assert.ok(DASHBOARD.includes('<script src="student-account.js?v=1.11.0"></script>'));
   assert.ok(DASHBOARD.includes('<script defer src="access-gate.js?v=1.1.0" data-app="student"></script>'));
   const at = text => DASHBOARD.indexOf(text);
   assert.ok(at('<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js">') < at('<script src="student-account.js'), 'the SDK first');
@@ -702,4 +702,17 @@ test('🎥 Join Zoom (My Polymath v1.10.0): only a signed-in approved family, st
     assert.equal(h.canJoinZoom(parent, { phase: 'staff' }), true);
     for (const phase of ['pending', 'revoked', 'form', 'loading', undefined]) assert.equal(h.canJoinZoom(parent, { phase }), false, String(phase));
   }
+});
+
+test('🔴 Live (My Polymath v1.11.0): beside Join Zoom for the same people, with a line saying either works', () => {
+  const h = loadAccount().helpers;
+  assert.equal(h.LIVE_LESSON_URL, 'https://polymathlc.com.sg/live/');
+  assert.ok(DASHBOARD.includes('id="liveButton" href="#"'), 'no link in the page until the script shows it');
+  assert.match(DASHBOARD, /id="liveButton"[^>]*\shidden\s/, 'hidden at first');
+  assert.match(DASHBOARD, /id="joinNote" hidden/);
+  assert.ok(DASHBOARD.indexOf('id="zoomButton"') < DASHBOARD.indexOf('id="liveButton"'), 'right beside Join Zoom');
+  assert.match(DASHBOARD, /Both take you into the same lesson\. <b>Live<\/b> also tracks how you do/);
+  // The same rule shows both (renderZoom sets both from one `on`).
+  assert.match(ACCOUNT_SOURCE, /liveButton\.hidden = !on;/);
+  assert.match(ACCOUNT_SOURCE, /if \(joinNote\) joinNote\.hidden = !on;/);
 });
