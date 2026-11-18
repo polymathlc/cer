@@ -4,7 +4,8 @@ name: Private data rules (signed-out lock)
 # to any browser that is not signed in — every account's users/** subtree, the
 # rosters (userProfiles, studentProfiles) and the CER portal's answers, logins,
 # messages, community posts, prize claims, work sessions, flags, boards and
-# quests. A signed-in account (including an anonymous sign-in) keeps exactly the
+# quests, plus (v2) Rewards, Study Buddy, Scan and Math data, with bookings and
+# holiday registrations create-only. A signed-in account (including an anonymous sign-in) keeps exactly the
 # access it has today. tools/private-data-rules.mjs only adds its own block and
 # one predicate on the catch-all; every other app keeps its permissions, and it
 # refuses rules it does not recognise.

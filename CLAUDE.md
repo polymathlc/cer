@@ -2,32 +2,41 @@
 
 Guidance for Claude when working in this repo.
 
-## 🔒 Private data is closed to signed-out browsers (rules tool, 2026-11-18)
+## 🔒 Private data is closed to signed-out browsers (rules tool, v1 2026-11-18, v2 2026-11-19)
 
 The shared Firestore catch-all of `mathgen--app` is OPEN, and on 2026-11-18 a key-less REST call could read
 (and write) every answer in `questionAttempts` with names and emails, `loginEvents`, `messages`, prize claims,
 the rosters and every account's `users/{uid}/…` subtree. `tools/private-data-rules.mjs` adds the
-`polymath-signed-out-lock-v1` block (`isSignedOutPrivatePath()`: `request.auth == null` AND the top collection is
-in `SIGNED_OUT_LOCKED_COLLECTIONS`) and one `&& !isSignedOutPrivatePath()` on the catch-all, the same narrow way as
-the Office / Shop Guard / cs / trial tools. Published by a *Private data rules* run with **apply** ticked;
-**undo** takes it out byte for byte. CI: `.github/workflows/private-data-rules.yml` (the run also probes as a
-stranger and fails an apply that is still answered).
+`polymath-signed-out-lock-v2` block (`isSignedOutPrivatePath()`) and one `&& !isSignedOutPrivatePath()` on the
+catch-all, the same narrow way as the Office / Shop Guard / cs / trial tools. Published by a *Private data rules*
+run with **apply** ticked; **undo** takes it out byte for byte. CI: `.github/workflows/private-data-rules.yml`
+(the run also probes as a stranger and fails an apply that is still answered).
 
+- **Two kinds of lock** (`tools/signed-out-lock-core.mjs`), both only for `request.auth == null`:
+  `SIGNED_OUT_LOCKED_COLLECTIONS` — no read, no write (the v1 list, plus Rewards' `students`, `awards`, `claims`,
+  `rewards`, `bosses`, `purchases`, `shopItems`, `testPapers`, Study Buddy's `tutorWorksheets`, Scan's `scanPapers`,
+  Math's `gameLeaderboard`, the old question tool's `vetting_questions` / `custom_questions`); and
+  `SIGNED_OUT_CREATE_ONLY_COLLECTIONS` — a public form may still CREATE (`schedule_bookings`,
+  `june2026_registrations`, `sep2026_registrations`) but a stranger can never get, list, update or delete one.
+  The admin reads them signed in. The June / September holiday pages' signed-out slot counters (they listed every
+  registration) now read nothing; both events are over.
+- **v1 → v2 upgrade.** v1's block is kept byte for byte as `LOCK_RULE_V1`; `addPrivateDataRules` swaps it for v2
+  in place (the predicate stays), and `removePrivateDataRules` undoes either. `withSignedOutLock` reads the
+  installed version, so the other tools' preserved cases match whichever lock is live.
 - **Only a request with NO sign-in loses anything.** A signed-in account — Google, email, or an ANONYMOUS Firebase
   sign-in (Study Buddy voice, Ans Key guests) — keeps exactly what the catch-all gave it. So the rule for every
   app on this project is: **sign in (anonymously if need be) before touching a locked collection.** A public page
   that reads one signed out will now get `permission-denied`.
-- **The list lives in `tools/signed-out-lock-core.mjs`.** Adding a collection: check every repo that uses it
-  (cer, website, math, anskey, tutor, mindmap, scan, english, chinese, mathgame, wsgen, Add…) signs in first,
-  then add it there and re-run the workflow with apply. Public-page collections (`schedule_config`, `officeLinks`,
-  `shop_*`, `polymathTutorPapers`, `liveClassRooms`, `mail`) must never be on it; a test holds that.
+- **Adding a collection:** check every repo that uses it (cer, website, math, anskey, tutor, rewards, monsters,
+  mindmap, scan, english, chinese, mathgame, wsgen, science-cer-tool…) signs in first, add it to the core, bump the
+  marker (and keep the old block text for the upgrade), re-run the workflow with apply. Public-page collections
+  (`schedule_config`, `officeLinks`, `shop_*`, `polymathTutorPapers`, `liveClassRooms`, `mail`, `pdfAnnotator`,
+  `mindmaps`, `config`) must never be on it; a test holds that.
 - **Every other rules tool passes its preserved cases through `withSignedOutLock(source, cases)`**, which turns a
-  signed-out ALLOW on a locked collection into a DENY once the lock is live. A new rules tool must do the same, or
-  its push-time live test fails after the lock is installed.
-- Still open to strangers and NOT covered (other apps' data, each needs its own app checked first):
-  `schedule_bookings`, `june2026_registrations` / `sep2026_registrations`, `students`, `claims`, `awards`,
-  `rewards`, `mindmaps`, `worksheets`, `tutorWorksheets`, `scanPapers`, `pdfAnnotator`, `submissions`,
-  `gameLeaderboard`, `vetting_questions`, `custom_questions`, `testPapers`, `config`.
+  signed-out ALLOW the lock refuses into a DENY once the lock is live. A new rules tool must do the same, or its
+  push-time live test fails after the lock is installed.
+- Still open to strangers (public share links or unclear public use, each needs its app checked first):
+  `mindmaps`, `submissions`, `worksheets` (wsgen), `pdfAnnotator`, `polymathTutorPapers`, `config`, `mail`.
 - Run `node --test tools/private-data-rules-tests.mjs` (and the other rules tools' tests) after touching any of it.
 
 ## Admin Games Insights and Science Legends refinement (v1.458.0)
