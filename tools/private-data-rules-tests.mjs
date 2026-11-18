@@ -8,11 +8,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  addPrivateDataRules, removePrivateDataRules, LOCK_RULE, SIGNED_OUT_LOCKED_COLLECTIONS,
+  addPrivateDataRules, removePrivateDataRules, LOCK_RULE, LOCK_RULE_V1, SIGNED_OUT_LOCKED_COLLECTIONS,
+  SIGNED_OUT_CREATE_ONLY_COLLECTIONS,
   lockRuleTests, lockPreservedTests, lockedPaths, uniqueCases, publishPrivateDataRules,
   probeStranger, STILL_OPEN, PROBE_COLLECTIONS, SIGNED_IN
 } from './private-data-rules.mjs';
-import { withSignedOutLock, topCollectionOf, hasSignedOutLock } from './signed-out-lock-core.mjs';
+import { withSignedOutLock, topCollectionOf, hasSignedOutLock, signedOutLockVersion, V1_LOCKED } from './signed-out-lock-core.mjs';
 import { addEnquiryRules } from './enquiry-rules.mjs';
 import { addOnlineRules } from './online-rules.mjs';
 import { addCsRules, csPreservedTests } from './cs-rules.mjs';
@@ -43,7 +44,8 @@ test('the patch adds one block and one predicate, whatever is already on the cat
     const updated = addPrivateDataRules(source);
     assert.notEqual(updated, source);
     assert.equal(updated.replace(LOCK_RULE, '').replace(PREDICATE, ''), source);
-    assert.equal((updated.match(/BEGIN polymath-signed-out-lock-v1/g) || []).length, 1);
+    assert.equal((updated.match(/BEGIN polymath-signed-out-lock-v2/g) || []).length, 1);
+    assert.ok(!updated.includes('polymath-signed-out-lock-v1'));
     assert.match(updated, /&& !isSignedOutPrivatePath\(\);\n    \}/);
     assert.ok(updated.includes(LOCK_RULE + '    match /{document=**} {'), 'right above the catch-all');
     assert.ok(hasSignedOutLock(updated));
@@ -91,20 +93,49 @@ test('unrecognised, partial, duplicate and clashing rules fail closed', () => {
 });
 
 test('the block applies only to requests with no sign-in at all, and names exactly the locked collections', () => {
-  assert.match(LOCK_RULE, /return request\.auth == null\n\s+&& request\.path\[3\] in \[/);
-  for (const name of SIGNED_OUT_LOCKED_COLLECTIONS) assert.ok(LOCK_RULE.includes(`'${name}'`), name);
-  const listed = LOCK_RULE.match(/in \[([^\]]+)\]/)[1].split(',').map(s => s.trim().replace(/'/g, ''));
-  assert.deepEqual(listed, [...SIGNED_OUT_LOCKED_COLLECTIONS]);
-  assert.equal(new Set(listed).size, listed.length, 'no duplicates');
-  for (const name of ['users', 'questionAttempts', 'loginEvents', 'messages', 'userProfiles', 'studentProfiles'])
+  assert.match(LOCK_RULE, /return request\.auth == null\n\s+&& \(request\.path\[3\] in \[/);
+  const lists = [...LOCK_RULE.matchAll(/in \[([^\]]+)\]/g)].map(m => m[1].split(',').map(s => s.trim().replace(/'/g, '')));
+  assert.equal(lists.length, 2);
+  assert.deepEqual(lists[0], [...SIGNED_OUT_LOCKED_COLLECTIONS]);
+  assert.deepEqual(lists[1], [...SIGNED_OUT_CREATE_ONLY_COLLECTIONS]);
+  assert.match(LOCK_RULE, /\|\| \(request\.method != 'create'\n\s+&& request\.path\[3\] in \['schedule_bookings'/);
+  const all = [...lists[0], ...lists[1]];
+  assert.equal(new Set(all).size, all.length, 'no duplicates, and no collection is both');
+  for (const name of V1_LOCKED) assert.ok(SIGNED_OUT_LOCKED_COLLECTIONS.includes(name), 'v2 keeps everything v1 locked: ' + name);
+  for (const name of ['users', 'questionAttempts', 'loginEvents', 'messages', 'userProfiles', 'studentProfiles',
+    'students', 'claims', 'awards', 'rewards', 'tutorWorksheets', 'scanPapers'])
     assert.ok(SIGNED_OUT_LOCKED_COLLECTIONS.includes(name), name);
+  for (const name of ['schedule_bookings', 'june2026_registrations', 'sep2026_registrations'])
+    assert.ok(SIGNED_OUT_CREATE_ONLY_COLLECTIONS.includes(name), name);
   // Public pages that read signed out must never be swept up.
-  for (const name of ['schedule_config', 'officeLinks', 'shop_products', 'shop_settings', 'liveClassRooms', 'shopguard', 'polymathTutorPapers', 'mail'])
-    assert.ok(!SIGNED_OUT_LOCKED_COLLECTIONS.includes(name), name);
-  const n = s => (LOCK_RULE.match(new RegExp('\\' + s, 'g')) || []).length;
-  assert.equal(n('{'), n('}'));
-  assert.equal(n('('), n(')'));
-  assert.equal(n('['), n(']'));
+  for (const name of ['schedule_config', 'officeLinks', 'shop_products', 'shop_settings', 'liveClassRooms', 'shopguard',
+    'polymathTutorPapers', 'mail', 'pdfAnnotator', 'mindmaps', 'config'])
+    assert.ok(!all.includes(name), name);
+  for (const block of [LOCK_RULE, LOCK_RULE_V1]) {
+    const n = s => (block.match(new RegExp('\\' + s, 'g')) || []).length;
+    assert.equal(n('{'), n('}'));
+    assert.equal(n('('), n(')'));
+    assert.equal(n('['), n(']'));
+  }
+});
+
+test('v1 rules are upgraded to v2 in place, and either version undoes byte for byte', () => {
+  for (const source of [original, withEnquiry, withOnline, withCs]) {
+    // What v1 published: its block above the catch-all and the one predicate.
+    const v1 = source.replace(/^([ \t]*)match\s+\/\{\w+=\*\*\}\s*\{/m, whole => LOCK_RULE_V1 + whole)
+      .replace(/(allow read, write: if !isPermanentStudentHistoryPath\(\) && !isLiveServerPath\(\)(?: && !\w+\(\))*);/, '$1' + PREDICATE + ';');
+    assert.equal(signedOutLockVersion(v1), 1);
+    assert.match(LOCK_RULE_V1, /in \['users', 'userProfiles'/);
+    assert.ok(!LOCK_RULE_V1.includes("'students'"), 'v1 text is the published v1, not the new list');
+    const v2 = addPrivateDataRules(v1);
+    assert.equal(v2, addPrivateDataRules(source), 'upgrading v1 lands exactly where a fresh install does');
+    assert.equal(signedOutLockVersion(v2), 2);
+    assert.equal(addPrivateDataRules(v2), v2);
+    assert.equal(removePrivateDataRules(v1), source, 'v1 undo');
+    assert.equal(removePrivateDataRules(v2), source, 'v2 undo');
+    assert.throws(() => addPrivateDataRules(v1.replace(LOCK_RULE_V1, () => LOCK_RULE_V1 + LOCK_RULE)), 'both blocks at once');
+    assert.throws(() => addPrivateDataRules(v1.replace("'users', ", '')), 'an edited v1 block');
+  }
 });
 
 test('every locked path is refused signed out and still allowed to every kind of signed-in account', () => {
@@ -112,17 +143,24 @@ test('every locked path is refused signed out and still allowed to every kind of
   const { docs, lists } = lockedPaths();
   assert.ok(docs.length >= SIGNED_OUT_LOCKED_COLLECTIONS.length * 2);
   for (const c of cases) {
-    const signedIn = !!c.request.auth;
-    assert.equal(c.expectation, signedIn ? 'ALLOW' : 'DENY', c.request.path + ' ' + c.request.method);
-    assert.ok(SIGNED_OUT_LOCKED_COLLECTIONS.includes(topCollectionOf(c)), c.request.path);
+    const signedIn = !!c.request.auth, root = topCollectionOf(c);
+    const createOnly = SIGNED_OUT_CREATE_ONLY_COLLECTIONS.includes(root);
+    const want = signedIn || (createOnly && c.request.method === 'create') ? 'ALLOW' : 'DENY';
+    assert.equal(c.expectation, want, c.request.path + ' ' + c.request.method);
+    assert.ok(SIGNED_OUT_LOCKED_COLLECTIONS.includes(root) || createOnly, c.request.path);
   }
-  for (const root of SIGNED_OUT_LOCKED_COLLECTIONS) {
+  for (const root of [...SIGNED_OUT_LOCKED_COLLECTIONS, ...SIGNED_OUT_CREATE_ONLY_COLLECTIONS]) {
     for (const method of ['get', 'list', 'create', 'update', 'delete']) {
       assert.ok(cases.some(c => topCollectionOf(c) === root && c.request.method === method && !c.request.auth), root + ' ' + method + ' signed out');
       for (const uid of SIGNED_IN)
         assert.ok(cases.some(c => topCollectionOf(c) === root && c.request.method === method && c.request.auth?.uid === uid), root + ' ' + method + ' ' + uid);
     }
   }
+  // A parent can still book from the public form; nobody signed out reads a booking back.
+  assert.ok(cases.some(c => topCollectionOf(c) === 'schedule_bookings' && c.request.method === 'create' && !c.request.auth && c.expectation === 'ALLOW'));
+  assert.ok(cases.some(c => topCollectionOf(c) === 'schedule_bookings' && c.request.method === 'list' && !c.request.auth && c.expectation === 'DENY'));
+  // v1's own suite (for rules still carrying v1) names only the v1 collections.
+  for (const c of lockRuleTests(1)) assert.ok(V1_LOCKED.includes(topCollectionOf(c)), c.request.path);
   assert.ok(SIGNED_IN.includes('lock-test-anonymous'), 'an anonymous sign-in is a sign-in (Study Buddy voice, Ans Key guests)');
   assert.ok(lists.includes('users/probe/settings'));
 });
@@ -137,13 +175,15 @@ test('the preserved set keeps every other app as it is, and adapts once the lock
   const locked = addPrivateDataRules(withCs);
   const after = lockPreservedTests(locked);
   assert.equal(after.length, before.length);
+  const touched = c => SIGNED_OUT_LOCKED_COLLECTIONS.includes(topCollectionOf(c))
+    || (SIGNED_OUT_CREATE_ONLY_COLLECTIONS.includes(topCollectionOf(c)) && c.request.method !== 'create');
   for (const c of after) {
-    if (!c.request.auth && SIGNED_OUT_LOCKED_COLLECTIONS.includes(topCollectionOf(c)))
+    if (!c.request.auth && touched(c))
       assert.equal(c.expectation, 'DENY', 'a stranger is refused ' + c.request.path);
   }
   // Nothing outside the locked collections changes expectation.
   before.forEach((c, i) => {
-    if (!SIGNED_OUT_LOCKED_COLLECTIONS.includes(topCollectionOf(c)) || c.request.auth)
+    if (!touched(c) || c.request.auth)
       assert.equal(after[i].expectation, c.expectation, c.request.path);
   });
 });
@@ -253,4 +293,7 @@ test('the stranger probe waits for the rules to spread, and reports honestly', a
   const open = await probeStranger({ fetchImpl: async () => ({ status: 200 }), attempts: 2, waitMs: 1, sleep: async () => {} });
   assert.equal(open.refused, false);
   assert.equal(open.statuses.questionAttempts, 200);
+  const urls = [];
+  await probeStranger({ fetchImpl: async u => { urls.push(u); return { status: 403 }; }, attempts: 1 });
+  for (const u of urls) assert.match(u, /\/documents\/\w+\?pageSize=1$/, 'a plain list read, nothing Firestore could reject as malformed');
 });

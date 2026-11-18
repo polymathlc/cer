@@ -12,7 +12,8 @@
 // replaces the shared rules: it inserts one block and adds one predicate to the
 // existing catch-all, so every app keeps exactly the permissions it has today
 // with ONE exception — a request with no Firebase sign-in at all is refused the
-// collections in SIGNED_OUT_LOCKED_COLLECTIONS. A signed-in account (Google,
+// collections in SIGNED_OUT_LOCKED_COLLECTIONS (and all but create on the
+// SIGNED_OUT_CREATE_ONLY_COLLECTIONS). A signed-in account (Google,
 // email, or an anonymous Firebase sign-in) keeps every permission it had, so
 // the CER portal, Study Buddy, Ans Key, Math, Mindmap, Scan and the rest — all
 // of which sign in before they read these — are unaffected. Cloud Functions
@@ -34,15 +35,18 @@ import { enquiryRuleTests } from './enquiry-rules.mjs';
 import { onlineRuleTests, describeRules, setupCredentials } from './online-rules.mjs';
 import { accessRuleTests } from './student-access-rules.mjs';
 import {
-  SIGNED_OUT_LOCK_MARKER, SIGNED_OUT_LOCK_FUNCTION, SIGNED_OUT_LOCKED_COLLECTIONS,
-  withSignedOutLock, hasSignedOutLock
+  SIGNED_OUT_LOCK_MARKER, SIGNED_OUT_LOCK_MARKER_V1, SIGNED_OUT_LOCK_FUNCTION,
+  SIGNED_OUT_LOCKED_COLLECTIONS, SIGNED_OUT_CREATE_ONLY_COLLECTIONS, V1_LOCKED,
+  withSignedOutLock, hasSignedOutLock, signedOutLockVersion
 } from './signed-out-lock-core.mjs';
 
 export const PROJECT = 'mathgen--app';
-export { SIGNED_OUT_LOCKED_COLLECTIONS };
+export { SIGNED_OUT_LOCKED_COLLECTIONS, SIGNED_OUT_CREATE_ONLY_COLLECTIONS };
 const list = a => JSON.stringify(a).replace(/"/g, "'").replace(/,/g, ', ');
 
-export const LOCK_RULE = `    // BEGIN ${SIGNED_OUT_LOCK_MARKER}
+// v1, exactly as it was published on 2026-11-18. Kept byte for byte so the
+// tool can recognise it and upgrade it in place (or undo it).
+export const LOCK_RULE_V1 = `    // BEGIN ${SIGNED_OUT_LOCK_MARKER_V1}
     // Private data — every account's own subtree, the rosters, and the CER
     // portal's answers, logins, messages, claims and boards. A browser with
     // no Firebase sign-in at all may not read or write them; a signed-in
@@ -50,7 +54,26 @@ export const LOCK_RULE = `    // BEGIN ${SIGNED_OUT_LOCK_MARKER}
     // catch-all below already gave it. Installed by tools/private-data-rules.mjs.
     function ${SIGNED_OUT_LOCK_FUNCTION}() {
       return request.auth == null
-        && request.path[3] in ${list(SIGNED_OUT_LOCKED_COLLECTIONS)};
+        && request.path[3] in ${list(V1_LOCKED)};
+    }
+    // END ${SIGNED_OUT_LOCK_MARKER_V1}
+
+`;
+
+export const LOCK_RULE = `    // BEGIN ${SIGNED_OUT_LOCK_MARKER}
+    // Private data — every account's own subtree, the rosters, the CER
+    // portal's answers, logins, messages, claims and boards, Rewards, Study
+    // Buddy and Scan work. A browser with no Firebase sign-in at all may not
+    // read or write them. Public forms (bookings, holiday registrations) may
+    // still CREATE a document signed out, but never read, list, change or
+    // delete one. A signed-in account (including an anonymous sign-in) keeps
+    // exactly what the catch-all below already gave it.
+    // Installed by tools/private-data-rules.mjs.
+    function ${SIGNED_OUT_LOCK_FUNCTION}() {
+      return request.auth == null
+        && (request.path[3] in ${list(SIGNED_OUT_LOCKED_COLLECTIONS)}
+          || (request.method != 'create'
+            && request.path[3] in ${list(SIGNED_OUT_CREATE_ONLY_COLLECTIONS)}));
     }
     // END ${SIGNED_OUT_LOCK_MARKER}
 
@@ -64,6 +87,8 @@ const CATCH_ALL_MATCH = /^([ \t]*)match\s+\/\{\w+=\*\*\}\s*\{/m;
 const PREDICATE = ` && !${SIGNED_OUT_LOCK_FUNCTION}()`;
 const FN_RE = new RegExp(`function ${SIGNED_OUT_LOCK_FUNCTION}`, 'g');
 const CALL_RE = new RegExp(`${SIGNED_OUT_LOCK_FUNCTION}\\(\\)`, 'g');
+const anyMarker = source => source.includes(SIGNED_OUT_LOCK_MARKER) || source.includes(SIGNED_OUT_LOCK_MARKER_V1)
+  || source.includes(SIGNED_OUT_LOCK_FUNCTION);
 
 function count(source, pattern) { return (source.match(pattern) || []).length; }
 
@@ -78,20 +103,33 @@ function recognise(source) {
   return lines[0];
 }
 
-function installedIn(source, line) {
+/** Which lock block is installed, exactly: LOCK_RULE, LOCK_RULE_V1 or null. */
+function installedBlock(source, line) {
   const installed = line.includes(PREDICATE + ';') || line.includes(PREDICATE + ' &&');
-  if (!installed) return false;
-  if (!source.includes(LOCK_RULE) || count(source, new RegExp('BEGIN ' + SIGNED_OUT_LOCK_MARKER, 'g')) !== 1
+  if (!installed) return null;
+  const version = signedOutLockVersion(source);
+  const block = version === 2 ? LOCK_RULE : version === 1 ? LOCK_RULE_V1 : null;
+  const marker = version === 2 ? SIGNED_OUT_LOCK_MARKER : SIGNED_OUT_LOCK_MARKER_V1;
+  if (!block || !source.includes(block) || count(source, new RegExp('BEGIN ' + marker, 'g')) !== 1
+      || (version === 2 && source.includes(SIGNED_OUT_LOCK_MARKER_V1))
       || count(source, FN_RE) !== 1 || count(source, CALL_RE) !== 2)
     throw new Error('Ambiguous existing signed-out lock; review changed rules first.');
-  return true;
+  return block;
 }
 
-/** Add the lock. Idempotent; refuses anything it does not recognise. */
+/** Add the lock (or upgrade v1 to v2 in place). Idempotent; refuses anything it does not recognise. */
 export function addPrivateDataRules(source) {
   const line = recognise(source);
-  if (installedIn(source, line)) return source;
-  if (source.includes(SIGNED_OUT_LOCK_MARKER) || source.includes(SIGNED_OUT_LOCK_FUNCTION))
+  const block = installedBlock(source, line);
+  if (block === LOCK_RULE) return source;
+  if (block === LOCK_RULE_V1) {
+    const updated = source.replace(LOCK_RULE_V1, () => LOCK_RULE);
+    if (updated.replace(LOCK_RULE, () => LOCK_RULE_V1) !== source || signedOutLockVersion(updated) !== 2)
+      throw new Error('Unrelated rules would change.');
+    recognise(updated);
+    return updated;
+  }
+  if (anyMarker(source))
     throw new Error('A partial signed-out lock is already there; review changed rules first.');
   const updated = source.replace(CATCH_ALL_MATCH, whole => LOCK_RULE + whole)
     .replace(CATCH_ALL, l => l.slice(0, -1) + PREDICATE + ';');
@@ -100,18 +138,18 @@ export function addPrivateDataRules(source) {
   return updated;
 }
 
-/** Take the lock out again, exactly. Idempotent. */
+/** Take the lock (either version) out again, exactly. Idempotent. */
 export function removePrivateDataRules(source) {
   const line = recognise(source);
-  if (!installedIn(source, line)) {
-    if (source.includes(SIGNED_OUT_LOCK_MARKER) || source.includes(SIGNED_OUT_LOCK_FUNCTION))
+  const block = installedBlock(source, line);
+  if (!block) {
+    if (anyMarker(source))
       throw new Error('A partial signed-out lock is there; review changed rules first.');
     return source;
   }
-  const updated = source.replace(LOCK_RULE, '').replace(CATCH_ALL, l => l.replace(PREDICATE, ''));
+  const updated = source.replace(block, '').replace(CATCH_ALL, l => l.replace(PREDICATE, ''));
   // Exactly the block and the one predicate came out, nothing else.
-  if (updated.includes(SIGNED_OUT_LOCK_FUNCTION) || updated.includes(SIGNED_OUT_LOCK_MARKER)
-      || source.length - updated.length !== LOCK_RULE.length + PREDICATE.length)
+  if (anyMarker(updated) || source.length - updated.length !== block.length + PREDICATE.length)
     throw new Error('Unrelated rules would change.');
   recognise(updated);
   return updated;
@@ -140,32 +178,40 @@ export function lockCase(path, method, expectation, uid = null, { data = { test:
 // the private data sits.
 const USER_PATHS = ['users/probe', 'users/probe/settings/profile', 'users/probe/teachingNotes/note',
   'users/probe/questions/q1', 'users/probe/mistakes/m1', 'users/probe/worksheets/w1', 'users/probe/flashcards/f1'];
-export function lockedPaths() {
+export function lockedPaths(collections = SIGNED_OUT_LOCKED_COLLECTIONS) {
   const docs = [], lists = [];
-  for (const root of SIGNED_OUT_LOCKED_COLLECTIONS) {
+  for (const root of collections) {
     if (root === 'users') docs.push(...USER_PATHS);
     else docs.push(root + '/probe', root + '/probe/nested/child');
     lists.push(root, root + '/probe/nested');
   }
-  lists.push('users/probe/settings', 'users/probe/questions');
+  if (collections.includes('users')) lists.push('users/probe/settings', 'users/probe/questions');
   return { docs, lists };
 }
 
-/** Signed out: refused everything. Signed in (any provider): still allowed. */
-export function lockRuleTests() {
+/**
+ * Signed out: refused everything on a locked collection, and everything but
+ * create on a create-only one. Signed in (any provider): still allowed.
+ * version 1 tests the v1 list only (to check rules that still carry v1).
+ */
+export function lockRuleTests(version = 2) {
   const cases = [];
-  const { docs, lists } = lockedPaths();
   const data = { name: 'Probe', email: 'probe@example.com', uid: 'probe' };
-  for (const path of docs) {
-    for (const method of ['get', 'create', 'update', 'delete']) {
-      cases.push(lockCase(path, method, 'DENY', null, { data }));
-      for (const uid of SIGNED_IN) cases.push(lockCase(path, method, 'ALLOW', uid, { data }));
+  const add = (collections, signedOut) => {
+    const { docs, lists } = lockedPaths(collections);
+    for (const path of docs) {
+      for (const method of ['get', 'create', 'update', 'delete']) {
+        cases.push(lockCase(path, method, signedOut(method), null, { data }));
+        for (const uid of SIGNED_IN) cases.push(lockCase(path, method, 'ALLOW', uid, { data }));
+      }
     }
-  }
-  for (const path of lists) {
-    cases.push(lockCase(path, 'list', 'DENY'));
-    for (const uid of SIGNED_IN) cases.push(lockCase(path, 'list', 'ALLOW', uid));
-  }
+    for (const path of lists) {
+      cases.push(lockCase(path, 'list', 'DENY'));
+      for (const uid of SIGNED_IN) cases.push(lockCase(path, 'list', 'ALLOW', uid));
+    }
+  };
+  add(version === 1 ? V1_LOCKED : SIGNED_OUT_LOCKED_COLLECTIONS, () => 'DENY');
+  if (version >= 2) add(SIGNED_OUT_CREATE_ONLY_COLLECTIONS, method => method === 'create' ? 'ALLOW' : 'DENY');
   return cases;
 }
 
@@ -174,7 +220,9 @@ export function lockRuleTests() {
 // and look-alike names next to the locked ones prove the predicate is exact
 // (a prefix or a near-miss is never caught by it).
 export const STILL_OPEN = ['schedule_config/main', 'usersArchive/probe', 'user/probe', 'questionAttemptsX/probe',
-  'messagesArchive/probe', 'communityPosts/probe', 'userProfilesOld/probe', 'scienceQuestions/probe', 'pdfAnnotator/probe'];
+  'messagesArchive/probe', 'communityPosts/probe', 'userProfilesOld/probe', 'scienceQuestions/probe', 'pdfAnnotator/probe',
+  'studentsArchive/probe', 'schedule_bookingsX/probe', 'claimsOld/probe', 'scanPapersX/probe',
+  'rewardsConfig/probe'];
 
 /** Everything else keeps its current permissions, including every other installed protection. */
 export function lockPreservedTests(source) {
@@ -233,12 +281,15 @@ export async function publishPrivateDataRules({ request, mode = 'test' }) {
   const changed = original !== content;
   const sourceSha256 = createHash('sha256').update(content).digest('hex');
   const installed = hasSignedOutLock(original);
-  if (mode === 'read') return { mode, installed, changeNeeded: changed, ruleset: previous.rulesetName, sourceSha256 };
+  const installedVersion = signedOutLockVersion(original);
+  if (mode === 'read') return { mode, installed, installedVersion, changeNeeded: changed, ruleset: previous.rulesetName, sourceSha256 };
 
   const source = { files: [{ ...files[0], content }] };
   // Today's expectations must already hold on today's rules, so a surprise in
   // the live rules stops here instead of being "fixed" by us.
-  const before = uniqueCases(installed ? [...lockPreservedTests(original), ...lockRuleTests()] : lockPreservedTests(original));
+  const before = uniqueCases(installed
+    ? [...lockPreservedTests(original), ...lockRuleTests(installedVersion)]
+    : lockPreservedTests(original));
   if (changed) await validate(request, production.source, before);
   const after = uniqueCases(mode === 'undo'
     ? lockPreservedTests(content)
@@ -262,7 +313,7 @@ export async function publishPrivateDataRules({ request, mode = 'test' }) {
 // plain, key-less REST reads of a few locked collections with no sign-in at
 // all, exactly as anybody could. Read only; nothing is written. Rules take up
 // to a minute to reach every server, so it retries for a while.
-export const PROBE_COLLECTIONS = ['questionAttempts', 'loginEvents', 'messages', 'users', 'userProfiles'];
+export const PROBE_COLLECTIONS = ['questionAttempts', 'loginEvents', 'messages', 'users', 'userProfiles', 'students', 'schedule_bookings'];
 
 export async function probeStranger({ fetchImpl = fetch, attempts = 12, waitMs = 10000, sleep = ms => new Promise(r => setTimeout(r, ms)) } = {}) {
   const base = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/`;
@@ -270,7 +321,9 @@ export async function probeStranger({ fetchImpl = fetch, attempts = 12, waitMs =
   for (let i = 0; i < attempts; i++) {
     last = {};
     for (const name of PROBE_COLLECTIONS) {
-      const response = await fetchImpl(base + name + '?pageSize=1&mask.fieldPaths=__none__');
+      // No field mask: Firestore answers 400 to a mask it cannot parse, which
+      // would hide the 403 this is looking for.
+      const response = await fetchImpl(base + name + '?pageSize=1');
       last[name] = response.status;
     }
     if (Object.values(last).every(status => status === 403)) return { refused: true, statuses: last, attempts: i + 1 };
