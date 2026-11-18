@@ -859,6 +859,244 @@
     return naturalCompare(courseTitle(a), courseTitle(b));
   }
 
+  /* 🗂 v1.21.0: the admin's "Where each class is" (Overview) and Classes tab,
+     organised. Zhi Kai, 18 Nov 2026: "this is way too messy. For admin
+     accounts only, sort them out according to levels and/or subjects and
+     give a timetable view as well." Three views, kept on this device:
+       'level'     — a heading per level (P3 … P6), classes by subject, then
+                     day and time;
+       'subject'   — a heading per subject (Maths, Science), classes by
+                     level, then day and time;
+       'timetable' — days of the week across, lesson times down, each class
+                     in its cell.
+     Two filters (a level, a subject) narrow every view. Students never see
+     any of this: their own pages are unchanged.
+     A class's day and time come from its saved day and session first. A
+     class saved without them (an older class whose name was typed by hand,
+     "P6 Science Saturday 9 a.m.") is placed by reading its name. */
+  var ADMIN_CLASS_VIEWS = [
+    ['level', 'By level', 'A heading for each level'],
+    ['subject', 'By subject', 'A heading for each subject'],
+    ['timetable', 'Timetable', 'Days across, lesson times down']
+  ];
+  function cleanAdminClassView(value) {
+    for (var i = 0; i < ADMIN_CLASS_VIEWS.length; i++) if (ADMIN_CLASS_VIEWS[i][0] === value) return value;
+    return 'level';
+  }
+  var DAY_PATTERNS = [/\bmon(day)?\b/i, /\btue(s|sday)?\b/i, /\bwed(nesday)?\b/i, /\bthu(r|rs|rsday)?\b/i, /\bfri(day)?\b/i, /\bsat(urday)?\b/i, /\bsun(day)?\b/i];
+  // "9 a.m.", "9am", "3:00pm", "11.30 AM", "7 pm" → minutes after midnight, or -1.
+  function parseClockText(text) {
+    var m = /(\d{1,2})(?:\s*[:.]\s*(\d{2}))?\s*([ap])\.?\s*m\b\.?/i.exec(String(text || ''));
+    if (!m) return -1;
+    var hour = parseInt(m[1], 10), minute = m[2] ? parseInt(m[2], 10) : 0;
+    if (hour < 1 || hour > 12 || minute > 59) return -1;
+    var pm = m[3].toLowerCase() === 'p';
+    if (hour === 12) hour = 0;
+    return (hour + (pm ? 12 : 0)) * 60 + minute;
+  }
+  // 540 → "9:00am", 1020 → "5:00pm", the way the class names write times.
+  function clockLabel(minutes) {
+    if (!(minutes >= 0)) return '';
+    var hour = Math.floor(minutes / 60) % 24, minute = minutes % 60;
+    var h12 = hour % 12 === 0 ? 12 : hour % 12;
+    return h12 + ':' + (minute < 10 ? '0' : '') + minute + (hour < 12 ? 'am' : 'pm');
+  }
+  function dayFromText(text) {
+    var s = String(text || '');
+    for (var i = 0; i < DAY_PATTERNS.length; i++) if (DAY_PATTERNS[i].test(s)) return i;
+    return -1;
+  }
+  /* When a class meets: { dayIndex (0 Monday … 6 Sunday, -1 none), day,
+     dayKey (mon … sun, none), minutes (-1 none), time ('5:00pm'), fromName
+     (true when read from the name rather than the saved day/session),
+     known (has a day and a time) }. */
+  function classWhen(course) {
+    course = course || {};
+    var title = String(course.title || '');
+    var fromName = false;
+    var dayIndex = DAYS.indexOf(course.day);
+    if (dayIndex < 0) { dayIndex = dayFromText(title); if (dayIndex >= 0) fromName = true; }
+    var minutes = -1;
+    if (dayIndex >= 0 && DAYS.indexOf(course.day) === dayIndex) minutes = parseClockText(slotLabel(course.day, course.slot));
+    if (minutes < 0) { minutes = parseClockText(title); if (minutes >= 0) fromName = true; }
+    return {
+      dayIndex: dayIndex,
+      day: dayIndex >= 0 ? DAYS[dayIndex] : '',
+      dayKey: dayIndex >= 0 ? DAY_KEYS[dayIndex] : 'none',
+      minutes: minutes,
+      time: clockLabel(minutes),
+      fromName: fromName,
+      known: dayIndex >= 0 && minutes >= 0
+    };
+  }
+  // Earlier in the week first, then earlier in the day; unplaced ones last.
+  function compareWhen(a, b) {
+    var wa = classWhen(a), wb = classWhen(b);
+    var da = wa.dayIndex < 0 ? 99 : wa.dayIndex, db = wb.dayIndex < 0 ? 99 : wb.dayIndex;
+    if (da !== db) return da - db;
+    var ma = wa.minutes < 0 ? 9999 : wa.minutes, mb = wb.minutes < 0 ? 9999 : wb.minutes;
+    if (ma !== mb) return ma - mb;
+    return naturalCompare(courseTitle(a), courseTitle(b));
+  }
+  var SUBJECT_ORDER = ['math', 'science', 'both', 'general'];
+  function subjectRank(course) { var i = SUBJECT_ORDER.indexOf(subjectArt(course && course.subject).key); return i < 0 ? 9 : i; }
+  function levelRank(course) { var i = LEVELS.indexOf(course && course.level); return i < 0 ? 99 : i; }
+  // The level a class is filed under: its saved level, else one in its name.
+  function classLevel(course) {
+    course = course || {};
+    if (LEVELS.indexOf(course.level) >= 0) return course.level;
+    var m = /\bP\s?([1-6])\b/i.exec(String(course.title || ''));
+    return m ? 'P' + m[1] : '';
+  }
+  // A filter: { level: '' | 'P5', subject: '' | 'math' | 'science' }.
+  function cleanAdminClassFilter(filter) {
+    filter = filter || {};
+    return {
+      level: LEVELS.indexOf(filter.level) >= 0 ? filter.level : '',
+      subject: filter.subject === 'math' || filter.subject === 'science' ? filter.subject : ''
+    };
+  }
+  function filterAdminClasses(courses, filter) {
+    var f = cleanAdminClassFilter(filter);
+    return (courses || []).filter(function (c) {
+      if (f.level && classLevel(c) !== f.level) return false;
+      if (f.subject && subjectFilterKeys(c).indexOf(f.subject) < 0) return false;
+      return true;
+    });
+  }
+  // The levels and subjects that have classes, for the filter chips.
+  function adminClassFacets(courses) {
+    var levels = {}, subjects = { math: 0, science: 0 };
+    (courses || []).forEach(function (c) {
+      var lv = classLevel(c);
+      if (lv) levels[lv] = (levels[lv] || 0) + 1;
+      subjectFilterKeys(c).forEach(function (k) { subjects[k]++; });
+    });
+    return {
+      levels: LEVELS.filter(function (l) { return levels[l]; }).map(function (l) { return { value: l, count: levels[l] }; }),
+      subjects: SUBJECTS.filter(function (s) { return subjects[s.value]; }).map(function (s) { return { value: s.value, label: s.short, count: subjects[s.value] }; })
+    };
+  }
+  /* The classes in headed groups: [{ key, label, sub, courses }].
+     by 'level': P3 … P6 (then "No level"), inside each Maths before
+     Science, then day and time. by 'subject': Maths, Science, Maths &
+     Science, Other, inside each P3 … P6, then day and time. Archived
+     classes go to the end of their group. */
+  function groupAdminClasses(courses, by) {
+    var list = (courses || []).slice();
+    var groups = {}, order = [];
+    function add(key, label, course) {
+      if (!groups[key]) { groups[key] = { key: key, label: label, courses: [] }; order.push(key); }
+      groups[key].courses.push(course);
+    }
+    list.forEach(function (c) {
+      if (by === 'subject') {
+        var art = subjectArt(c.subject);
+        add(art.key, art.key === 'general' ? (c.subject ? art.name : 'No subject') : art.name, c);
+      } else {
+        var lv = classLevel(c);
+        add(lv || 'none', lv ? 'Primary ' + lv.slice(1) : 'No level', c);
+      }
+    });
+    function within(a, b) {
+      var aa = a.archived ? 1 : 0, ab = b.archived ? 1 : 0;
+      if (aa !== ab) return aa - ab;
+      if (by === 'subject') {
+        var l = levelRank(a) - levelRank(b);
+        if (l) return l;
+      } else {
+        var s = subjectRank(a) - subjectRank(b);
+        if (s) return s;
+      }
+      return compareWhen(a, b);
+    }
+    var keyRank = by === 'subject'
+      ? function (k) { var i = SUBJECT_ORDER.indexOf(k); return i < 0 ? 9 : i; }
+      : function (k) { var i = LEVELS.indexOf(k); return i < 0 ? 99 : i; };
+    return order.sort(function (a, b) { return keyRank(a) - keyRank(b); }).map(function (k) {
+      var g = groups[k];
+      g.courses.sort(within);
+      g.sub = groupSummary(g.courses, by);
+      return g;
+    });
+  }
+  // "3 classes · 1 Maths · 2 Science" under a level, "4 classes · P4, P5, P6" under a subject.
+  function groupSummary(courses, by) {
+    var n = courses.length;
+    var bits = [n + ' class' + (n === 1 ? '' : 'es')];
+    if (by === 'subject') {
+      var lv = [];
+      courses.forEach(function (c) { var l = classLevel(c); if (l && lv.indexOf(l) < 0) lv.push(l); });
+      lv.sort(function (a, b) { return LEVELS.indexOf(a) - LEVELS.indexOf(b); });
+      if (lv.length) bits.push(lv.join(', '));
+    } else {
+      var counts = {};
+      courses.forEach(function (c) { var k = subjectArt(c.subject).key; counts[k] = (counts[k] || 0) + 1; });
+      SUBJECT_ORDER.forEach(function (k) {
+        if (counts[k]) bits.push(counts[k] + ' ' + (k === 'math' ? 'Maths' : k === 'science' ? 'Science' : k === 'both' ? 'Maths & Science' : 'other'));
+      });
+    }
+    var archived = courses.filter(function (c) { return c.archived; }).length;
+    if (archived) bits.push(archived + ' archived');
+    return bits.join(' · ');
+  }
+  /* The week as a grid: { days: [{ index, day, short, key, count }],
+     times: [{ minutes, label }], cell(dayIndex, minutes) → classes,
+     unplaced: classes with no day or no time, count }.
+     Days run Monday → Sunday, keeping only days that have a class (all
+     five weekdays when every class is at the weekend would be empty
+     columns). Times are every lesson time used, earliest first. A slot
+     that a day never has (3pm on a Saturday) is told apart from a free one
+     by `usual(dayIndex, minutes)`: the centre's own sessions for that day. */
+  function adminTimetable(courses) {
+    var cells = {}, dayCount = {}, timeSeen = {}, unplaced = [];
+    (courses || []).forEach(function (c) {
+      var w = classWhen(c);
+      if (!w.known) { unplaced.push(c); return; }
+      var k = w.dayIndex + '|' + w.minutes;
+      (cells[k] = cells[k] || []).push(c);
+      dayCount[w.dayIndex] = (dayCount[w.dayIndex] || 0) + 1;
+      timeSeen[w.minutes] = true;
+    });
+    Object.keys(cells).forEach(function (k) {
+      cells[k].sort(function (a, b) {
+        return (a.archived ? 1 : 0) - (b.archived ? 1 : 0) || levelRank(a) - levelRank(b) || subjectRank(a) - subjectRank(b) || naturalCompare(courseTitle(a), courseTitle(b));
+      });
+    });
+    var days = [];
+    for (var i = 0; i < DAYS.length; i++) {
+      if (dayCount[i]) days.push({ index: i, day: DAYS[i], short: DAYS[i].slice(0, 3), key: DAY_KEYS[i], count: dayCount[i] });
+    }
+    var times = Object.keys(timeSeen).map(Number).sort(function (a, b) { return a - b; })
+      .map(function (m) { return { minutes: m, label: clockLabel(m) }; });
+    unplaced.sort(function (a, b) { return levelRank(a) - levelRank(b) || subjectRank(a) - subjectRank(b) || naturalCompare(courseTitle(a), courseTitle(b)); });
+    return {
+      days: days,
+      times: times,
+      cell: function (dayIndex, minutes) { return cells[dayIndex + '|' + minutes] || []; },
+      usual: function (dayIndex, minutes) {
+        if (dayIndex < 0 || dayIndex >= DAYS.length) return false;
+        return slotsForDay(DAYS[dayIndex]).some(function (s) { return parseClockText(s) === minutes; });
+      },
+      unplaced: unplaced,
+      count: (courses || []).length - unplaced.length
+    };
+  }
+  /* A class's name without its day and time, for a timetable cell, where
+     the column and row already say when: "P6 Science · Monday 7:00pm" →
+     "P6 Science"; "P6 Science Saturday 9 a.m." → "P6 Science". */
+  function classShortName(course) {
+    course = course || {};
+    var auto = !course.title || course.title === autoCourseTitle(course.level, course.subject, course.day, course.slot);
+    if (auto) return (String(course.level || '').trim() + ' ' + subjectLabel(course.subject, true)).trim() || 'Class';
+    var s = String(course.title);
+    s = s.replace(/(\d{1,2})(?:\s*[:.]\s*(\d{2}))?\s*([ap])\.?\s*m\b\.?/ig, ' ');
+    DAY_PATTERNS.forEach(function (re) { s = s.replace(new RegExp(re.source, 'ig'), ' '); });
+    s = s.replace(/[·,\-–—|@]+\s*$/g, ' ').replace(/\s+[·,\-–—|@]+\s+/g, ' ').replace(/\s+/g, ' ').trim();
+    s = s.replace(/[·,\-–—|@\s]+$/, '').trim();
+    return s || courseTitle(course);
+  }
+
   /* ---- List editing ---- */
   function moveItem(list, from, to) {
     var copy = list.slice();
@@ -1675,6 +1913,10 @@
     worksheetState: worksheetState, releasedWorksheets: releasedWorksheets, nextWorksheets: nextWorksheets, progressUpdate: progressUpdate, percent: percent,
     ansKeyAt: ansKeyAt, ansKeyState: ansKeyState, finishUpdate: finishUpdate,
     memberSees: memberSees, coursesForMember: coursesForMember, compareCourses: compareCourses,
+    ADMIN_CLASS_VIEWS: ADMIN_CLASS_VIEWS, cleanAdminClassView: cleanAdminClassView, parseClockText: parseClockText, clockLabel: clockLabel,
+    classWhen: classWhen, compareWhen: compareWhen, classLevel: classLevel, cleanAdminClassFilter: cleanAdminClassFilter,
+    filterAdminClasses: filterAdminClasses, adminClassFacets: adminClassFacets, groupAdminClasses: groupAdminClasses,
+    adminTimetable: adminTimetable, classShortName: classShortName,
     accessPairs: accessPairs, studentAccessStatus: studentAccessStatus, accessFromStudentAccess: accessFromStudentAccess,
     memberFromStudentAccess: memberFromStudentAccess, studentAccessLevels: studentAccessLevels,
     moveItem: moveItem, remapProgress: remapProgress,

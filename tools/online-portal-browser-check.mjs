@@ -932,5 +932,39 @@ let studentDb = null;
   void bandDays;
 }
 
+/* ---- 🗂 v1.21.0: the admin's classes by level, by subject and as a timetable ---- */
+{
+  const ids = (p, n) => Array.from({ length: n }, (_, i) => p + i);
+  const docs = {
+    'onlineCourses/p4thu': { title: 'P4 Science · Thursday 3:00pm', level: 'P4', subject: 'science', day: 'Thursday', slot: 0, worksheetIds: ids('a', 2), currentIndex: -1, releasedThrough: -1 },
+    'onlineCourses/p6mon': { title: 'P6 Mathematics · Monday 5:00pm', level: 'P6', subject: 'math', day: 'Monday', slot: 1, worksheetIds: ids('b', 1), currentIndex: 0, releasedThrough: 0 },
+    'onlineCourses/p6tue': { title: 'P6 Science · Tuesday 5:00pm', level: 'P6', subject: 'science', day: 'Tuesday', slot: 1, worksheetIds: ids('c', 7), currentIndex: 3, releasedThrough: 6 },
+    'onlineCourses/p6sat': { title: 'P6 Science Saturday 9 a.m.', level: 'P6', subject: 'science', worksheetIds: ids('d', 7), currentIndex: 2, releasedThrough: 5 }
+  };
+  const { page, context, errors } = await open({ user: admin, docs });
+  await page.waitForSelector('.class-tools');
+  const levels = await page.$$eval('.class-group h3', (els) => els.map((e) => e.textContent));
+  check('classes: by level, a heading per level', levels.join('|') === 'Primary 4|Primary 6');
+  const p6 = await page.$$eval('.group-P6 [data-action="open-course"]', (els) => els.map((e) => e.dataset.id));
+  check('classes: inside a level, maths first, then by day and time', p6.join() === 'p6mon,p6tue,p6sat');
+  await page.click('[data-action="class-view"][data-view="subject"]');
+  const subjects = await page.$$eval('.class-group h3', (els) => els.map((e) => e.textContent));
+  check('classes: by subject, a heading per subject', subjects.join('|') === 'Mathematics|Science');
+  await page.click('[data-action="class-view"][data-view="timetable"]');
+  const days = await page.$$eval('.tt-scroll .tt-day-name', (els) => els.map((e) => e.textContent));
+  check('classes: the timetable has the days with classes', days.join() === 'Monday,Tuesday,Thursday,Saturday');
+  check('classes: a hand-typed "Saturday 9 a.m." class sits on Saturday', (await page.$$('.tt-scroll .tt-cell.day-sat .tt-class[data-id="p6sat"]')).length === 1);
+  await page.click('[data-action="class-filter"][data-kind="subject"][data-value="math"]');
+  check('classes: the subject filter narrows the timetable', (await page.$$('.tt-scroll .tt-class')).length === 1);
+  check('classes: the view and filter are kept on this device', await page.evaluate(() => localStorage.getItem('polymathOnline.adminClassView') === 'timetable' && JSON.parse(localStorage.getItem('polymathOnline.adminClassFilter')).subject === 'math'));
+  await page.click('[data-action="class-filter-clear"]');
+  check('classes: Show all clears the filter', (await page.$$('.tt-scroll .tt-class')).length === 4);
+  await page.click('.tt-scroll .tt-class[data-id="p6tue"]');
+  await page.waitForSelector('.course-head');
+  check('classes: a timetable class opens its class page', /Tuesday 5:00pm/.test(await page.textContent('.course-head h1')));
+  check('classes: no script errors', errors.length === 0);
+  await context.close();
+}
+
 await browser.close();
 console.log(`Passed ${checks} Polymath Online browser checks.`);

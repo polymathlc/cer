@@ -1054,6 +1054,130 @@
     *, *::before, *::after { animation-duration: 0.01ms !important; animation-delay: 0ms !important; transition-duration: 0.01ms !important; }
   }
 
+  /* ===== 🗂 Classes, organised (v1.21.0, admin only) =====
+     The bar above the admin's class cards (By level / By subject /
+     Timetable + level and subject filters), the headed groups, and the
+     weekly timetable. Each card and timetable column wears its day's colour
+     (the same colours as the students' day bands). */
+  .tile-day, .tt-day, .tt-cell, .chip-day { --day: var(--day-none); }
+  :is(.tile-day, .tt-day, .tt-cell, .chip-day).day-mon { --day: var(--day-mon); }
+  :is(.tile-day, .tt-day, .tt-cell, .chip-day).day-tue { --day: var(--day-tue); }
+  :is(.tile-day, .tt-day, .tt-cell, .chip-day).day-wed { --day: var(--day-wed); }
+  :is(.tile-day, .tt-day, .tt-cell, .chip-day).day-thu { --day: var(--day-thu); }
+  :is(.tile-day, .tt-day, .tt-cell, .chip-day).day-fri { --day: var(--day-fri); }
+  :is(.tile-day, .tt-day, .tt-cell, .chip-day).day-sat { --day: var(--day-sat); }
+  :is(.tile-day, .tt-day, .tt-cell, .chip-day).day-sun { --day: var(--day-sun); }
+
+  .class-tools { display: flex; flex-direction: column; gap: 12px; margin-bottom: var(--space-lg); }
+  .class-view-tabs { margin-top: 0; align-self: flex-start; }
+  .class-view-tabs .tab { display: inline-flex; align-items: center; gap: 6px; }
+  .class-filters { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+  .filter-group { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .filter-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 12px; border-radius: var(--radius-full);
+    border: 1px solid var(--border-medium); background: var(--bg-primary);
+    font: inherit; font-size: var(--font-size-sm); font-weight: 600; color: var(--text-secondary);
+    cursor: pointer; transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+  }
+  .filter-chip:hover { border-color: var(--text-tertiary); color: var(--text-primary); }
+  .filter-chip:focus-visible { outline: 3px solid var(--accent-light); outline-offset: 2px; }
+  .filter-chip .n { font-size: 0.72rem; font-weight: 700; opacity: 0.7; }
+  .filter-chip.is-on { color: #fff; background: var(--text-primary); border-color: var(--text-primary); }
+  .filter-chip.filter-level.is-on { background: var(--accent-dark); border-color: var(--accent-dark); }
+  .filter-chip.filter-math.is-on { background: var(--math-ink); border-color: var(--math-ink); }
+  .filter-chip.filter-science.is-on { background: var(--science-ink); border-color: var(--science-ink); }
+  .filter-chip.filter-all { color: var(--text-tertiary); }
+  .filter-group:not(:has(.is-on)) .filter-all { color: var(--text-primary); border-color: var(--text-primary); }
+  .class-tools-note { font-size: var(--font-size-sm); color: var(--text-secondary); }
+  .link-btn { border: none; background: none; padding: 0; font: inherit; font-weight: 700; color: var(--accent-ink); text-decoration: underline; cursor: pointer; }
+
+  .class-groups { display: flex; flex-direction: column; gap: var(--space-xl); }
+  .class-group-head {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px;
+    padding-bottom: 10px; margin-bottom: var(--space-md); border-bottom: 1px solid var(--border-subtle);
+  }
+  .class-group-head h3 { font-size: 1.08rem; font-weight: 800; margin: 0; }
+  .class-group-sub { font-size: var(--font-size-sm); color: var(--text-tertiary); }
+  .class-group-head .chip { font-size: 0.82rem; padding: 4px 12px; }
+
+  /* Cards in a grid line up: the stacked-card gap is for cards one under another. */
+  .grid-3 > .card + .card { margin-top: 0; }
+  .course-tile.tile-day { border-left: 5px solid var(--day); }
+  .course-tile.is-archived { opacity: 0.6; }
+  .chip-day { background: var(--day); color: #fff; }
+
+  /* The timetable: days across, lesson times down. */
+  .tt-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+  .tt-grid {
+    display: grid; grid-template-columns: 76px repeat(var(--tt-days), minmax(150px, 1fr));
+    gap: 6px; min-width: calc(76px + var(--tt-days) * 156px);
+  }
+  .tt-corner { display: flex; align-items: flex-end; padding: 0 4px 8px; }
+  .tt-day {
+    display: flex; flex-direction: column; gap: 1px; padding: 10px 12px; border-radius: 12px;
+    background: var(--day); color: #fff;
+  }
+  .tt-day-name { font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; font-size: 0.92rem; }
+  .tt-day-count { font-size: 0.74rem; opacity: 0.88; font-weight: 600; }
+  .tt-time {
+    display: flex; align-items: flex-start; justify-content: flex-end; padding: 10px 6px 0 0;
+    font-weight: 800; font-size: 0.9rem; color: var(--text-secondary); white-space: nowrap;
+  }
+  .tt-cell {
+    min-height: 92px; border-radius: 12px; padding: 6px; display: flex; flex-direction: column; gap: 6px;
+    background: var(--bg-secondary); border: 1px dashed var(--border-subtle);
+  }
+  .tt-cell.has-class { background: color-mix(in srgb, var(--day) 7%, var(--bg-primary)); border: 1px solid color-mix(in srgb, var(--day) 25%, transparent); }
+  .tt-cell.is-none {
+    background: repeating-linear-gradient(135deg, transparent 0 8px, var(--bg-tertiary) 8px 9px);
+    border-color: transparent; opacity: 0.7;
+  }
+  .tt-free { margin: auto; font-size: 0.74rem; font-weight: 600; color: var(--text-tertiary); letter-spacing: 0.04em; }
+  .tt-class {
+    --tt-ink: var(--accent-ink);
+    display: flex; flex-direction: column; gap: 5px; width: 100%; text-align: left;
+    padding: 9px 10px 10px; border-radius: 10px; font: inherit; cursor: pointer;
+    background: var(--bg-primary); border: 1px solid var(--border-subtle); border-left: 4px solid var(--tt-ink);
+    box-shadow: var(--shadow-xs); transition: box-shadow var(--transition-fast), transform var(--transition-fast);
+  }
+  .tt-class.tt-math { --tt-ink: var(--math-ink); }
+  .tt-class.tt-science { --tt-ink: var(--science-ink); }
+  .tt-class:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+  .tt-class:focus-visible { outline: 3px solid var(--accent-light); outline-offset: 2px; }
+  .tt-class.is-archived { opacity: 0.55; }
+  .tt-class-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .tt-class-top .chip { padding: 2px 8px; font-size: 0.7rem; }
+  .tt-subject { font-size: 0.74rem; font-weight: 800; color: var(--tt-ink); letter-spacing: 0.04em; text-transform: uppercase; }
+  .tt-name { font-weight: 700; font-size: 0.92rem; line-height: 1.25; color: var(--text-primary); }
+  .tt-bar { position: relative; height: 5px; border-radius: 5px; background: var(--bg-tertiary); overflow: hidden; }
+  .tt-bar i { position: absolute; inset: 0 auto 0 0; border-radius: 5px; }
+  .tt-bar .released { background: var(--accent-light); }
+  .tt-bar .done { background: var(--accent-dark); }
+  .tt-status { font-size: 0.74rem; color: var(--text-tertiary); }
+  .tt-guess { color: var(--warn-ink); font-weight: 700; }
+  .tt-agenda { display: none; }
+  .tt-unplaced { margin-top: var(--space-xl); }
+  .tt-unplaced-head { font-size: 1.02rem; font-weight: 800; margin: 0 0 var(--space-md); }
+  .tt-unplaced-head .small { font-weight: 500; }
+  @media (max-width: 640px) {
+    .class-view-tabs { align-self: stretch; display: grid; grid-template-columns: repeat(3, 1fr); }
+    .class-view-tabs .tab { justify-content: center; padding: 9px 6px; }
+    .class-filters { flex-direction: column; align-items: flex-start; gap: 8px; }
+    .tt-scroll { display: none; }
+    .tt-agenda { display: flex; flex-direction: column; gap: var(--space-lg); }
+    .tt-agenda-day { display: flex; flex-direction: column; gap: 8px; }
+    .tt-agenda-day .tt-day { flex-direction: row; align-items: baseline; justify-content: space-between; }
+    .tt-agenda-row { display: grid; grid-template-columns: 64px 1fr; gap: 8px; }
+    .tt-agenda-row .tt-time { justify-content: flex-start; padding: 10px 0 0 2px; }
+    .tt-agenda-classes { display: flex; flex-direction: column; gap: 6px; }
+  }
+  @media print {
+    .class-tools { display: none !important; }
+    .tt-scroll { overflow: visible; }
+    .tt-class { box-shadow: none; }
+  }
+
   /* ===== Responsive ===== */
   @media (max-width: 900px) {
     .hero { grid-template-columns: 1fr; padding: var(--space-xl) var(--space-lg); }
@@ -1142,8 +1266,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
 <script src="lesson-clock.js?v=1.20.0"></script>
-<script src="portal-core.js?v=1.20.0"></script>
-<script src="portal.js?v=1.20.0"></script>
+<script src="portal-core.js?v=1.21.0"></script>
+<script src="portal.js?v=1.21.0"></script>
 <script defer src="pwa-install.js?v=2.0.0" data-app-name="Polymath Worksheets" data-app-key="online" data-app-icon="assets/app-icons/icon-192.png" data-accent="#00695C" data-sw="sw.js" data-floating="auto"></script>
 <!-- 🔐 Polymath student access (v1.0.0): the enrolment pop-up every Polymath app shares. A signed-in student is
      blocked here until an admin approves them at polymathlc.com.sg/student/#admin. Source: polymathlc/cer student/access-gate.js -->
