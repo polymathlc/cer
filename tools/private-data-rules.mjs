@@ -321,7 +321,9 @@ export async function probeStranger({ fetchImpl = fetch, attempts = 12, waitMs =
   for (let i = 0; i < attempts; i++) {
     last = {};
     for (const name of PROBE_COLLECTIONS) {
-      const response = await fetchImpl(base + name + '?pageSize=1&mask.fieldPaths=__none__');
+      // No field mask: Firestore answers 400 to a mask it cannot parse, which
+      // would hide the 403 this is looking for.
+      const response = await fetchImpl(base + name + '?pageSize=1');
       last[name] = response.status;
     }
     if (Object.values(last).every(status => status === 403)) return { refused: true, statuses: last, attempts: i + 1 };

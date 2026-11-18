@@ -293,4 +293,7 @@ test('the stranger probe waits for the rules to spread, and reports honestly', a
   const open = await probeStranger({ fetchImpl: async () => ({ status: 200 }), attempts: 2, waitMs: 1, sleep: async () => {} });
   assert.equal(open.refused, false);
   assert.equal(open.statuses.questionAttempts, 200);
+  const urls = [];
+  await probeStranger({ fetchImpl: async u => { urls.push(u); return { status: 403 }; }, attempts: 1 });
+  for (const u of urls) assert.match(u, /\/documents\/\w+\?pageSize=1$/, 'a plain list read, nothing Firestore could reject as malformed');
 });
