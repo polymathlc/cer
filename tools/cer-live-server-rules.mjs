@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { withSignedOutLock } from './signed-out-lock-core.mjs';
 
 export const LIVE_COLLECTIONS = Object.freeze([
   'studyBuddyLiveSessions', 'studyBuddyLiveLimits', 'ansKeyLiveSessions', 'ansKeyLiveLimits',
@@ -90,7 +91,7 @@ export function preservedRuleTests(source) {
   }
   // Existing voice applications must stay private both before and after the
   // extension. Only the two new top-level CER namespaces change permission.
-  return cases.concat(liveRuleTests().filter(test => !/\/documents\/cerAinsteinLive(?:Sessions|Limits)(?:\/|$)/.test(test.request.path)));
+  return withSignedOutLock(source, cases.concat(liveRuleTests().filter(test => !/\/documents\/cerAinsteinLive(?:Sessions|Limits)(?:\/|$)/.test(test.request.path))));
 }
 
 async function validate(request, project, source, testCases) {

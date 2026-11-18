@@ -28,6 +28,7 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { preservedRuleTests, liveRuleTests } from './cer-live-server-rules.mjs';
 import { enquiryRuleTests } from './enquiry-rules.mjs';
+import { withSignedOutLock } from './signed-out-lock-core.mjs';
 
 export const PROJECT = 'mathgen--app';
 export const ONLINE_ADMINS = ['chungzhikai@gmail.com', 'elsielcr@gmail.com', 'admin@polymathlc.com.sg', 'support@polymathlc.com.sg'];
@@ -316,7 +317,7 @@ export function onlinePreservedTests(source) {
   // With the enquiry protection the whole mail collection is already unlistable.
   if (source.includes('polymath-enquiry-server-only-v1')) cases.push(...enquiryRuleTests());
   else cases.push(onlineCase('mail', 'list', 'ALLOW'));
-  return cases;
+  return withSignedOutLock(source, cases);
 }
 
 async function validate(request, project, source, tests) {
