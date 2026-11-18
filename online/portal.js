@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = 'v1.20.0';
+  var APP_VERSION = 'v1.21.0';
   var Core = window.PolymathOnlineCore;
 
   // Who runs the portal. Anyone else signs in as a student or a parent.
@@ -57,6 +57,8 @@
     docsLoading: {},
     recordings: {},            // worksheet id → its recorded lessons, newest first
     adminTab: 'overview',
+    adminClassView: storedAdminClassView(),     // 🗂 v1.21.0: 'level' | 'subject' | 'timetable', kept on this device
+    adminClassFilter: storedAdminClassFilter(), // 🗂 v1.21.0: { level, subject }, '' = all
     studentTab: Core.studentTab(location.hash),   // 🗂 v1.12.0: worksheets | answers | videos | timeline
     courseId: null,            // the class open in the admin's class view
     preview: null,             // { level, subjects } while an admin previews the student view
@@ -1679,7 +1681,7 @@
     html += '<div class="section"><div class="section-head"><div><h2 class="section-heading">Where each class is</h2>' +
       '<div class="section-note">Opening a class worksheet in Ans Key moves its class along and releases up to ' + Core.RELEASE_AHEAD + ' worksheets ahead.</div></div>' +
       '<button class="btn btn-primary" type="button" data-action="new-course">+ New class</button></div>';
-    html += courses.length ? '<div class="grid-3 reveal">' + courses.map(courseTileHtml).join('') + '</div>' : emptyClassesHtml();
+    html += courses.length ? organisedClassesHtml(courses) : emptyClassesHtml();
     return html + '</div>';
   }
   function statHtml(value, label) { return '<div class="card stat"><div class="value">' + h(value) + '</div><div class="label">' + h(label) + '</div></div>'; }
@@ -1687,10 +1689,14 @@
     return '<div class="card empty"><div class="big">🗂</div><h3>No classes yet</h3><p>Create a class, then upload its whole list of worksheets in teaching order.</p>' +
       '<div class="row" style="justify-content:center;margin-top:16px"><button class="btn btn-primary" type="button" data-action="new-course">+ New class</button></div></div>';
   }
-  function courseTileHtml(course) {
+  // 🗂 v1.21.0: each card carries its day's colour on its left edge and a
+  // day chip, so a level's or subject's classes read by day at a glance.
+  function courseTileHtml(course, view) {
     var total = Core.courseIds(course).length, cur = Core.currentIndex(course), rel = Core.releasedCount(course);
-    return '<button class="card course-tile" type="button" data-action="open-course" data-id="' + h(course.id) + '">' +
-      '<div class="row">' + levelChip(course.level) + subjectChip(course.subject) + (course.archived ? '<span class="chip">Archived</span>' : '') + '</div>' +
+    var when = Core.classWhen(course);
+    var whenChip = when.day ? '<span class="chip chip-day day-' + when.dayKey + '">' + h(when.day.slice(0, 3) + (when.time ? ' ' + when.time : '')) + '</span>' : '';
+    return '<button class="card course-tile tile-day day-' + when.dayKey + (course.archived ? ' is-archived' : '') + '" type="button" data-action="open-course" data-id="' + h(course.id) + '">' +
+      '<div class="row">' + (view === 'level' ? '' : levelChip(course.level)) + (view === 'subject' ? '' : subjectChip(course.subject)) + whenChip + (course.archived ? '<span class="chip">Archived</span>' : '') + '</div>' +
       '<div class="title">' + h(Core.courseTitle(course)) + '</div>' +
       '<div class="progress" aria-hidden="true"><div class="released" style="width:' + Core.percent(rel, total) + '%"></div><div class="done" style="width:' + Core.percent(cur + 1, total) + '%"></div></div>' +
       '<div class="small muted">' + (total ? (cur >= 0 ? 'On worksheet ' + (cur + 1) + ' of ' + total : 'Not started · ' + total + ' worksheets') + ' · ' + rel + ' released' : 'No worksheets yet') + '</div>' +
@@ -1710,7 +1716,136 @@
       '<button class="btn btn-primary" type="button" data-action="new-course">+ New class</button></div>';
     if (!courses.length) return html + emptyClassesHtml() + '</div>';
     html += '<div class="legend" style="margin-bottom:12px"><span><i style="background:var(--accent-dark)"></i>Taught</span><span><i style="background:var(--accent-light)"></i>Released to students</span><span><i style="background:var(--bg-tertiary)"></i>Waiting</span></div>';
-    html += '<div class="grid-3 reveal">' + courses.map(courseTileHtml).join('') + '</div>';
+    html += organisedClassesHtml(courses);
+    return html + '</div>';
+  }
+  /* ---- 🗂 Classes, organised (v1.21.0, admin only) ----
+     The admin's class cards in the Overview ("Where each class is") and the
+     Classes tab used to be one flat grid. Now a bar on top picks how they
+     are laid out: By level (a heading per level), By subject (a heading per
+     subject) or Timetable (days across, lesson times down), plus a level
+     and a subject filter. The choice is kept on this device. Students see
+     none of it. */
+  // Functions, not vars: the state object at the top reads them before this line runs.
+  function ADMIN_VIEW_STORE_KEY() { return 'polymathOnline.adminClassView'; }
+  function ADMIN_FILTER_STORE_KEY() { return 'polymathOnline.adminClassFilter'; }
+  function storedAdminClassView() {
+    try { return Core.cleanAdminClassView(localStorage.getItem(ADMIN_VIEW_STORE_KEY()) || ''); } catch (e) { return 'level'; }
+  }
+  function storedAdminClassFilter() {
+    try { return Core.cleanAdminClassFilter(JSON.parse(localStorage.getItem(ADMIN_FILTER_STORE_KEY()) || '{}')); } catch (e) { return Core.cleanAdminClassFilter({}); }
+  }
+  function setAdminClassView(view) {
+    state.adminClassView = Core.cleanAdminClassView(view);
+    try { localStorage.setItem(ADMIN_VIEW_STORE_KEY(), state.adminClassView); } catch (e) {}
+    render();
+  }
+  // Tapping the lit chip again clears that filter, like the student buttons.
+  function setAdminClassFilter(kind, value) {
+    var f = Core.cleanAdminClassFilter(state.adminClassFilter);
+    if (kind === 'level' || kind === 'subject') f[kind] = f[kind] === value ? '' : (value || '');
+    state.adminClassFilter = Core.cleanAdminClassFilter(f);
+    try { localStorage.setItem(ADMIN_FILTER_STORE_KEY(), JSON.stringify(state.adminClassFilter)); } catch (e) {}
+    render();
+  }
+  function classToolsHtml(courses, view, filter, shown) {
+    var facets = Core.adminClassFacets(courses);
+    var views = Core.ADMIN_CLASS_VIEWS.map(function (v) {
+      var icon = v[0] === 'level' ? '🎓' : v[0] === 'subject' ? '📚' : '🗓';
+      return '<button class="tab" type="button" role="tab" data-action="class-view" data-view="' + v[0] + '" aria-selected="' + (view === v[0]) + '" data-tooltip="' + h(v[2]) + '">' +
+        '<span aria-hidden="true">' + icon + '</span> ' + h(v[1]) + '</button>';
+    }).join('');
+    function chip(kind, value, label, count, cls) {
+      var on = filter[kind] === value;
+      return '<button type="button" class="filter-chip' + (cls ? ' ' + cls : '') + (on ? ' is-on' : '') + '" data-action="class-filter" data-kind="' + kind + '" data-value="' + h(value) + '" aria-pressed="' + on + '">' +
+        h(label) + (count != null ? '<span class="n">' + count + '</span>' : '') + '</button>';
+    }
+    var levelChips = facets.levels.length > 1 ? '<div class="filter-group" role="group" aria-label="Level">' +
+      chip('level', '', 'All levels', null, 'filter-all') +
+      facets.levels.map(function (l) { return chip('level', l.value, l.value, l.count, 'filter-level'); }).join('') + '</div>' : '';
+    var subjectChips = facets.subjects.length > 1 ? '<div class="filter-group" role="group" aria-label="Subject">' +
+      chip('subject', '', 'All subjects', null, 'filter-all') +
+      facets.subjects.map(function (s) { return chip('subject', s.value, s.label, s.count, 'filter-' + s.value); }).join('') + '</div>' : '';
+    var narrowed = (filter.level || filter.subject) && shown !== courses.length;
+    var note = narrowed
+      ? '<div class="class-tools-note">Showing ' + shown + ' of ' + courses.length + ' classes. <button type="button" class="link-btn" data-action="class-filter-clear">Show all</button></div>'
+      : '';
+    return '<div class="class-tools">' +
+      '<nav class="tabs class-view-tabs" role="tablist" aria-label="Lay the classes out">' + views + '</nav>' +
+      (levelChips || subjectChips ? '<div class="class-filters">' + levelChips + subjectChips + '</div>' : '') +
+      note + '</div>';
+  }
+  // The whole organised block: the bar, then the groups or the timetable.
+  function organisedClassesHtml(courses) {
+    var view = Core.cleanAdminClassView(state.adminClassView);
+    var filter = Core.cleanAdminClassFilter(state.adminClassFilter);
+    // A filter for a level or subject that no longer has classes is ignored.
+    var facets = Core.adminClassFacets(courses);
+    if (filter.level && !facets.levels.some(function (l) { return l.value === filter.level; })) filter.level = '';
+    if (filter.subject && !facets.subjects.some(function (s) { return s.value === filter.subject; })) filter.subject = '';
+    var shown = Core.filterAdminClasses(courses, filter);
+    var html = classToolsHtml(courses, view, filter, shown.length);
+    if (!shown.length) return html + '<div class="card empty"><p>No classes match these filters.</p></div>';
+    if (view === 'timetable') return html + timetableHtml(shown);
+    var groups = Core.groupAdminClasses(shown, view);
+    return html + '<div class="class-groups reveal">' + groups.map(function (g) {
+      var badge = view === 'subject'
+        ? subjectChip(g.key === 'general' ? '' : g.key)
+        : (g.key !== 'none' ? levelChip(g.key) : '');
+      return '<section class="class-group class-group-' + h(view) + ' group-' + h(g.key) + '">' +
+        '<header class="class-group-head">' + badge + '<h3>' + h(g.label) + '</h3><span class="class-group-sub">' + h(g.sub) + '</span></header>' +
+        '<div class="grid-3">' + g.courses.map(function (c) { return courseTileHtml(c, view); }).join('') + '</div></section>';
+    }).join('') + '</div>';
+  }
+  // One class in a timetable cell: level, subject, short name and progress.
+  function timetableClassHtml(course) {
+    var total = Core.courseIds(course).length, cur = Core.currentIndex(course), rel = Core.releasedCount(course);
+    var key = Core.subjectArt(course.subject).key;
+    var status = total ? (cur >= 0 ? 'On ' + (cur + 1) + ' of ' + total : 'Not started · ' + total + ' worksheet' + (total === 1 ? '' : 's')) : 'No worksheets';
+    var when = Core.classWhen(course);
+    return '<button type="button" class="tt-class tt-' + h(key) + (course.archived ? ' is-archived' : '') + '" data-action="open-course" data-id="' + h(course.id) + '"' +
+      ' aria-label="' + h(Core.courseTitle(course) + '. ' + status + (when.fromName ? '. Day and time read from the name' : '')) + '" title="' + h(Core.courseTitle(course)) + '">' +
+      '<span class="tt-class-top">' + levelChip(Core.classLevel(course)) + '<span class="tt-subject">' + h(Core.subjectLabel(course.subject, true) || 'Class') + '</span></span>' +
+      '<span class="tt-name">' + h(Core.classShortName(course)) + '</span>' +
+      '<span class="tt-bar" aria-hidden="true"><i class="released" style="width:' + Core.percent(rel, total) + '%"></i><i class="done" style="width:' + Core.percent(cur + 1, total) + '%"></i></span>' +
+      '<span class="tt-status">' + h(status) + (course.archived ? ' · Archived' : '') + (when.fromName ? ' <span class="tt-guess" title="This class has no saved day or session, so its place comes from its name. Edit class to set them.">✎</span>' : '') + '</span>' +
+    '</button>';
+  }
+  function timetableHtml(courses) {
+    var tt = Core.adminTimetable(courses);
+    var html = '<div class="timetable reveal">';
+    if (tt.days.length) {
+      // Wide screens: a grid, days across and times down.
+      html += '<div class="tt-scroll"><div class="tt-grid" style="--tt-days:' + tt.days.length + '" role="table" aria-label="Weekly timetable">' +
+        '<div class="tt-corner" role="columnheader"><span class="small muted">' + tt.count + ' class' + (tt.count === 1 ? '' : 'es') + '</span></div>' +
+        tt.days.map(function (d) {
+          return '<div class="tt-day day-' + d.key + '" role="columnheader"><span class="tt-day-name">' + h(d.day) + '</span><span class="tt-day-count">' + d.count + ' class' + (d.count === 1 ? '' : 'es') + '</span></div>';
+        }).join('');
+      tt.times.forEach(function (t) {
+        html += '<div class="tt-time" role="rowheader">' + h(t.label) + '</div>';
+        tt.days.forEach(function (d) {
+          var list = tt.cell(d.index, t.minutes);
+          var usual = tt.usual(d.index, t.minutes);
+          html += '<div class="tt-cell day-' + d.key + (list.length ? ' has-class' : usual ? ' is-free' : ' is-none') + '" role="cell"' +
+            (list.length ? '' : ' aria-label="' + h(d.day + ' ' + t.label + (usual ? ': free' : ': no lesson at this time')) + '"') + '>' +
+            (list.length ? list.map(timetableClassHtml).join('') : (usual ? '<span class="tt-free">Free</span>' : '')) + '</div>';
+        });
+      });
+      html += '</div></div>';
+      // Phones: the same week as a list, one day after another.
+      html += '<div class="tt-agenda" aria-label="Weekly timetable by day">' + tt.days.map(function (d) {
+        var rows = tt.times.map(function (t) {
+          var list = tt.cell(d.index, t.minutes);
+          if (!list.length) return '';
+          return '<div class="tt-agenda-row"><div class="tt-time">' + h(t.label) + '</div><div class="tt-agenda-classes">' + list.map(timetableClassHtml).join('') + '</div></div>';
+        }).join('');
+        return '<section class="tt-agenda-day"><div class="tt-day day-' + d.key + '"><span class="tt-day-name">' + h(d.day) + '</span><span class="tt-day-count">' + d.count + ' class' + (d.count === 1 ? '' : 'es') + '</span></div>' + rows + '</section>';
+      }).join('') + '</div>';
+    }
+    if (tt.unplaced.length) {
+      html += '<div class="tt-unplaced"><h3 class="tt-unplaced-head">No day or time yet <span class="small muted">· ' + tt.unplaced.length + ' class' + (tt.unplaced.length === 1 ? '' : 'es') + '. Open one and use Edit class to give it a day and session.</span></h3>' +
+        '<div class="grid-3">' + tt.unplaced.map(function (c) { return courseTileHtml(c, 'timetable'); }).join('') + '</div></div>';
+    }
     return html + '</div>';
   }
 
@@ -3114,6 +3249,9 @@
       case 'student-tab': setStudentTab(el.dataset.tab); break;
       case 'my-class': toggleMyClass(id); break;
       case 'subject-filter': setSubjectFilter(el.dataset.subject); break;
+      case 'class-view': setAdminClassView(el.dataset.view); break;
+      case 'class-filter': setAdminClassFilter(el.dataset.kind, el.dataset.value); break;
+      case 'class-filter-clear': state.adminClassFilter = { level: '', subject: '' }; setAdminClassFilter('', ''); break;
       case 'new-course': courseForm(null); break;
       case 'open-course': state.courseId = id; state.uploads = []; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); break;
       case 'close-course': state.courseId = null; render(); break;

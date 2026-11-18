@@ -1352,3 +1352,69 @@ test('🔍 v1.20.0: Maths and Science buttons show one subject in every tab, off
   assert.match(page, /\.subject-filter-btn \{[^}]*min-height: 68px/, 'big buttons');
   assert.match(page, /\.subject-filter-btn\.is-on \{[^}]*background: var\(--sf-ink\)/, 'the lit button is solid');
 });
+
+test('🗂 v1.21.0: admin classes read their day and time from the saved session, or from a hand-typed name', () => {
+  assert.deepEqual(
+    [Core.parseClockText('9 a.m.'), Core.parseClockText('3:00pm'), Core.parseClockText('11.30 AM'), Core.parseClockText('12pm'), Core.parseClockText('no time')],
+    [540, 900, 690, 720, -1]);
+  assert.equal(Core.clockLabel(540), '9:00am');
+  assert.equal(Core.clockLabel(1140), '7:00pm');
+  const saved = Core.classWhen({ level: 'P6', subject: 'math', day: 'Monday', slot: 1 });
+  assert.equal(saved.day, 'Monday'); assert.equal(saved.time, '5:00pm'); assert.equal(saved.fromName, false); assert.equal(saved.known, true);
+  const typed = Core.classWhen({ level: 'P6', subject: 'science', title: 'P6 Science Saturday 9 a.m.' });
+  assert.equal(typed.day, 'Saturday'); assert.equal(typed.time, '9:00am'); assert.equal(typed.fromName, true);
+  assert.equal(Core.classWhen({ level: 'P5', subject: 'math', title: 'Holiday revision' }).known, false);
+  assert.equal(Core.classShortName({ level: 'P6', subject: 'science', title: 'P6 Science Saturday 9 a.m.' }), 'P6 Science');
+  assert.equal(Core.classShortName({ level: 'P6', subject: 'science', day: 'Monday', slot: 2, title: 'P6 Science · Monday 7:00pm' }), 'P6 Science');
+  assert.equal(Core.classLevel({ title: 'P4 Science Thu' }), 'P4');
+  assert.equal(Core.cleanAdminClassView('timetable'), 'timetable');
+  assert.equal(Core.cleanAdminClassView('nonsense'), 'level');
+});
+
+test('🗂 v1.21.0: admin classes group by level or by subject, in day-and-time order, and filter', () => {
+  const list = [
+    { id: 'p6s-sat', level: 'P6', subject: 'science', title: 'P6 Science Saturday 9 a.m.' },
+    { id: 'p6s-tue', level: 'P6', subject: 'science', day: 'Tuesday', slot: 1 },
+    { id: 'p6m-mon', level: 'P6', subject: 'math', day: 'Monday', slot: 1 },
+    { id: 'p6s-mon', level: 'P6', subject: 'science', day: 'Monday', slot: 2 },
+    { id: 'p4s-sat', level: 'P4', subject: 'science', day: 'Saturday', slot: 1 },
+    { id: 'p4s-thu', level: 'P4', subject: 'science', day: 'Thursday', slot: 0 },
+    { id: 'p5s-old', level: 'P5', subject: 'science', day: 'Friday', slot: 0, archived: true },
+    { id: 'p5s-fri', level: 'P5', subject: 'science', day: 'Friday', slot: 0 }
+  ];
+  const byLevel = Core.groupAdminClasses(list, 'level');
+  assert.deepEqual(byLevel.map((g) => g.label), ['Primary 4', 'Primary 5', 'Primary 6']);
+  assert.deepEqual(byLevel[2].courses.map((c) => c.id), ['p6m-mon', 'p6s-mon', 'p6s-tue', 'p6s-sat']);
+  assert.deepEqual(byLevel[1].courses.map((c) => c.id), ['p5s-fri', 'p5s-old'], 'archived classes go last');
+  assert.equal(byLevel[2].sub, '4 classes · 1 Maths · 3 Science');
+  const bySubject = Core.groupAdminClasses(list, 'subject');
+  assert.deepEqual(bySubject.map((g) => g.label), ['Mathematics', 'Science']);
+  assert.deepEqual(bySubject[1].courses.map((c) => c.id), ['p4s-thu', 'p4s-sat', 'p5s-fri', 'p6s-mon', 'p6s-tue', 'p6s-sat', 'p5s-old']);
+  assert.equal(bySubject[1].sub, '7 classes · P4, P5, P6 · 1 archived');
+  assert.deepEqual(Core.filterAdminClasses(list, { level: 'P6', subject: 'science' }).map((c) => c.id).sort(), ['p6s-mon', 'p6s-sat', 'p6s-tue']);
+  assert.deepEqual(Core.filterAdminClasses(list, { level: 'P9', subject: 'art' }).length, list.length, 'unknown filters show everything');
+  const facets = Core.adminClassFacets(list);
+  assert.deepEqual(facets.levels.map((l) => l.value + ':' + l.count), ['P4:2', 'P5:2', 'P6:4']);
+  assert.deepEqual(facets.subjects.map((s) => s.value + ':' + s.count), ['math:1', 'science:7']);
+});
+
+test('🗂 v1.21.0: the admin timetable puts each class in its day and time, and keeps unplaced ones aside', () => {
+  const list = [
+    { id: 'a', level: 'P6', subject: 'science', title: 'P6 Science Saturday 9 a.m.' },
+    { id: 'b', level: 'P6', subject: 'math', day: 'Monday', slot: 1 },
+    { id: 'c', level: 'P5', subject: 'science', day: 'Monday', slot: 1 },
+    { id: 'd', level: 'P4', subject: 'science', day: 'Thursday', slot: 0 },
+    { id: 'e', level: 'P5', subject: 'math', title: 'Holiday revision' }
+  ];
+  const tt = Core.adminTimetable(list);
+  assert.deepEqual(tt.days.map((d) => d.day), ['Monday', 'Thursday', 'Saturday']);
+  assert.deepEqual(tt.times.map((t) => t.label), ['9:00am', '3:00pm', '5:00pm']);
+  assert.deepEqual(tt.cell(0, 1020).map((c) => c.id), ['c', 'b'], 'two classes at once: lower level first');
+  assert.deepEqual(tt.cell(5, 540).map((c) => c.id), ['a']);
+  assert.deepEqual(tt.cell(3, 540), []);
+  assert.equal(tt.usual(5, 540), true);
+  assert.equal(tt.usual(5, 900), false, 'no 3pm session on a Saturday');
+  assert.equal(tt.usual(0, 900), true);
+  assert.deepEqual(tt.unplaced.map((c) => c.id), ['e']);
+  assert.equal(tt.count, 4);
+});
