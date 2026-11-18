@@ -28,6 +28,7 @@ import { pathToFileURL } from 'node:url';
 import { preservedRuleTests, liveRuleTests } from './cer-live-server-rules.mjs';
 import { enquiryRuleTests } from './enquiry-rules.mjs';
 import { PROJECT, describeRules, onlineRuleTests, setupCredentials } from './online-rules.mjs';
+import { withSignedOutLock } from './signed-out-lock-core.mjs';
 
 export const CS_COLLECTIONS = Object.freeze(['csFiles', 'csLeads', 'csLimits', 'csGrants', 'csSettings']);
 
@@ -119,7 +120,7 @@ export function csPreservedTests(source) {
   // Other apps' narrow protections, if they are installed, must still hold.
   if (source.includes('polymath-enquiry-server-only-v1')) cases.push(...enquiryRuleTests());
   if (source.includes('polymath-online-v1')) cases.push(...onlineRuleTests());
-  return cases;
+  return withSignedOutLock(source, cases);
 }
 
 async function validate(request, source, tests) {

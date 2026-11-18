@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { preservedRuleTests, liveRuleTests } from './cer-live-server-rules.mjs';
+import { withSignedOutLock } from './signed-out-lock-core.mjs';
 
 export const ENQUIRY_RULE = `    // BEGIN polymath-enquiry-server-only-v1
     // Enquiry contacts, email payloads and admission limits are server-only.
@@ -61,11 +62,11 @@ export function enquiryRuleTests() {
   ]);
 }
 export function enquiryPreservedTests(source) {
-  return [...preservedRuleTests(source), ...liveRuleTests(),
+  return withSignedOutLock(source, [...preservedRuleTests(source), ...liveRuleTests(),
     ...['mail/unrelated-existing-mail', 'mail/unrelated-existing-mail/nested/child',
       'polymathEnquiryRequestsArchive/probe', 'users/probe/polymathEnquiryRequests/item']
       .flatMap(path => ['get', 'create', 'update', 'delete'].map(method => permission(path, method, 'ALLOW')))
-  ];
+  ]);
 }
 async function validate(request, project, source, tests) {
   for (let offset = 0; offset < tests.length; offset += 100) {

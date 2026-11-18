@@ -27,6 +27,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { officePreservedTests, officeRuleTests } from './office-rules.mjs';
 import { describeRules, setupCredentials } from './online-rules.mjs';
+import { withSignedOutLock } from './signed-out-lock-core.mjs';
 
 export const PROJECT = 'mathgen--app';
 // Keep equal to ALLOWED_EMAILS in shopguard/index.html and SHOPGUARD_OWNERS in
@@ -156,7 +157,7 @@ export function shopGuardPreservedTests(source) {
   if (source.includes('polymath-office-v1')) cases.push(...officeRuleTests());
   for (const path of ['shopguardx/probe', 'shop_guard/probe', 'users/probe/shopguard/item', 'shopguard_archive/probe'])
     for (const method of ['get', 'create', 'update', 'delete']) cases.push(shopGuardCase(path, method, 'ALLOW'));
-  return cases;
+  return withSignedOutLock(source, cases);
 }
 
 async function validate(request, project, source, tests) {

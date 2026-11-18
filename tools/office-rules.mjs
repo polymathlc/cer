@@ -36,6 +36,7 @@ import { preservedRuleTests, liveRuleTests } from './cer-live-server-rules.mjs';
 import { enquiryRuleTests } from './enquiry-rules.mjs';
 import { onlineRuleTests, describeRules, setupCredentials } from './online-rules.mjs';
 import { csRuleTests } from './cs-rules.mjs';
+import { withSignedOutLock } from './signed-out-lock-core.mjs';
 
 export const PROJECT = 'mathgen--app';
 // Keep equal to OFFICE_ADMINS in office/office-core.mjs (a test checks).
@@ -201,7 +202,7 @@ export function officePreservedTests(source) {
   else cases.push(officeCase('mail', 'list', 'ALLOW'));
   if (source.includes('polymath-online-v1')) cases.push(...onlineRuleTests());
   if (source.includes('polymath-cs-server-only-v1')) cases.push(...csRuleTests());
-  return cases;
+  return withSignedOutLock(source, cases);
 }
 
 async function validate(request, project, source, tests) {

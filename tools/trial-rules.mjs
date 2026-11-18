@@ -29,6 +29,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { shopGuardPreservedTests, shopGuardRuleTests } from './shopguard-rules.mjs';
 import { describeRules, setupCredentials } from './online-rules.mjs';
+import { withSignedOutLock } from './signed-out-lock-core.mjs';
 
 export const PROJECT = 'mathgen--app';
 export const TRIAL_COLLECTIONS = Object.freeze(['trialSettings', 'trialBookings', 'trialCodes', 'trialLinks']);
@@ -122,7 +123,7 @@ export function trialPreservedTests(source) {
   if (source.includes('polymath-shopguard-v1')) cases.push(...shopGuardRuleTests());
   for (const path of ['trialSettingsX/probe', 'trial/probe', 'users/probe/trialBookings/item', 'trial_bookings/probe'])
     for (const method of ['get', 'create', 'update', 'delete']) cases.push(trialCase(path, method, 'ALLOW'));
-  return cases;
+  return withSignedOutLock(source, cases);
 }
 
 async function validate(request, project, source, tests) {

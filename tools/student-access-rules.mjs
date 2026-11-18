@@ -35,6 +35,7 @@ import { enquiryRuleTests } from './enquiry-rules.mjs';
 import { onlineRuleTests, describeRules, setupCredentials, ONLINE_RULE } from './online-rules.mjs';
 import { csRuleTests } from './cs-rules.mjs';
 import { officeRuleTests, OFFICE_RULE } from './office-rules.mjs';
+import { withSignedOutLock } from './signed-out-lock-core.mjs';
 
 export const PROJECT = 'mathgen--app';
 // Keep equal to ACCESS_ADMINS in student/access-gate.js (a test checks).
@@ -290,7 +291,7 @@ export function accessPreservedTests(source) {
   if (source.includes(ONLINE_RULE)) cases.push(...onlineRuleTests());
   if (source.includes('polymath-cs-server-only-v1')) cases.push(...csRuleTests());
   if (source.includes(OFFICE_RULE)) cases.push(...officeRuleTests());
-  return cases;
+  return withSignedOutLock(source, cases);
 }
 
 // Runs EVERY batch before deciding, so one run names every failing case (up to 20).
