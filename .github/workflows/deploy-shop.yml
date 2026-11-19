@@ -5,7 +5,7 @@ name: Deploy shop card payments
 # enrolment card payments createScheduleCheckout and scheduleCheckoutStatus, and the
 # free /diagnostic test bookings bookDiagnostic and the parent's report page diagnosticReport, and the /trial page's trialBooking,
 # trialAdmin and trialMaterial, and the exam countdown revision packs revisionPack and
-# revisionPackAdmin) to
+# revisionPackAdmin, and the /maps library subscription mapsLibrary) to
 # mathgen--app, then proves the live endpoints answer the pages that serve them.
 #
 # It runs by itself when the function's source changes on main, and on demand from
@@ -82,7 +82,7 @@ jobs:
         # Names every function, so the deploy never tries to delete anything else
         # in the codebase: deleting the old scheduled cleanupShopCheckouts needs Cloud
         # Scheduler rights this service account does not have. Add a new export here.
-        run: firebase deploy --project "$FIREBASE_PROJECT" --config shop-function/firebase.json --non-interactive --only "functions:polymath-shop:createShopCheckout,functions:polymath-shop:shopCheckoutStatus,functions:polymath-shop:stripeShopWebhook,functions:polymath-shop:sendShopReceipt,functions:polymath-shop:createScheduleCheckout,functions:polymath-shop:scheduleCheckoutStatus,functions:polymath-shop:bookDiagnostic,functions:polymath-shop:diagnosticReport,functions:polymath-shop:trialBooking,functions:polymath-shop:trialAdmin,functions:polymath-shop:trialMaterial,functions:polymath-shop:revisionPack,functions:polymath-shop:revisionPackAdmin"
+        run: firebase deploy --project "$FIREBASE_PROJECT" --config shop-function/firebase.json --non-interactive --only "functions:polymath-shop:createShopCheckout,functions:polymath-shop:shopCheckoutStatus,functions:polymath-shop:stripeShopWebhook,functions:polymath-shop:sendShopReceipt,functions:polymath-shop:createScheduleCheckout,functions:polymath-shop:scheduleCheckoutStatus,functions:polymath-shop:bookDiagnostic,functions:polymath-shop:diagnosticReport,functions:polymath-shop:trialBooking,functions:polymath-shop:trialAdmin,functions:polymath-shop:trialMaterial,functions:polymath-shop:revisionPack,functions:polymath-shop:revisionPackAdmin,functions:polymath-shop:mapsLibrary"
 
       - name: Prove the live endpoints answer the shop
         if: always() && steps.prepare.outputs.ready == 'true'

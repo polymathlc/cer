@@ -1,14 +1,14 @@
 name: Mind map checks
 
-# polymathlc.com.sg/mindmap — the pure core (layout, voice operations, question gate,
+# polymathlc.com.sg/mindmap (and the /maps library page built on it) — the pure core (layout, voice operations, question gate,
 # sandbox document) and a real-browser run of the page with the Firebase / AI services
 # replaced by fixtures (tools/mindmap-fixtures/), so it needs no account and no network.
 on:
   pull_request:
-    paths: ['mindmap/**', 'student/access-gate.js', 'tools/mindmap-*', 'tools/mindmap-fixtures/**', '.github/workflows/mindmap.yml']
+    paths: ['mindmap/**', 'student/access-gate.js', 'tools/mindmap-*', 'tools/mindmap-fixtures/**', '.github/workflows/mindmap.yml', 'maps/**', 'tools/maps-*', 'tools/maps-fixtures/**']
   push:
     branches: [main]
-    paths: ['mindmap/**', 'student/access-gate.js', 'tools/mindmap-*', 'tools/mindmap-fixtures/**', '.github/workflows/mindmap.yml']
+    paths: ['mindmap/**', 'student/access-gate.js', 'tools/mindmap-*', 'tools/mindmap-fixtures/**', '.github/workflows/mindmap.yml', 'maps/**', 'tools/maps-*', 'tools/maps-fixtures/**']
   workflow_dispatch:
 
 permissions:
@@ -29,6 +29,7 @@ jobs:
           node --check mindmap/mindmap-services.js
           node --check mindmap/mindmap-questions.js
           node --check mindmap/mindmap-core.mjs
+          node --check maps/maps-app.js
       - name: Core logic
         run: node --test tools/mindmap-tests.mjs
       - run: npm install --no-save --package-lock=false playwright@1.62.1
@@ -37,6 +38,10 @@ jobs:
         run: node tools/mindmap-browser.mjs
         env:
           MINDMAP_SCREENSHOTS: artifacts/mindmap
+      - name: Mr Chung's Maps library page (/maps) in a real browser
+        run: node tools/maps-browser.mjs
+        env:
+          MAPS_SCREENSHOTS: artifacts/mindmap/maps
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -50,7 +50,18 @@ function createStripe({ secretKey, fetchImpl = globalThis.fetch } = {}) {
   }
   return {
     createCheckoutSession: (params, idempotencyKey) => call('POST', '/checkout/sessions', params, idempotencyKey),
-    retrieveCheckoutSession: id => call('GET', '/checkout/sessions/' + encodeURIComponent(id))
+    retrieveCheckoutSession: id => call('GET', '/checkout/sessions/' + encodeURIComponent(id)),
+    // The mind map library subscription (maps.js): monthly subscriptions, their price
+    // (found by lookup key, so the admin can change it without a deploy), cancelling
+    // at the end of the paid month, and Stripe's own page for changing the card.
+    retrieveSubscription: id => call('GET', '/subscriptions/' + encodeURIComponent(id)),
+    updateSubscription: (id, params) => call('POST', '/subscriptions/' + encodeURIComponent(id), params),
+    searchSubscriptions: query => call('GET', '/subscriptions/search?' + encodeBody({ query, limit: 20 })),
+    listSubscriptions: params => call('GET', '/subscriptions?' + encodeBody(params || {})),
+    listPrices: params => call('GET', '/prices?' + encodeBody(params || {})),
+    createPrice: (params, idempotencyKey) => call('POST', '/prices', params, idempotencyKey),
+    updatePrice: (id, params) => call('POST', '/prices/' + encodeURIComponent(id), params),
+    createBillingPortalSession: params => call('POST', '/billing_portal/sessions', params)
   };
 }
 
