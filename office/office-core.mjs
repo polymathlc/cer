@@ -2084,7 +2084,7 @@ function qrBlockHtml(inv, o, amount) {
     + '</td></tr></table>';
 }
 function payLinkFrom(url, save) { return save ? url + (url.includes('?') ? '&' : '?') + 'save=1' : url; }
-function emailShell(title, inner, s) {
+export function emailShell(title, inner, s) {
   return '<div style="margin:0;padding:0;background:#eef5f6;">'
     + '<div style="max-width:600px;margin:0 auto;padding:24px 12px;font-family:Arial,Helvetica,sans-serif;color:#10303a;">'
     + '<div style="background:#10303a;border-radius:14px 14px 0 0;padding:14px 22px;">'
