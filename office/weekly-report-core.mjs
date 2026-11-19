@@ -50,7 +50,7 @@ import {
   escapeHtml, normalizeFamily, familyEmails, familyStateIn, normalizeSettings,
   emailShell, officeMail, scheduleSlot, slotParts, slotShortLabel, levelLabel,
   subjectKey, firstName, listJoin, plural, nameTokens, cleanEmail, isEmail
-} from './office-core.mjs';
+} from './office-core.mjs?v=1.16.0';
 
 export const WEEKLY_VERSION = '1.0.0';
 export const WEEKLY_DOC = 'weeklyReports';              // officeSettings/weeklyReports
@@ -464,7 +464,7 @@ export function childReport(family, student, ctx) {
   });
   gaps.forEach(g => {
     if (g.trend === 'improving') strong.push({ what: g.label, why: 'fewer of these slips than before', score: 100, gap: true });
-    else weak.push({ what: g.label, why: plural(g.n, 'time') + ' in marked work' + (g.trend === 'worse' ? ', more often lately' : g.trend === 'new' ? ', new this week' : ''), score: 0, gap: true, topics: g.topics });
+    else weak.push({ what: g.label, why: plural(g.n, 'time') + ' in marked work' + (g.trend === 'worse' ? ', more often lately' : ''), score: 0, gap: true, topics: g.topics });
   });
   strong.sort((a, b) => b.score - a.score);
   weak.sort((a, b) => a.score - b.score);
@@ -509,9 +509,9 @@ export function familyReport(rawFamily, ctx) {
 /* ─────────────────────────── 8. The email ─────────────────────────── */
 const P = 'font-size:15px;line-height:1.6;margin:0 0 10px;color:#10303a;';
 function tileHtml(label, value, sub, colour) {
-  return '<td style="width:25%;padding:4px;vertical-align:top;"><div style="background:#f2f9fa;border:1px solid #d1eaee;border-radius:12px;padding:10px 6px;text-align:center;">'
-    + '<div style="font-size:11px;color:#3d5a61;text-transform:uppercase;letter-spacing:.05em;">' + escapeHtml(label) + '</div>'
-    + '<div style="font-size:22px;font-weight:800;color:' + (colour || '#10303a') + ';margin-top:4px;">' + escapeHtml(value) + '</div>'
+  return '<td style="width:25%;padding:3px;vertical-align:top;"><div style="background:#f2f9fa;border:1px solid #d1eaee;border-radius:12px;padding:9px 2px;text-align:center;">'
+    + '<div style="font-size:10px;color:#3d5a61;text-transform:uppercase;letter-spacing:.02em;">' + escapeHtml(label) + '</div>'
+    + '<div style="font-size:20px;font-weight:800;color:' + (colour || '#10303a') + ';margin-top:4px;">' + escapeHtml(value) + '</div>'
     + (sub ? '<div style="font-size:11px;color:#6b7f85;margin-top:2px;">' + escapeHtml(sub) + '</div>' : '') + '</div></td>';
 }
 function h3(text, colour) { return '<div style="font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:' + (colour || '#056c76') + ';margin:18px 0 6px;">' + escapeHtml(text) + '</div>'; }
@@ -533,12 +533,12 @@ export function childSectionHtml(ch) {
   h += '<div style="font-size:19px;font-weight:800;color:#10303a;">' + E(ch.name) + (ch.level ? ' <span style="font-size:13px;font-weight:700;color:#056c76;background:#e3f4f6;border-radius:999px;padding:2px 9px;vertical-align:middle;">' + E(levelLabel(ch.level)) + '</span>' : '') + '</div>';
   // At a glance.
   const tiles = [
-    tileHtml('Worksheets in class', String(t.classWorksheets), t.lessons ? plural(t.lessons, 'live lesson') : ''),
-    tileHtml('Answered in class', t.asked ? t.answered + '/' + t.asked : '—', t.answeredPct == null ? 'live lessons' : t.answeredPct + '%', t.answeredPct == null ? '' : scoreColour(t.answeredPct)),
-    tileHtml('Correct in class', t.correctPct == null ? '—' : t.correctPct + '%', t.correctPct == null ? 'not marked yet' : (t.focusPct == null ? 'teacher-marked' : 'focus ' + t.focusPct + '%'), scoreColour(t.correctPct)),
-    tileHtml('Practice at home', String(t.practiceSheets), t.practicePct == null ? (t.practiceSheets ? '' : 'worksheets') : t.practicePct + '% right', t.practicePct == null ? '' : scoreColour(t.practicePct))
+    tileHtml('In class', String(t.classWorksheets), t.classWorksheets === 1 ? 'worksheet' : 'worksheets'),
+    tileHtml('Answered', t.asked ? t.answered + '/' + t.asked : '—', t.answeredPct == null ? 'live lessons' : t.answeredPct + '% in live lessons', t.answeredPct == null ? '' : scoreColour(t.answeredPct)),
+    tileHtml('Correct', t.correctPct == null ? '—' : t.correctPct + '%', t.correctPct == null ? 'not marked yet' : (t.focusPct == null ? 'teacher-marked' : 'focus ' + t.focusPct + '%'), scoreColour(t.correctPct)),
+    tileHtml('Practice', String(t.practiceSheets), t.practicePct == null ? 'at home' : 'at home · ' + t.practicePct + '%', t.practicePct == null ? '' : scoreColour(t.practicePct))
   ];
-  h += '<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;margin:10px 0 0;"><tr>' + tiles.join('') + '</tr></table>';
+  h += '<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;table-layout:fixed;margin:10px 0 0;"><tr>' + tiles.join('') + '</tr></table>';
   // In class.
   const withWork = ch.classes.filter(cl => cl.taught.length || cl.next);
   if (withWork.length) {
@@ -617,8 +617,8 @@ export function childSectionText(ch) {
   if (ch.next.length) { L.push('', 'What to practise this week:'); ch.next.forEach(x => L.push('  → ' + x)); }
   return L.join('\n');
 }
-const HOW_WE_MEASURE = 'How we measure: "Correct in class" counts only answers your child\'s teacher marked in the live lesson. '
-  + '"Practice at home" is the worksheets Study Buddy marked this week. "Worksheets in class" follows your child\'s class on Polymath Online. '
+const HOW_WE_MEASURE = 'How we measure: "Correct" counts only answers your child\'s teacher marked in the live lesson. '
+  + '"Practice" is the worksheets Study Buddy marked at home this week. "In class" follows your child\'s class on Polymath Online. '
   + '"Focus" is how much of the live lesson the class screen stayed open in front of your child.';
 
 // weekly: normalizeWeekly(...); settings: the office's normalizeSettings(...).

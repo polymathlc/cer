@@ -1,0 +1,98 @@
+name: Polymath weekly parent reports
+
+# 📈 The weekly parent progress reports — tools/weekly-reports.mjs.
+#
+# Checks every half hour. Almost every check reads officeSettings/weeklyReports
+# and stops. It acts when:
+#   • the office pressed "Email me this week's reports" or "Email parents now"
+#     at polymathlc.com.sg/office/#reports, or
+#   • it is Sunday 6 PM (Singapore) – Monday noon and that week is not done yet:
+#       "Email me a preview each Sunday" → one preview email to the office
+#       "Email parents every Sunday"     → each family gets its own report
+#
+# Every family's report has ONE mail id per week (create-only), so a family can
+# never get the same week twice. No Cloud Scheduler and no deploy: the deploy
+# service account cannot create scheduler jobs, so the schedule lives here.
+#
+# Run workflow by hand: "preview" builds this week's reports and emails the
+# office only; "dry run" reads everything and writes nothing. The log shows
+# counts only (this repository is public).
+
+on:
+  schedule:
+    - cron: '11,41 * * * *'
+  workflow_dispatch:
+    inputs:
+      what:
+        description: 'What to do'
+        type: choice
+        default: dry-run
+        options: [dry-run, preview, check]
+  push:
+    branches: [main]
+    paths: ['office/weekly-report-core.mjs', 'tools/weekly-report*', '.github/workflows/weekly-parent-reports.yml']
+  pull_request:
+    paths: ['office/weekly-report-core.mjs', 'office/weekly-reports.mjs', 'tools/weekly-report*', '.github/workflows/weekly-parent-reports.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: polymath-weekly-parent-reports-${{ github.event_name == 'pull_request' && github.ref || 'live' }}
+  cancel-in-progress: false
+
+jobs:
+  tests:
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Weekly report tests
+        run: |
+          node --check office/weekly-reports.mjs
+          node --test tools/weekly-report-tests.mjs tools/office-core-tests.mjs
+
+  weekly:
+    if: github.repository == 'polymathlc/cer' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check the report rules first
+        run: node --test tools/weekly-report-tests.mjs
+
+      - name: Install the Admin SDK
+        run: npm install --prefix "$RUNNER_TEMP/office-deps" --no-save --no-audit --no-fund firebase-admin@12
+
+      - name: Prepare the service-account key
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node tools/office-rules.mjs --setup
+
+      - name: Weekly reports
+        env:
+          OFFICE_DEPS: ${{ runner.temp }}/office-deps
+          WHAT: ${{ github.event_name == 'workflow_dispatch' && inputs.what || 'check' }}
+        run: |
+          case "$WHAT" in
+            dry-run) node tools/weekly-reports.mjs --dry-run ;;
+            preview) node tools/weekly-reports.mjs --force-preview ;;
+            *) node tools/weekly-reports.mjs ;;
+          esac
+
+      - name: Remove the key from the runner
+        if: always()
+        run: rm -f "$RUNNER_TEMP/firebase-sa.json"

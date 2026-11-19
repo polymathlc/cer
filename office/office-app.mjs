@@ -35,7 +35,7 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 import * as C from './office-core.mjs?v=1.14.1';
 
-const OFFICE_VERSION = 'v1.15.0';
+const OFFICE_VERSION = 'v1.16.0';
 
 /* ═══════════════ Firebase — the CER project ═══════════════ */
 firebase.initializeApp({
