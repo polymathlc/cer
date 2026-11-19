@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mr Chung's Maps · Polymath</title>
+<meta name="description" content="Mr Chung's Maps: ready-made mind maps for Primary Science and Math by Polymath Learning Centre, with notes, pictures, learning apps and exam questions. A small monthly subscription; free for Polymath students.">
+<meta name="theme-color" content="#FFFFFF">
+<link rel="canonical" href="https://polymathlc.com.sg/maps/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Polymath Learning Centre">
+<meta property="og:locale" content="en_SG">
+<meta property="og:title" content="Mr Chung's Maps · Polymath Learning Centre">
+<meta property="og:description" content="Every topic on one page: mind maps with notes, pictures, learning apps and exam questions. Cancel anytime.">
+<meta property="og:url" content="https://polymathlc.com.sg/maps/">
+<meta property="og:image" content="https://polymathlc.com.sg/assets/branding/polymath-learning-centre.png">
+<meta property="og:image:alt" content="Polymath Learning Centre logo">
+<link rel="icon" type="image/png" sizes="32x32" href="../student/assets/app-icons/favicon-32.png">
+<link rel="apple-touch-icon" href="../student/assets/app-icons/apple-touch-icon.png">
+<!--
+  MR CHUNG'S MAPS — polymathlc.com.sg/maps   (v1.0.0, November 2026)
+  -------------------------------------------------------------------
+  The library of mind maps Mr Chung publishes from /mindmap (📌), sold as a small
+  monthly subscription to people outside the centre, and free for the centre's own:
+
+    • anyone        sees the catalogue: each map's title, first branches and what is in it
+    • approved      Polymath students (approved at /student/#admin) and staff open every
+      students      map free, with the same account they use in the other apps
+    • subscribers   pay monthly by card (Stripe Checkout, the same account as /products),
+                    open every map, and cancel (at the end of the paid month), undo the
+                    cancel, or change their card from this page
+    • the admins    (#admin) see every subscriber and change the monthly price for new
+                    subscribers; it lives in Stripe, so no deploy is needed
+
+  Everything about money and access is decided by the polymath-shop function
+  mapsLibrary (shop-function/functions/maps.js): the page never reads a map's contents
+  from Firestore itself and never decides who has paid.
+
+  Files: index.html (this page and its styles), maps-app.js (the page's code). It reuses
+  the mind map's sign-in (../mindmap/mindmap-services.js), drawing helpers
+  (../mindmap/mindmap-core.mjs) and question cards (../mindmap/mindmap-questions.js).
+  Checks: tools/maps-browser.mjs, in the "Mind map checks" workflow.
+-->
+<style>
+:root {
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #FAFAFA;
+  --bg-tertiary: #F3F3F0;
+  --bg-canvas: #F7F7F5;
+  --border-subtle: #E8E8E4;
+  --border-medium: #D4D4CF;
+  --text-primary: #1A1A1A;
+  --text-secondary: #5C5C5C;
+  --text-tertiary: #8A8A8A;
+  /* General subject → soft orange, like the mind map itself */
+  --accent-light: #FFE0B2;
+  --accent-base: #FFB74D;
+  --accent-dark: #FFA726;
+  --accent-bg: #FFF3E0;
+  --accent-ink: #8A4B00;
+  --science-light: #BBDEFB;
+  --science-ink: #0D47A1;
+  --math-light: #C8E6C9;
+  --math-ink: #1B5E20;
+  --good: #2E7D32;
+  --good-bg: #E8F5E9;
+  --bad: #C62828;
+  --bad-bg: #FFEBEE;
+  --warn-bg: #FFF8E1;
+  --warn-ink: #8D6E00;
+  --shadow-xs: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.06);
+  --shadow-md: 0 2px 4px rgba(0,0,0,0.05), 0 6px 20px rgba(0,0,0,0.08);
+  --shadow-lg: 0 4px 6px rgba(0,0,0,0.05), 0 10px 30px rgba(0,0,0,0.1);
+  --shadow-button: 0 1px 2px rgba(0,0,0,0.05), 0 2px 8px rgba(0,0,0,0.08);
+  --shadow-button-hover: 0 2px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.12);
+  --space-xs: 4px; --space-sm: 8px; --space-md: 16px; --space-lg: 24px; --space-xl: 40px; --space-2xl: 64px;
+  --radius-sm: 6px; --radius-md: 10px; --radius-lg: 16px; --radius-full: 999px;
+  --font-family: 'Century Gothic', CenturyGothic, AppleGothic, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  --transition-fast: 0.15s ease; --transition-base: 0.25s ease;
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html { font-size: 16px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+body { font-family: var(--font-family); color: var(--text-primary); background: var(--bg-primary); line-height: 1.55; min-height: 100vh; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+a { color: var(--science-ink); }
+[hidden] { display: none !important; }
+img { max-width: 100%; }
+
+@keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes scaleIn { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes shake { 0%, 100% { transform: none; } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 167, 38, 0.45); } 100% { box-shadow: 0 0 0 14px rgba(255, 167, 38, 0); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+.reveal > * { animation: fadeUp 0.5s ease both; }
+.reveal > *:nth-child(2) { animation-delay: 0.07s; } .reveal > *:nth-child(3) { animation-delay: 0.14s; }
+.reveal > *:nth-child(4) { animation-delay: 0.21s; } .reveal > *:nth-child(5) { animation-delay: 0.28s; }
+
+/* ------------------------------------------------------------------ buttons */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid var(--border-subtle); background: #fff;
+  border-radius: var(--radius-full); padding: 10px 20px; font-weight: 700; font-size: 0.95rem; box-shadow: var(--shadow-button);
+  transition: box-shadow var(--transition-base), transform var(--transition-base), background var(--transition-fast); text-decoration: none; color: var(--text-primary);
+  white-space: nowrap;
+}
+.btn:hover { box-shadow: var(--shadow-button-hover); transform: translateY(-1px); }
+.btn:active { transform: translateY(0.5px); box-shadow: var(--shadow-xs); }
+.btn:disabled { opacity: 0.55; cursor: default; transform: none; }
+.btn-primary { background: var(--accent-light); border-color: var(--accent-base); color: var(--accent-ink); }
+.btn-primary:hover { background: #FFD699; }
+.btn-big { padding: 14px 28px; font-size: 1.05rem; }
+.btn-small { padding: 6px 14px; font-size: 0.85rem; }
+.btn-ghost { background: transparent; box-shadow: none; border-color: transparent; }
+.btn-ghost:hover { background: var(--bg-tertiary); box-shadow: none; }
+.btn-danger { color: var(--bad); }
+.btn.is-busy { position: relative; color: transparent !important; pointer-events: none; }
+.btn.is-busy::after { content: ''; position: absolute; width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--accent-ink); border-right-color: transparent; animation: spin 0.8s linear infinite; }
+
+/* ------------------------------------------------------------------ header */
+.site-header {
+  position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 12px; padding: 10px max(16px, env(safe-area-inset-left));
+  background: rgba(255,255,255,0.92); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid var(--border-subtle);
+}
+.site-header .polymath-logo { height: 44px; width: auto; flex: none; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+.site-header .brand { font-weight: 700; font-size: 1.05rem; letter-spacing: 0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.site-header .spacer { flex: 1; }
+.user-chip { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border-subtle); border-radius: var(--radius-full); padding: 4px 6px 4px 4px; background: #fff; box-shadow: var(--shadow-xs); max-width: 260px; }
+.user-chip .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--accent-light); color: var(--accent-ink); display: grid; place-items: center; font-weight: 700; overflow: hidden; flex: none; }
+.user-chip .avatar img { width: 100%; height: 100%; object-fit: cover; }
+.user-chip .who { font-size: 0.85rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.access-pill { font-size: 0.72rem; font-weight: 700; border-radius: var(--radius-full); padding: 2px 9px; background: var(--bg-tertiary); color: var(--text-secondary); white-space: nowrap; }
+.access-pill.is-open { background: var(--good-bg); color: var(--good); }
+
+/* ------------------------------------------------------------------ page */
+main { max-width: 1080px; margin: 0 auto; padding: 0 16px 80px; }
+.hero { display: grid; grid-template-columns: 1.25fr 1fr; gap: 40px; align-items: center; padding: 56px 0 40px; }
+.hero h1 { font-size: 2.5rem; line-height: 1.15; letter-spacing: 0.01em; margin-bottom: 14px; }
+.hero h1 .accent { background: linear-gradient(transparent 62%, var(--accent-light) 62%); padding: 0 4px; }
+.hero p.lead { font-size: 1.12rem; color: var(--text-secondary); max-width: 34em; margin-bottom: 22px; }
+.hero .cta-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.hero .free-note { font-size: 0.9rem; color: var(--text-secondary); margin-top: 14px; }
+.hero .free-note b { color: var(--good); }
+.hero-art { position: relative; aspect-ratio: 4 / 3; border-radius: 24px; background: var(--bg-canvas);
+  background-image: radial-gradient(circle, #DDDDD7 1px, transparent 1.2px); background-size: 22px 22px; box-shadow: var(--shadow-md); overflow: hidden; }
+.hero-art svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+.price-card { border: 1.5px solid var(--accent-base); background: var(--accent-bg); border-radius: var(--radius-lg); padding: 18px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; max-width: 520px; }
+.price-card .amount { font-size: 2rem; font-weight: 700; color: var(--accent-ink); line-height: 1; }
+.price-card .amount small { font-size: 0.95rem; font-weight: 600; }
+.price-card ul { list-style: none; font-size: 0.88rem; color: var(--text-secondary); }
+.price-card li::before { content: '✓ '; color: var(--good); font-weight: 700; }
+
+section.block { padding: 36px 0; border-top: 1px solid var(--border-subtle); scroll-margin-top: 64px; }
+section.block > h2 { font-size: 1.6rem; letter-spacing: 0.01em; margin-bottom: 6px; }
+section.block > p.sub { color: var(--text-secondary); margin-bottom: 22px; max-width: 46em; }
+
+.features { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.feature { background: #fff; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 18px; box-shadow: var(--shadow-sm); }
+.feature .icon { font-size: 1.6rem; width: 46px; height: 46px; display: grid; place-items: center; border-radius: 14px; background: var(--bg-tertiary); margin-bottom: 10px; }
+.feature h3 { font-size: 1rem; margin-bottom: 4px; }
+.feature p { font-size: 0.88rem; color: var(--text-secondary); }
+
+/* account panel */
+.account { border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--bg-secondary); padding: 18px 20px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; box-shadow: var(--shadow-xs); }
+.account .state { flex: 1 1 280px; }
+.account .state b { display: block; font-size: 1.05rem; margin-bottom: 2px; }
+.account .state span { color: var(--text-secondary); font-size: 0.92rem; }
+.account .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.account.is-open { background: var(--good-bg); border-color: #C8E6C9; }
+.account.is-warn { background: var(--warn-bg); border-color: #FFE082; }
+
+/* library */
+.library-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+.search { flex: 1 1 240px; border: 1px solid var(--border-medium); border-radius: var(--radius-full); padding: 10px 16px; background: #fff; outline: none; transition: border-color var(--transition-fast), box-shadow var(--transition-fast); }
+.search:focus { border-color: var(--accent-base); box-shadow: 0 0 0 3px var(--accent-bg); }
+.count { color: var(--text-secondary); font-size: 0.9rem; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; }
+.map-card { position: relative; text-align: left; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: #fff; padding: 16px; box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--transition-base), transform var(--transition-base), border-color var(--transition-fast); display: flex; flex-direction: column; gap: 10px; min-height: 190px; animation: scaleIn 0.35s ease both; }
+.map-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); border-color: var(--accent-base); }
+.map-card:focus-visible { outline: 3px solid var(--accent-dark); outline-offset: 3px; }
+.map-card .thumb { height: 64px; border-radius: 12px; background: var(--bg-canvas); position: relative; overflow: hidden; }
+.map-card .thumb svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.map-card h3 { font-size: 1.02rem; line-height: 1.3; }
+.map-card .topics { display: flex; flex-wrap: wrap; gap: 5px; }
+.map-card .topics span { font-size: 0.74rem; background: var(--bg-tertiary); border-radius: var(--radius-full); padding: 2px 9px; color: var(--text-secondary); }
+.map-card .meta { margin-top: auto; display: flex; gap: 10px; flex-wrap: wrap; font-size: 0.78rem; color: var(--text-tertiary); align-items: center; }
+.map-card .lock { z-index: 1; position: absolute; top: 12px; right: 12px; font-size: 0.75rem; font-weight: 700; border-radius: var(--radius-full); padding: 3px 10px; background: #fff; border: 1px solid var(--border-subtle); box-shadow: var(--shadow-xs); }
+.map-card .lock.is-open { color: var(--good); border-color: #C8E6C9; background: var(--good-bg); }
+.map-card.is-new::before { content: 'New'; position: absolute; top: -8px; left: 14px; background: var(--accent-dark); color: #fff; font-size: 0.7rem; font-weight: 700; border-radius: var(--radius-full); padding: 1px 9px; }
+.empty-state { text-align: center; padding: 36px 16px; color: var(--text-secondary); border: 1px dashed var(--border-medium); border-radius: var(--radius-lg); background: var(--bg-secondary); grid-column: 1 / -1; }
+.skeleton { height: 190px; border-radius: var(--radius-lg); background: linear-gradient(90deg, #F3F3F0 0px, #FAFAF8 160px, #F3F3F0 320px); background-size: 800px 100%; animation: shimmer 1.4s linear infinite; }
+@keyframes shimmer { from { background-position: -400px 0; } to { background-position: 400px 0; } }
+
+/* FAQ */
+.faq details { border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 12px 16px; background: #fff; margin-bottom: 10px; }
+.faq summary { font-weight: 700; cursor: pointer; }
+.faq details p { margin-top: 8px; color: var(--text-secondary); font-size: 0.94rem; }
+footer.site-footer { border-top: 1px solid var(--border-subtle); padding: 24px 16px 40px; text-align: center; color: var(--text-tertiary); font-size: 0.85rem; }
+
+/* ------------------------------------------------------------------ modals, toasts */
+.modal-back { position: fixed; inset: 0; background: rgba(26,26,26,0.36); z-index: 60; display: grid; place-items: center; padding: 16px; animation: fadeUp 0.2s ease both; }
+.modal { width: min(460px, 100%); max-height: calc(100vh - 32px); overflow: auto; background: #fff; border-radius: 20px; box-shadow: var(--shadow-lg); padding: 24px; animation: scaleIn 0.25s var(--spring) both; }
+.modal h2 { font-size: 1.35rem; margin-bottom: 6px; }
+.modal p { color: var(--text-secondary); margin-bottom: 14px; }
+.modal .row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; margin-top: 16px; }
+.modal .stack { display: grid; gap: 10px; }
+.modal .divider { display: flex; align-items: center; gap: 10px; color: var(--text-tertiary); font-size: 0.8rem; margin: 6px 0; }
+.modal .divider::before, .modal .divider::after { content: ''; flex: 1; height: 1px; background: var(--border-subtle); }
+.field { display: grid; gap: 4px; font-size: 0.88rem; font-weight: 600; }
+.field input { border: 1px solid var(--border-medium); border-radius: var(--radius-md); padding: 10px 12px; font-weight: 400; outline: none; }
+.field input:focus { border-color: var(--accent-base); box-shadow: 0 0 0 3px var(--accent-bg); }
+.form-error { color: var(--bad); font-size: 0.88rem; min-height: 1.2em; }
+.google-btn img { width: 18px; height: 18px; }
+.toasts { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 90; display: grid; gap: 8px; width: min(520px, calc(100% - 32px)); pointer-events: none; }
+.toast { background: #1A1A1A; color: #fff; border-radius: 14px; padding: 12px 16px; box-shadow: var(--shadow-lg); font-size: 0.92rem; animation: fadeUp 0.25s ease both; pointer-events: auto; }
+.toast.good { background: #1B5E20; } .toast.error { background: #B71C1C; }
+
+/* ------------------------------------------------------------------ the viewer */
+.viewer { position: fixed; inset: 0; z-index: 50; background: var(--bg-canvas); display: flex; flex-direction: column; animation: fadeUp 0.25s ease both; }
+.viewer-bar { display: flex; align-items: center; gap: 8px; padding: 8px max(12px, env(safe-area-inset-left)); background: #fff; border-bottom: 1px solid var(--border-subtle); box-shadow: var(--shadow-xs); flex-wrap: wrap; }
+.viewer-bar h2 { font-size: 1.05rem; flex: 1 1 160px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.viewer-bar .zoom { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--border-subtle); border-radius: var(--radius-full); padding: 2px; background: var(--bg-secondary); }
+.viewer-bar .zoom button { border: 0; background: transparent; width: 32px; height: 32px; border-radius: 50%; font-weight: 700; }
+.viewer-bar .zoom button:hover { background: #fff; }
+.viewer-bar .zoom span { min-width: 46px; text-align: center; font-size: 0.8rem; color: var(--text-secondary); }
+.viewport { position: relative; flex: 1 1 auto; overflow: hidden; background-color: var(--bg-canvas);
+  background-image: radial-gradient(circle, #DDDDD7 1px, transparent 1.2px); background-size: 24px 24px; touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+.viewport.is-panning { cursor: grabbing; }
+.world { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0; will-change: transform; }
+.edges { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.edges path.branch { fill: none; stroke-linecap: round; }
+.edges path.link { fill: none; stroke: #9E9E9E; stroke-width: 2; stroke-dasharray: 6 6; }
+.edges .link-label { font-family: var(--font-family); font-size: 13px; font-weight: 600; fill: var(--text-secondary); paint-order: stroke; stroke: var(--bg-canvas); stroke-width: 5px; }
+.nodes { position: absolute; left: 0; top: 0; }
+.viewer-hint { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); background: rgba(255,255,255,0.94); border: 1px solid var(--border-subtle); border-radius: var(--radius-full); padding: 6px 14px; font-size: 0.8rem; color: var(--text-secondary); box-shadow: var(--shadow-sm); pointer-events: none; white-space: nowrap; }
+.viewer-loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--text-secondary); }
+
+.mm-node { position: absolute; left: 0; top: 0; background: var(--node-fill, #fff); color: var(--node-ink, #1A1A1A); border: 1.5px solid var(--node-line, #D4D4CF);
+  border-radius: 14px; box-shadow: var(--shadow-sm); padding: 10px 16px; min-width: 70px; max-width: 280px; width: max-content;
+  font-size: 0.98rem; font-weight: 600; line-height: 1.35; text-align: center; overflow-wrap: anywhere; }
+.mm-node.is-root { font-size: 1.3rem; font-weight: 700; padding: 16px 26px; max-width: 340px; border-width: 2px; }
+.mm-node.shape-pill { border-radius: var(--radius-full); }
+.mm-node.shape-rect { border-radius: 4px; }
+.mm-node.shape-cloud { border-radius: 40px 34px 44px 30px / 30px 40px 32px 42px; }
+.mm-node .mm-text { white-space: pre-wrap; }
+.mm-node .fold { position: absolute; top: 50%; margin-top: -11px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: var(--radius-full);
+  border: 1px solid var(--node-line, #D4D4CF); background: #fff; color: var(--text-secondary); font-size: 11px; line-height: 20px; font-weight: 700; }
+.mm-node .fold.right { right: -12px; transform: translateX(100%); } .mm-node .fold.left { left: -12px; transform: translateX(-100%); }
+.mm-node.type-note { text-align: left; font-weight: 400; max-width: 300px; min-width: 180px; border-radius: 6px 18px 6px 6px; padding: 12px 14px; }
+.mm-node.type-note .note-title { font-weight: 700; margin-bottom: 4px; }
+.mm-node.type-note .note-body { font-size: 0.88rem; white-space: pre-wrap; line-height: 1.45; color: var(--text-primary); }
+.mm-node.type-image { padding: 8px; max-width: none; background: #fff; }
+.mm-node.type-image .pic { max-width: none; height: auto; display: block; border-radius: 10px; background: var(--bg-tertiary); pointer-events: none; }
+.mm-node.type-image .pic-caption { font-size: 0.85rem; margin-top: 6px; }
+.mm-node.type-code { padding: 0; max-width: none; text-align: left; overflow: hidden; background: #fff; display: flex; flex-direction: column; }
+.code-bar { display: flex; align-items: center; gap: 6px; padding: 6px 12px; background: var(--bg-tertiary); border-bottom: 1px solid var(--border-subtle); }
+.code-dots { display: flex; gap: 5px; flex: none; }
+.code-dots i { width: 10px; height: 10px; border-radius: 50%; background: #FFCDD2; } .code-dots i:nth-child(2) { background: #FFE0B2; } .code-dots i:nth-child(3) { background: #C8E6C9; }
+.code-title { flex: 1; font-size: 0.85rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.code-frame-wrap { position: relative; background: #fff; }
+.code-frame { display: block; width: 100%; height: 100%; border: 0; background: #fff; }
+.code-shield { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(255,255,255,0.0); }
+.code-shield { background: rgba(255,255,255,0.08); }
+.code-shield button { opacity: 0.92; }
+.mm-node.type-code.is-live .code-shield { display: none; }
+.mm-node.type-question { padding: 0; max-width: none; text-align: left; font-weight: 400; background: #fff; border-color: #90CAF9; overflow: hidden; }
+.q-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 8px 12px; background: #E3F2FD; border-bottom: 1px solid #BBDEFB; font-size: 0.75rem; font-weight: 700; color: var(--science-ink); }
+.q-head .q-badge { background: #fff; border-radius: var(--radius-full); padding: 1px 8px; }
+.q-fold { border: 0; background: #fff; color: var(--science-ink); width: 24px; height: 24px; border-radius: 8px; font-size: 0.8rem; display: inline-grid; place-items: center; box-shadow: var(--shadow-xs); flex: none; }
+.q-body { padding: 10px 14px 12px; font-size: 0.9rem; line-height: 1.5; }
+.q-foot { display: flex; gap: 6px; padding: 0 12px 12px; flex-wrap: wrap; }
+.q-mini { display: block; border: 0; background: #fff; text-align: left; padding: 9px 14px 11px; font-size: 0.86rem; line-height: 1.4; width: 100%; }
+.qc p { margin: 0 0 6px; }
+.qc img { max-width: 100%; height: auto; border-radius: 8px; margin: 6px 0; }
+.qc table { border-collapse: collapse; margin: 8px 0; font-size: 0.85rem; max-width: 100%; }
+.qc td, .qc th { border: 1px solid var(--border-medium); padding: 4px 8px; vertical-align: top; }
+.qc .qc-part { font-weight: 700; margin-right: 4px; }
+.qc .qc-block { margin-bottom: 8px; }
+.qc .qc-options { display: grid; gap: 6px; margin: 6px 0; }
+.qc .qc-option { display: flex; gap: 8px; align-items: flex-start; border: 1px solid var(--border-subtle); border-radius: 10px; padding: 6px 10px; background: var(--bg-secondary); text-align: left; width: 100%; font: inherit; }
+.qc button.qc-option:hover { background: var(--bg-tertiary); }
+.qc .qc-option.is-right { border-color: #A5D6A7; background: var(--good-bg); }
+.qc .qc-option.is-wrong { border-color: #EF9A9A; background: var(--bad-bg); animation: shake 0.35s ease; }
+.qc .qc-blank { display: inline-block; min-width: 60px; border-bottom: 2px solid var(--text-secondary); margin: 0 4px; }
+.qc .qc-answer { background: var(--good-bg); border: 1px solid #C8E6C9; border-radius: 10px; padding: 8px 10px; margin-top: 8px; font-size: 0.85rem; }
+.qc .qc-answer b { color: var(--good); }
+.qc .qc-mistake { background: var(--warn-bg); border: 1px solid #FFE082; border-radius: 10px; padding: 8px 10px; margin: 6px 0; font-size: 0.85rem; }
+.qc .qc-lines { height: 40px; border-bottom: 1px dashed var(--border-medium); }
+.qc-opt-num { margin-right: 2px; }
+
+/* ------------------------------------------------------------------ admin */
+.admin { border: 1.5px dashed var(--accent-base); border-radius: var(--radius-lg); padding: 20px; background: #FFFCF7; }
+.admin h2 { font-size: 1.3rem; margin-bottom: 4px; }
+.admin .price-edit { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin: 14px 0 20px; }
+.admin .price-edit .field input { width: 140px; }
+.admin table { width: 100%; border-collapse: collapse; font-size: 0.88rem; background: #fff; border-radius: var(--radius-md); overflow: hidden; }
+.admin th, .admin td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border-subtle); }
+.admin th { background: var(--bg-tertiary); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); }
+.admin .table-wrap { overflow-x: auto; }
+.admin .stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.admin .stat { background: #fff; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 10px 14px; min-width: 120px; }
+.admin .stat b { display: block; font-size: 1.4rem; }
+.admin .stat span { font-size: 0.78rem; color: var(--text-secondary); }
+.status-tag { font-size: 0.75rem; font-weight: 700; border-radius: var(--radius-full); padding: 2px 9px; background: var(--bg-tertiary); }
+.status-tag.active, .status-tag.trialing { background: var(--good-bg); color: var(--good); }
+.status-tag.past_due, .status-tag.unpaid { background: var(--warn-bg); color: var(--warn-ink); }
+.status-tag.canceled, .status-tag.incomplete_expired { background: var(--bad-bg); color: var(--bad); }
+
+@media (max-width: 860px) {
+  .hero { grid-template-columns: 1fr; padding-top: 32px; gap: 24px; }
+  .hero h1 { font-size: 2rem; }
+  .features { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 520px) {
+  .site-header .polymath-logo { height: 34px; }
+  .site-header .brand { display: none; }
+  .user-chip .who { display: none; }
+  .features { grid-template-columns: 1fr; }
+  .hero h1 { font-size: 1.7rem; }
+  .price-card .amount { font-size: 1.7rem; }
+  .viewer-bar h2 { flex-basis: 100%; order: -1; }
+  .viewer-hint { display: none; }
+}
+@media print {
+  @page { size: A4; margin: 15mm 20mm; }
+  .site-header .spacer ~ *, .cta-row, .account .actions, .library-tools, .toasts, .admin { display: none !important; }
+  body { background: #fff; }
+  .map-card, .feature { box-shadow: none; page-break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+<header class="site-header">
+  <a href="https://polymathlc.com.sg/" aria-label="Polymath Learning Centre"><img class="polymath-logo" src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Polymath Learning Centre"></a>
+  <span class="brand">Mr Chung's Maps</span>
+  <span class="spacer"></span>
+  <button class="btn btn-small" type="button" id="headerSignIn">Sign in</button>
+  <div class="user-chip" id="userChip" hidden>
+    <span class="avatar" id="userAvatar"></span>
+    <span class="who" id="userName"></span>
+    <span class="access-pill" id="accessPill"></span>
+    <button class="btn btn-small btn-ghost" type="button" id="signOutBtn" title="Sign out">Sign out</button>
+  </div>
+</header>
+
+<main>
+  <section class="hero reveal">
+    <div>
+      <h1>Every topic, on <span class="accent">one page</span>.</h1>
+      <p class="lead">Mr Chung's Maps are ready-made mind maps for Primary Science and Math, made by Mr Chung of Polymath Learning Centre. Each map lays a whole topic out on one page, with short notes, pictures, little learning apps to play with and real exam-style questions to try.</p>
+      <div class="price-card" id="priceCard">
+        <div class="amount"><span id="priceAmount">S$9.90</span> <small>/ month</small></div>
+        <ul>
+          <li>Every map in the library, and every new one</li>
+          <li>Cancel anytime, from this page</li>
+        </ul>
+      </div>
+      <div class="cta-row">
+        <button class="btn btn-primary btn-big" type="button" id="heroSubscribe">Subscribe</button>
+        <a class="btn btn-big btn-ghost" href="#library">See the maps</a>
+      </div>
+      <p class="free-note"><b>Polymath students: it's free.</b> Sign in with the account you use for My Polymath and the whole library opens.</p>
+    </div>
+    <div class="hero-art" aria-hidden="true">
+      <svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid meet">
+        <g fill="none" stroke-linecap="round">
+          <path d="M200 150 C 150 150, 150 70, 96 70" stroke="#90CAF9" stroke-width="4"/>
+          <path d="M200 150 C 150 150, 150 230, 96 230" stroke="#A5D6A7" stroke-width="4"/>
+          <path d="M200 150 C 250 150, 250 70, 304 70" stroke="#FFCC80" stroke-width="4"/>
+          <path d="M200 150 C 250 150, 250 230, 304 230" stroke="#B39DDB" stroke-width="4"/>
+          <path d="M304 70 C 330 70, 330 40, 352 40" stroke="#FFCC80" stroke-width="2.5"/>
+          <path d="M304 70 C 330 70, 330 100, 352 100" stroke="#FFCC80" stroke-width="2.5"/>
+          <path d="M96 230 C 70 230, 70 262, 48 262" stroke="#A5D6A7" stroke-width="2.5"/>
+        </g>
+        <rect x="140" y="126" width="120" height="48" rx="24" fill="#FFF3E0" stroke="#FFCC80" stroke-width="2"/>
+        <text x="200" y="156" text-anchor="middle" font-family="Century Gothic, sans-serif" font-weight="700" font-size="17" fill="#8A4B00">Heat</text>
+        <rect x="46" y="52" width="100" height="36" rx="12" fill="#E3F2FD" stroke="#90CAF9" stroke-width="1.5"/>
+        <text x="96" y="75" text-anchor="middle" font-family="Century Gothic, sans-serif" font-weight="600" font-size="12" fill="#0D47A1">Conductors</text>
+        <rect x="46" y="212" width="100" height="36" rx="12" fill="#F1F8E9" stroke="#A5D6A7" stroke-width="1.5"/>
+        <text x="96" y="235" text-anchor="middle" font-family="Century Gothic, sans-serif" font-weight="600" font-size="12" fill="#1B5E20">Insulators</text>
+        <rect x="254" y="52" width="100" height="36" rx="12" fill="#FFF3E0" stroke="#FFCC80" stroke-width="1.5"/>
+        <text x="304" y="75" text-anchor="middle" font-family="Century Gothic, sans-serif" font-weight="600" font-size="12" fill="#8A4B00">Heat flow</text>
+        <rect x="254" y="212" width="100" height="36" rx="12" fill="#EDE7F6" stroke="#B39DDB" stroke-width="1.5"/>
+        <text x="304" y="235" text-anchor="middle" font-family="Century Gothic, sans-serif" font-weight="600" font-size="12" fill="#4527A0">❓ Try it</text>
+        <rect x="336" y="28" width="52" height="24" rx="8" fill="#fff" stroke="#FFCC80"/>
+        <rect x="336" y="88" width="52" height="24" rx="8" fill="#fff" stroke="#FFCC80"/>
+        <rect x="8" y="250" width="56" height="24" rx="8" fill="#fff" stroke="#A5D6A7"/>
+      </svg>
+    </div>
+  </section>
+
+  <section class="block" id="accountSection" hidden>
+    <div class="account" id="accountPanel">
+      <div class="state"><b id="accountTitle"></b><span id="accountText"></span></div>
+      <div class="actions" id="accountActions"></div>
+    </div>
+  </section>
+
+  <section class="block reveal" id="featuresSection">
+    <h2>What's in a map</h2>
+    <p class="sub">The same maps Mr Chung teaches from in class, kept up to date as he adds to them.</p>
+    <div class="features">
+      <div class="feature"><div class="icon">🗺️</div><h3>The whole topic</h3><p>Every idea in a topic and how they connect, so revision starts from the big picture.</p></div>
+      <div class="feature"><div class="icon">📝</div><h3>Short notes</h3><p>Key definitions and the words examiners look for, right where they belong.</p></div>
+      <div class="feature"><div class="icon">💻</div><h3>Apps to play with</h3><p>Little interactive apps inside the map that show how things change.</p></div>
+      <div class="feature"><div class="icon">❓</div><h3>Exam questions</h3><p>Questions from Polymath's own bank. Tap an option to check it, or reveal the answer.</p></div>
+    </div>
+  </section>
+
+  <section class="block" id="library">
+    <h2>The library</h2>
+    <p class="sub" id="librarySub">Every map Mr Chung has published. Subscribe to open them all.</p>
+    <div class="library-tools">
+      <input class="search" id="search" type="search" placeholder="Search maps and topics" aria-label="Search maps and topics">
+      <span class="count" id="mapCount"></span>
+    </div>
+    <div class="grid" id="mapGrid">
+      <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+    </div>
+  </section>
+
+  <section class="block" id="adminSection" hidden>
+    <div class="admin" id="adminPanel"></div>
+  </section>
+
+  <section class="block faq" id="faq">
+    <h2>Questions</h2>
+    <details><summary>How do I cancel?</summary><p>Sign in on this page and tap <b>Cancel subscription</b>. You keep the library until the end of the month you've paid for, and you're never charged again. Changed your mind? Tap <b>Keep my subscription</b> before that date.</p></details>
+    <details><summary>I'm a Polymath student. Do I pay?</summary><p>No. Sign in with the account you use for My Polymath. Once the centre has approved it, every map opens free. You can also find the maps inside the Mind Map app.</p></details>
+    <details><summary>What if a payment doesn't go through?</summary><p>The library pauses until the card is fixed. Tap <b>Update card</b> on this page, or WhatsApp us on +65 9645 0588 and we'll help.</p></details>
+    <details><summary>Which levels are the maps for?</summary><p>Primary Science and Math, mostly P3 to P6. Each map shows its topics on the card, so you can see what's inside before you subscribe.</p></details>
+  </section>
+</main>
+
+<footer class="site-footer">
+  Polymath Learning Centre · <a href="https://wa.me/6596450588">WhatsApp +65 9645 0588</a> · Payments by Stripe · <span id="versionLabel"></span>
+</footer>
+
+<div class="viewer" id="viewer" hidden role="dialog" aria-modal="true" aria-labelledby="viewerTitle">
+  <div class="viewer-bar">
+    <button class="btn btn-small" type="button" id="viewerClose">← Library</button>
+    <h2 id="viewerTitle"></h2>
+    <div class="zoom">
+      <button type="button" id="zoomOut" aria-label="Zoom out">−</button>
+      <span id="zoomLabel">100%</span>
+      <button type="button" id="zoomIn" aria-label="Zoom in">+</button>
+    </div>
+    <button class="btn btn-small" type="button" id="zoomFit">Fit</button>
+    <button class="btn btn-small" type="button" id="foldAll">Fold all</button>
+  </div>
+  <div class="viewport" id="viewport">
+    <div class="world" id="world"><svg class="edges" id="edges" width="1" height="1"></svg><div class="nodes" id="nodes"></div></div>
+    <div class="viewer-loading" id="viewerLoading">Opening the map…</div>
+    <div class="viewer-hint">Drag to move · pinch or scroll to zoom · tap a number to open a branch</div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script type="module" src="./maps-app.js?v=1.0.0"></script>
+</body>
+</html>
