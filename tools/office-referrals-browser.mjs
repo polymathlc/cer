@@ -284,8 +284,10 @@ try {
   await pp.addInitScript(seed => { window.__fakeSeed = { docs: seed }; }, Object.assign({ 'schedule_config/main': SCHEDULE, 'officeSettings/config': { combinedMonths: [] } }, FAMILIES, BOOKINGS));
   await pp.goto(BASE + '/office/#referrals');
   await pp.waitForSelector('text=Waiting for you to confirm');
+  if (process.env.REF_FONT) await pp.addStyleTag({ content: '* { font-family: "' + process.env.REF_FONT + '" !important; }' });
   const wide = await pp.evaluate(() => document.documentElement.scrollWidth);
-  assert.ok(wide <= 392, 'the phone page does not scroll sideways (' + wide + ')');
+  const over = wide > 392 ? await pp.evaluate(() => [...document.querySelectorAll('body *')].filter(e => e.getBoundingClientRect().right > 392 && !e.closest('.table-wrap')).slice(-8).map(e => e.tagName + '.' + e.className + ' ' + Math.round(e.getBoundingClientRect().right))) : [];
+  assert.ok(wide <= 392, 'the phone page does not scroll sideways (' + wide + ') ' + JSON.stringify(over));
   await pp.screenshot({ path: join(OUT, '08-referrals-phone.png'), animations: 'disabled' });
   await phone.close();
   ok('the Referrals tab fits a phone');

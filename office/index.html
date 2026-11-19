@@ -159,7 +159,9 @@
   .ref-row .ref-act { display:flex; flex-direction:column; gap:6px; align-items:stretch; }
   .ref-url { word-break:break-all; }
   .ref-dismissed { margin-top:12px; }
-  @media (max-width:900px) { .ref-row { grid-template-columns:minmax(0,1fr); } .ref-row .ref-act { flex-direction:row; flex-wrap:wrap; } }
+  .ref-manual { grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; align-items:end; }
+  .ref-manual select { width:100%; min-width:0; }
+  @media (max-width:900px) { .ref-manual { grid-template-columns:minmax(0,1fr); } .ref-row { grid-template-columns:minmax(0,1fr); } .ref-row .ref-act { flex-direction:row; flex-wrap:wrap; } }
   /* 👋 The withdrawn list under the timetable (v1.15.0) */
   .wd-card .wd-head { display:flex; gap:12px; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; }
   .wd-card .wd-head h2 { margin:0 0 4px; }

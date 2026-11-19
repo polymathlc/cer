@@ -3642,7 +3642,7 @@ VIEWS.referrals = function () {
   // 2. By hand.
   const mReady = m.from && m.to && m.from !== m.to;
   h += '<div class="card"><h2>Add a referral by hand</h2><div class="sub">For a family who mentioned a friend on WhatsApp or at the centre instead of using the link.</div>'
-    + '<div class="form" style="grid-template-columns:1fr 1fr auto;align-items:end;">'
+    + '<div class="form ref-manual">'
     + '<div class="field"><label>Introduced by</label><select data-ch="refManual" data-k="from">' + refFamilyOptions(m.from, { all: true }) + '</select></div>'
     + '<div class="field"><label>The new family</label><select data-ch="refManual" data-k="to">' + refFamilyOptions(m.to) + '</select></div>'
     + '<div class="field"><button class="btn" data-act="refConfirmManual" ' + (mReady ? '' : 'disabled') + '>✓ Give both rewards…</button></div></div></div>';
