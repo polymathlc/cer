@@ -40,7 +40,7 @@
         payment, last PayNow screenshot the parent sent).
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export const OFFICE_CORE_VERSION = '1.15.0';
+export const OFFICE_CORE_VERSION = '1.16.0';
 // The centre's logo for emails: a small copy of assets/branding/polymath-learning-centre.png,
 // served from the website so Gmail and other mail apps can show it (v1.13.0).
 export const EMAIL_LOGO_URL = 'https://polymathlc.com.sg/assets/branding/polymath-logo-email.png';
@@ -581,7 +581,8 @@ export function normalizeFamily(raw) {
     status: 'active', payerNames: [], credit: 0, discount: null, students: [], preferWhatsapp: false,
     paidMonths: [], screenshots: [],
     hardcopy: false, paymentType: 'monthly', packageStart: '', packageEnd: '', withdrawn: false, lastMonth: '',
-    pauseFrom: '', pauseUntil: ''
+    pauseFrom: '', pauseUntil: '',
+    referralCode: '', rewards: [], referredBy: null
   }, raw || {});
   f.parentName = String(f.parentName || '').trim();
   f.email = cleanEmail(f.email);
@@ -612,6 +613,10 @@ export function normalizeFamily(raw) {
   if (wd && f.status === 'active') f.status = 'withdrawn';
   f.withdrawn = f.status === 'withdrawn';
   if (f.status !== 'paused') { f.pauseFrom = ''; f.pauseUntil = ''; }
+  // Referral rewards (v1.16.0): the family's own link code, its rewards, who introduced it.
+  f.referralCode = cleanReferralCode(f.referralCode);
+  f.rewards = normalizeRewards(f.rewards);
+  f.referredBy = normalizeReferredBy(f.referredBy);
   return f;
 }
 export function familyEmails(f) { return [f.email, f.email2].filter(isEmail).filter((e, i, a) => a.indexOf(e) === i); }
@@ -875,6 +880,10 @@ export function buildInvoice(family, period, ctx) {
   let running = subtotal;
   const dl = discountLine(f, subtotal);
   if (dl) { lines.push(dl); running = round2(running + dl.amount); }
+  // Referral rewards confirmed by staff (v1.16.0), each as its own line.
+  const rw = running > 0 ? rewardLines(f, running) : { lines: [], uses: [], total: 0 };
+  rw.lines.forEach(l => lines.push(l));
+  running = round2(running - rw.total);
   let creditUsed = 0;
   if (f.credit > 0 && running > 0) {
     creditUsed = round2(Math.min(f.credit, running));
@@ -891,7 +900,7 @@ export function buildInvoice(family, period, ctx) {
     reference: invoiceReference(f.code, period),
     parentName: f.parentName, emails: familyEmails(f), whatsapp: f.whatsapp,
     students: activeStudents(f).map(s => s.name),
-    lines, subtotal, creditUsed, total, paid: 0,
+    lines, subtotal, creditUsed, rewardUses: rw.uses, rewardsUsed: rw.total, total, paid: 0,
     issueDate, dueDate: addDays(issueDate, settings.dueDays),
     status: 'draft', issues, payments: [], reminders: [], sends: []
   };
@@ -1240,7 +1249,11 @@ export const DEFAULT_SETTINGS = Object.freeze({
   combinedMonths: Object.freeze(['2026-11']),
   // Hardcopy printing, a month, for families with a hardcopy subscription.
   // 0 = not charged on monthly invoices (a custom invoice still lists the line to fill in).
-  hardcopyFee: 0
+  hardcopyFee: 0,
+  // Referral rewards (v1.16.0): taken off each family's next invoice once staff
+  // confirm the friend enrolled. Placeholders until Mr Chung sets his own.
+  referralReward: 50,
+  referralFriendReward: 50
 });
 export function normalizeSettings(raw) {
   const s = Object.assign({}, DEFAULT_SETTINGS, raw || {});
@@ -1255,6 +1268,8 @@ export function normalizeSettings(raw) {
   s.centreWhatsapp = normalizeWhatsapp(s.centreWhatsapp) || CENTRE_WHATSAPP;
   s.combinedMonths = normalizeCombinedMonths(raw && Array.isArray(raw.combinedMonths) ? raw.combinedMonths : DEFAULT_SETTINGS.combinedMonths);
   s.hardcopyFee = feeNum(s.hardcopyFee);
+  s.referralReward = raw && raw.referralReward !== undefined && raw.referralReward !== '' ? (Number(raw.referralReward) > 0 ? feeNum(raw.referralReward) : 0) : DEFAULT_SETTINGS.referralReward;
+  s.referralFriendReward = raw && raw.referralFriendReward !== undefined && raw.referralFriendReward !== '' ? (Number(raw.referralFriendReward) > 0 ? feeNum(raw.referralFriendReward) : 0) : DEFAULT_SETTINGS.referralFriendReward;
   return s;
 }
 
@@ -3628,4 +3643,350 @@ export function categoryFilters(key, base) {
 export function categoryCsv(rows) {
   return toCsv([['Student', 'Level', 'Primary school', 'Classes', 'Fees a month', 'Parent', 'Email', 'WhatsApp'],
     ...(rows || []).map(r => [r.name, levelLabel(r.level), r.school, r.classes.map(x => x.label + ' (' + x.modeLabel + ')').join('; '), moneyPlain(r.fees), r.parentName, r.emails.join('; '), displayPhone(r.whatsapp)])]);
+}
+
+/* ─────────────────────────── 10. Referral rewards (v1.16.0) ───────────────────────────
+   Every family has its own referral link, polymathlc.com.sg/schedule/?ref=CODE.
+   A friend who books a trial, an enrolment or a free diagnostic test through it
+   carries the code into the booking (schedule_bookings.referralCode). Nothing is
+   given away at that point: a booking is only a booking.
+
+   Staff confirm in the Office, on the 🎁 Referrals tab, once the friend's family
+   has really enrolled and has its own family record. Confirming gives BOTH
+   families a reward (amounts in Settings, `referralReward` for the family who
+   introduced and `referralFriendReward` for the new family), kept on each family
+   as `rewards`:
+       { id, kind: 'referrer' | 'friend' | 'goodwill', amount, used, label, detail,
+         otherFamilyId, otherName, bookingId, confirmedAt, confirmedBy, uses: [{ invoiceId, period, amount }] }
+   and the new family remembers who introduced it in `referredBy`.
+
+   A reward is taken off the family's NEXT monthly invoice as its own line,
+   "Referral reward — thank you for introducing the Lim family", after any
+   standing discount and before credit from an overpayment. A reward larger than
+   one invoice carries on to the next. Cancelling an invoice gives the reward back.
+   Custom invoices never use rewards.
+   ─────────────────────────────────────────────────────────────────────────── */
+export const REFERRAL_PATH = '/schedule/';
+export const REFERRAL_PARAM = 'ref';
+export const REFERRAL_KINDS = Object.freeze({
+  referrer: Object.freeze({ key: 'referrer', label: 'Referral reward', icon: '🎁', help: 'For introducing a family that enrolled' }),
+  friend: Object.freeze({ key: 'friend', label: 'Welcome reward', icon: '👋', help: 'For joining through a friend\'s referral' }),
+  goodwill: Object.freeze({ key: 'goodwill', label: 'Reward', icon: '⭐', help: 'Added by hand' })
+});
+
+// The code in a link or typed by a parent: upper case, nothing but the code's letters.
+export function cleanReferralCode(input) {
+  let s = String(input || '').toUpperCase();
+  s = s.replace(/^.*[?&#]REF=/, '').replace(/[&#].*$/, '');
+  s = s.replace(/^PLC/, '').replace(/[^A-Z0-9]/g, '');
+  return isCode(s) ? s : '';
+}
+export function referralLink(code) {
+  const c = cleanReferralCode(code);
+  return c ? SITE + REFERRAL_PATH + '?' + REFERRAL_PARAM + '=' + c : '';
+}
+// The family's own referral code, or a new one that clashes with no family code
+// and no referral code. The caller stores it on the family.
+export function newReferralCode(random, families) {
+  const taken = new Set();
+  (families || []).forEach(f => { if (f && f.code) taken.add(f.code); if (f && f.referralCode) taken.add(f.referralCode); });
+  return newCode(random, taken);
+}
+export function normalizeRewards(list) {
+  return (Array.isArray(list) ? list : []).map(raw => {
+    const r = Object.assign({ id: '', kind: 'goodwill', amount: 0, used: 0, label: '', detail: '', otherFamilyId: '', otherName: '', bookingId: '', confirmedAt: '', confirmedBy: '', uses: [] }, raw || {});
+    r.id = String(r.id || '');
+    if (!REFERRAL_KINDS[r.kind]) r.kind = 'goodwill';
+    r.amount = feeNum(r.amount);
+    r.uses = (Array.isArray(r.uses) ? r.uses : []).map(u => ({ invoiceId: String((u && u.invoiceId) || ''), period: isPeriod(u && u.period) ? u.period : '', amount: feeNum(u && u.amount) }))
+      .filter(u => u.invoiceId && u.amount > 0);
+    r.used = round2(Math.min(r.amount, r.uses.reduce((n, u) => n + u.amount, 0)));
+    r.label = String(r.label || '').trim();
+    r.detail = String(r.detail || '').trim();
+    r.otherName = String(r.otherName || '').trim();
+    r.confirmedAt = isDayKey(r.confirmedAt) ? r.confirmedAt : '';
+    return r;
+  }).filter(r => r.id && r.amount > 0);
+}
+export function normalizeReferredBy(raw) {
+  if (!raw || typeof raw !== 'object' || !raw.familyId) return null;
+  return {
+    familyId: String(raw.familyId), name: String(raw.name || '').trim(), code: cleanReferralCode(raw.code),
+    bookingId: String(raw.bookingId || ''), confirmedAt: isDayKey(raw.confirmedAt) ? raw.confirmedAt : '', confirmedBy: String(raw.confirmedBy || '')
+  };
+}
+export function rewardLeft(r) { return Math.max(0, round2((Number(r.amount) || 0) - (Number(r.used) || 0))); }
+export function familyRewardsLeft(family) {
+  return round2(normalizeRewards(family && family.rewards).reduce((n, r) => n + rewardLeft(r), 0));
+}
+// "the Lim family" — how a family is named on another family's invoice.
+export function familyCallName(family) {
+  const f = family || {};
+  const parent = String(f.parentName || '').trim();
+  if (parent) return parent + '\'s family';
+  const kids = activeStudents(f).map(s => s.name).filter(Boolean);
+  return kids.length ? listJoin(kids) + '\'s family' : 'a new family';
+}
+export function rewardLineText(r) {
+  const k = REFERRAL_KINDS[r.kind] || REFERRAL_KINDS.goodwill;
+  if (r.label) return { desc: r.label, detail: r.detail };
+  if (r.kind === 'referrer') return { desc: k.label, detail: 'Thank you for introducing ' + (r.otherName || 'a new family') + ' to Polymath' };
+  if (r.kind === 'friend') return { desc: k.label, detail: 'Welcome! You joined through ' + (r.otherName || 'a friend') + '\'s referral' };
+  return { desc: k.label, detail: r.detail };
+}
+// The reward lines for an invoice worth `running` so far, oldest reward first.
+// Returns the lines and the uses to record on the family in the same write.
+export function rewardLines(family, running) {
+  const lines = [], uses = [];
+  let left = round2(running);
+  normalizeRewards(family && family.rewards)
+    .filter(r => rewardLeft(r) > 0)
+    .sort((a, b) => (a.confirmedAt || '').localeCompare(b.confirmedAt || '') || a.id.localeCompare(b.id))
+    .forEach(r => {
+      if (!(left > 0)) return;
+      const take = round2(Math.min(rewardLeft(r), left));
+      if (!(take > 0)) return;
+      const t = rewardLineText(r);
+      lines.push({ studentId: '', studentName: '', desc: t.desc, detail: t.detail + (take < rewardLeft(r) ? ' (' + money(round2(rewardLeft(r) - take)) + ' more next month)' : ''), amount: -take, kind: 'reward', rewardId: r.id });
+      uses.push({ id: r.id, amount: take });
+      left = round2(left - take);
+    });
+  return { lines, uses, total: round2(uses.reduce((n, u) => n + u.amount, 0)) };
+}
+// The rewards after an invoice used some of them (`uses` from rewardLines).
+export function rewardsAfterUse(rewards, uses, invoiceId, period) {
+  const by = new Map((uses || []).map(u => [u.id, u]));
+  return normalizeRewards(rewards).map(r => {
+    const u = by.get(r.id);
+    if (!u || r.uses.some(x => x.invoiceId === invoiceId)) return r;
+    const out = Object.assign({}, r, { uses: r.uses.concat([{ invoiceId, period: isPeriod(period) ? period : '', amount: round2(u.amount) }]) });
+    return normalizeRewards([out])[0];
+  });
+}
+// The rewards after an invoice is cancelled: whatever it used is given back.
+export function rewardsAfterVoid(rewards, invoiceId) {
+  return normalizeRewards(rewards).map(r => r.uses.some(u => u.invoiceId === invoiceId)
+    ? normalizeRewards([Object.assign({}, r, { uses: r.uses.filter(u => u.invoiceId !== invoiceId) })])[0] : r);
+}
+// What a freshly made invoice changes on its family, for the same transaction:
+// credit from an overpayment used, rewards used. `famData` is the stored family.
+export function familyUpdateForInvoice(famData, inv) {
+  const out = {};
+  if (inv && inv.creditUsed > 0) out.credit = round2((Number(famData && famData.credit) || 0) - inv.creditUsed);
+  if (inv && Array.isArray(inv.rewardUses) && inv.rewardUses.length) out.rewards = rewardsAfterUse(famData && famData.rewards, inv.rewardUses, inv.id, inv.period);
+  return out;
+}
+// …and what cancelling it gives back.
+export function familyUpdateForVoid(famData, invData) {
+  const out = {};
+  if (invData && invData.creditUsed > 0) out.credit = round2((Number(famData && famData.credit) || 0) + invData.creditUsed);
+  const used = normalizeRewards(famData && famData.rewards).some(r => r.uses.some(u => u.invoiceId === (invData && invData.id)));
+  if (used) out.rewards = rewardsAfterVoid(famData.rewards, invData.id);
+  return out;
+}
+
+/* ── Finding the family behind a code, and the bookings that carry one ── */
+export function familyByReferralCode(families, code) {
+  const c = cleanReferralCode(code);
+  if (!c) return null;
+  const list = families || [];
+  return list.find(f => f && f.referralCode === c) || list.find(f => f && f.code === c) || null;
+}
+// A friend's family record for a booking: same email, then same WhatsApp, then a child's name.
+export function familyForBooking(families, booking) {
+  const b = booking || {};
+  const email = cleanEmail(b.email);
+  const wa = normalizeWhatsapp(b.whatsapp);
+  const child = normText(b.childName || b.studentName);
+  const list = (families || []).map(normalizeFamily);
+  return (email && list.find(f => familyEmails(f).includes(email)))
+    || (wa && list.find(f => f.whatsapp && f.whatsapp === wa))
+    || (child && list.find(f => f.students.some(s => normText(s.name) === child)))
+    || null;
+}
+// Every confirmed referral, from the referring side, newest first.
+export function confirmedReferrals(families) {
+  const list = (families || []).map(normalizeFamily);
+  const byId = new Map(list.map(f => [f.id, f]));
+  const out = [];
+  list.forEach(f => {
+    normalizeRewards(f.rewards).filter(r => r.kind === 'referrer').forEach(r => {
+      const friend = byId.get(r.otherFamilyId) || null;
+      const friendReward = friend ? normalizeRewards(friend.rewards).find(x => x.kind === 'friend' && x.otherFamilyId === f.id && (!r.bookingId || x.bookingId === r.bookingId)) || null : null;
+      out.push({
+        id: r.id, bookingId: r.bookingId, confirmedAt: r.confirmedAt, confirmedBy: r.confirmedBy,
+        referrer: f, referrerReward: r, friend, friendName: friend ? familyDisplayName(friend) : r.otherName, friendReward
+      });
+    });
+  });
+  return out.sort((a, b) => (b.confirmedAt || '').localeCompare(a.confirmedAt || '') || a.id.localeCompare(b.id));
+}
+export function referralRewardState(r) {
+  if (!r) return { key: 'none', label: 'No reward', tone: 'grey', icon: '—' };
+  const left = rewardLeft(r);
+  if (left <= 0) return { key: 'used', label: 'On invoice' + (r.uses.length > 1 ? 's' : '') + ' ' + r.uses.map(u => periodShort(u.period) || u.invoiceId).join(', '), tone: 'green', icon: '✅' };
+  if (r.used > 0) return { key: 'part', label: money(left) + ' still to take off', tone: 'amber', icon: '◐' };
+  return { key: 'waiting', label: 'Next invoice', tone: 'amber', icon: '⏳' };
+}
+// The bookings that came through a referral link, with what the office knows of each.
+//   state: 'waiting' (to confirm) | 'confirmed' | 'dismissed' | 'unknown' (no family has that code)
+export function referralBookings(bookings, families) {
+  const list = (families || []).map(normalizeFamily);
+  const confirmedIds = new Set();
+  list.forEach(f => normalizeRewards(f.rewards).forEach(r => { if (r.bookingId) confirmedIds.add(r.bookingId); }));
+  return (bookings || []).filter(b => b && cleanReferralCode(b.referralCode)).map(b => {
+    const code = cleanReferralCode(b.referralCode);
+    const referrer = familyByReferralCode(list, code);
+    const friend = familyForBooking(list, b);
+    let state = 'waiting';
+    if (confirmedIds.has(b.id)) state = 'confirmed';
+    else if (b.referralStatus === 'dismissed') state = 'dismissed';
+    else if (!referrer) state = 'unknown';
+    const sameFamily = !!(referrer && friend && referrer.id === friend.id);
+    return {
+      id: b.id, booking: b, code, referrer, friend: sameFamily ? null : friend, sameFamily, state,
+      kind: b.kind === 'diagnostic' ? 'Free diagnostic test' : b.kind === 'enrol' ? 'Enrolment' : 'Trial',
+      child: String(b.childName || b.studentName || ''), parent: String(b.parentName || ''),
+      when: b.createdAtMs || 0
+    };
+  }).sort((a, b) => (b.when || 0) - (a.when || 0));
+}
+// Can these two families be linked by a referral? Problems block, in words.
+export function referralProblems(referrer, friend) {
+  const out = [];
+  if (!referrer) out.push('Choose the family who introduced them.');
+  if (!friend) out.push('Choose the new family\'s record. Add the family first if it is not in the Office yet.');
+  if (referrer && friend && referrer.id === friend.id) out.push('A family cannot refer itself.');
+  if (friend) {
+    const by = normalizeReferredBy(normalizeFamily(friend).referredBy);
+    if (by) out.push(familyDisplayName(friend) + ' was already referred by ' + (by.name || 'another family') + '. Each new family gives one reward.');
+  }
+  if (friend && referrer && normalizeRewards(normalizeFamily(friend).rewards).some(r => r.kind === 'referrer' && r.otherFamilyId === referrer.id)) {
+    out.push(familyDisplayName(friend) + ' already introduced ' + familyDisplayName(referrer) + '; the same two families cannot refer each other back.');
+  }
+  return out;
+}
+// Confirming a referral. Pure: returns the new `rewards` for both families and
+// the new family's `referredBy`. ctx: { settings, today, by, ids: [id1, id2], bookingId, amounts }
+export function referralPlan(referrer, friend, ctx) {
+  const c = ctx || {};
+  const s = normalizeSettings(c.settings);
+  const problems = referralProblems(referrer, friend);
+  if (problems.length) return { ok: false, problems };
+  const R = normalizeFamily(referrer), F = normalizeFamily(friend);
+  const day = isDayKey(c.today) ? c.today : sgDayKey();
+  const ids = c.ids || [];
+  const forReferrer = feeNum(c.amounts && c.amounts.referrer != null ? c.amounts.referrer : s.referralReward);
+  const forFriend = feeNum(c.amounts && c.amounts.friend != null ? c.amounts.friend : s.referralFriendReward);
+  const base = { bookingId: String(c.bookingId || ''), confirmedAt: day, confirmedBy: String(c.by || '') };
+  const rr = forReferrer > 0 ? [Object.assign({ id: ids[0] || 'rw-' + day + '-a', kind: 'referrer', amount: forReferrer, otherFamilyId: F.id, otherName: familyCallName(F) }, base)] : [];
+  const fr = forFriend > 0 ? [Object.assign({ id: ids[1] || 'rw-' + day + '-b', kind: 'friend', amount: forFriend, otherFamilyId: R.id, otherName: familyCallName(R) }, base)] : [];
+  const referredBy = { familyId: R.id, name: familyDisplayName(R), code: R.referralCode || R.code, bookingId: base.bookingId, confirmedAt: day, confirmedBy: base.confirmedBy };
+  return {
+    ok: true, problems: [],
+    referrerRewards: normalizeRewards(R.rewards.concat(rr)),
+    friendRewards: normalizeRewards(F.rewards.concat(fr)),
+    referredBy, forReferrer, forFriend,
+    text: familyDisplayName(R) + ' gets ' + money(forReferrer) + ' off their next invoice, and ' + familyDisplayName(F) + ' gets ' + money(forFriend) + ' off theirs.'
+  };
+}
+// Undoing a confirmed referral, allowed only while neither reward has reached an invoice.
+export function undoReferralPlan(referrer, friend, rewardId) {
+  const R = normalizeFamily(referrer), F = friend ? normalizeFamily(friend) : null;
+  const rr = normalizeRewards(R.rewards).find(r => r.id === rewardId);
+  if (!rr) return { ok: false, problems: ['That referral is no longer there.'] };
+  const fr = F ? normalizeRewards(F.rewards).find(r => r.kind === 'friend' && r.otherFamilyId === R.id && (!rr.bookingId || r.bookingId === rr.bookingId)) : null;
+  if (rr.used > 0 || (fr && fr.used > 0)) return { ok: false, problems: ['A reward from this referral is already on an invoice. Cancel that invoice first, then undo.'] };
+  return {
+    ok: true, problems: [],
+    referrerRewards: normalizeRewards(R.rewards).filter(r => r.id !== rr.id),
+    friendRewards: F ? normalizeRewards(F.rewards).filter(r => !fr || r.id !== fr.id) : null,
+    clearReferredBy: !!(F && normalizeReferredBy(F.referredBy) && F.referredBy.familyId === R.id),
+    bookingId: rr.bookingId
+  };
+}
+// Totals for the Referrals tab.
+export function referralStats(families, rows) {
+  const all = confirmedReferrals(families);
+  let given = 0, left = 0;
+  (families || []).map(normalizeFamily).forEach(f => normalizeRewards(f.rewards).forEach(r => { given = round2(given + r.used); left = round2(left + rewardLeft(r)); }));
+  return {
+    confirmed: all.length,
+    waiting: (rows || []).filter(r => r.state === 'waiting').length,
+    unknown: (rows || []).filter(r => r.state === 'unknown').length,
+    given, left,
+    topReferrers: Object.values(all.reduce((m, x) => { const k = x.referrer.id; m[k] = m[k] || { family: x.referrer, n: 0 }; m[k].n++; return m; }, {})).sort((a, b) => b.n - a.n).slice(0, 5)
+  };
+}
+
+/* ── Words: the family's own link, by email and WhatsApp ── */
+function rewardWords(s) {
+  const a = feeNum(s.referralReward), b = feeNum(s.referralFriendReward);
+  if (a && b && sameMoney(a, b)) return { you: money(a), them: money(b), both: 'you both get <b>' + money(a) + ' off</b> your next month\'s fees', bothText: 'you both get ' + money(a) + ' off your next month\'s fees' };
+  return {
+    you: money(a), them: money(b),
+    both: 'you get <b>' + money(a) + ' off</b> your next month\'s fees' + (b ? ', and your friend gets <b>' + money(b) + ' off</b> theirs' : ''),
+    bothText: 'you get ' + money(a) + ' off your next month\'s fees' + (b ? ', and your friend gets ' + money(b) + ' off theirs' : '')
+  };
+}
+// The message a parent forwards to a friend.
+export function referralShareText(family, settings) {
+  const s = normalizeSettings(settings);
+  const link = referralLink(family && (family.referralCode || ''));
+  const b = feeNum(s.referralFriendReward);
+  return 'Hi! My child learns Math and Science at Polymath Learning Centre and we really like it. '
+    + 'You can book a trial class or a free diagnostic test here: ' + link
+    + (b ? ' If you enrol through this link, you get ' + money(b) + ' off your fees.' : '');
+}
+export function referralEmail(family, settings) {
+  const s = normalizeSettings(settings);
+  const f = normalizeFamily(family);
+  const link = referralLink(f.referralCode);
+  const w = rewardWords(s);
+  const kids = listJoin(activeStudents(f).map(x => x.name).filter(Boolean));
+  const share = referralShareText(f, s);
+  const wa = 'https://wa.me/?text=' + encodeURIComponent(share);
+  const html = emailShell('Share Polymath with a friend',
+    '<p style="font-size:15px;line-height:1.6;margin:0 0 10px;">Dear ' + escapeHtml(f.parentName || 'Parent') + ',</p>'
+    + '<p style="font-size:15px;line-height:1.6;margin:0 0 10px;">Thank you for learning with us' + (kids ? ' — it has been a joy to teach ' + escapeHtml(kids) : '') + '. '
+    + 'Many of our families joined because a friend told them about us, so here is your family\'s own referral link.</p>'
+    + '<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:16px 0;"><tr><td align="center" style="padding:20px;background:#fdf2f8;border:1px solid #f9c5e1;border-radius:14px;">'
+    + '<div style="font-size:13px;color:#be185d;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;">🎁 Your referral link</div>'
+    + '<div style="font-size:16px;font-weight:700;color:#10303a;word-break:break-all;margin-bottom:6px;"><a href="' + escapeHtml(link) + '" style="color:#056c76;">' + escapeHtml(link) + '</a></div>'
+    + '<div style="font-size:13px;color:#3d5a61;">Your code: <b style="letter-spacing:.08em;">' + escapeHtml(f.referralCode) + '</b></div>'
+    + '<div style="margin-top:14px;"><a href="' + escapeHtml(wa) + '" style="display:inline-block;background:#25d366;color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:12px 20px;border-radius:10px;">💬 Share on WhatsApp</a></div>'
+    + '</td></tr></table>'
+    + '<p style="font-size:15px;line-height:1.6;margin:0 0 8px;"><b>How it works</b></p>'
+    + '<ol style="font-size:14px;line-height:1.7;margin:0 0 10px;padding-left:20px;color:#10303a;">'
+    + '<li>Send the link to a friend. They can book a trial class or a free diagnostic test from it, or type your code when they book.</li>'
+    + '<li>When their child enrols with us, ' + w.both + '.</li>'
+    + '<li>The reward shows as its own line on your next invoice. There is no limit: every family you introduce counts.</li>'
+    + '</ol>', s);
+  const text = [
+    'Dear ' + (f.parentName || 'Parent') + ',', '',
+    'Thank you for learning with us. Here is your family\'s own referral link:', link, 'Your code: ' + f.referralCode, '',
+    'How it works:',
+    '1. Send the link to a friend. They can book a trial class or a free diagnostic test from it, or type your code when they book.',
+    '2. When their child enrols with us, ' + w.bothText + '.',
+    '3. The reward shows as its own line on your next invoice. Every family you introduce counts.', '',
+    'A message you can forward:', share, '', s.signature
+  ].join('\n');
+  return { subject: 'Your Polymath referral link — ' + w.you + ' off for every friend who joins', html, text };
+}
+// A short thank-you when a referral is confirmed (both families get one).
+export function referralConfirmedEmail(family, reward, settings) {
+  const s = normalizeSettings(settings);
+  const f = normalizeFamily(family);
+  const t = rewardLineText(reward);
+  const intro = reward.kind === 'referrer'
+    ? 'Thank you for introducing ' + (reward.otherName || 'a new family') + ' to Polymath! They have now enrolled.'
+    : 'Welcome to Polymath! You joined through ' + (reward.otherName || 'a friend') + '\'s referral.';
+  const html = emailShell(reward.kind === 'referrer' ? 'Thank you for your referral' : 'Welcome to Polymath',
+    '<p style="font-size:15px;line-height:1.6;margin:0 0 10px;">Dear ' + escapeHtml(f.parentName || 'Parent') + ',</p>'
+    + '<p style="font-size:15px;line-height:1.6;margin:0 0 10px;">' + escapeHtml(intro) + '</p>'
+    + '<p style="font-size:15px;line-height:1.6;margin:0 0 10px;"><b>' + money(reward.amount) + '</b> will be taken off your next invoice, shown as "' + escapeHtml(t.desc) + '".</p>'
+    + (f.referralCode ? '<p style="font-size:14px;line-height:1.6;margin:0;color:#3d5a61;">Know another family who would enjoy our classes? Your link is <a href="' + escapeHtml(referralLink(f.referralCode)) + '" style="color:#056c76;">' + escapeHtml(referralLink(f.referralCode)) + '</a>.</p>' : ''), s);
+  const text = ['Dear ' + (f.parentName || 'Parent') + ',', '', intro, '', money(reward.amount) + ' will be taken off your next invoice, shown as "' + t.desc + '".',
+    f.referralCode ? '\nYour referral link: ' + referralLink(f.referralCode) : '', '', s.signature].join('\n').replace(/\n{3,}/g, '\n\n');
+  return { subject: reward.kind === 'referrer' ? 'Thank you — ' + money(reward.amount) + ' off your next invoice' : 'Welcome to Polymath — ' + money(reward.amount) + ' off your next invoice', html, text };
 }

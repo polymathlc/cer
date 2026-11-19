@@ -516,6 +516,11 @@
   .join-strip.trial-notice { border-left-color:var(--teal); }
   .trial-note { background:#eef8f9; border:1px solid var(--line); border-left:4px solid var(--teal); border-radius:12px; padding:12px 14px; font-size:13px; line-height:1.6; color:var(--ink); }
   .trial-note b { color:var(--deep); }
+  /* A friend's referral link (Polymath Office v1.16.0) */
+  .ref-banner { display:flex; gap:12px; align-items:flex-start; background:#fdf2f8; border:1px solid #f9c5e1; border-left:4px solid #ec008c; border-radius:14px; padding:12px 16px; margin:0 0 16px; font-size:14px; line-height:1.6; color:var(--ink); }
+  .ref-banner .ref-ico { font-size:22px; line-height:1; }
+  .ref-banner b { color:#9d174d; }
+  .ref-field-note { font-size:12px; color:var(--muted, #6b7f85); margin-top:4px; }
   .page-version { margin-left:4px; color:var(--gray-400); }
 
   @media (max-width:720px) {
@@ -620,6 +625,7 @@
 
   <!-- ═════════════════ SCHEDULE TAB ═════════════════ -->
   <section id="tab-schedule">
+    <div class="ref-banner hidden" id="ref-banner" role="note"></div>
     <div id="admin-schedule-banner" class="admin-banner hidden">
       <span>Admin mode — edit each slot below, then press <b>Save schedule</b>. Visitors only see the published version.</span>
       <button class="btn small" onclick="saveSchedule()" id="save-schedule-btn">Save schedule</button>
@@ -826,6 +832,10 @@
           <div class="field"><label>Email <span class="req">*</span></label><input id="b-email" type="email" placeholder="you@example.com"></div>
           <div class="field"><label>WhatsApp number <span class="req">*</span></label><input id="b-wa" type="tel" placeholder="9123 4567"></div>
         </div>
+        <div class="field" id="b-ref-wrap"><label for="b-ref">Referral code <span style="font-weight:500;color:var(--muted, #6b7f85);">(optional)</span></label>
+          <input id="b-ref" type="text" maxlength="12" autocomplete="off" autocapitalize="characters" placeholder="From a Polymath family, e.g. K7M2QX" style="text-transform:uppercase;letter-spacing:.06em;">
+          <div class="ref-field-note" id="b-ref-note">Did a Polymath family tell you about us? Their code gets both families money off the fees when your child enrols.</div>
+        </div>
 
         <div class="field hidden" id="pay-choice-wrap">
           <label id="pay-choice-label">How would you like to pay?</label>
@@ -926,7 +936,46 @@ const auth = firebase.auth();
 
 // Shown to the signed-in teacher in the footer, so a deploy can be checked.
 // Bump it on every change to this page.
-const SCHEDULE_PAGE_VERSION = 'v1.7.0';
+const SCHEDULE_PAGE_VERSION = 'v1.8.0';
+
+// ─── Referral links (Polymath Office v1.16.0) ───
+// A family's link is /schedule/?ref=CODE. The code is kept on this device for
+// 60 days (so a parent can come back later), filled into the booking form, and
+// saved on the booking as referralCode. Staff confirm the enrolment in the
+// Office before anybody gets a reward; the page itself gives nothing away.
+const REFERRAL_KEY = 'polymath-referral';
+const REFERRAL_DAYS = 60;
+const REFERRAL_CHARS = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}$/;
+function cleanReferralCode(v) {
+  const c = String(v || '').toUpperCase().replace(/^PLC/, '').replace(/[^A-Z0-9]/g, '');
+  return REFERRAL_CHARS.test(c) ? c : '';
+}
+function storedReferral() {
+  try {
+    const x = JSON.parse(localStorage.getItem(REFERRAL_KEY) || 'null');
+    if (x && cleanReferralCode(x.code) && Date.now() - (Number(x.at) || 0) < REFERRAL_DAYS * 86400000) return cleanReferralCode(x.code);
+  } catch (e) { /* private window */ }
+  return '';
+}
+function captureReferral() {
+  let code = '';
+  try { code = cleanReferralCode(new URLSearchParams(location.search).get('ref')); } catch (e) { code = ''; }
+  if (code) { try { localStorage.setItem(REFERRAL_KEY, JSON.stringify({ code, at: Date.now() })); } catch (e) { /* private window */ } }
+  return code || storedReferral();
+}
+const referralFromLink = captureReferral();
+function showReferralBanner() {
+  const el = document.getElementById('ref-banner');
+  if (!el || !referralFromLink) return;
+  el.innerHTML = '<span class="ref-ico" aria-hidden="true">🎁</span><div><b>A Polymath family invited you.</b> '
+    + 'Book a trial class or enrol below. When your child enrols, you and the family who invited you both get money off your fees. '
+    + 'Their code <b>' + referralFromLink + '</b> is filled in for you.</div>';
+  el.classList.remove('hidden');
+}
+function bookingReferralCode() {
+  const input = document.getElementById('b-ref');
+  return cleanReferralCode(input ? input.value : '') || '';
+}
 
 const ADMIN_EMAIL = 'chungzhikai@gmail.com';
 // Every trial booking emails these addresses via the "Trigger Email"
@@ -2134,6 +2183,7 @@ function openBooking(id, kind) {
   currentSlotId = id;
   receiptFile = null;
   ['b-parent', 'b-child', 'b-email', 'b-wa'].forEach(x => document.getElementById(x).value = '');
+  document.getElementById('b-ref').value = referralFromLink || storedReferral();
   const lvlMap = { P3: 'Primary 3', P4: 'Primary 4', P5: 'Primary 5', P6: 'Primary 6' };
   document.getElementById('b-level').value = lvlMap[s.level] || '';
   document.getElementById('b-file').value = '';
@@ -2332,6 +2382,9 @@ async function submitBooking() {
       status: 'pending',
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     };
+    // Only when the parent came through a family's link or typed its code.
+    const referralCode = bookingReferralCode();
+    if (referralCode) booking.referralCode = referralCode;
     await BOOKINGS.add(booking);
 
     try { await sendBookingEmails(booking, earliestKey); } catch (mailErr) { console.error('Email error', mailErr); }
@@ -2383,7 +2436,8 @@ async function payBookingByCard({ s, parentName, childName, childLevel2027, emai
         slot: currentSlotId, kind: enrol ? 'enrol' : 'trial', mode,
         parentName, childName, childLevel2027, email, whatsapp: normalizeSgMobile(waRaw),
         earliestKey: enrol ? '' : earliestTrialFor(String(currentSlotId).split('-')[0], bookedOn),
-        returnUrl: location.origin + location.pathname, pageVersion: SCHEDULE_PAGE_VERSION
+        returnUrl: location.origin + location.pathname, pageVersion: SCHEDULE_PAGE_VERSION,
+        ...(bookingReferralCode() ? { referralCode: bookingReferralCode() } : {})
       })
     });
     answer = await res.json().catch(() => null);
@@ -2488,7 +2542,8 @@ async function sendBookingEmails(b, earliestKey) {
     ['WhatsApp', '+65 ' + fmtWa(b.whatsapp)],
     enrol ? ["First month's fees paid", money(b.price)] : ['Trial fee paid', money(b.price)],
     [enrol ? 'Monthly fee' : 'Monthly fee after trial', b.monthlyFee ? money(b.monthlyFee) + ' / month' : '—'],
-    ['PayNow reference', b.paymentRef]
+    ['PayNow reference', b.paymentRef],
+    b.referralCode ? ['Referral code', b.referralCode + ' (from a Polymath family)'] : null
   ].filter(Boolean);
   if (enrol) rows.push(['Subsequent months', 'Collected by Polymath admin staff']);
   const table = rows.map(([k, v]) =>
@@ -2569,6 +2624,7 @@ function renderBookings() {
       +     (b.monthlyFee ? ' · ' + money(b.monthlyFee) + '/month' : '')
       +     (b.kind === 'enrol' ? ' · collect from month 2' : '')
       +     ' · Ref ' + escapeHtml(b.paymentRef || '') + ' · ' + escapeHtml(fmtTime(b.createdAt)) + '</div>'
+      +   (b.referralCode ? '<div>🎁 Came through referral code <b>' + escapeHtml(b.referralCode) + '</b> · confirm it in <a href="../office/#referrals">Polymath Office → Referrals</a> once they enrol</div>' : '')
       + '</div>'
       + '<div class="booking-actions">'
       +   (b.status === 'confirmed'
@@ -2899,6 +2955,7 @@ window.addEventListener('hashchange', () => {
 // A page left open overnight must not keep quoting yesterday's earliest trial date.
 document.addEventListener('visibilitychange', () => { if (!document.hidden) renderTrialNotice(); });
 maybeAdminFromHash();
+showReferralBanner();
 handleCardReturn();
 renderHero();
 if (location.hash === '#timetable') openTimetableFromLink();

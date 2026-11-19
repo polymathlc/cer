@@ -262,3 +262,15 @@ test('the emails escape what the parent typed', () => {
   assert.deepEqual(Object.keys(publicDiagnostic(booking)).sort(),
     ['code', 'confirmationSent', 'date', 'email', 'level', 'parentName', 'sessionLabel', 'slot', 'studentName', 'subject', 'worth']);
 });
+
+test('a referral code from a family\'s link is kept on the diagnostic booking; a bad one is dropped', async () => {
+  assert.equal(validateDiagnostic(form({ referralCode: 'k7m2qx' })).referralCode, 'K7M2QX');
+  assert.equal(validateDiagnostic(form({ referralCode: 'nonsense!' })).referralCode, '');
+  const h = harness();
+  const res = await h.call(form({ referralCode: 'K7M2QX' }));
+  assert.equal(res.statusCode, 201);
+  assert.equal(bookingRows(h.db)[0][1].referralCode, 'K7M2QX');
+  const plain = harness();
+  await plain.call(form());
+  assert.equal('referralCode' in bookingRows(plain.db)[0][1], false);
+});

@@ -116,7 +116,7 @@ function earliestKey(value, now) {
 function validateBooking(body, now) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) fail();
   const keys = new Set(['slot', 'kind', 'mode', 'parentName', 'childName', 'childLevel2027', 'email', 'whatsapp',
-    'earliestKey', 'returnUrl', 'pageVersion']);
+    'earliestKey', 'returnUrl', 'pageVersion', 'referralCode']);
   if (Object.keys(body).some(key => !keys.has(key))) fail();
   const slot = oneLine(body.slot, 8, 1);
   if (!SLOT_ID.test(slot)) fail('unknown-class');
@@ -134,8 +134,18 @@ function validateBooking(body, now) {
     whatsapp: sgMobile(body.whatsapp),
     earliestKey: kind === 'trial' ? earliestKey(body.earliestKey, now) : '',
     pageVersion: oneLine(body.pageVersion, 20),
-    returnBase: returnBase(body.returnUrl)
+    returnBase: returnBase(body.returnUrl),
+    referralCode: referralCode(body.referralCode)
   };
+}
+// A family's referral code (Polymath Office, office-core cleanReferralCode): six
+// of the reference-code letters. Anything else is quietly dropped, never refused,
+// so a mistyped code can never stop a booking.
+const REFERRAL_CODE = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}$/;
+function referralCode(value) {
+  if (typeof value !== 'string') return '';
+  const code = value.toUpperCase().replace(/^PLC/, '').replace(/[^A-Z0-9]/g, '');
+  return REFERRAL_CODE.test(code) ? code : '';
 }
 
 // Prices the booking from the schedule as it is in Firestore now. A class that
@@ -188,7 +198,9 @@ function bookingFields(request, priced, reference) {
     email: request.email, whatsapp: request.whatsapp,
     price: priced.amount,
     paymentRef: reference,
-    receiptURL: '', receiptFilename: ''
+    receiptURL: '', receiptFilename: '',
+    // Only when the parent came through a family's referral link (Office v1.16.0).
+    ...(request.referralCode ? { referralCode: request.referralCode } : {})
   };
 }
 

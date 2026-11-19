@@ -58,7 +58,8 @@ function bookingRows(b, code, earliest) {
     ['WhatsApp', '+65 ' + fmtWa(b.whatsapp)],
     enrol ? ["First month's fees paid", money(b.price) + ' by card'] : ['Trial fee paid', money(b.price) + ' by card'],
     [enrol ? 'Monthly fee' : 'Monthly fee after trial', b.monthlyFee ? money(b.monthlyFee) + ' / month' : '—'],
-    ['Reference', b.paymentRef]
+    ['Reference', b.paymentRef],
+    b.referralCode ? ['Referral code', b.referralCode + ' (from a Polymath family)'] : null
   ].filter(Boolean);
   if (enrol) rows.push(['Subsequent months', 'Collected by Polymath admin staff']);
   return rows;
