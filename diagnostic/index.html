@@ -174,7 +174,7 @@
     display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
   .admin-tools { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:12px; }
   .admin-tools input { padding:8px 10px; border:1px solid var(--gray-300); border-radius:8px; min-width:200px; font-size:14px; }
-  .admin-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px; }
+  .admin-stats { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:16px; }
   .stat { background:var(--paper); border-radius:10px; padding:12px; }
   .stat b { display:block; font-size:22px; color:var(--deep); }
   .stat span { font-size:12px; color:var(--gray-600); }
@@ -213,6 +213,72 @@
     .summary div { grid-template-columns:110px 1fr; }
   }
   @media (max-width:420px) { .contact-link { display:none; } }
+  /* ─── Diagnostic results and report editor (admin) ─── */
+  .rep-bg { position:fixed; inset:0; background:rgba(16,48,58,.5); z-index:160; overflow-y:auto; padding:18px 12px; }
+  .rep { background:#fff; border-radius:18px; max-width:1240px; margin:0 auto; box-shadow:0 20px 60px rgba(0,0,0,.25); }
+  .rep-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; padding:18px 20px; border-bottom:1px solid var(--line); position:sticky; top:-18px; background:#fff; border-radius:18px 18px 0 0; z-index:2; }
+  .rep-head h2 { margin:0; font-size:19px; }
+  .rep-head .sub { font-size:13px; color:var(--gray-500); margin-top:2px; }
+  .rep-body { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:0; }
+  .rep-form { padding:16px 20px 24px; border-right:1px solid var(--line); }
+  .rep-preview { padding:16px 20px 24px; background:#f2f6f7; border-radius:0 0 18px 0; }
+  .rep-preview .frame { background:#fff; border-radius:16px; padding:18px 14px; box-shadow:0 4px 18px rgba(16,48,58,.08); position:sticky; top:84px; max-height:calc(100vh - 120px); overflow:auto; }
+  .rep-sec { margin-top:18px; }
+  .rep-sec:first-child { margin-top:4px; }
+  .rep-sec h3 { font-size:14px; font-weight:800; margin:0 0 8px; display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; }
+  .rep-sec h3 small { font-weight:500; color:var(--gray-500); font-size:12px; }
+  .rep-help { font-size:12px; color:var(--gray-500); margin:-2px 0 8px; line-height:1.5; }
+  .rep input, .rep select, .rep textarea { font:inherit; font-size:14px; padding:8px 10px; border:1px solid var(--gray-300); border-radius:8px; background:#fff; color:var(--gray-900); width:100%; }
+  .rep textarea { min-height:84px; resize:vertical; line-height:1.5; }
+  .rep input:focus, .rep select:focus, .rep textarea:focus { outline:none; border-color:var(--deep); box-shadow:0 0 0 3px rgba(5,108,118,.12); }
+  .topic-row { display:grid; grid-template-columns:minmax(0,1fr) 62px 14px 62px 92px 30px; gap:6px; align-items:center; padding:6px 0; border-bottom:1px solid #eef3f4; }
+  .topic-row .of { text-align:center; color:var(--gray-500); font-size:13px; }
+  .topic-row input.mark { text-align:center; padding:8px 4px; }
+  .topic-row .note { grid-column:1 / -1; font-size:13px; padding:6px 9px; color:var(--gray-700); }
+  .topic-row .bandtag { font-size:11px; font-weight:800; text-align:center; border-radius:999px; padding:4px 6px; white-space:nowrap; }
+  .topic-row .x, .step .x { border:0; background:none; color:var(--gray-400); font-size:18px; cursor:pointer; padding:4px; line-height:1; }
+  .topic-row .x:hover, .step .x:hover { color:var(--danger); }
+  .topic-head { display:grid; grid-template-columns:minmax(0,1fr) 62px 14px 62px 92px 30px; gap:6px; font-size:11px; color:var(--gray-500); font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+  .rep-inline { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-top:8px; font-size:13px; }
+  .rep-inline input { width:70px; }
+  .rep-inline select { width:auto; }
+  .rep-total { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:10px; padding:10px 12px; background:var(--paper); border-radius:10px; font-size:13px; }
+  .rep-total b { font-size:20px; color:var(--deep); }
+  .step { position:relative; border:1px solid var(--line); border-radius:12px; padding:10px 40px 10px 10px; margin-bottom:8px; display:grid; grid-template-columns:110px minmax(0,1fr); gap:6px; align-items:start; }
+  .step .x { position:absolute; top:10px; right:6px; }
+  .step textarea { grid-column:1 / -1; min-height:70px; font-size:13px; }
+  .rep-foot { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; padding:14px 20px; border-top:1px solid var(--line); position:sticky; bottom:-18px; background:#fff; border-radius:0 0 18px 18px; z-index:2; }
+  .rep-foot .acts { display:flex; gap:8px; flex-wrap:wrap; }
+  .rep-status { font-size:12px; color:var(--gray-500); }
+  .rep-problems { background:var(--warn-bg); border:1px solid var(--warn-border); color:var(--warn); border-radius:10px; padding:10px 12px; font-size:13px; margin-top:12px; }
+  .rep-problems ul { margin:4px 0 0; padding-left:18px; }
+  .btn.pink { background:var(--pink); border-color:var(--pink); }
+  .btn.pink:hover { background:var(--plum); border-color:var(--plum); }
+  .report-line { margin-top:4px; font-size:12px; }
+  .report-line.sent { color:var(--success); font-weight:700; }
+  .report-line.draft { color:var(--warn); font-weight:700; }
+  .rep-tabs { display:none; }
+  @media (max-width:900px) {
+    .rep-body { grid-template-columns:1fr; }
+    .rep-form { border-right:0; }
+    .rep-preview { border-radius:0; }
+    .rep-preview .frame { position:static; max-height:none; }
+    .rep-tabs { display:flex; gap:6px; padding:10px 20px 0; }
+    .rep[data-view="form"] .rep-preview, .rep[data-view="preview"] .rep-form { display:none; }
+  }
+  @media (max-width:560px) {
+    .rep-bg { padding:0; }
+    .rep { border-radius:0; min-height:100vh; }
+    .rep-head { top:0; border-radius:0; padding:14px; }
+    .rep-form, .rep-preview { padding:12px 12px 20px; }
+    .rep-foot { bottom:0; border-radius:0; padding:12px; }
+    .rep-foot .acts { width:100%; }
+    .rep-foot .acts .btn { flex:1 1 auto; }
+    .topic-row, .topic-head { grid-template-columns:minmax(0,1fr) 50px 10px 50px 30px; }
+    .topic-row .bandtag, .topic-head .bh { display:none; }
+    .step { grid-template-columns:1fr; }
+    .rep-tabs { padding:10px 12px 0; }
+  }
 </style>
 </head>
 <body>
@@ -276,7 +342,7 @@
       <div class="benefits">
         <div class="benefit"><div class="icon">🎯</div><h3>Find the gaps</h3><p>See which topics are strong and which need work, so revision time goes where it matters.</p></div>
         <div class="benefit"><div class="icon">📝</div><h3>Exam-style questions</h3><p>A paper set at your child's level, in the style of school and PSLE questions.</p></div>
-        <div class="benefit"><div class="icon">🧭</div><h3>Clear next steps</h3><p>We get in touch after the test to share how your child did and where to focus next.</p></div>
+        <div class="benefit"><div class="icon">🧭</div><h3>A personal report and study plan</h3><p>You receive a report by email showing every topic as strong, developing or needing work, a week-by-week study plan, and the class we recommend.</p></div>
       </div>
     </div>
 
@@ -285,7 +351,7 @@
       <ol class="steps" style="margin-top:12px">
         <li><b>Pick a session</b><span>Any Master Class session from 7 December onwards.</span></li>
         <li><b>Come to the centre</b><span>Your child sits the test at our Clementi centre during that session.</span></li>
-        <li><b>Hear the results</b><span>We follow up with you on how your child did.</span></li>
+        <li><b>Get the report</b><span>Your child's personal report and study plan arrive by email, with marks for every topic.</span></li>
       </ol>
     </div>
 
@@ -371,6 +437,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="report-core.js"></script>
 <script>
 // ═══════════════════════════════════════════════════════════
 // 🩺 Free diagnostic test — polymathlc.com.sg/diagnostic
@@ -385,7 +452,7 @@
 
 // Shown to the signed-in teacher in the footer, so a deploy can be checked.
 // Bump it on every change to this page.
-const DIAGNOSTIC_PAGE_VERSION = 'v1.0.1';
+const DIAGNOSTIC_PAGE_VERSION = 'v1.1.0';
 const ADMIN_EMAIL = 'chungzhikai@gmail.com';
 const BOOK_URL = 'https://us-central1-mathgen--app.cloudfunctions.net/bookDiagnostic';
 const CONFIG_CACHE_KEY = 'pl_diagnostic_schedule_v1';
@@ -789,6 +856,7 @@ function onAuth(user) {
     adminUnsub = db.collection('schedule_bookings').where('kind', '==', 'diagnostic').onSnapshot(snap => {
       adminRows = snap.docs.map(d => Object.assign({ _id: d.id }, d.data()));
       renderAdmin();
+      syncReportEditor();
     }, err => {
       console.error(err);
       document.getElementById('admin-list').innerHTML = '<div class="state">Could not load bookings: ' + escapeHtml(err.message) + '</div>';
@@ -832,7 +900,8 @@ function renderAdmin() {
     [adminRows.length, 'bookings in all'],
     [upcoming.length, 'upcoming'],
     [adminRows.filter(b => (b.status || 'pending') === 'pending').length, 'to confirm'],
-    [adminRows.filter(b => b.status === 'attended').length, 'attended']
+    [adminRows.filter(b => b.status === 'attended').length, 'attended'],
+    [adminRows.filter(b => b.reportSentAt).length, 'reports sent']
   ];
   document.getElementById('admin-stats').innerHTML = stats.map(([n, l]) => '<div class="stat"><b>' + n + '</b><span>' + l + '</span></div>').join('');
   const rows = filteredAdminRows();
@@ -855,8 +924,9 @@ function renderAdmin() {
           + '<span class="badge ' + status + '">' + status + '</span>'
           + '<div>Parent: ' + escapeHtml(b.parentName) + ' · <a href="mailto:' + escapeHtml(b.email) + '">' + escapeHtml(b.email) + '</a></div>'
           + '<div style="color:var(--gray-500)">Code ' + escapeHtml(b.code || b._id) + ' · booked ' + escapeHtml(fmtCreated(b.createdAt))
-          + (b.confirmationSentTo ? ' · confirmation emailed' : '') + '</div></div>'
-          + '<div class="acts">' + act('confirmed', 'Confirm', ' ') + act('attended', 'Attended') + act('pending', 'Mark pending') + act('cancelled', 'Cancel')
+          + (b.confirmationSentTo ? ' · confirmation emailed' : '') + '</div>' + reportStatusLine(b) + '</div>'
+          + '<div class="acts">' + (status === 'cancelled' ? '' : '<button class="btn small pink" onclick="openReportEditor(\'' + b._id + '\')">📝 ' + (b.reportSentAt ? 'Report' : 'Results') + '</button>')
+          + act('confirmed', 'Confirm', ' ') + act('attended', 'Attended') + act('pending', 'Mark pending') + act('cancelled', 'Cancel')
           + '<button class="btn small danger" onclick="deleteDiagnostic(\'' + b._id + '\')">Delete</button></div></div>';
       }).join('') + '</div>';
   });
@@ -886,15 +956,387 @@ async function deleteDiagnostic(id) {
   catch (e) { toast('Delete failed: ' + (e.message || e), true); }
 }
 function downloadCsv() {
-  const head = ['Code', 'Session date', 'Session', 'Master Class', 'Student', 'Subject', 'Level in 2027', 'Parent', 'Email', 'Status', 'Booked at'];
+  const head = ['Code', 'Session date', 'Session', 'Master Class', 'Student', 'Subject', 'Level in 2027', 'Parent', 'Email', 'Status', 'Booked at', 'Overall %', 'Report sent'];
   const cell = v => { const s = String(v == null ? '' : v); return /[",\n]/.test(s) || /^[=+\-@]/.test(s) ? '"' + s.replace(/^([=+\-@])/, "'$1").replace(/"/g, '""') + '"' : s; };
   const rows = filteredAdminRows().map(b => [b.code || b._id, b.diagnosticDate, b.sessionLabel, levelName(b.classLevel) + ' ' + subjectName(b.classSubject || ''),
-    b.childName, subjectName(b.subject), b.level, b.parentName, b.email, b.status || 'pending', fmtCreated(b.createdAt)]);
+    b.childName, subjectName(b.subject), b.level, b.parentName, b.email, b.status || 'pending', fmtCreated(b.createdAt),
+    b.diagnosticReport ? (R.summarise(b.diagnosticReport).pct ?? '') : '', b.reportSentAt ? fmtCreated(b.reportSentAt) : '']);
   const csv = [head].concat(rows).map(r => r.map(cell).join(',')).join('\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' }));
   a.download = 'diagnostic-bookings-' + sgDayKey() + '.csv';
   document.body.appendChild(a); a.click(); a.remove();
+}
+
+// ═══════════════════════════════════════════════════════════
+// Admin: diagnostic results → the parent's report and study plan
+// ═══════════════════════════════════════════════════════════
+// The test is a paper, marked at the centre. The teacher opens 📝 Results on the
+// booking, types each topic's marks off the marked paper (the topic list starts
+// from the level's syllabus and can be changed), and the report builds itself:
+// overall %, strong / developing / needs-work topics, a first draft of the
+// teacher's note, a week-by-week study plan with the weakest topics first, and a
+// recommended class from the live timetable with Enrol and Trial buttons that open
+// that class's booking form on /schedule with the parent's details filled in.
+// Everything stays editable; the preview on the right is exactly what the parent
+// gets, drawn by report-core.js (the same code draws the email and the parent's
+// report page /diagnostic/report/).
+//
+// Saved on schedule_bookings/{code}: diagnosticReport, reportToken (the key in the
+// parent's link), reportUpdatedAt, and once sent reportSentAt, reportSentTo and
+// reportSentCount. Sending writes one `mail` document from admin@ in the same batch.
+const R = window.DiagnosticReport;
+let repId = null, rep = null, repDirty = false, repBusy = false, repPreviewTimer = null, repView = 'form';
+let repWhyAuto = '', repCommentAuto = '';
+
+function bookingById(id) { return adminRows.find(x => x._id === id) || null; }
+function reportStatusLine(b) {
+  if (b.reportSentAt) {
+    const n = b.reportSentCount || 1;
+    return '<div class="report-line sent">✉ Report sent ' + escapeHtml(fmtCreated(b.reportSentAt)) + (n > 1 ? ' (' + n + ' times)' : '')
+      + (b.reportSentTo ? ' to ' + escapeHtml(b.reportSentTo) : '') + '</div>';
+  }
+  if (b.diagnosticReport) return '<div class="report-line draft">📝 Report draft saved, not sent yet</div>';
+  return '';
+}
+
+function openReportEditor(id) {
+  if (!requireAdmin()) return;
+  const b = bookingById(id);
+  if (!b) return;
+  repId = id;
+  const saved = b.diagnosticReport && typeof b.diagnosticReport === 'object' ? b.diagnosticReport : null;
+  rep = saved ? Object.assign(R.blankReport(b), JSON.parse(JSON.stringify(saved))) : R.blankReport(b);
+  // The booking is the truth for who the report is for.
+  rep.code = b.code || b._id; rep.studentName = rep.studentName || b.childName || '';
+  rep.parentName = b.parentName || rep.parentName; rep.email = b.email || rep.email;
+  if (!rep.plan || !Array.isArray(rep.plan.steps)) rep.plan = { weeks: R.DEFAULT_WEEKS, steps: [] };
+  repWhyAuto = ''; repCommentAuto = '';
+  repDirty = false; repView = 'form';
+  renderReportEditor();
+  document.body.style.overflow = 'hidden';
+}
+function closeReportEditor(force) {
+  if (!force && repDirty && !confirm('Close without saving? Your changes to this report will be lost.')) return;
+  const bg = document.getElementById('rep-bg');
+  if (bg) bg.remove();
+  document.body.style.overflow = '';
+  repId = null; rep = null; repDirty = false;
+}
+
+function topicSetOptions() {
+  return R.topicSetKeys().map(k => { const [lvl, sub] = k.split('|'); return '<option value="' + escapeHtml(k) + '"' + (rep.topicSet === k ? ' selected' : '') + '>'
+    + escapeHtml(lvl + ' ' + subjectName(sub)) + '</option>'; }).join('');
+}
+function classSelectOptions() {
+  const options = R.classOptions(config || {}, rep.level, rep.subject);
+  const cur = rep.recommended && rep.recommended.slot;
+  let html = '<option value="">No class recommended</option>';
+  if (cur && !options.some(o => o.slot === cur)) {
+    html += '<option value="' + escapeHtml(cur) + '" selected>' + escapeHtml(R.className(rep.recommended) + ' · ' + (rep.recommended.label || cur)) + ' (no longer open)</option>';
+  }
+  html += options.map(o => '<option value="' + o.slot + '"' + (o.slot === cur ? ' selected' : '') + '>'
+    + escapeHtml(R.className(o) + ' · ' + o.label) + '</option>').join('');
+  return { html, count: options.length };
+}
+
+function renderReportEditor() {
+  const b = bookingById(repId);
+  if (!b || !rep) return;
+  let bg = document.getElementById('rep-bg');
+  if (!bg) {
+    bg = document.createElement('div');
+    bg.id = 'rep-bg'; bg.className = 'rep-bg';
+    bg.addEventListener('input', onReportInput);
+    bg.addEventListener('change', onReportInput);
+    bg.addEventListener('click', onReportClick);
+    document.body.appendChild(bg);
+  }
+  const classes = classSelectOptions();
+  const weeks = R.PLAN_WEEKS.map(w => '<option value="' + w + '"' + (Number(rep.plan.weeks) === w ? ' selected' : '') + '>' + w + ' weeks</option>').join('');
+  bg.innerHTML = '<div class="rep" data-view="' + repView + '" role="dialog" aria-modal="true" aria-labelledby="rep-title">'
+    + '<div class="rep-head"><div><h2 id="rep-title">📝 Diagnostic results · ' + escapeHtml(b.childName || '') + '</h2>'
+    + '<div class="sub">' + escapeHtml((b.level || '') + ' ' + subjectName(b.subject || '')) + ' · ' + escapeHtml(b.sessionLabel || b.diagnosticDate || '')
+    + ' · Parent ' + escapeHtml(b.parentName || '') + ' (' + escapeHtml(b.email || '') + ')</div></div>'
+    + '<button class="btn small ghost" data-act="close" aria-label="Close">✕ Close</button></div>'
+    + '<div class="rep-tabs"><button class="chip' + (repView === 'form' ? ' on' : '') + '" data-act="view" data-view="form">Enter results</button>'
+    + '<button class="chip' + (repView === 'preview' ? ' on' : '') + '" data-act="view" data-view="preview">Preview report</button></div>'
+    + '<div class="rep-body"><div class="rep-form">'
+
+    // 1. Marks
+    + '<div class="rep-sec"><h3><span>1. Marks by topic</span><small>from the marked paper</small></h3>'
+    + '<p class="rep-help">Type each topic\'s score and what it was out of. Remove topics the paper did not test. 75% and up is Strong, 50–74% Developing, below 50% Needs work.</p>'
+    + '<div class="rep-inline"><label for="rep-set">Topic list</label><select id="rep-set" data-k="topicSet">' + topicSetOptions() + '</select>'
+    + '<button class="btn small ghost" data-act="load-set">Use this list</button></div>'
+    + '<div class="topic-head" style="margin-top:10px"><span>Topic</span><span style="text-align:center">Score</span><span></span><span style="text-align:center">Out of</span><span class="bh" style="text-align:center">Band</span><span></span></div>'
+    + '<div id="rep-topics">' + rep.topics.map(topicRowHtml).join('') + '</div>'
+    + '<div class="rep-inline"><button class="btn small ghost" data-act="add-topic">＋ Add topic</button>'
+    + '<span style="margin-left:auto">Every topic out of</span><input type="number" min="1" step="0.5" id="rep-allmax" inputmode="decimal" placeholder="e.g. 10">'
+    + '<button class="btn small ghost" data-act="all-max">Apply</button></div>'
+    + '<div class="rep-total" id="rep-total"></div></div>'
+
+    // 2. Note
+    + '<div class="rep-sec"><h3><span>2. Teacher\'s note</span><button class="btn small ghost" data-act="draft-comment">✨ Write a first draft from the marks</button></h3>'
+    + '<textarea id="rep-comment" data-k="comment" maxlength="' + R.LIMITS.comment + '" placeholder="A few sentences for the parent: what went well, what to work on.">' + escapeHtml(rep.comment || '') + '</textarea>'
+    + '<div class="rep-inline"><label for="rep-teacher">Signed</label><input id="rep-teacher" data-k="teacher" style="width:200px" maxlength="' + R.LIMITS.teacher + '" value="' + escapeHtml(rep.teacher || '') + '"></div></div>'
+
+    // 3. Plan
+    + '<div class="rep-sec"><h3><span>3. Study plan</span><span class="rep-inline" style="margin:0"><select id="rep-weeks" data-k="weeks">' + weeks + '</select>'
+    + '<button class="btn small ghost" data-act="build-plan">↻ Build from the marks</button></span></h3>'
+    + '<p class="rep-help">Weakest topics first, two weeks a block, ending with timed practice. Edit anything; one task per line.</p>'
+    + '<div id="rep-steps">' + (rep.plan.steps.length ? rep.plan.steps.map(stepHtml).join('') : '<div class="state" style="padding:14px">Enter the marks, then press <b>Build from the marks</b>.</div>') + '</div>'
+    + '<button class="btn small ghost" data-act="add-step">＋ Add a block</button></div>'
+
+    // 4. Class
+    + '<div class="rep-sec"><h3><span>4. Recommended class</span><small>' + classes.count + ' open ' + escapeHtml(subjectName(rep.subject)) + ' class' + (classes.count === 1 ? '' : 'es') + ' on the timetable</small></h3>'
+    + '<p class="rep-help">From the live /schedule timetable, ' + escapeHtml(rep.level || 'the child\'s level') + ' first. The report\'s Enrol and Trial buttons open this class\'s booking form with the parent\'s details filled in.</p>'
+    + '<select id="rep-class" data-k="class">' + classes.html + '</select>'
+    + '<textarea id="rep-why" data-k="why" style="margin-top:8px;min-height:70px" maxlength="' + R.LIMITS.why + '" placeholder="Why this class fits">' + escapeHtml(rep.recommended ? rep.recommended.why || '' : '') + '</textarea>'
+    + '<div class="rep-inline"><button class="btn small ghost" data-act="draft-why"' + (rep.recommended ? '' : ' disabled') + '>✨ Suggest wording</button></div></div>'
+    + '<div id="rep-problems"></div>'
+    + '</div>'
+
+    + '<div class="rep-preview"><div class="rep-help" style="margin-bottom:8px">Preview: exactly what ' + escapeHtml(b.parentName || 'the parent') + ' receives by email</div>'
+    + '<div class="frame" id="rep-preview"></div></div></div>'
+
+    + '<div class="rep-foot"><span class="rep-status" id="rep-status">' + reportFootStatus(b) + '</span><div class="acts">'
+    + (b.reportToken && b.reportSentAt ? '<a class="btn small ghost" target="_blank" rel="noopener" href="' + escapeHtml(R.reportUrl(b.code || b._id, b.reportToken)) + '">Open parent\'s page ↗</a>' : '')
+    + (b.reportToken && b.reportSentAt ? '<button class="btn small danger" data-act="withdraw">Turn off the link</button>' : '')
+    + '<button class="btn ghost" data-act="save">Save draft</button>'
+    + '<button class="btn ghost" data-act="test">✉ Test to me</button>'
+    + '<button class="btn pink" data-act="send">' + (b.reportSentAt ? 'Send again to parent' : 'Send report to parent') + '</button>'
+    + '</div></div></div>';
+  refreshReportBits();
+}
+function reportFootStatus(b) {
+  if (b.reportSentAt) return 'Sent ' + escapeHtml(fmtCreated(b.reportSentAt)) + ' to ' + escapeHtml(b.reportSentTo || b.email || '') + (repDirty ? ' · unsaved changes' : '');
+  if (b.reportUpdatedAt) return 'Draft saved ' + escapeHtml(fmtCreated(b.reportUpdatedAt)) + (repDirty ? ' · unsaved changes' : '');
+  return repDirty ? 'Not saved yet' : 'New report';
+}
+
+function topicRowHtml(t, i) {
+  const r = R.topicResult(t);
+  const tag = r.band ? '<span class="bandtag" style="background:' + r.band.soft + ';color:' + r.band.colour + '">' + r.pct + '% ' + r.band.label + '</span>'
+    : '<span class="bandtag" style="background:#f1f5f9;color:#64748b">–</span>';
+  const v = x => x === null || x === undefined ? '' : String(x);
+  return '<div class="topic-row" data-i="' + i + '">'
+    + '<input data-k="t-name" value="' + escapeHtml(t.name) + '" maxlength="' + R.LIMITS.topic + '" aria-label="Topic">'
+    + '<input class="mark" data-k="t-score" type="number" min="0" step="0.5" inputmode="decimal" value="' + escapeHtml(v(t.score)) + '" aria-label="Score for ' + escapeHtml(t.name) + '">'
+    + '<span class="of">/</span>'
+    + '<input class="mark" data-k="t-max" type="number" min="0" step="0.5" inputmode="decimal" value="' + escapeHtml(v(t.max)) + '" aria-label="Out of, for ' + escapeHtml(t.name) + '">'
+    + tag
+    + '<button class="x" data-act="del-topic" aria-label="Remove ' + escapeHtml(t.name) + '">×</button>'
+    + '<input class="note" data-k="t-note" value="' + escapeHtml(t.note || '') + '" maxlength="' + R.LIMITS.note + '" placeholder="Optional note for this topic (e.g. careless with units)">'
+    + '</div>';
+}
+function stepHtml(step, i) {
+  return '<div class="step" data-s="' + i + '">'
+    + '<input class="when" data-k="s-when" value="' + escapeHtml(step.when || '') + '" maxlength="' + R.LIMITS.when + '" aria-label="When">'
+    + '<input class="focus" data-k="s-focus" value="' + escapeHtml(step.focus || '') + '" maxlength="' + R.LIMITS.focus + '" aria-label="Focus">'
+    + '<button class="x" data-act="del-step" aria-label="Remove this block">×</button>'
+    + '<textarea data-k="s-tasks" aria-label="Tasks, one per line">' + escapeHtml((step.tasks || []).join('\n')) + '</textarea>'
+    + '</div>';
+}
+
+function refreshReportBits() {
+  if (!rep) return;
+  const s = R.summarise(rep);
+  const total = document.getElementById('rep-total');
+  if (total) total.innerHTML = s.max
+    ? '<b>' + s.pct + '%</b><span>' + s.score + ' / ' + s.max + ' marks</span>'
+      + (s.band ? '<span class="bandtag" style="background:' + s.band.soft + ';color:' + s.band.colour + ';padding:3px 9px;border-radius:999px;font-weight:800">' + s.band.label + '</span>' : '')
+      + '<span>· ' + s.strong.length + ' strong · ' + s.developing.length + ' developing · ' + s.needs.length + ' need work</span>'
+    : '<span>Enter marks to see the total.</span>';
+  const problems = R.reportProblems(rep);
+  const box = document.getElementById('rep-problems');
+  if (box) box.innerHTML = problems.length ? '<div class="rep-problems"><b>Before sending:</b><ul>' + problems.map(p => '<li>' + escapeHtml(p) + '</li>').join('') + '</ul></div>' : '';
+  clearTimeout(repPreviewTimer);
+  repPreviewTimer = setTimeout(drawReportPreview, 120);
+}
+function drawReportPreview() {
+  const el = document.getElementById('rep-preview');
+  if (el && rep) el.innerHTML = R.renderReport(rep, { mode: 'email', preview: true });
+}
+function markDirty() {
+  repDirty = true;
+  const st = document.getElementById('rep-status');
+  const b = bookingById(repId);
+  if (st && b) st.innerHTML = reportFootStatus(b);
+}
+
+function onReportInput(e) {
+  const el = e.target;
+  const k = el.dataset && el.dataset.k;
+  if (!k || !rep) return;
+  const row = el.closest('[data-i]'), step = el.closest('[data-s]');
+  const num = v => v === '' ? null : Number(v);
+  if (k === 't-name' && row) rep.topics[+row.dataset.i].name = el.value;
+  else if (k === 't-score' && row) rep.topics[+row.dataset.i].score = num(el.value);
+  else if (k === 't-max' && row) rep.topics[+row.dataset.i].max = num(el.value);
+  else if (k === 't-note' && row) rep.topics[+row.dataset.i].note = el.value;
+  else if (k === 's-when' && step) rep.plan.steps[+step.dataset.s].when = el.value;
+  else if (k === 's-focus' && step) rep.plan.steps[+step.dataset.s].focus = el.value;
+  else if (k === 's-tasks' && step) rep.plan.steps[+step.dataset.s].tasks = el.value.split('\n').map(x => x.trim()).filter(Boolean);
+  else if (k === 'comment') rep.comment = el.value;
+  else if (k === 'teacher') rep.teacher = el.value;
+  else if (k === 'why') { if (rep.recommended) rep.recommended.why = el.value; }
+  else if (k === 'weeks') { if (e.type === 'change') { rep.plan.weeks = Number(el.value); if (rep.plan.steps.length) rebuildPlan(false); } }
+  else if (k === 'class') { if (e.type === 'change') chooseClass(el.value); return; }
+  else if (k === 'topicSet') return;   // applied with "Use this list"
+  else return;
+  // Live band tag on a marks row, without redrawing (keeps the cursor where it is).
+  if (row && (k === 't-score' || k === 't-max')) {
+    const r = R.topicResult(rep.topics[+row.dataset.i]);
+    const tag = row.querySelector('.bandtag');
+    if (tag) {
+      tag.textContent = r.band ? r.pct + '% ' + r.band.label : '–';
+      tag.style.background = r.band ? r.band.soft : '#f1f5f9';
+      tag.style.color = r.band ? r.band.colour : '#64748b';
+    }
+  }
+  markDirty();
+  refreshReportBits();
+}
+
+function chooseClass(slot) {
+  if (!slot) { rep.recommended = null; }
+  else {
+    const o = R.classOptions(config || {}, rep.level, rep.subject).find(x => x.slot === slot);
+    if (o) {
+      const oldWhy = rep.recommended ? rep.recommended.why || '' : '';
+      rep.recommended = Object.assign({}, o, { why: oldWhy });
+      // Keep the teacher's own words; replace only empty or untouched suggestions.
+      if (!oldWhy || oldWhy === repWhyAuto) { repWhyAuto = R.suggestWhy(rep, rep.recommended); rep.recommended.why = repWhyAuto; }
+    }
+  }
+  markDirty();
+  renderReportEditor();
+}
+function rebuildPlan(silent) {
+  const s = R.summarise(rep);
+  if (!s.scored.length) { if (!silent) toast('Enter some marks first, then build the plan.', true); return; }
+  if (!silent && rep.plan.steps.length && repDirty && !confirm('Replace the study plan with a new one built from the marks? Edits to the plan will be lost.')) return;
+  rep.plan = R.buildPlan(rep, rep.plan.weeks);
+  markDirty();
+  renderReportEditor();
+}
+
+function onReportClick(e) {
+  if (e.target.id === 'rep-bg') { closeReportEditor(); return; }
+  const btn = e.target.closest('[data-act]');
+  if (!btn || !rep) return;
+  const act = btn.dataset.act;
+  if (act === 'close') closeReportEditor();
+  else if (act === 'view') { repView = btn.dataset.view; renderReportEditor(); }
+  else if (act === 'add-topic') { rep.topics.push({ name: 'New topic', score: null, max: null, note: '' }); markDirty(); renderReportEditor(); }
+  else if (act === 'del-topic') { const row = btn.closest('[data-i]'); rep.topics.splice(+row.dataset.i, 1); markDirty(); renderReportEditor(); }
+  else if (act === 'all-max') {
+    const v = Number(document.getElementById('rep-allmax').value);
+    if (!(v > 0)) { toast('Type the marks each topic is out of first.', true); return; }
+    rep.topics.forEach(t => { t.max = v; });
+    markDirty(); renderReportEditor();
+  } else if (act === 'load-set') {
+    const key = document.getElementById('rep-set').value;
+    const [level, subject] = key.split('|');
+    const names = R.topicsFor(level, subject);
+    if (!names.length) return;
+    const hasMarks = rep.topics.some(t => t.score !== null && t.score !== undefined);
+    if (hasMarks && !confirm('Replace the topic list with the ' + level + ' ' + subjectName(subject) + ' topics? Marks are kept for topics with the same name.')) return;
+    const old = new Map(rep.topics.map(t => [t.name, t]));
+    rep.topics = names.map(name => old.get(name) || { name, score: null, max: null, note: '' });
+    rep.topicSet = key;
+    markDirty(); renderReportEditor();
+  } else if (act === 'draft-comment') {
+    const draft = R.suggestComment(rep);
+    if (!draft) { toast('Enter some marks first.', true); return; }
+    if (rep.comment && rep.comment !== repCommentAuto && !confirm('Replace the note you wrote with a new draft?')) return;
+    rep.comment = repCommentAuto = draft;
+    markDirty(); renderReportEditor();
+  } else if (act === 'draft-why') {
+    if (!rep.recommended) return;
+    rep.recommended.why = repWhyAuto = R.suggestWhy(rep, rep.recommended);
+    markDirty(); renderReportEditor();
+  } else if (act === 'build-plan') rebuildPlan(false);
+  else if (act === 'add-step') { rep.plan.steps.push({ when: 'Weeks', focus: '', tasks: [] }); markDirty(); renderReportEditor(); }
+  else if (act === 'del-step') { const st = btn.closest('[data-s]'); rep.plan.steps.splice(+st.dataset.s, 1); markDirty(); renderReportEditor(); }
+  else if (act === 'save') saveReport('draft');
+  else if (act === 'test') saveReport('test');
+  else if (act === 'send') saveReport('parent');
+  else if (act === 'withdraw') withdrawReport();
+}
+
+function newReportToken() { return R.newToken(bytes => crypto.getRandomValues(bytes)); }
+
+// draft: save only. test: save, and email the report to the signed-in teacher.
+// parent: save, email the parent, and open the parent's link.
+async function saveReport(kind) {
+  if (!requireAdmin() || repBusy || !rep) return;
+  const b = bookingById(repId);
+  if (!b) { toast('This booking was deleted.', true); return; }
+  const clean = R.cleanReport(rep);
+  if (kind !== 'draft') {
+    const problems = R.reportProblems(clean);
+    if (problems.length) { refreshReportBits(); toast(problems[0], true); return; }
+  }
+  if (kind === 'parent') {
+    const again = b.reportSentAt ? ' again' : '';
+    if (!clean.email || !EMAIL_RE.test(clean.email)) { toast('This booking has no valid parent email.', true); return; }
+    if (!confirm('Email ' + clean.studentName + '\'s report' + again + ' to ' + clean.parentName + ' at ' + clean.email + '?')) return;
+  }
+  repBusy = true;
+  document.querySelectorAll('.rep-foot .btn').forEach(x => { x.disabled = true; });
+  try {
+    const FieldValue = firebase.firestore.FieldValue;
+    const token = b.reportToken || newReportToken();
+    const code = b.code || b._id;
+    const ref = db.collection('schedule_bookings').doc(repId);
+    const batch = db.batch();
+    const update = { diagnosticReport: clean, reportToken: token, reportUpdatedAt: FieldValue.serverTimestamp() };
+    if (kind === 'parent') {
+      Object.assign(update, { reportSentAt: FieldValue.serverTimestamp(), reportSentTo: clean.email, reportSentCount: FieldValue.increment(1) });
+      if ((b.status || 'pending') !== 'cancelled') update.status = 'attended';
+    }
+    batch.update(ref, update);
+    if (kind === 'parent' || kind === 'test') {
+      const to = kind === 'test' ? auth.currentUser.email : clean.email;
+      const mail = R.reportMail(clean, { code, token, to, test: kind === 'test' });
+      batch.set(db.collection('mail').doc(R.REPORT_MAIL_PREFIX + code + '-' + kind + '-' + Date.now()), mail);
+    }
+    await batch.commit();
+    repDirty = false;
+    rep = clean;
+    toast(kind === 'parent' ? 'Report emailed to ' + clean.email
+      : kind === 'test' ? 'Test emailed to ' + auth.currentUser.email + '. Its online link works once the report is sent to the parent.'
+      : 'Draft saved');
+    if (kind === 'parent') closeReportEditor(true);
+  } catch (e) {
+    console.error(e);
+    toast('Could not save: ' + (e.message || e), true);
+  } finally {
+    repBusy = false;
+    document.querySelectorAll('.rep-foot .btn').forEach(x => { x.disabled = false; });
+  }
+}
+
+async function withdrawReport() {
+  if (!requireAdmin() || !repId) return;
+  if (!confirm('Turn off the parent\'s report link? The page will say the report is not found. The email they already have is not affected, and sending again makes a new link.')) return;
+  try {
+    const FieldValue = firebase.firestore.FieldValue;
+    await db.collection('schedule_bookings').doc(repId).update({ reportToken: FieldValue.delete(), reportSentAt: FieldValue.delete() });
+    toast('Link turned off');
+    closeReportEditor(true);
+  } catch (e) { toast('Could not turn it off: ' + (e.message || e), true); }
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.getElementById('rep-bg')) closeReportEditor(); });
+// A booking that changes under the editor (another device) keeps the teacher's edits;
+// only the footer's status is brought up to date.
+function syncReportEditor() {
+  if (!repId) return;
+  const b = bookingById(repId);
+  if (!b) { closeReportEditor(true); toast('That booking was deleted.', true); return; }
+  const st = document.getElementById('rep-status');
+  if (st) st.innerHTML = reportFootStatus(b);
 }
 
 // ─── Init ───

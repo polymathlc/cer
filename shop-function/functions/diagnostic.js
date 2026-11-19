@@ -297,8 +297,8 @@ function parentDiagnosticMail(b) {
   const lead = 'Thank you for booking a free diagnostic test for ' + b.childName + '. We look forward to seeing ' + b.childName
     + ' on ' + b.sessionLabel + ' at our Clementi centre.';
   const what = 'The test is a ' + b.level + ' ' + b.subject + ' paper, sat during the session. It is completely free (worth $'
-    + (b.worth || DIAGNOSTIC_WORTH) + '). After the test, we will get in touch to share how ' + b.childName
-    + ' did and where to focus next.';
+    + (b.worth || DIAGNOSTIC_WORTH) + '). After the test, you will receive ' + b.childName
+    + '\'s personal report by email: marks for every topic, a week-by-week study plan and the class we recommend.';
   const change = 'Need a different date? Reply to this email or WhatsApp us at ' + WHATSAPP_DISPLAY + ' with your booking code ' + b.code + '.';
   const html =
     '<div style="font-family:\'Century Gothic\',CenturyGothic,AppleGothic,Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#1A1A1A">'
