@@ -11,6 +11,8 @@ const { createDiagnosticService } = require('./diagnostic');
 const { createDiagnosticReportService } = require('./diagnostic-report');
 const { createTrialService } = require('./trial');
 const { createTrialStore } = require('./trial-store');
+const { createRevisionService, REVISION_SOURCE } = require('./revision');
+const { createRevisionStore } = require('./revision-store');
 const { createRepository } = require('./repository');
 const { createStripe } = require('./stripe');
 initializeApp();
@@ -33,10 +35,17 @@ const trials = createTrialService({
   store: createTrialStore(getFirestore(), Timestamp, { bucket: getStorage().bucket('mathgen--app.firebasestorage.app') }),
   http: createHttp(report), hashIp: hash, verifyIdToken: token => getAuth().verifyIdToken(token), report
 });
+// Exam countdown revision packs on /revision (and listed on /products): card or PayNow,
+// then an access code by email. Kept under trialSettings/revisionPacks (see revision.js).
+const revision = createRevisionService({
+  store: createRevisionStore(getFirestore(), Timestamp, { bucket: getStorage().bucket('mathgen--app.firebasestorage.app') }),
+  stripe, http: createHttp(report), hashIp: hash, verifyIdToken: token => getAuth().verifyIdToken(token),
+  cardConfigured: !!process.env.STRIPE_SECRET_KEY, report
+});
 const service = createService({
   repository, stripe,
   webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
-  paidSessionHandlers: { [BOOKING_SOURCE]: bookings.handlePaidSession },
+  paidSessionHandlers: { [BOOKING_SOURCE]: bookings.handlePaidSession, [REVISION_SOURCE]: revision.handlePaidSession },
   // The admin's Google sign-in on the products page, for sendShopReceipt.
   verifyIdToken: token => getAuth().verifyIdToken(token),
   report
@@ -53,3 +62,5 @@ exports.diagnosticReport = onRequest(web, diagnosticReports.diagnosticReport);
 exports.trialBooking = onRequest(web, trials.trialBooking);
 exports.trialAdmin = onRequest(web, trials.trialAdmin);
 exports.trialMaterial = onRequest(Object.assign({}, web, { timeoutSeconds: 120, concurrency: 10 }), trials.trialMaterial);
+exports.revisionPack = onRequest(Object.assign({}, web, { timeoutSeconds: 120, concurrency: 10 }), revision.revisionPack);
+exports.revisionPackAdmin = onRequest(web, revision.revisionPackAdmin);
