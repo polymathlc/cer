@@ -8,6 +8,7 @@ const logger = require('firebase-functions/logger');
 const { createService, createHttp, hash } = require('./service');
 const { createBookingService, BOOKING_SOURCE } = require('./booking');
 const { createDiagnosticService } = require('./diagnostic');
+const { createDiagnosticReportService } = require('./diagnostic-report');
 const { createTrialService } = require('./trial');
 const { createTrialStore } = require('./trial-store');
 const { createRepository } = require('./repository');
@@ -25,6 +26,8 @@ const report = code => logger.warn(code);
 const bookings = createBookingService({ repository, stripe, http: createHttp(report), hashIp: hash, report });
 // Free diagnostic tests on /diagnostic, at the Master Class sessions on /schedule.
 const diagnostics = createDiagnosticService({ repository, http: createHttp(report), hashIp: hash, report });
+// The parent's diagnostic report page (/diagnostic/report/), read with the key in their emailed link.
+const diagnosticReports = createDiagnosticReportService({ repository, http: createHttp(report) });
 // Online trial lessons on /trial: one-time codes, class links, live Zoom link and worksheets.
 const trials = createTrialService({
   store: createTrialStore(getFirestore(), Timestamp, { bucket: getStorage().bucket('mathgen--app.firebasestorage.app') }),
@@ -46,6 +49,7 @@ exports.sendShopReceipt = onRequest(web, service.sendReceipt);
 exports.createScheduleCheckout = onRequest(web, bookings.createCheckout);
 exports.scheduleCheckoutStatus = onRequest(web, bookings.checkoutStatus);
 exports.bookDiagnostic = onRequest(web, diagnostics.bookDiagnostic);
+exports.diagnosticReport = onRequest(web, diagnosticReports.diagnosticReport);
 exports.trialBooking = onRequest(web, trials.trialBooking);
 exports.trialAdmin = onRequest(web, trials.trialAdmin);
 exports.trialMaterial = onRequest(Object.assign({}, web, { timeoutSeconds: 120, concurrency: 10 }), trials.trialMaterial);

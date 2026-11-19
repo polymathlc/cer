@@ -926,7 +926,7 @@ const auth = firebase.auth();
 
 // Shown to the signed-in teacher in the footer, so a deploy can be checked.
 // Bump it on every change to this page.
-const SCHEDULE_PAGE_VERSION = 'v1.6.3';
+const SCHEDULE_PAGE_VERSION = 'v1.7.0';
 
 const ADMIN_EMAIL = 'chungzhikai@gmail.com';
 // Every trial booking emails these addresses via the "Trigger Email"
@@ -2083,6 +2083,7 @@ CONFIG_DOC.onSnapshot(snap => {
   writeCachedConfig(data);
   renderHero();
   if (!draftSlots) renderSchedule();
+  openBookingFromLink();
 }, err => {
   console.error('Schedule load failed', err);
   configError = (err && (err.code || err.message)) || 'unavailable';
@@ -2169,6 +2170,41 @@ function openBooking(id, kind) {
   btn.textContent = submitLabel();
   refreshBookingQR();
   document.getElementById('booking-modal').classList.add('show');
+}
+
+// ─── A booking opened from a link ───
+// The diagnostic report (diagnostic/report-core.js) links its Enrol and Trial
+// buttons here as /schedule/?book=THU-3&kind=enrol&parent=…&child=…&email=…&from=diagnostic.
+// Once the live timetable has loaded, that class's booking form opens with the
+// parent's details filled in. A class that is full or closed by then shows the
+// timetable with a note instead. The address is cleaned so a refresh does not
+// reopen the form. Runs once per page load.
+let bookingLinkDone = false;
+function bookingLinkParams() {
+  const p = new URLSearchParams(location.search);
+  const slot = (p.get('book') || '').toUpperCase();
+  if (!/^(MON|TUE|WED|THU|FRI|SAT)-[123]$/.test(slot)) return null;
+  const clip = (v, n) => String(v || '').replace(/[\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, n);
+  return { slot, kind: p.get('kind') === 'trial' ? 'trial' : 'enrol',
+    parent: clip(p.get('parent'), 80), child: clip(p.get('child'), 80), email: clip(p.get('email'), 120), from: clip(p.get('from'), 20) };
+}
+function openBookingFromLink() {
+  if (bookingLinkDone) return;
+  const link = bookingLinkParams();
+  if (!link) return;
+  bookingLinkDone = true;
+  try { history.replaceState(null, '', location.pathname + location.hash); } catch (e) {}
+  const s = getSlot(link.slot);
+  const kind = link.kind === 'enrol' && canEnrol(s) ? 'enrol' : 'trial';
+  if (s.status !== 'open') {
+    toast(s.status === 'full' ? 'That class is full now. Please choose another time below, or WhatsApp us.' : 'That class is not open now. Please choose another time below, or WhatsApp us.', true);
+    return;
+  }
+  openBooking(link.slot, kind);
+  if (link.parent) document.getElementById('b-parent').value = link.parent;
+  if (link.child) document.getElementById('b-child').value = link.child;
+  if (link.email) document.getElementById('b-email').value = link.email;
+  if (link.from === 'diagnostic') toast(kind === 'enrol' ? 'Enrolling from the diagnostic report. Your details are filled in.' : 'Booking a trial from the diagnostic report. Your details are filled in.');
 }
 
 function submitLabel() {

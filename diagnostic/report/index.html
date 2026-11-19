@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Diagnostic Report | Polymath Learning Centre</title>
+<!-- 🩺 The parent's diagnostic report (Nov 2026). The teacher enters the marks of the
+     free diagnostic test on /diagnostic/#admin and sends the report; the email links
+     here with the booking code and a random key (?c=CODE&t=KEY). The page asks the
+     diagnosticReport function for the report and draws it with report-core.js, the
+     same code that drew the email and the admin's preview. Not in the sitemap. -->
+<link rel="icon" href="../../assets/branding/polymath-learning-centre.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://us-central1-mathgen--app.cloudfunctions.net" crossorigin>
+<style>
+  :root {
+    --ink:#10303a; --teal:#2e9ca6; --deep:#056c76; --pink:#ec008c; --paper:#f2f9fa; --line:#d1eaee; --muted:#5c6b70;
+    --bg:#f2f6f7; --card:#ffffff;
+    --font:'DM Sans',system-ui,sans-serif;
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; padding:0; }
+  body { background:var(--bg); color:var(--ink); font-family:var(--font); -webkit-font-smoothing:antialiased; }
+  a { color:var(--deep); }
+  .topbar { background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5; }
+  .topbar-inner { max-width:760px; margin:0 auto; padding:10px 16px; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .brand { display:flex; align-items:center; gap:10px; text-decoration:none; color:var(--ink); }
+  .brand img { height:38px; width:auto; }
+  .brand-name { font-weight:800; font-size:15px; line-height:1.1; }
+  .brand-name span { display:block; font-weight:500; font-size:12px; color:var(--muted); }
+  .top-actions { display:flex; gap:8px; align-items:center; }
+  .btn { display:inline-flex; align-items:center; gap:6px; border:0; border-radius:10px; padding:9px 14px; font:700 14px var(--font);
+    cursor:pointer; background:var(--deep); color:#fff; text-decoration:none; }
+  .btn.ghost { background:#fff; color:var(--deep); border:1.5px solid var(--line); }
+  .btn.wa { background:#25d366; }
+  .wrap { max-width:760px; margin:0 auto; padding:22px 16px 48px; }
+  .sheet { background:var(--card); border-radius:22px; padding:26px 24px 30px; box-shadow:0 10px 40px rgba(16,48,58,.08); }
+  .state { text-align:center; padding:60px 16px; color:var(--muted); font-size:15px; line-height:1.6; }
+  .state h1 { color:var(--ink); font-size:22px; margin:0 0 8px; }
+  .spin { display:inline-block; width:22px; height:22px; border:3px solid var(--line); border-top-color:var(--deep); border-radius:50%;
+    animation:spin .8s linear infinite; vertical-align:middle; margin-right:10px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .meta { font-size:12px; color:var(--muted); text-align:center; margin-top:16px; }
+  .hidden { display:none !important; }
+  @media (max-width:560px) {
+    .brand-name { display:none; }
+    .sheet { padding:18px 14px 24px; border-radius:16px; }
+    .wrap { padding:14px 10px 36px; }
+    .btn { padding:8px 11px; font-size:13px; }
+  }
+  @media print {
+    body { background:#fff; }
+    .topbar, .meta, .no-print { display:none !important; }
+    .wrap { padding:0; max-width:none; }
+    .sheet { box-shadow:none; padding:0; border-radius:0; }
+    a[href]::after { content:''; }
+    table, h2 { break-inside:avoid; page-break-inside:avoid; }
+    * { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="../../"><img src="../../assets/branding/polymath-learning-centre.png" alt="Polymath Learning Centre logo"><div class="brand-name">Polymath<span>Learning Centre</span></div></a>
+    <div class="top-actions">
+      <button class="btn ghost hidden" id="print-btn" type="button" onclick="window.print()">🖨 Print or save PDF</button>
+      <a class="btn wa" href="https://wa.me/6596450588" target="_blank" rel="noopener">WhatsApp us</a>
+    </div>
+  </div>
+</header>
+<main class="wrap">
+  <div class="sheet" id="sheet">
+    <div class="state" id="state"><span class="spin"></span>Loading the report…</div>
+    <div id="report" class="hidden" aria-live="polite"></div>
+  </div>
+  <p class="meta" id="meta"></p>
+</main>
+<script src="../report-core.js"></script>
+<script>
+// Bump on every change to this page (shown to anyone in the footer line).
+const REPORT_PAGE_VERSION = 'v1.0.0';
+const REPORT_API = 'https://us-central1-mathgen--app.cloudfunctions.net/diagnosticReport';
+const R = window.DiagnosticReport;
+
+function showState(title, text) {
+  document.getElementById('state').innerHTML = '<h1>' + R.escapeHtml(title) + '</h1>' + R.escapeHtml(text)
+    + '<p style="margin-top:18px"><a class="btn" href="https://wa.me/6596450588" target="_blank" rel="noopener">WhatsApp +65 9645 0588</a></p>';
+}
+
+async function loadReport() {
+  const params = new URLSearchParams(location.search);
+  const code = (params.get('c') || '').trim();
+  const token = (params.get('t') || '').trim();
+  if (!code || !token) {
+    showState('Report link incomplete', 'This link is missing part of its address. Please open the link in your report email again, or WhatsApp us and we will resend it.');
+    return;
+  }
+  let answer = null, status = 0;
+  for (let attempt = 0; attempt < 3 && !answer; attempt++) {
+    try {
+      const res = await fetch(REPORT_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, token }) });
+      status = res.status;
+      const body = await res.json().catch(() => null);
+      if (res.ok && body && body.ok) { answer = body; break; }
+      if (res.status === 404 || res.status === 400) break;
+    } catch (e) { status = 0; }
+    await new Promise(r => setTimeout(r, 800 * (attempt + 1)));
+  }
+  if (!answer) {
+    if (status === 404 || status === 400) showState('Report not found', 'This report link is not valid any more. A newer report may have been sent, so please check for the latest email from us, or WhatsApp us and we will resend it.');
+    else showState('Could not load the report', 'Please check your connection and refresh the page. If it keeps happening, WhatsApp us and we will send the report again.');
+    return;
+  }
+  const report = answer.report;
+  document.title = (report.studentName ? report.studentName + '’s diagnostic report' : 'Diagnostic report') + ' | Polymath Learning Centre';
+  const el = document.getElementById('report');
+  el.innerHTML = R.renderReport(report, { mode: 'web', code, token });
+  el.classList.remove('hidden');
+  document.getElementById('state').classList.add('hidden');
+  document.getElementById('print-btn').classList.remove('hidden');
+  const sent = answer.sentAt ? new Date(answer.sentAt).toLocaleDateString('en-SG', { timeZone: 'Asia/Singapore', day: 'numeric', month: 'long', year: 'numeric' }) : '';
+  document.getElementById('meta').textContent = (sent ? 'Report sent ' + sent + ' · ' : '') + 'Booking ' + (report.code || code) + ' · Report page ' + REPORT_PAGE_VERSION;
+}
+loadReport();
+</script>
+</body>
+</html>
