@@ -33,9 +33,9 @@
      mail/polymath-office-*    emails for the Trigger Email extension
    Reads: schedule_config/main (the /schedule page's own document).
    ═══════════════════════════════════════════════════════════════════════════ */
-import * as C from './office-core.mjs?v=1.14.1';
+import * as C from './office-core.mjs?v=1.17.0';
 
-const OFFICE_VERSION = 'v1.16.0';
+const OFFICE_VERSION = 'v1.17.0';
 
 /* ═══════════════ Firebase — the CER project ═══════════════ */
 firebase.initializeApp({
@@ -72,6 +72,7 @@ const S = {
   payments: [], paymentsLoaded: false,
   statements: [],
   announcements: [],                  // the log of announcements sent
+  bookings: [], bookingsLoaded: false, bookingsErr: '',   // schedule_bookings that carry a referral code (v1.17.0)
   listenErrors: {},
   view: 'home',
   period: C.sgMonthKey(),
@@ -82,7 +83,8 @@ const S = {
     ann: { draft: savedAnnDraft(), status: 'active', type: '', F: C.cleanFamilyFilters({}), search: '', excluded: [], panel: false, preview: '' },
     stuSearch: '', stu: { level: '', subject: '', mode: '', day: '', status: 'active', pay: '', cls: '' }, stuSort: { key: 'name', dir: 1 },
     tt: { level: '', subject: '', mode: '' }, wdOpen: false,
-    invFilter: 'all', invSearch: ''
+    invFilter: 'all', invSearch: '',
+    ref: { search: '', pick: {}, manual: { from: '', to: '' } }
   },
   modal: null, drawer: null,
   review: null,                       // the statement being reviewed
@@ -357,6 +359,14 @@ function start() {
   listen('statements', db.collection(COL.statements).orderBy('uploadedAt', 'desc').limit(12), snap => {
     S.statements = snap.docs.map(d => { const x = d.data(); return { id: d.id, fileName: x.fileName, uploadedAt: x.uploadedAt, summary: x.summary || {}, appliedAt: x.appliedAt, from: x.from, to: x.to, aiUsed: x.aiUsed }; });
   });
+  // Bookings that came through a family's referral link (v1.17.0). Read without
+  // the shared error banner: if they cannot be read, only the Referrals tab says so.
+  try {
+    unsubs.push(db.collection('schedule_bookings').where('referralCode', '>=', 'A').onSnapshot(snap => {
+      S.bookings = snap.docs.map(d => { const x = d.data(); return Object.assign({}, x, { id: d.id, createdAtMs: tsMs(x.createdAt) || Number(x.createdAt) || 0 }); });
+      S.bookingsLoaded = true; S.bookingsErr = ''; render();
+    }, err => { console.error('referral bookings', err); S.bookingsLoaded = true; S.bookingsErr = friendlyError(err); render(); }));
+  } catch (e) { S.bookingsLoaded = true; S.bookingsErr = friendlyError(e); }
   const hv = (location.hash || '').replace('#', '');
   if (VIEWS[hv]) S.view = hv;
   render();
@@ -404,6 +414,7 @@ function renderTabs() {
   set('students', IX.rows.filter(r => r.status === 'active').length);
   const p = periodInvoices(C.sgMonthKey());
   set('invoices', p.filter(i => stateOf(i).key === 'draft').length + billableWithoutInvoice(C.sgMonthKey()).length);
+  set('referrals', refRows().filter(r => r.state === 'waiting' || r.state === 'unknown').length);
 }
 // Draw QR codes and invoice pictures into whatever was just rendered.
 function hydrate(root) {
@@ -1317,6 +1328,10 @@ VIEWS.settings = function () {
     + f('hardcopyFee', 'Hardcopy printing a month ($)', 'number', 'For families with a hardcopy subscription. Above $0 it is added to their monthly invoices; a custom invoice always lists the line, with this amount filled in.', 'min="0" step="0.01" placeholder="0.00"')
     + '</div></div>'
     + combinedMonthsCard(s)
+    + '<div class="card"><h2>🎁 Referral rewards</h2><div class="sub">Taken off each family\'s next monthly invoice, as its own line, once you confirm on the <button class="linkbtn" data-act="go" data-to="referrals">Referrals</button> tab that the new family enrolled. Set 0 for no reward.</div><div class="form">'
+    + f('referralReward', 'Reward for the family who refers ($)', 'number', 'For each friend who enrols through their link.', 'min="0" step="1" placeholder="50"')
+    + f('referralFriendReward', 'Reward for the new family ($)', 'number', 'Off the new family\'s first full invoice.', 'min="0" step="1" placeholder="50"')
+    + '</div></div>'
     + '<div class="card"><h2>🤖 Autopilot</h2><div class="sub">Runs every morning at 9am. ' + (ap && ap.lastRunAt ? 'Last run ' + esc(timeAgo(tsMs(ap.lastRunAt))) + ': ' + esc(ap.result || '') : 'It has not checked in yet.') + '</div>'
     + '<div class="radio-cards">' + radio('off', 'Off', 'You press "Prepare invoices" yourself each month.')
     + radio('review', 'Prepare, then ask me', 'On the invoice day it prepares every family\'s invoice and emails you to check and send them.')
@@ -1574,6 +1589,7 @@ MODALS.family = function (m) {
       + '<div class="small muted" style="margin-top:6px;">Every invoice adds the month, e.g. ' + esc(C.invoiceReference(f.code, C.sgMonthKey())) + '. The bank shows it on your statement, which is how payments are matched.</div>'
       : '<div class="small muted">A permanent code is created when you save.</div>')
     + (f.credit > 0 ? '<div class="banner green" style="margin-top:14px;"><div class="big">💳</div><div><b>Credit ' + money(f.credit) + '</b>Taken off the next invoice automatically.</div></div>' : '')
+    + familyReferralHtml(f)
     + (f.payerNames && f.payerNames.length ? '<div class="small muted" style="margin-top:10px;">🏦 Bank names seen: ' + f.payerNames.map(p => esc(p.toUpperCase())).join(', ') + '</div>' : '')
     + '</div><div>'
     + '<div class="section-title">Children</div>' + stud
@@ -2181,6 +2197,10 @@ async function saveFamily() {
   busy(btn, true);
   try {
     if (!draft.code) draft.code = C.newCode(rnd, new Set(S.families.map(f => f.code)));
+    // Referral data is changed only on the Referrals tab: keep what is stored now,
+    // not the copy this dialog opened with, so a referral confirmed meanwhile stays.
+    const live = draft.id ? famById(draft.id) : null;
+    if (live) ['referralCode', 'rewards', 'referredBy', 'referralSentAt', 'referralSentVia'].forEach(k => { if (live[k] !== undefined) draft[k] = clone(live[k]); });
     const data = Object.assign(stripLocal(draft), { updatedAt: ts(), updatedBy: S.user.email });
     if (!draft.id) {
       const ref = db.collection(COL.families).doc();
@@ -2255,7 +2275,9 @@ async function createInvoice(familyId, period) {
     if (!(inv.total > 0)) return 'zero';
     t.set(ref, Object.assign({}, inv, { linkToken: token, createdAt: ts(), updatedAt: ts(), createdBy: S.user.email }));
     t.set(linkRef(token), Object.assign(C.publicInvoiceDoc(inv, S.settings), { updatedAt: ts() }));
-    if (inv.creditUsed > 0) t.update(famRef(familyId), { credit: C.round2((Number(fam.credit) || 0) - inv.creditUsed), updatedAt: ts() });
+    // Credit from an overpayment and referral rewards are used in the same write.
+    const fu = C.familyUpdateForInvoice(fSnap.data(), inv);
+    if (Object.keys(fu).length) t.update(famRef(familyId), Object.assign(fu, { updatedAt: ts() }));
     return 'created';
   });
 }
@@ -3139,7 +3161,7 @@ const ACT = {
   async saveGenericQr() { const ref = C.cleanRef(S.modal.reference) || 'POLYMATH'; savePng(await qrPngBase64(C.genericPayNow(S.settings, ref)), 'PayNow-Polymath-generic' + (ref === 'POLYMATH' ? '' : '-' + ref.replace(/\s+/g, '-')) + '.png'); },
   async voidInvoice(el) {
     const inv = IX.invById.get(el.dataset.id);
-    if (!inv || !requireProtected() || !confirm('Cancel ' + inv.number + ' for ' + inv.parentName + '?' + (inv.creditUsed > 0 ? ' The ' + money(inv.creditUsed) + ' credit it used goes back to the family.' : ''))) return;
+    if (!inv || !requireProtected() || !confirm('Cancel ' + inv.number + ' for ' + inv.parentName + '?' + (inv.creditUsed > 0 ? ' The ' + money(inv.creditUsed) + ' credit it used goes back to the family.' : '') + (inv.rewardsUsed > 0 ? ' The ' + money(inv.rewardsUsed) + ' referral reward goes back too, for the next invoice.' : ''))) return;
     try {
       await db.runTransaction(async t => {
         const s = await t.get(invRef(inv.id));
@@ -3148,7 +3170,10 @@ const ACT = {
         if (!s.exists || s.data().paid > 0) throw new Error('it has payments — undo them first');
         t.update(invRef(inv.id), { status: 'void', updatedAt: ts() });
         if (s.data().linkToken) t.set(linkRef(s.data().linkToken), { status: 'void', updatedAt: ts() }, { merge: true });
-        if (f.exists && s.data().creditUsed > 0) t.update(famRef(inv.familyId), { credit: C.round2((Number(f.data().credit) || 0) + s.data().creditUsed) });
+        if (f.exists) {
+          const fu = C.familyUpdateForVoid(f.data(), Object.assign({}, s.data(), { id: inv.id }));
+          if (Object.keys(fu).length) t.update(famRef(inv.familyId), fu);
+        }
       });
       toast('Invoice cancelled', 'ok');
     } catch (e) { fail('Could not cancel', e); }
@@ -3522,6 +3547,355 @@ const CHG = {
   setAutopilot(el) { const d = S.settingsDraft || (S.settingsDraft = clone(S.settings)); d.autopilot = el.value; render(); },
   settingBool(el) { const d = S.settingsDraft || (S.settingsDraft = clone(S.settings)); d[el.dataset.k] = el.checked; }
 };
+
+/* ═══════════════ 🎁 Referrals (v1.17.0) ═══════════════
+   Each family's own link (polymathlc.com.sg/schedule/?ref=CODE), the bookings
+   that came through one, staff confirming that the friend really enrolled, and
+   the rewards that then come off both families' next invoices (office-core §10).
+   Nothing is given until a member of staff presses "Enrolled — give both rewards". */
+function refRows() { return C.referralBookings(S.bookings, S.families); }
+function refFamilyOptions(selected, opts) {
+  const o = opts || {};
+  const list = S.families.filter(f => o.all || famRoster(f) !== 'withdrawn' || f.id === selected);
+  return '<option value="">' + esc(o.blank || 'Choose a family…') + '</option>'
+    + list.map(f => '<option value="' + esc(f.id) + '" ' + (f.id === selected ? 'selected' : '') + '>' + esc(C.familyDisplayName(f)) + (f.email ? ' · ' + esc(f.email) : '') + '</option>').join('');
+}
+function refPickFor(row) {
+  const p = S.ui.ref.pick[row.id] || {};
+  return {
+    from: p.from !== undefined ? p.from : (row.referrer ? row.referrer.id : ''),
+    to: p.to !== undefined ? p.to : (row.friend ? row.friend.id : '')
+  };
+}
+function rewardPill(r) {
+  const st = C.referralRewardState(r);
+  return r ? '<span class="pill ' + st.tone + '">' + st.icon + ' ' + money(r.amount) + ' · ' + esc(st.label) + '</span>' : '<span class="muted small">no reward</span>';
+}
+function refWhen(ms) { return ms ? C.prettyDateShort(C.sgDayKey(new Date(ms))) : ''; }
+function refBookingWhat(b) {
+  if (b.kind === 'diagnostic') return 'Free diagnostic test · ' + (b.sessionLabel || b.slotLabel || '');
+  return (b.kind === 'enrol' ? 'Enrolment' : 'Trial') + ' · ' + (b.slotLabel || '') + (b.subject ? ' · ' + (b.classLevel ? C.levelLabel(b.classLevel) + ' ' : '') + b.subject : '') + (b.mode ? ' · ' + b.mode : '');
+}
+function refWaitingHtml(row) {
+  const b = row.booking;
+  const pick = refPickFor(row);
+  const ready = pick.from && pick.to && pick.from !== pick.to;
+  return '<div class="ref-row" data-ref-row="' + esc(row.id) + '">'
+    + '<div class="ref-who"><div><b>' + esc(row.child || 'A child') + '</b> <span class="pill ' + (b.kind === 'enrol' ? 'green' : 'deep') + '">' + esc(row.kind) + '</span>'
+    + (row.state === 'unknown' ? ' <span class="pill amber">⚠ No family has code ' + esc(row.code) + '</span>' : ' <span class="code">' + esc(row.code) + '</span>') + '</div>'
+    + '<div class="small muted">' + esc(refBookingWhat(b)) + '</div>'
+    + '<div class="small">Parent ' + esc(row.parent || '—') + (b.email ? ' · ' + esc(b.email) : '') + (b.whatsapp ? ' · ' + esc(C.displayPhone(C.normalizeWhatsapp(b.whatsapp))) : '') + (row.when ? ' · booked ' + esc(refWhen(row.when)) : '') + '</div></div>'
+    + '<div class="ref-pick">'
+    + '<label class="small">Introduced by<select data-ch="refPick" data-id="' + esc(row.id) + '" data-k="from" aria-label="Family who introduced them">' + refFamilyOptions(pick.from, { all: true }) + '</select></label>'
+    + '<label class="small">The new family\'s record<select data-ch="refPick" data-id="' + esc(row.id) + '" data-k="to" aria-label="The new family">' + refFamilyOptions(pick.to, { blank: 'Not in the Office yet…' }) + '</select></label>'
+    + (pick.to ? '' : '<button class="linkbtn small" data-act="refAddFamily" data-id="' + esc(row.id) + '">＋ Add this family from the booking</button>')
+    + '</div>'
+    + '<div class="ref-act"><button class="btn sm" data-act="refConfirm" data-id="' + esc(row.id) + '" ' + (ready ? '' : 'disabled title="Choose both families first"') + '>✓ Enrolled — give both rewards</button>'
+    + '<button class="btn sm ghost" data-act="refDismiss" data-id="' + esc(row.id) + '" title="They did not enrol, or it is not a real referral">Not enrolled</button></div>'
+    + '</div>';
+}
+function refLinkCell(f) {
+  if (!f.referralCode) return '<span class="muted small">Made when you first copy, email or WhatsApp it</span>';
+  return '<span class="code">' + esc(f.referralCode) + '</span> <span class="small muted ref-url">' + esc(C.referralLink(f.referralCode).replace(/^https:\/\//, '')) + '</span>';
+}
+function refLinkButtons(f, small) {
+  const cls = 'btn ' + (small ? 'xs' : 'sm') + ' ghost';
+  return '<button class="' + cls + '" data-act="refCopy" data-id="' + esc(f.id) + '">📋 Copy link</button>'
+    + (C.familyEmails(f).length ? '<button class="' + cls + '" data-act="refEmail" data-id="' + esc(f.id) + '">✉ Email it</button>' : '')
+    + (f.whatsapp ? '<button class="' + cls + '" data-act="refWa" data-id="' + esc(f.id) + '">💬 WhatsApp it</button>' : '');
+}
+VIEWS.referrals = function () {
+  if (!S.familiesLoaded) return emptyHtml('⏳', 'Loading…', 'Fetching families.');
+  const st = S.settings;
+  const rows = refRows();
+  const waiting = rows.filter(r => r.state === 'waiting' || r.state === 'unknown');
+  const dismissed = rows.filter(r => r.state === 'dismissed');
+  const done = C.confirmedReferrals(S.families);
+  const stats = C.referralStats(S.families, rows);
+  const active = S.families.filter(f => famRoster(f) === 'active');
+  const q = C.normText(S.ui.ref.search);
+  const linkList = active.filter(f => !q || C.normText(C.familyDisplayName(f) + ' ' + f.email + ' ' + f.referralCode).includes(q));
+  const emailable = active.filter(f => C.familyEmails(f).length);
+  const m = S.ui.ref.manual;
+  let h = '<div class="page-head"><div><h1>🎁 Referral rewards</h1><p>Every family has its own link. When a friend enrols through it, both families get money off their next invoice — once you confirm it here.</p></div>'
+    + '<div class="actions"><button class="btn" data-act="refEmailAll" ' + (emailable.length ? '' : 'disabled') + '>✉ Email every family its link (' + emailable.length + ')</button></div></div>';
+  h += '<div class="banner ' + (st.referralReward > 0 || st.referralFriendReward > 0 ? 'green' : 'amber') + '"><div class="big">🎁</div><div style="flex:1"><b>'
+    + money(st.referralReward) + ' off for the family who refers · ' + money(st.referralFriendReward) + ' off for the new family</b>'
+    + 'Taken off each family\'s next monthly invoice, as its own line, once you confirm the new family enrolled. '
+    + (S.settingsRaw && S.settingsRaw.referralReward !== undefined ? '' : 'These are starting amounts — set your own in Settings. ')
+    + '<button class="linkbtn" data-act="go" data-to="settings">Change the amounts</button></div></div>';
+  h += '<div class="stats" style="margin-bottom:18px;">'
+    + '<div class="stat ' + (stats.waiting + stats.unknown ? 'amber' : '') + '"><div class="label">Waiting for you</div><div class="value">' + (stats.waiting + stats.unknown) + '</div><div class="hint">bookings through a link</div></div>'
+    + '<div class="stat deep"><div class="label">Confirmed referrals</div><div class="value">' + stats.confirmed + '</div><div class="hint">families who enrolled</div></div>'
+    + '<div class="stat green"><div class="label">Rewards given</div><div class="value">' + money(stats.given) + '</div><div class="hint">already on invoices</div></div>'
+    + '<div class="stat"><div class="label">Still to give</div><div class="value">' + money(stats.left) + '</div><div class="hint">on the next invoices</div></div></div>';
+  // 1. Bookings that came through a link.
+  h += '<div class="card"><h2>Waiting for you to confirm</h2><div class="sub">Trials, enrolments and diagnostic tests booked through a family\'s link or with its code. Confirm only once the child has really enrolled and the family is in the Office.</div>'
+    + (S.bookingsErr ? '<div class="fix warn">⚠ Bookings could not be read: ' + esc(S.bookingsErr) + '. You can still add a referral by hand below.</div>' : '')
+    + (!S.bookingsLoaded && !S.bookingsErr ? '<p class="muted">Loading bookings…</p>'
+      : waiting.length ? '<div class="ref-list">' + waiting.map(refWaitingHtml).join('') + '</div>'
+        : emptyHtml('📭', 'Nothing to confirm', 'When a friend books through a family\'s link it shows up here.'))
+    + (dismissed.length ? '<details class="ref-dismissed"><summary class="small muted">' + C.plural(dismissed.length, 'booking') + ' marked "not enrolled"</summary>'
+      + dismissed.map(r => '<div class="small" style="margin:6px 0;">' + esc(r.child) + ' · ' + esc(r.kind) + ' · code ' + esc(r.code) + (r.referrer ? ' (' + esc(C.familyDisplayName(r.referrer)) + ')' : '')
+        + ' <button class="linkbtn small" data-act="refUndismiss" data-id="' + esc(r.id) + '">Put it back</button></div>').join('') + '</details>' : '')
+    + '</div>';
+  // 2. By hand.
+  const mReady = m.from && m.to && m.from !== m.to;
+  h += '<div class="card"><h2>Add a referral by hand</h2><div class="sub">For a family who mentioned a friend on WhatsApp or at the centre instead of using the link.</div>'
+    + '<div class="form" style="grid-template-columns:1fr 1fr auto;align-items:end;">'
+    + '<div class="field"><label>Introduced by</label><select data-ch="refManual" data-k="from">' + refFamilyOptions(m.from, { all: true }) + '</select></div>'
+    + '<div class="field"><label>The new family</label><select data-ch="refManual" data-k="to">' + refFamilyOptions(m.to) + '</select></div>'
+    + '<div class="field"><button class="btn" data-act="refConfirmManual" ' + (mReady ? '' : 'disabled') + '>✓ Give both rewards…</button></div></div></div>';
+  // 3. Confirmed.
+  h += '<div class="card"><h2>Confirmed referrals</h2><div class="sub">Newest first. A referral can be undone until one of its rewards is on an invoice.</div>'
+    + (!done.length ? emptyHtml('🌱', 'No referrals yet', 'Email every family its link to get the first one.')
+      : '<div class="table-wrap" style="box-shadow:none;"><table class="t"><thead><tr><th>Confirmed</th><th>Family who referred</th><th>Their reward</th><th>New family</th><th>Their reward</th><th></th></tr></thead><tbody>'
+        + done.map(x => {
+          const locked = x.referrerReward.used > 0 || (x.friendReward && x.friendReward.used > 0);
+          return '<tr><td class="nowrap">' + esc(C.prettyDateShort(x.confirmedAt)) + '</td>'
+            + '<td><button class="linkbtn" data-act="openFamily" data-id="' + esc(x.referrer.id) + '">' + esc(C.familyDisplayName(x.referrer)) + '</button></td>'
+            + '<td>' + rewardPill(x.referrerReward) + '</td>'
+            + '<td>' + (x.friend ? '<button class="linkbtn" data-act="openFamily" data-id="' + esc(x.friend.id) + '">' + esc(x.friendName) + '</button>' : esc(x.friendName || '—')) + '</td>'
+            + '<td>' + rewardPill(x.friendReward) + '</td>'
+            + '<td class="r">' + (locked ? '' : '<button class="btn xs ghost" data-act="refUndo" data-fam="' + esc(x.referrer.id) + '" data-id="' + esc(x.id) + '">Undo</button>') + '</td></tr>';
+        }).join('') + '</tbody></table></div>')
+    + '</div>';
+  // 4. Every family's link.
+  h += '<div class="card"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline;"><div><h2>Each family\'s link</h2><div class="sub">Active families. A link is made the first time you copy, email or WhatsApp it, and never changes.</div></div>'
+    + '<input class="plain" type="search" placeholder="Search families" value="' + esc(S.ui.ref.search) + '" data-in="refSearch" data-keep="ref-search" style="max-width:240px;"></div>'
+    + (!linkList.length ? emptyHtml('👪', 'No families', q ? 'Nobody matches that search.' : 'Add families first.')
+      : '<div class="table-wrap" style="box-shadow:none;"><table class="t"><thead><tr><th>Family</th><th>Link</th><th>Referred</th><th>Rewards left</th><th>Link sent</th><th></th></tr></thead><tbody>'
+        + linkList.map(f => {
+          const n = done.filter(x => x.referrer.id === f.id).length;
+          const left = C.familyRewardsLeft(f);
+          return '<tr><td><button class="linkbtn" data-act="openFamily" data-id="' + esc(f.id) + '">' + esc(C.familyDisplayName(f)) + '</button></td>'
+            + '<td>' + refLinkCell(f) + '</td><td class="num">' + (n ? '<b>' + n + '</b>' : '<span class="muted">0</span>') + '</td>'
+            + '<td class="num">' + (left > 0 ? '<span class="pill green">' + money(left) + '</span>' : '<span class="muted">—</span>') + '</td>'
+            + '<td class="small nowrap">' + (f.referralSentAt ? esc(C.prettyDateShort(f.referralSentAt)) + (f.referralSentVia ? ' · ' + esc(f.referralSentVia) : '') : '<span class="muted">not yet</span>') + '</td>'
+            + '<td class="r nowrap">' + refLinkButtons(f, true) + '</td></tr>';
+        }).join('') + '</tbody></table></div>')
+    + '</div>';
+  return h;
+};
+// The family dialog's referral section.
+function familyReferralHtml(f) {
+  if (!f.id) return '';
+  const live = famById(f.id) || f;
+  const rewards = C.normalizeRewards(live.rewards);
+  const by = C.normalizeReferredBy(live.referredBy);
+  return '<div class="section-title" style="margin-top:20px;">🎁 Referral link</div>'
+    + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' + refLinkCell(live) + '</div>'
+    + '<div class="actions" style="margin-top:8px;">' + refLinkButtons(live, true) + '</div>'
+    + '<div class="small muted" style="margin-top:6px;">A friend who books through this link, or types the code, shows up in Referrals for you to confirm.'
+    + (live.referralSentAt ? ' Last sent ' + esc(C.prettyDateShort(live.referralSentAt)) + '.' : '') + '</div>'
+    + (by ? '<div class="small" style="margin-top:8px;">👋 Joined through <b>' + esc(by.name || 'another family') + '</b>' + (by.confirmedAt ? ', confirmed ' + esc(C.prettyDateShort(by.confirmedAt)) : '') + '.</div>' : '')
+    + (rewards.length ? '<div class="history" style="margin-top:10px;">' + rewards.map(r => {
+      const t = C.rewardLineText(r);
+      return '<div><time>' + esc(C.prettyDateShort(r.confirmedAt) || '') + '</time><span>' + esc(t.desc) + ' · ' + esc(t.detail) + ' ' + rewardPill(r) + '</span></div>';
+    }).join('') + '</div>' : '');
+}
+MODALS.refConfirm = function (m) {
+  const from = famById(m.from), to = famById(m.to);
+  const plan = C.referralPlan(from, to, { settings: S.settings, today: today(), by: S.user.email, amounts: { referrer: m.amtFrom, friend: m.amtTo } });
+  const amt = (k, v, who) => '<div class="field"><label>' + who + '</label><input type="number" min="0" step="0.01" value="' + esc(v) + '" data-in="refAmt" data-ch="refAmtDone" data-k="' + k + '" data-keep="ref-' + k + '"></div>';
+  const body = (plan.ok
+    ? '<p style="margin-top:0;">' + esc(plan.text) + '</p>'
+      + '<div class="form">' + amt('amtFrom', m.amtFrom, 'Reward for ' + esc(C.familyDisplayName(from))) + amt('amtTo', m.amtTo, 'Reward for ' + esc(C.familyDisplayName(to))) + '</div>'
+      + '<div class="small muted" style="margin-top:6px;">From Settings; change them here for this referral only. Each shows as its own line on the family\'s next monthly invoice.</div>'
+      + '<label class="check" style="margin-top:14px;"><input type="checkbox" data-ch="refMail" ' + (m.mail ? 'checked' : '') + '> Email both families to say thank you and tell them about the reward</label>'
+    : '<div class="fix block">⛔ ' + plan.problems.map(esc).join('<br>') + '</div>')
+    + (m.booking ? '<div class="small muted" style="margin-top:12px;">From the booking: ' + esc(m.booking.childName || m.booking.studentName || '') + ' · ' + esc(refBookingWhat(m.booking)) + '</div>' : '');
+  return {
+    size: 'narrow', title: '🎁 Confirm the referral', sub: from && to ? esc(C.familyDisplayName(from)) + ' → ' + esc(C.familyDisplayName(to)) : '',
+    body,
+    foot: '<button class="btn ghost" data-act="closeModal">Cancel</button>' + (plan.ok ? '<button class="btn" data-act="refCommit">Give both rewards</button>' : '')
+  };
+};
+// The family's referral code, made and saved the first time it is needed.
+async function ensureReferralCode(familyId) {
+  const f = famById(familyId);
+  if (!f) throw new Error('that family is not loaded yet');
+  if (f.referralCode) return f.referralCode;
+  const ref = famRef(familyId);
+  const code = await db.runTransaction(async t => {
+    const snap = await t.get(ref);
+    if (!snap.exists) throw new Error('that family no longer exists');
+    const have = C.cleanReferralCode(snap.data().referralCode);
+    if (have) return have;
+    const fresh = C.newReferralCode(rnd, S.families);
+    t.update(ref, { referralCode: fresh, updatedAt: ts() });
+    return fresh;
+  });
+  f.referralCode = code;   // until the listener catches up
+  return code;
+}
+async function emailReferralLink(familyId) {
+  const code = await ensureReferralCode(familyId);
+  const f = Object.assign({}, famById(familyId), { referralCode: code });
+  const to = C.familyEmails(f);
+  if (!to.length) throw new Error('no email address for ' + (f.parentName || 'this family'));
+  const id = C.mailDocId('referral', familyId);
+  await db.collection('mail').doc(id).set(C.officeMail(to, C.referralEmail(f, S.settings), { kind: 'referral', familyId, sentBy: S.user.email }, S.settings));
+  await famRef(familyId).update({ referralSentAt: today(), referralSentVia: 'email', updatedAt: ts() });
+  return id;
+}
+async function commitReferral() {
+  if (!requireProtected()) return;
+  const m = S.modal;
+  const btn = document.querySelector('[data-act="refCommit"]');
+  busy(btn, true);
+  try {
+    const ids = [sid(), sid()];
+    const res = await db.runTransaction(async t => {
+      const [a, b] = await Promise.all([t.get(famRef(m.from)), t.get(famRef(m.to))]);
+      if (!a.exists || !b.exists) throw new Error('one of the families no longer exists');
+      const from = Object.assign({}, a.data(), { id: a.id }), to = Object.assign({}, b.data(), { id: b.id });
+      const taken = S.families.slice();
+      if (!C.cleanReferralCode(from.referralCode)) { from.referralCode = C.newReferralCode(rnd, taken); taken.push(from); }
+      if (!C.cleanReferralCode(to.referralCode)) to.referralCode = C.newReferralCode(rnd, taken);
+      const plan = C.referralPlan(from, to, { settings: S.settings, today: today(), by: S.user.email, ids, bookingId: m.bookingId || '', amounts: { referrer: m.amtFrom, friend: m.amtTo } });
+      if (!plan.ok) throw new Error(plan.problems.join(' '));
+      t.update(famRef(m.from), { rewards: plan.referrerRewards, referralCode: from.referralCode, updatedAt: ts(), updatedBy: S.user.email });
+      t.update(famRef(m.to), { rewards: plan.friendRewards, referredBy: plan.referredBy, referralCode: to.referralCode, updatedAt: ts(), updatedBy: S.user.email });
+      return { plan, from: Object.assign(from, { rewards: plan.referrerRewards }), to: Object.assign(to, { rewards: plan.friendRewards }) };
+    });
+    // The booking remembers it was handled (the rewards themselves are the record).
+    if (m.bookingId) { try { await db.collection('schedule_bookings').doc(m.bookingId).update({ referralStatus: 'confirmed', referralConfirmedAt: today() }); } catch (e) { console.warn('booking not marked', e); } }
+    let mailed = 0;
+    if (m.mail) {
+      for (const [fam, kind] of [[res.from, 'referrer'], [res.to, 'friend']]) {
+        const r = C.normalizeRewards(fam.rewards).find(x => ids.includes(x.id) && x.kind === kind);
+        const to = C.familyEmails(C.normalizeFamily(fam));
+        if (!r || !to.length) continue;
+        try {
+          await db.collection('mail').doc(C.mailDocId('referral-thanks', fam.id)).set(C.officeMail(to, C.referralConfirmedEmail(fam, r, S.settings), { kind: 'referral-thanks', familyId: fam.id, sentBy: S.user.email }, S.settings));
+          mailed++;
+        } catch (e) { console.error('thank-you email', e); }
+      }
+    }
+    delete S.ui.ref.pick[m.bookingId];
+    if (!m.bookingId) S.ui.ref.manual = { from: '', to: '' };
+    closeModal();
+    toast('Referral confirmed · both rewards come off the next invoices' + (mailed ? ' · ' + C.plural(mailed, 'email') + ' sent' : ''), 'ok');
+  } catch (e) { fail('Could not confirm the referral', e); } finally { busy(btn, false); }
+}
+function openRefConfirm(from, to, booking) {
+  openModal({ type: 'refConfirm', from, to, bookingId: booking ? booking.id : '', booking: booking || null,
+    amtFrom: S.settings.referralReward, amtTo: S.settings.referralFriendReward, mail: true });
+}
+Object.assign(ACT, {
+  refConfirm(el) {
+    const row = refRows().find(r => r.id === el.dataset.id);
+    if (!row) return;
+    const p = refPickFor(row);
+    if (!p.from || !p.to) { toast('Choose both families first', 'err'); return; }
+    openRefConfirm(p.from, p.to, row.booking);
+  },
+  refConfirmManual() {
+    const m = S.ui.ref.manual;
+    if (!m.from || !m.to) { toast('Choose both families first', 'err'); return; }
+    openRefConfirm(m.from, m.to, null);
+  },
+  refCommit() { return commitReferral(); },
+  async refDismiss(el) {
+    if (!requireProtected()) return;
+    const row = refRows().find(r => r.id === el.dataset.id);
+    if (!row || !confirm('Mark ' + (row.child || 'this booking') + ' as not enrolled?\n\nNo reward is given. You can put it back later.')) return;
+    try { await db.collection('schedule_bookings').doc(row.id).update({ referralStatus: 'dismissed' }); toast('Marked as not enrolled', 'ok'); }
+    catch (e) { fail('Could not update the booking', e); }
+  },
+  async refUndismiss(el) {
+    try { await db.collection('schedule_bookings').doc(el.dataset.id).update({ referralStatus: FV.delete() }); toast('Back in the list', 'ok'); }
+    catch (e) { fail('Could not update the booking', e); }
+  },
+  async refUndo(el) {
+    if (!requireProtected()) return;
+    const ref = famById(el.dataset.fam);
+    const x = C.confirmedReferrals(S.families).find(r => r.id === el.dataset.id);
+    if (!ref || !x || !confirm('Undo the referral ' + C.familyDisplayName(ref) + ' → ' + (x.friendName || 'the new family') + '?\n\nBoth rewards are taken away. Nothing has been invoiced yet.')) return;
+    try {
+      const bookingId = await db.runTransaction(async t => {
+        const a = await t.get(famRef(ref.id));
+        const b = x.friend ? await t.get(famRef(x.friend.id)) : { exists: false };
+        const plan = C.undoReferralPlan(Object.assign({}, a.data(), { id: a.id }), b.exists ? Object.assign({}, b.data(), { id: b.id }) : null, x.id);
+        if (!plan.ok) throw new Error(plan.problems.join(' '));
+        t.update(famRef(ref.id), { rewards: plan.referrerRewards, updatedAt: ts() });
+        if (b.exists && plan.friendRewards) t.update(famRef(x.friend.id), Object.assign({ rewards: plan.friendRewards, updatedAt: ts() }, plan.clearReferredBy ? { referredBy: null } : {}));
+        return plan.bookingId;
+      });
+      if (bookingId) { try { await db.collection('schedule_bookings').doc(bookingId).update({ referralStatus: FV.delete() }); } catch (e) { console.warn(e); } }
+      toast('Referral undone', 'ok');
+    } catch (e) { fail('Could not undo', e); }
+  },
+  refAddFamily(el) {
+    const row = refRows().find(r => r.id === el.dataset.id);
+    if (!row) return;
+    const b = row.booking;
+    const draft = newFamilyDraft();
+    draft.parentName = b.parentName || '';
+    draft.email = C.cleanEmail(b.email);
+    draft.whatsapp = C.normalizeWhatsapp(b.whatsapp);
+    draft.signUpDate = today();
+    const st = newStudent();
+    st.name = b.childName || b.studentName || '';
+    st.level = C.normalizeLevel(b.childLevel2027 || b.level || b.classLevel || '');
+    if (b.slot && C.isValidSlotId(b.slot) && b.kind === 'enrol') st.classes = [{ slotId: b.slot, mode: b.classType === 'master' ? 'Master' : (b.mode || 'Physical'), rate: '', custom: false, label: '' }];
+    draft.students = [st];
+    openModal({ type: 'family', draft });
+  },
+  async refCopy(el) {
+    try { const code = await ensureReferralCode(el.dataset.id); copyText(C.referralLink(code), 'Link copied · ' + code); }
+    catch (e) { fail('Could not make the link', e); }
+  },
+  async refEmail(el) {
+    if (!requireProtected()) return;
+    const f = famById(el.dataset.id);
+    if (!f || !confirm('Email ' + (f.parentName || 'this family') + ' their referral link?\n\nTo: ' + C.familyEmails(f).join(', '))) return;
+    busy(el, true);
+    try { await emailReferralLink(f.id); toast('Referral link emailed to ' + (f.parentName || 'the family'), 'ok'); }
+    catch (e) { fail('Could not email the link', e); } finally { busy(el, false); }
+  },
+  async refWa(el) {
+    const f = famById(el.dataset.id);
+    if (!f || !f.whatsapp) return;
+    const win = window.open('', 'polymath_whatsapp');
+    try {
+      const code = await ensureReferralCode(f.id);
+      const fam = Object.assign({}, f, { referralCode: code });
+      const text = 'Hi ' + (f.parentName || '') + ', thank you for learning with Polymath! Here is your family\'s own referral link: ' + C.referralLink(code)
+        + '\n\nWhen a friend enrols through it, ' + (S.settings.referralReward > 0 ? 'you get ' + money(S.settings.referralReward) + ' off your next month\'s fees' : 'you get a reward')
+        + (S.settings.referralFriendReward > 0 ? ' and they get ' + money(S.settings.referralFriendReward) + ' off theirs' : '') + '.\n\nA message you can forward:\n' + C.referralShareText(fam, S.settings);
+      const url = C.whatsappLink(f.whatsapp, text, !TOUCH);
+      if (win) win.location.href = url; else window.open(url, 'polymath_whatsapp');
+      await famRef(f.id).update({ referralSentAt: today(), referralSentVia: 'WhatsApp', updatedAt: ts() });
+    } catch (e) { if (win) win.close(); fail('Could not make the link', e); }
+  },
+  async refEmailAll(el) {
+    if (!requireProtected()) return;
+    const list = S.families.filter(f => famRoster(f) === 'active' && C.familyEmails(f).length);
+    if (!list.length) return;
+    if (!confirm('Email ' + C.plural(list.length, 'family', 'families') + ' their own referral link?\n\nEach email explains the reward (' + money(S.settings.referralReward) + ' for them, ' + money(S.settings.referralFriendReward) + ' for the friend) and has a WhatsApp share button.')) return;
+    busy(el, true);
+    openModal({ type: 'progress', title: 'Emailing referral links…', done: 0, total: list.length });
+    let ok = 0, bad = 0;
+    for (const f of list) {
+      try { await emailReferralLink(f.id); ok++; } catch (e) { console.error(e); bad++; }
+      if (S.modal && S.modal.type === 'progress') { S.modal.done = ok + bad; renderModal(); }
+    }
+    busy(el, false);
+    openModal({ type: 'result', title: ok ? '✉ Referral links sent' : 'Nothing was sent', body: '<p>' + C.plural(ok, 'family was', 'families were') + ' emailed their link.' + (bad ? ' ' + bad + ' could not be emailed — see the console.' : '') + '</p>' });
+  }
+});
+Object.assign(CHG, {
+  refPick(el) { const p = S.ui.ref.pick[el.dataset.id] || (S.ui.ref.pick[el.dataset.id] = {}); p[el.dataset.k] = el.value; render(); },
+  refManual(el) { S.ui.ref.manual[el.dataset.k] = el.value; render(); },
+  refMail(el) { S.modal.mail = el.checked; },
+  refAmtDone() { renderModal(); }
+});
+Object.assign(INP, {
+  refSearch(el) { S.ui.ref.search = el.value; render(); },
+  refAmt(el) { S.modal[el.dataset.k] = el.value === '' ? 0 : el.value; }
+});
 
 /* ═══════════════ Wiring ═══════════════ */
 document.addEventListener('click', e => {

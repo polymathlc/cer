@@ -167,7 +167,7 @@ function validateDiagnostic(body) {
   return { slot, date, parentName, email, studentName, subject: body.subject, level: body.level,
     pageVersion: oneLine(body.pageVersion, 20), referralCode: referralCode(body.referralCode) };
 }
-// A family's referral code (Polymath Office v1.16.0); anything else is dropped, never refused.
+// A family's referral code (Polymath Office v1.17.0); anything else is dropped, never refused.
 function referralCode(value) {
   if (typeof value !== 'string') return '';
   const code = value.toUpperCase().replace(/^PLC/, '').replace(/[^A-Z0-9]/g, '');

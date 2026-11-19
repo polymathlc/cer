@@ -40,7 +40,7 @@
         payment, last PayNow screenshot the parent sent).
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export const OFFICE_CORE_VERSION = '1.16.0';
+export const OFFICE_CORE_VERSION = '1.17.0';
 // The centre's logo for emails: a small copy of assets/branding/polymath-learning-centre.png,
 // served from the website so Gmail and other mail apps can show it (v1.13.0).
 export const EMAIL_LOGO_URL = 'https://polymathlc.com.sg/assets/branding/polymath-logo-email.png';
@@ -613,7 +613,7 @@ export function normalizeFamily(raw) {
   if (wd && f.status === 'active') f.status = 'withdrawn';
   f.withdrawn = f.status === 'withdrawn';
   if (f.status !== 'paused') { f.pauseFrom = ''; f.pauseUntil = ''; }
-  // Referral rewards (v1.16.0): the family's own link code, its rewards, who introduced it.
+  // Referral rewards (v1.17.0): the family's own link code, its rewards, who introduced it.
   f.referralCode = cleanReferralCode(f.referralCode);
   f.rewards = normalizeRewards(f.rewards);
   f.referredBy = normalizeReferredBy(f.referredBy);
@@ -880,7 +880,7 @@ export function buildInvoice(family, period, ctx) {
   let running = subtotal;
   const dl = discountLine(f, subtotal);
   if (dl) { lines.push(dl); running = round2(running + dl.amount); }
-  // Referral rewards confirmed by staff (v1.16.0), each as its own line.
+  // Referral rewards confirmed by staff (v1.17.0), each as its own line.
   const rw = running > 0 ? rewardLines(f, running) : { lines: [], uses: [], total: 0 };
   rw.lines.forEach(l => lines.push(l));
   running = round2(running - rw.total);
@@ -1250,7 +1250,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   // Hardcopy printing, a month, for families with a hardcopy subscription.
   // 0 = not charged on monthly invoices (a custom invoice still lists the line to fill in).
   hardcopyFee: 0,
-  // Referral rewards (v1.16.0): taken off each family's next invoice once staff
+  // Referral rewards (v1.17.0): taken off each family's next invoice once staff
   // confirm the friend enrolled. Placeholders until Mr Chung sets his own.
   referralReward: 50,
   referralFriendReward: 50
@@ -3645,7 +3645,7 @@ export function categoryCsv(rows) {
     ...(rows || []).map(r => [r.name, levelLabel(r.level), r.school, r.classes.map(x => x.label + ' (' + x.modeLabel + ')').join('; '), moneyPlain(r.fees), r.parentName, r.emails.join('; '), displayPhone(r.whatsapp)])]);
 }
 
-/* ─────────────────────────── 10. Referral rewards (v1.16.0) ───────────────────────────
+/* ─────────────────────────── 10. Referral rewards (v1.17.0) ───────────────────────────
    Every family has its own referral link, polymathlc.com.sg/schedule/?ref=CODE.
    A friend who books a trial, an enrolment or a free diagnostic test through it
    carries the code into the booking (schedule_bookings.referralCode). Nothing is
@@ -3741,7 +3741,8 @@ export function rewardLines(family, running) {
   let left = round2(running);
   normalizeRewards(family && family.rewards)
     .filter(r => rewardLeft(r) > 0)
-    .sort((a, b) => (a.confirmedAt || '').localeCompare(b.confirmedAt || '') || a.id.localeCompare(b.id))
+    // Oldest first; on the same day, in the order they were confirmed (the stored order).
+    .sort((a, b) => (a.confirmedAt || '').localeCompare(b.confirmedAt || ''))
     .forEach(r => {
       if (!(left > 0)) return;
       const take = round2(Math.min(rewardLeft(r), left));

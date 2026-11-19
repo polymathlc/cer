@@ -148,6 +148,18 @@
   .iconbtn { display:inline-grid; place-items:center; width:34px; height:34px; border-radius:9px; border:1px solid var(--line); background:var(--white); font-size:15px; }
   .iconbtn:hover { background:var(--paper); }
   .linkbtn { background:none; border:none; color:var(--deep); font-weight:700; text-decoration:underline; padding:0; }
+  /* 🎁 Referrals (v1.16.0) */
+  .ref-list { display:flex; flex-direction:column; gap:10px; }
+  .ref-row { display:grid; grid-template-columns:minmax(0,1.3fr) minmax(0,1.2fr) auto; gap:14px; align-items:center; padding:12px 14px; border:1px solid var(--line); border-radius:12px; background:var(--white); }
+  .ref-row .ref-who > div { margin:2px 0; }
+  .ref-row .ref-pick { display:flex; flex-direction:column; gap:6px; }
+  .ref-row .ref-pick label { display:flex; flex-direction:column; gap:3px; font-weight:700; color:var(--muted); }
+  .ref-row .ref-pick select { font-weight:500; color:var(--ink); width:100%; min-width:0; max-width:100%; }
+  .ref-row > div { min-width:0; overflow-wrap:anywhere; }
+  .ref-row .ref-act { display:flex; flex-direction:column; gap:6px; align-items:stretch; }
+  .ref-url { word-break:break-all; }
+  .ref-dismissed { margin-top:12px; }
+  @media (max-width:900px) { .ref-row { grid-template-columns:minmax(0,1fr); } .ref-row .ref-act { flex-direction:row; flex-wrap:wrap; } }
   /* 👋 The withdrawn list under the timetable (v1.15.0) */
   .wd-card .wd-head { display:flex; gap:12px; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; }
   .wd-card .wd-head h2 { margin:0 0 4px; }
@@ -734,6 +746,7 @@
         <button class="tab" data-view="payments" type="button"><span class="ico">🏦</span><span class="lbl">Payments</span></button>
         <button class="tab" data-view="announce" type="button"><span class="ico">📣</span><span class="lbl">Announce</span></button>
         <button class="tab" data-view="reports" type="button"><span class="ico">📈</span><span class="lbl">Reports</span></button>
+        <button class="tab" data-view="referrals" type="button"><span class="ico">🎁</span><span class="lbl">Referrals</span><span class="count hidden" data-count="referrals"></span></button>
         <button class="tab" data-view="settings" type="button"><span class="ico">⚙️</span><span class="lbl">Settings</span></button>
       </nav>
     </div>
@@ -751,7 +764,7 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="version hidden" id="version"></div>
 
-<script type="module" src="office-app.mjs?v=1.16.0"></script>
+<script type="module" src="office-app.mjs?v=1.17.0"></script>
 <!-- 📈 Weekly parent progress reports: the Reports tab (v1.16.0) -->
 <script type="module" src="weekly-reports.mjs?v=1.0.0"></script>
 </body>

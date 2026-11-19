@@ -199,7 +199,7 @@ function bookingFields(request, priced, reference) {
     price: priced.amount,
     paymentRef: reference,
     receiptURL: '', receiptFilename: '',
-    // Only when the parent came through a family's referral link (Office v1.16.0).
+    // Only when the parent came through a family's referral link (Office v1.17.0).
     ...(request.referralCode ? { referralCode: request.referralCode } : {})
   };
 }
