@@ -293,6 +293,22 @@ label.lbl { display: block; font-size: 12px; font-weight: 700; color: var(--gray
 .mk-preview { margin-top: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); padding: 12px; text-align: center; }
 .mk-preview canvas { max-width: 100%; height: auto; border-radius: 8px; box-shadow: var(--shadow); }
 .feat-tag { font-size: 11px; font-weight: 800; color: #8a5a00; background: #fff3cf; border-radius: 999px; padding: 1px 8px; }
+/* 📚 v1.5.0: exam countdown revision packs, from /revision (revisionPack catalogue) */
+.rv { margin: 22px 0 22px; }
+.rv-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.rv-head h2 { font-size: 18px; }
+.rv-head a { font-size: 14px; }
+.rv-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.rv-card { display: flex; flex-direction: column; gap: 8px; background: #fff; border: 1px solid #d1eaee; border-radius: 14px; padding: 16px; text-decoration: none; color: inherit; box-shadow: 0 1px 3px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.06); transition: transform .2s ease, box-shadow .2s ease; }
+.rv-card:hover { transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,.05), 0 10px 30px rgba(0,0,0,.1); }
+.rv-tag { align-self: flex-start; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: #FFE0B2; color: #8A4B00; }
+.rv-tag.math { background: #C8E6C9; color: #1B5E20; } .rv-tag.science { background: #BBDEFB; color: #0D47A1; }
+.rv-card h3 { font-size: 16px; line-height: 1.3; }
+.rv-card p { font-size: 13.5px; color: var(--gray-600, #525252); }
+.rv-foot { display: flex; justify-content: space-between; align-items: center; margin-top: auto; padding-top: 6px; }
+.rv-price { font-size: 20px; font-weight: 700; }
+.rv-days { font-size: 12.5px; color: var(--gray-500, #737373); }
+.rv-go { font-size: 13px; font-weight: 700; background: #10303a; color: #fff; border-radius: 10px; padding: 8px 12px; }
 </style>
 </head>
 <body>
@@ -341,6 +357,11 @@ label.lbl { display: block; font-size: 12px; font-weight: 700; color: var(--gray
 
   <!-- ─── SHOP VIEW ─── -->
   <section id="view-shop">
+    <!-- 📚 v1.5.0: exam countdown revision packs, sold and opened on /revision/ -->
+    <div class="rv hidden" id="rv-packs">
+      <div class="rv-head"><h2>📚 Exam countdown revision packs</h2><a href="../revision/">How they work · I already have a code</a></div>
+      <div class="rv-list" id="rv-list"></div>
+    </div>
     <div class="toolbar">
       <div class="search">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
@@ -684,7 +705,7 @@ let deliveryFee = 0;
 // shop_settings/config.cardPayments: false hides "Pay by card"; missing means on.
 // createShopCheckout refuses card checkouts too while it is false.
 let cardEnabled = true;
-const PRODUCTS_PAGE_VERSION = 'v1.4.0';
+const PRODUCTS_PAGE_VERSION = 'v1.5.0';
 const WHATSAPP_NUMBER = '6596450588';
 // Card payments (shop-function/, codebase polymath-shop). Prices are always worked
 // out again on the server; the page only sends product ids and quantities.
@@ -2215,6 +2236,30 @@ $('hero-uen').textContent = PAYNOW_UEN;
 renderCartCount();
 maybeAdminFromHash();
 resumeCardReturn();
+</script>
+<script>
+/* 📚 v1.5.0 (Zhi Kai, 19 Nov 2026): the revision packs on sale, from the same server as
+   /revision (shop-function/functions/revision.js). Each card opens the pack's page there,
+   where it is bought by card or PayNow. Nothing shows if the call fails. */
+(function () {
+  var esc = function (v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+  fetch('https://us-central1-mathgen--app.cloudfunctions.net/revisionPack', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'catalogue' }) })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (data) {
+      if (!data || !data.ok || !data.packs || !data.packs.length) return;
+      document.getElementById('rv-list').innerHTML = data.packs.map(function (p) {
+        var days = typeof p.daysLeft === 'number' && p.daysLeft > 0 ? p.daysLeft + ' days to ' + esc(p.examName || 'the exam') : '';
+        return '<a class="rv-card" href="../revision/?pack=' + encodeURIComponent(p.id) + '">'
+          + '<span class="rv-tag ' + (p.subject === 'math' || p.subject === 'science' ? p.subject : '') + '">' + esc([p.levelName, p.subjectName].filter(Boolean).join(' ') || 'Revision') + '</span>'
+          + '<h3>' + esc(p.title) + '</h3><p>' + esc(p.tagline) + '</p>'
+          + '<p>' + [[p.counts.papers, 'timed paper'], [p.counts.keys, 'answer key'], [p.counts.videos, 'video set'], [p.counts.maps, 'mind map']]
+            .filter(function (c) { return c[0] > 0; }).map(function (c) { return c[0] + ' ' + c[1] + (c[0] === 1 ? '' : 's'); }).join(' · ') + '</p>'
+          + '<div class="rv-foot"><div><div class="rv-price">$' + (Math.round(p.price * 100) / 100).toFixed(2).replace(/\.00$/, '') + '</div><div class="rv-days">' + days + '</div></div><span class="rv-go">View pack →</span></div></a>';
+      }).join('');
+      document.getElementById('rv-packs').classList.remove('hidden');
+    })
+    .catch(function () {});
+})();
 </script>
 </body>
 </html>

@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>/* HTTPS UPGRADE — a page opened over plain http:// on the custom domain moves to https://, but only after a probe proves the secure address answers. */(function(){var l=location;if(l.protocol!=='http:'||!/(^|\.)polymathlc\.com\.sg$/i.test(l.hostname))return;try{fetch('https://'+l.host+'/?https-check='+Date.now(),{mode:'no-cors',cache:'no-store'}).then(function(){l.replace('https://'+l.host+l.pathname+l.search+l.hash)},function(){})}catch(e){}})();</script>
+<title>Exam Countdown Revision Packs | Polymath Learning Centre</title>
+<!-- 📚 Exam countdown revision packs (Nov 2026, Zhi Kai: "Exam countdown revision pack").
+     Anyone can buy a pack (card through Stripe, or PayNow); the buyer gets an access code
+     by email that opens the pack here: a countdown to the exam, a week-by-week plan,
+     timed practice papers, the teacher's answer keys, the lesson videos and Mr Chung's
+     mind maps, all taken from Polymath Online / Ans Key / Mind Map. Packs are also listed
+     on /products. Admins: /revision/#admin. Server: shop-function/functions/revision.js. -->
+<meta name="description" content="PSLE and year-end exam countdown revision packs from Polymath Learning Centre: a week-by-week plan, timed practice papers, worked answer keys, lesson videos and mind maps.">
+<link rel="icon" href="../assets/branding/polymath-learning-centre.png">
+<link rel="preconnect" href="https://us-central1-mathgen--app.cloudfunctions.net" crossorigin>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --font: 'Century Gothic', CenturyGothic, AppleGothic, 'DM Sans', system-ui, sans-serif;
+    --bg: #F7F7F5; --white: #FFFFFF; --ink: #1A1A1A; --ink-soft: #4A4A4A; --muted: #767676; --line: #E6E6E1; --line-soft: #F0F0EC;
+    --accent: #FFE0B2; --accent-hover: #FFCC80; --accent-ink: #8A4B00;
+    --math: #C8E6C9; --math-ink: #1B5E20; --science: #BBDEFB; --science-ink: #0D47A1;
+    --coral: #FFCDD2; --coral-ink: #B71C1C; --deep: #056C76; --deep-soft: #E0F2F1;
+    --good: #1B7F3B; --good-bg: #EAF7EE; --warn: #8A5A00; --warn-bg: #FFF7E3; --bad: #B3261E; --bad-bg: #FDECEA;
+    --shadow-card: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.06);
+    --shadow-btn: 0 1px 2px rgba(0,0,0,0.05), 0 2px 8px rgba(0,0,0,0.08);
+    --shadow-btn-hover: 0 2px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.12);
+    --shadow-modal: 0 4px 6px rgba(0,0,0,0.05), 0 10px 30px rgba(0,0,0,0.1);
+    --radius: 16px; --radius-sm: 10px;
+    --space-xs: 6px; --space-sm: 10px; --space-md: 16px; --space-lg: 24px; --space-xl: 36px; --space-2xl: 56px;
+  }
+  html { -webkit-text-size-adjust: 100%; }
+  body { font-family: var(--font); background: var(--bg); color: var(--ink); line-height: 1.6; -webkit-font-smoothing: antialiased; min-height: 100vh; }
+  button, input, select, textarea { font-family: inherit; font-size: 15px; color: inherit; }
+  a { color: var(--deep); }
+  .hidden { display: none !important; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .06em; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* ─── Header ─── */
+  .polymath-header { position: sticky; top: 0; z-index: 30; background: rgba(247,247,245,.94); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+  .header-inner { max-width: 1060px; margin: 0 auto; padding: 8px 16px; display: flex; align-items: center; gap: 12px; }
+  .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); min-width: 0; }
+  .polymath-logo { height: 48px; width: auto; }
+  .brand-text { font-weight: 700; font-size: 15px; line-height: 1.2; }
+  .brand-text span { display: block; font-weight: 400; font-size: 12px; color: var(--muted); }
+  .header-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .icon-btn { width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line); background: var(--white); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: var(--shadow-btn); transition: box-shadow .25s ease, transform .25s ease; color: var(--ink); text-decoration: none; }
+  .icon-btn:hover { box-shadow: var(--shadow-btn-hover); transform: translateY(-1px); }
+  .icon-btn svg { width: 19px; height: 19px; }
+  .header-link { font-size: 14px; text-decoration: none; color: var(--ink-soft); padding: 8px 10px; border-radius: 10px; }
+  .header-link:hover { background: var(--white); }
+
+  main { max-width: 1060px; margin: 0 auto; padding: var(--space-lg) 16px var(--space-2xl); }
+  .fade-in > * { opacity: 0; transform: translateY(10px); animation: fadeUp .5s ease forwards; }
+  .fade-in > *:nth-child(2) { animation-delay: .07s; } .fade-in > *:nth-child(3) { animation-delay: .14s; }
+  .fade-in > *:nth-child(4) { animation-delay: .21s; } .fade-in > *:nth-child(5) { animation-delay: .28s; }
+  @keyframes fadeUp { to { opacity: 1; transform: none; } }
+  @keyframes scaleIn { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+  @keyframes pulse { 0% { transform: scale(1); } 40% { transform: scale(1.06); } 100% { transform: scale(1); } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ─── Buttons ─── */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: none; border-radius: 12px; padding: 12px 20px; font-weight: 700; cursor: pointer; background: var(--accent); color: var(--accent-ink); box-shadow: var(--shadow-btn); transition: box-shadow .25s ease, transform .25s cubic-bezier(.34,1.56,.64,1), background .2s ease; text-decoration: none; line-height: 1.2; min-height: 44px; }
+  .btn:hover { background: var(--accent-hover); box-shadow: var(--shadow-btn-hover); transform: translateY(-1px); }
+  .btn:active { transform: translateY(.5px); box-shadow: var(--shadow-btn); }
+  .btn[disabled] { opacity: .55; cursor: wait; transform: none; }
+  .btn.dark { background: var(--ink); color: var(--white); }
+  .btn.dark:hover { background: #333; }
+  .btn.deep { background: var(--deep); color: var(--white); }
+  .btn.deep:hover { background: #04565e; }
+  .btn.ghost { background: var(--white); color: var(--ink); border: 1px solid var(--line); }
+  .btn.ghost:hover { background: var(--line-soft); }
+  .btn.small { padding: 8px 12px; min-height: 36px; font-size: 14px; border-radius: 10px; }
+  .btn.danger { background: var(--bad-bg); color: var(--bad); }
+  .btn.good { background: var(--good-bg); color: var(--good); }
+  .btn .spinner { width: 16px; height: 16px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; }
+  .link-btn { background: none; border: none; color: var(--deep); cursor: pointer; text-decoration: underline; padding: 0; font-size: inherit; }
+
+  /* ─── Hero ─── */
+  .hero { text-align: center; padding: var(--space-xl) 0 var(--space-lg); }
+  .eyebrow { display: inline-block; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent-ink); background: var(--accent); padding: 4px 12px; border-radius: 999px; font-weight: 700; }
+  .hero h1 { font-size: clamp(1.8rem, 5vw, 2.5rem); letter-spacing: .01em; line-height: 1.2; margin: 14px auto 10px; max-width: 760px; }
+  .hero p { color: var(--ink-soft); max-width: 640px; margin: 0 auto; font-size: 1.05rem; }
+  .features { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; max-width: 860px; margin: var(--space-lg) auto 0; }
+  .feature { background: var(--white); border-radius: 14px; box-shadow: var(--shadow-card); padding: 14px 12px; text-align: center; font-size: 13.5px; color: var(--ink-soft); }
+  .feature b { display: block; font-size: 22px; margin-bottom: 4px; }
+  @media (max-width: 700px) { .features { grid-template-columns: repeat(2, 1fr); } }
+
+  /* ─── Pack cards ─── */
+  .section-title { font-size: 1.3rem; margin: var(--space-xl) 0 var(--space-md); letter-spacing: .01em; }
+  .packs { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--space-md); }
+  .pack-card { background: var(--white); border-radius: var(--radius); box-shadow: var(--shadow-card); overflow: hidden; display: flex; flex-direction: column; transition: box-shadow .25s ease, transform .25s ease; animation: scaleIn .4s ease both; }
+  .pack-card:hover { box-shadow: var(--shadow-modal); transform: translateY(-2px); }
+  .pack-top { padding: 18px 20px 14px; background: var(--accent); position: relative; }
+  .pack-top.math { background: var(--math); } .pack-top.science { background: var(--science); }
+  .pack-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .chip { font-size: 12px; font-weight: 700; background: rgba(255,255,255,.75); padding: 3px 10px; border-radius: 999px; color: var(--ink-soft); }
+  .pack-top h3 { font-size: 1.2rem; line-height: 1.3; }
+  .countdown-pill { display: inline-flex; align-items: baseline; gap: 6px; margin-top: 10px; background: var(--white); border-radius: 12px; padding: 6px 12px; box-shadow: var(--shadow-btn); }
+  .countdown-pill b { font-size: 1.5rem; line-height: 1; }
+  .countdown-pill span { font-size: 13px; color: var(--ink-soft); }
+  .pack-body { padding: 16px 20px; flex: 1; display: flex; flex-direction: column; gap: 12px; }
+  .pack-body p { color: var(--ink-soft); font-size: 14.5px; }
+  .counts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .count { text-align: center; background: var(--line-soft); border-radius: 10px; padding: 8px 4px; font-size: 12px; color: var(--muted); }
+  .count b { display: block; font-size: 1.15rem; color: var(--ink); }
+  .topic-peek { font-size: 13.5px; color: var(--ink-soft); padding-left: 18px; }
+  .topic-peek li { margin: 2px 0; }
+  .pack-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 20px 18px; border-top: 1px solid var(--line-soft); }
+  .price { font-size: 1.6rem; font-weight: 700; }
+  .price small { font-size: 12px; color: var(--muted); font-weight: 400; display: block; }
+  .state { text-align: center; color: var(--muted); padding: var(--space-xl) 16px; background: var(--white); border-radius: var(--radius); box-shadow: var(--shadow-card); }
+
+  /* ─── Access box ─── */
+  .access-box { max-width: 560px; margin: var(--space-xl) auto 0; background: var(--white); border-radius: var(--radius); box-shadow: var(--shadow-card); padding: var(--space-lg); text-align: center; }
+  .access-box h2 { font-size: 1.2rem; margin-bottom: 6px; }
+  .access-box p { color: var(--ink-soft); font-size: 14.5px; margin-bottom: 14px; }
+  .access-row { display: flex; gap: 8px; }
+  .access-row input { flex: 1; min-width: 0; text-transform: uppercase; letter-spacing: .14em; text-align: center; font-size: 18px; font-weight: 700; }
+  @media (max-width: 420px) { .access-row { flex-direction: column; } }
+
+  /* ─── Forms ─── */
+  label.field { display: block; text-align: left; font-size: 13.5px; font-weight: 700; color: var(--ink-soft); margin-bottom: 12px; }
+  label.field small { font-weight: 400; color: var(--muted); }
+  input[type=text], input[type=email], input[type=tel], input[type=number], input[type=date], select, textarea {
+    display: block; width: 100%; margin-top: 5px; padding: 11px 13px; border-radius: 10px; border: 1px solid var(--line); background: var(--white); outline: none; transition: border-color .2s ease, box-shadow .2s ease; }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent-hover); box-shadow: 0 0 0 3px rgba(255,204,128,.35); }
+  textarea { resize: vertical; min-height: 70px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 520px) { .row2 { grid-template-columns: 1fr; } }
+  .error { color: var(--bad); font-size: 14px; margin-top: 8px; min-height: 1em; }
+  .note { font-size: 13px; color: var(--muted); }
+
+  /* ─── Modal ─── */
+  .modal-bg { position: fixed; inset: 0; background: rgba(20,20,20,.4); z-index: 60; display: flex; align-items: flex-start; justify-content: center; padding: 24px 12px; overflow-y: auto; }
+  .modal { background: var(--white); border-radius: 18px; box-shadow: var(--shadow-modal); width: 100%; max-width: 520px; padding: var(--space-lg); animation: scaleIn .3s ease; position: relative; margin: auto 0; }
+  .modal h2 { font-size: 1.25rem; margin-bottom: 4px; padding-right: 36px; }
+  .modal .sub { color: var(--ink-soft); font-size: 14px; margin-bottom: 16px; }
+  .modal-x { position: absolute; top: 14px; right: 14px; width: 36px; height: 36px; border-radius: 10px; border: none; background: var(--line-soft); cursor: pointer; font-size: 20px; line-height: 1; }
+  .pay-buttons { display: grid; gap: 10px; margin-top: 6px; }
+  .pay-buttons .btn { width: 100%; }
+  .qr-wrap { display: flex; justify-content: center; margin: 14px 0; }
+  .qr-wrap > div { padding: 12px; background: #fff; border-radius: 14px; box-shadow: var(--shadow-card); }
+  .ref-box { background: var(--warn-bg); border-radius: 12px; padding: 12px 14px; font-size: 14px; margin: 10px 0; }
+  .ref-box b { font-size: 16px; }
+  .code-big { font-size: clamp(1.8rem, 8vw, 2.6rem); font-weight: 700; letter-spacing: .14em; color: var(--deep); text-align: center; margin: 8px 0; animation: pulse .6s ease; }
+  .success-box { text-align: center; }
+  .tick { width: 64px; height: 64px; margin: 0 auto 8px; }
+  .tick circle { fill: var(--good-bg); }
+  .tick path { stroke: var(--good); stroke-width: 5; fill: none; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 60; stroke-dashoffset: 60; animation: draw .55s .15s ease forwards; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+
+  /* ─── The buyer's pack ─── */
+  .pack-hero { background: var(--white); border-radius: 20px; box-shadow: var(--shadow-card); padding: var(--space-lg); display: grid; grid-template-columns: 1fr auto; gap: var(--space-lg); align-items: center; }
+  .pack-hero h1 { font-size: clamp(1.4rem, 4vw, 2rem); line-height: 1.25; }
+  .pack-hero p { color: var(--ink-soft); margin-top: 6px; }
+  .big-count { text-align: center; background: var(--accent); border-radius: 18px; padding: 16px 22px; min-width: 170px; }
+  .big-count.math { background: var(--math); } .big-count.science { background: var(--science); }
+  .big-count b { display: block; font-size: 3rem; line-height: 1; }
+  .big-count span { font-size: 13px; font-weight: 700; color: var(--ink-soft); }
+  .big-count small { display: block; font-size: 12px; color: var(--ink-soft); margin-top: 4px; }
+  @media (max-width: 640px) { .pack-hero { grid-template-columns: 1fr; } .big-count { min-width: 0; } }
+  .progress-line { margin-top: 14px; }
+  .progress-bar { height: 10px; border-radius: 999px; background: var(--line-soft); overflow: hidden; }
+  .progress-bar > div { height: 100%; background: var(--accent-hover); border-radius: 999px; transition: width .6s ease; }
+  .progress-label { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .meta-line { font-size: 13px; color: var(--muted); margin-top: 10px; display: flex; gap: 14px; flex-wrap: wrap; }
+
+  .plan { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+  .week { background: var(--white); border-radius: 14px; box-shadow: var(--shadow-card); padding: 12px 14px; font-size: 14px; border: 2px solid transparent; }
+  .week.now { border-color: var(--accent-hover); }
+  .week h4 { font-size: 13px; color: var(--muted); font-weight: 700; display: flex; justify-content: space-between; gap: 6px; }
+  .week h4 em { font-style: normal; white-space: nowrap; align-self: flex-start; background: var(--accent); color: var(--accent-ink); border-radius: 999px; padding: 0 8px; }
+  .week ul { list-style: none; margin-top: 6px; }
+  .week li { padding: 3px 0; }
+  .week li button { background: none; border: none; text-align: left; color: var(--ink); cursor: pointer; padding: 0; font-size: 14px; }
+  .week li button:hover { color: var(--deep); text-decoration: underline; }
+
+  .topic { background: var(--white); border-radius: var(--radius); box-shadow: var(--shadow-card); margin-bottom: var(--space-md); overflow: hidden; scroll-margin-top: 80px; }
+  .topic-head { display: flex; align-items: center; gap: 12px; padding: 16px 20px; cursor: pointer; }
+  .topic-num { width: 34px; height: 34px; border-radius: 10px; background: var(--line-soft); display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; transition: background .25s ease; }
+  .topic.done .topic-num { background: var(--good-bg); color: var(--good); }
+  .topic-head h3 { font-size: 1.05rem; flex: 1; line-height: 1.35; }
+  .topic-head .chev { transition: transform .25s ease; color: var(--muted); }
+  .topic.open .topic-head .chev { transform: rotate(90deg); }
+  .topic-body { padding: 0 20px 18px; display: none; }
+  .topic.open .topic-body { display: block; animation: fadeUp .3s ease both; }
+  .topic-note { color: var(--ink-soft); font-size: 14.5px; margin-bottom: 10px; white-space: pre-wrap; }
+  .paper { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-top: 10px; }
+  .paper-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .paper-head b { flex: 1; min-width: 160px; }
+  .paper-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .done-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--ink-soft); cursor: pointer; }
+  .done-toggle input { width: 18px; height: 18px; accent-color: var(--good); }
+  .best { font-size: 12.5px; color: var(--muted); }
+
+  /* Mind map outline */
+  .mindmap { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-top: 10px; background: #FCFCFB; }
+  .mindmap h4 { font-size: 15px; margin-bottom: 6px; display: flex; gap: 8px; align-items: center; }
+  .mm-tree, .mm-tree ul { list-style: none; }
+  .mm-tree ul { margin-left: 14px; padding-left: 12px; border-left: 2px solid var(--line); }
+  .mm-node { margin: 5px 0; }
+  .mm-label { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 10px; background: var(--white); border: 1px solid var(--line); font-size: 14px; cursor: default; }
+  .mm-label.has-kids { cursor: pointer; }
+  .mm-label .mm-caret { font-size: 11px; color: var(--muted); transition: transform .2s ease; }
+  .mm-node.folded > .mm-label .mm-caret { transform: rotate(-90deg); }
+  .mm-node.folded > ul { display: none; }
+  .mm-root > .mm-label { font-weight: 700; font-size: 15px; background: var(--accent); border-color: var(--accent-hover); }
+  .mm-note { display: block; font-size: 13px; color: var(--ink-soft); margin: 4px 0 0 4px; white-space: pre-wrap; }
+  .mm-img { display: block; max-width: 220px; max-height: 160px; border-radius: 10px; margin-top: 4px; }
+  .c-blue { background: #E3F2FD; border-color: #90CAF9; } .c-green { background: #F1F8E9; border-color: #A5D6A7; }
+  .c-orange { background: #FFF3E0; border-color: #FFCC80; } .c-purple { background: #EDE7F6; border-color: #B39DDB; }
+  .c-coral { background: #FFEBEE; border-color: #EF9A9A; } .c-yellow { background: #FFFDE7; border-color: #FFF176; }
+  .c-teal { background: #E0F2F1; border-color: #80CBC4; }
+
+  /* Timed practice bar */
+  .timer-bar { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 50; background: var(--ink); color: var(--white); border-radius: 16px; box-shadow: var(--shadow-modal); padding: 10px 12px 10px 16px; display: flex; align-items: center; gap: 12px; width: min(560px, calc(100% - 24px)); animation: scaleIn .3s ease; }
+  .timer-bar .t-name { flex: 1; min-width: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .85; }
+  .timer-bar .t-clock { font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .timer-bar.low .t-clock { color: #FFB4A9; }
+  .timer-bar .btn { min-height: 36px; padding: 8px 12px; }
+  .timer-progress { position: absolute; left: 12px; right: 12px; bottom: 4px; height: 3px; border-radius: 3px; background: rgba(255,255,255,.15); overflow: hidden; }
+  .timer-progress > div { height: 100%; background: var(--accent-hover); transition: width 1s linear; }
+
+  /* ─── Admin ─── */
+  .admin-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: var(--space-md); }
+  .admin-bar h1 { font-size: 1.4rem; flex: 1; }
+  .tabs { display: flex; gap: 6px; background: var(--white); border-radius: 14px; padding: 5px; box-shadow: var(--shadow-card); width: fit-content; margin-bottom: var(--space-md); }
+  .tab { border: none; background: none; padding: 8px 16px; border-radius: 10px; cursor: pointer; font-weight: 700; color: var(--ink-soft); }
+  .tab.on { background: var(--accent); color: var(--accent-ink); }
+  .tab .badge { background: var(--bad); color: #fff; border-radius: 999px; padding: 0 7px; font-size: 12px; margin-left: 4px; }
+  .card { background: var(--white); border-radius: var(--radius); box-shadow: var(--shadow-card); padding: var(--space-md) var(--space-lg); margin-bottom: var(--space-md); }
+  .admin-pack { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; }
+  .admin-pack h3 { font-size: 1.05rem; }
+  .admin-pack .meta { font-size: 13px; color: var(--muted); }
+  .pill { display: inline-block; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 2px 10px; }
+  .pill.on { background: var(--good-bg); color: var(--good); } .pill.off { background: var(--line-soft); color: var(--muted); }
+  .pill.warn { background: var(--warn-bg); color: var(--warn); } .pill.bad { background: var(--bad-bg); color: var(--bad); }
+  .editor-topic { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; background: #FCFCFB; }
+  .editor-topic-head { display: flex; gap: 8px; align-items: flex-end; }
+  .editor-topic-head label.field { flex: 1; margin-bottom: 8px; }
+  .editor-topic-head .mins { width: 96px; flex: none; }
+  .item-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
+  .item { display: inline-flex; align-items: center; gap: 6px; background: var(--white); border: 1px solid var(--line); border-radius: 10px; padding: 4px 6px 4px 10px; font-size: 13px; }
+  .item button { border: none; background: var(--line-soft); border-radius: 7px; width: 22px; height: 22px; cursor: pointer; }
+  .item .flag { font-size: 11px; color: var(--muted); }
+  .order-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--line-soft); }
+  .order-row:last-child { border-bottom: none; }
+  .order-row .who { font-weight: 700; }
+  .order-row .meta { font-size: 13px; color: var(--muted); }
+  .order-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; align-items: flex-start; }
+  .picker-list { max-height: 320px; overflow: auto; border: 1px solid var(--line); border-radius: 12px; padding: 6px; margin: 8px 0; }
+  .picker-list label { display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 8px; font-size: 14px; cursor: pointer; }
+  .picker-list label:hover { background: var(--line-soft); }
+  .warn-box { background: var(--warn-bg); color: var(--warn); border-radius: 12px; padding: 10px 14px; font-size: 14px; margin-bottom: 12px; }
+
+  .toast { position: fixed; left: 50%; top: 18px; transform: translateX(-50%); z-index: 90; background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 12px; box-shadow: var(--shadow-modal); font-size: 14px; max-width: calc(100% - 24px); animation: scaleIn .25s ease; }
+  .toast.bad { background: var(--bad); }
+  footer { text-align: center; font-size: 13px; color: var(--muted); padding: 0 16px var(--space-xl); }
+  footer a { color: var(--muted); }
+
+  /* ─── Print: the pack as an A4 revision plan ─── */
+  @page { size: A4; margin: 15mm 20mm; }
+  @media print {
+    body { background: #fff; color: #000; }
+    .polymath-header { position: static; background: #fff; border: none; }
+    .header-actions, .timer-bar, .btn, .access-box, .modal-bg, footer, .toast, .paper-actions, .done-toggle { display: none !important; }
+    .polymath-logo { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    .pack-card, .topic, .week, .pack-hero, .card { box-shadow: none !important; border: 1px solid #ccc; page-break-inside: avoid; }
+    .topic-body { display: block !important; }
+    .mm-node.folded > ul { display: block !important; }
+    .big-count, .pack-top, .chip, .eyebrow { background: #fff !important; border: 1px solid #ccc; }
+  }
+</style>
+</head>
+<body>
+<header class="polymath-header">
+  <div class="header-inner">
+    <a class="brand" href="../">
+      <img class="polymath-logo" src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Polymath Learning Centre">
+      <div class="brand-text">Revision Packs<span>Polymath Learning Centre</span></div>
+    </a>
+    <div class="header-actions">
+      <a class="header-link" href="../products/">Shop</a>
+      <a class="header-link hidden" id="my-pack-link" href="#">My pack</a>
+      <button class="icon-btn" type="button" id="print-btn" aria-label="Print" title="Print">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V3h12v6"/><rect x="6" y="14" width="12" height="7" rx="1"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <!-- ─── The shop window ─── -->
+  <section id="view-shop" class="fade-in">
+    <div class="hero">
+      <span class="eyebrow">Exam countdown</span>
+      <h1>Know exactly what to revise, every week, until exam day</h1>
+      <p>Each pack counts down to the exam and spreads the topics over the weeks left. Every topic has a timed practice paper, the teacher's worked answer key, the lesson videos that explain it, and Mr Chung's mind maps. Open to every student, not only Polymath's.</p>
+      <div class="features">
+        <div class="feature"><b>⏳</b>Countdown and weekly plan</div>
+        <div class="feature"><b>⏱️</b>Timed practice papers</div>
+        <div class="feature"><b>🎬</b>Answer keys and video explanations</div>
+        <div class="feature"><b>🧠</b>Mind maps for every topic</div>
+      </div>
+    </div>
+    <h2 class="section-title">Choose a pack</h2>
+    <div class="packs" id="pack-list"><div class="state">Loading the revision packs…</div></div>
+    <div class="access-box" id="access-box">
+      <h2>Already bought a pack?</h2>
+      <p>Type the access code from your email. It works on any phone, tablet or computer.</p>
+      <form class="access-row" id="access-form" autocomplete="off">
+        <label class="sr-only" for="access-input">Access code</label>
+        <input type="text" id="access-input" placeholder="ABCD-EFGH" maxlength="12" inputmode="latin" autocapitalize="characters" spellcheck="false">
+        <button class="btn dark" type="submit" id="access-go">Open my pack</button>
+      </form>
+      <div class="error" id="access-error" role="alert"></div>
+    </div>
+  </section>
+
+  <!-- ─── The buyer's pack ─── -->
+  <section id="view-pack" class="hidden"></section>
+
+  <!-- ─── Admin: /revision/#admin ─── -->
+  <section id="view-admin" class="hidden">
+    <div class="admin-bar">
+      <h1>Revision packs: admin</h1>
+      <span class="note" id="admin-who"></span>
+      <button class="btn ghost small" type="button" id="admin-out">Sign out</button>
+    </div>
+    <div class="tabs" id="admin-tabs">
+      <button class="tab on" data-tab="packs" type="button">📚 Packs</button>
+      <button class="tab" data-tab="orders" type="button">🧾 Orders <span class="badge hidden" id="pending-badge">0</span></button>
+    </div>
+    <div id="admin-body"><div class="state">Loading…</div></div>
+  </section>
+</main>
+<footer>
+  <p>Questions? WhatsApp <a href="https://wa.me/6596450588">+65 9645 0588</a> · <a href="#admin" id="admin-link">Teacher login</a></p>
+  <p id="page-version" class="hidden"></p>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script>
+'use strict';
+const REVISION_PAGE_VERSION = 'v1.0.0';
+const API = 'https://us-central1-mathgen--app.cloudfunctions.net/';
+const PACK_URL = API + 'revisionPack';
+const ADMIN_URL = API + 'revisionPackAdmin';
+const WHATSAPP = '6596450588';
+const ADMIN_EMAILS = ['chungzhikai@gmail.com', 'admin@polymathlc.com.sg', 'elsielcr@gmail.com', 'support@polymathlc.com.sg'];
+const STORE_KEY = 'polymath-revision:';
+const $ = id => document.getElementById(id);
+function escapeHtml(value) {
+  return String(value === undefined || value === null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+const money = value => '$' + (Math.round((Number(value) || 0) * 100) / 100).toFixed(2).replace(/\.00$/, '');
+const money2 = value => '$' + (Math.round((Number(value) || 0) * 100) / 100).toFixed(2);
+function local(key, value) {
+  try {
+    if (value === undefined) return localStorage.getItem(STORE_KEY + key);
+    if (value === null) localStorage.removeItem(STORE_KEY + key); else localStorage.setItem(STORE_KEY + key, value);
+  } catch (e) { /* private window: the page still works, it just forgets */ }
+  return null;
+}
+function toast(message, bad) {
+  const old = document.querySelector('.toast'); if (old) old.remove();
+  const el = document.createElement('div');
+  el.className = 'toast' + (bad ? ' bad' : '');
+  el.textContent = message;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 4200);
+}
+async function post(url, body, token) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = 'Bearer ' + token;
+  let res;
+  try { res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) }); }
+  catch (e) { return { ok: false, status: 0, error: 'offline' }; }
+  const data = await res.json().catch(() => null);
+  return Object.assign({ status: res.status }, data || { ok: false, error: 'temporarily-unavailable' });
+}
+const WORDS = {
+  'offline': 'You seem to be offline. Please check your connection and try again.',
+  'temporarily-unavailable': 'Something went wrong on our side. Please try again in a moment.',
+  'pack-unavailable': 'This pack is not on sale right now.',
+  'card-payments-off': 'Card payment is not available right now. Please pay with PayNow.',
+  'stripe-unavailable': 'The card payment page could not be opened. Please try again, or pay with PayNow.',
+  'invalid-email': 'Please check the email address. Your access code is sent there.',
+  'invalid-phone': 'Please check the phone number, or leave it empty.',
+  'too-many-orders': 'Too many orders from this connection. Please try again in an hour, or WhatsApp us.',
+  'access-not-found': 'That access code was not found. Please check it against your email.',
+  'access-cancelled': 'This order was cancelled. Please WhatsApp us if you think this is a mistake.',
+  'access-ended': 'Access to this pack has ended (it lasts until a few weeks after the exam).',
+  'pack-removed': 'This pack is no longer available. Please WhatsApp us and we will help.',
+  'too-many-attempts': 'Too many tries from this connection. Please try again in an hour.',
+  'invalid-request': 'Please check the details and try again.'
+};
+const say = error => WORDS[error] || WORDS['temporarily-unavailable'];
+function busy(button, on, label) {
+  if (!button) return;
+  if (on) { button.dataset.label = button.innerHTML; button.style.minWidth = button.offsetWidth + 'px'; button.disabled = true; button.innerHTML = '<span class="spinner"></span>' + (label ? ' ' + escapeHtml(label) : ''); }
+  else { button.disabled = false; if (button.dataset.label) button.innerHTML = button.dataset.label; button.style.minWidth = ''; }
+}
+function show(view) {
+  ['shop', 'pack', 'admin'].forEach(name => $('view-' + name).classList.toggle('hidden', name !== view));
+  window.scrollTo({ top: 0 });
+}
+$('print-btn').onclick = () => window.print();
+
+// ─── Days ───
+function sgToday() { return new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10); }
+function daysUntil(key) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(key || ''))) return null;
+  return Math.round((Date.parse(key + 'T00:00:00Z') - Date.parse(sgToday() + 'T00:00:00Z')) / 86400000);
+}
+function fmtDate(key) {
+  if (!key) return '';
+  const d = new Date(key + 'T12:00:00+08:00');
+  return d.toLocaleDateString('en-SG', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Singapore' });
+}
+function fmtMs(ms) { return ms ? new Date(ms).toLocaleString('en-SG', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Singapore' }) : ''; }
+function countdownWords(pack) {
+  const left = pack.examDate ? daysUntil(pack.examDate) : null;
+  if (left === null) return { big: '', label: '' };
+  if (left > 0) return { big: String(left), label: (left === 1 ? 'day' : 'days') + ' to ' + (pack.examName || 'the exam') };
+  if (left === 0) return { big: '🎯', label: (pack.examName || 'The exam') + ' is today. You have got this!' };
+  return { big: '✓', label: (pack.examName || 'The exam') + ' is over' };
+}
+
+// ═══════════════════════════════════════════════════════════
+// The shop window: the packs on sale
+// ═══════════════════════════════════════════════════════════
+let catalogue = null;
+async function loadCatalogue() {
+  const r = await post(PACK_URL, { action: 'catalogue' });
+  if (!r.ok) { $('pack-list').innerHTML = '<div class="state">' + escapeHtml(say(r.error)) + ' <button class="link-btn" id="retry">Try again</button></div>'; $('retry').onclick = loadCatalogue; return; }
+  catalogue = r;
+  renderCatalogue();
+  const want = new URLSearchParams(location.search).get('pack');
+  if (want && !location.search.includes('order=')) { const p = r.packs.find(x => x.id === want); if (p) openBuy(p); }
+}
+function packCard(p) {
+  const c = countdownWords(p);
+  const subjectClass = p.subject === 'math' ? 'math' : p.subject === 'science' ? 'science' : '';
+  const peek = p.topics.slice(0, 4).map(t => '<li>' + escapeHtml(t.title) + '</li>').join('') + (p.topics.length > 4 ? '<li>and ' + (p.topics.length - 4) + ' more topics</li>' : '');
+  return '<article class="pack-card">'
+    + '<div class="pack-top ' + subjectClass + '"><div class="pack-chips">'
+    + (p.levelName ? '<span class="chip">' + escapeHtml(p.levelName) + '</span>' : '') + (p.subjectName ? '<span class="chip">' + escapeHtml(p.subjectName) + '</span>' : '')
+    + (p.examName ? '<span class="chip">' + escapeHtml(p.examName) + '</span>' : '') + '</div>'
+    + '<h3>' + escapeHtml(p.title) + '</h3>'
+    + (c.big ? '<div class="countdown-pill"><b>' + escapeHtml(c.big) + '</b><span>' + escapeHtml(c.label) + '</span></div>' : '') + '</div>'
+    + '<div class="pack-body"><p>' + escapeHtml(p.tagline || p.description) + '</p>'
+    + '<div class="counts"><div class="count"><b>' + p.counts.topics + '</b>topics</div><div class="count"><b>' + p.counts.papers + '</b>timed papers</div>'
+    + '<div class="count"><b>' + p.counts.keys + '</b>answer keys</div><div class="count"><b>' + (p.counts.videos + p.counts.maps) + '</b>videos &amp; maps</div></div>'
+    + (peek ? '<ul class="topic-peek">' + peek + '</ul>' : '') + '</div>'
+    + '<div class="pack-foot"><div class="price">' + money(p.price) + '<small>one-off · access until after the exam</small></div>'
+    + '<button class="btn dark" type="button" data-buy="' + escapeHtml(p.id) + '">Get this pack</button></div></article>';
+}
+function renderCatalogue() {
+  const list = catalogue.packs;
+  $('pack-list').innerHTML = list.length ? list.map(packCard).join('')
+    : '<div class="state">New revision packs are on the way. WhatsApp us at <a href="https://wa.me/' + WHATSAPP + '">+65 9645 0588</a> to hear when they open.</div>';
+  $('pack-list').querySelectorAll('[data-buy]').forEach(b => { b.onclick = () => openBuy(list.find(p => p.id === b.dataset.buy)); });
+}
+
+// ─── Buying ───
+function modal(html) {
+  closeModal();
+  const bg = document.createElement('div');
+  bg.className = 'modal-bg'; bg.id = 'modal';
+  bg.innerHTML = '<div class="modal" role="dialog" aria-modal="true"><button class="modal-x" type="button" aria-label="Close">×</button>' + html + '</div>';
+  bg.addEventListener('click', e => { if (e.target === bg) closeModal(); });
+  bg.querySelector('.modal-x').onclick = closeModal;
+  document.body.appendChild(bg);
+  return bg;
+}
+function closeModal() { const m = $('modal'); if (m) m.remove(); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+function openBuy(pack) {
+  const saved = (() => { try { return JSON.parse(local('buyer') || '{}'); } catch (e) { return {}; } })();
+  const card = catalogue && catalogue.cardPayments;
+  const m = modal('<h2>' + escapeHtml(pack.title) + '</h2><p class="sub">' + money2(pack.price) + ' · your access code is emailed to you as soon as the payment is through.</p>'
+    + '<form id="buy-form" novalidate>'
+    + '<div class="row2"><label class="field">Your name<input type="text" id="b-name" autocomplete="name" maxlength="80" required></label>'
+    + '<label class="field">Student\'s name <small>(optional)</small><input type="text" id="b-student" maxlength="80"></label></div>'
+    + '<label class="field">Email <small>(your access code goes here)</small><input type="email" id="b-email" autocomplete="email" maxlength="120" required></label>'
+    + '<label class="field">WhatsApp number <small>(optional)</small><input type="tel" id="b-phone" autocomplete="tel" maxlength="24" placeholder="9123 4567"></label>'
+    + '<div class="pay-buttons">'
+    + (card ? '<button class="btn dark" type="button" id="pay-card">💳 Pay ' + money2(pack.price) + ' by card</button>' : '')
+    + '<button class="btn ' + (card ? 'ghost' : 'dark') + '" type="button" id="pay-paynow">⚡ Pay with PayNow</button></div>'
+    + (card ? '' : '<p class="note" style="margin-top:8px">Card payment is not available right now.</p>')
+    + '<div class="error" id="buy-error" role="alert"></div></form>');
+  $('b-name').value = saved.name || ''; $('b-email').value = saved.email || ''; $('b-phone').value = saved.phone || ''; $('b-student').value = saved.student || '';
+  const buyer = () => ({ name: $('b-name').value.trim(), email: $('b-email').value.trim(), phone: $('b-phone').value.trim(), student: $('b-student').value.trim() });
+  const check = b => {
+    if (!b.name) return 'Please type your name.';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(b.email)) return 'Please type a valid email. Your access code is sent there.';
+    return '';
+  };
+  async function go(method, button) {
+    const b = buyer(), problem = check(b);
+    $('buy-error').textContent = problem;
+    if (problem) return;
+    local('buyer', JSON.stringify(b));
+    busy(button, true, method === 'card' ? 'Opening secure payment…' : 'Preparing PayNow…');
+    const r = await post(PACK_URL, { action: 'checkout', packId: pack.id, method, buyer: b, returnUrl: location.origin + location.pathname, pageVersion: REVISION_PAGE_VERSION });
+    if (!r.ok) { busy(button, false); $('buy-error').textContent = say(r.error); return; }
+    if (method === 'card') { location.href = r.url; return; }
+    showPayNow(pack, r, b);
+  }
+  if ($('pay-card')) $('pay-card').onclick = e => go('card', e.currentTarget);
+  $('pay-paynow').onclick = e => go('paynow', e.currentTarget);
+  setTimeout(() => (m.querySelector('#b-name').value ? m.querySelector('#b-email') : m.querySelector('#b-name')).focus(), 50);
+}
+
+// PayNow SGQR, the same payload as /products (buildPayNow there).
+function tlv(tag, value) { return tag + value.length.toString().padStart(2, '0') + value; }
+function crc16(str) {
+  let crc = 0xFFFF;
+  for (let i = 0; i < str.length; i++) {
+    crc ^= str.charCodeAt(i) << 8;
+    for (let j = 0; j < 8; j++) { crc = (crc & 0x8000) ? (crc << 1) ^ 0x1021 : crc << 1; crc &= 0xFFFF; }
+  }
+  return crc.toString(16).toUpperCase().padStart(4, '0');
+}
+function buildPayNow(uen, merchant, amount, reference) {
+  const mai = tlv('00', 'SG.PAYNOW') + tlv('01', '2') + tlv('02', uen) + tlv('03', '0');
+  const p = tlv('00', '01') + tlv('01', '12') + tlv('26', mai) + tlv('52', '0000') + tlv('53', '702')
+    + tlv('54', Number(amount).toFixed(2)) + tlv('58', 'SG') + tlv('59', merchant) + tlv('60', 'Singapore')
+    + tlv('62', tlv('05', reference)) + '6304';
+  return p + crc16(p);
+}
+function showPayNow(pack, order, buyer) {
+  const uen = (order.paynow && order.paynow.uen) || 'T16LL2365E', merchant = (order.paynow && order.paynow.merchant) || 'POLYMATH LEARNING';
+  const text = 'Hi Polymath, I have paid ' + money2(order.total) + ' by PayNow for "' + pack.title + '" (order ' + order.code + ', reference ' + order.reference + '). Name: ' + buyer.name + ', email: ' + buyer.email + '.';
+  modal('<h2>Pay ' + money2(order.total) + ' with PayNow</h2><p class="sub">Scan with your banking app. The amount and reference are filled in for you.</p>'
+    + '<div class="qr-wrap"><div id="paynow-qr"></div></div>'
+    + '<div class="ref-box">Reference <b class="mono">' + escapeHtml(order.reference) + '</b><br>UEN ' + escapeHtml(uen) + ' · ' + escapeHtml(merchant) + '<br>Order <b class="mono">' + escapeHtml(order.code) + '</b></div>'
+    + '<p class="note">Once we see your payment (usually within the day), we email your access code to <b>' + escapeHtml(buyer.email) + '</b>. To make it faster, send us the screenshot of your payment on WhatsApp.</p>'
+    + '<div class="pay-buttons" style="margin-top:14px"><a class="btn dark" target="_blank" rel="noopener" href="https://wa.me/' + WHATSAPP + '?text=' + encodeURIComponent(text) + '">💬 I have paid: tell Polymath on WhatsApp</a>'
+    + '<button class="btn ghost" type="button" id="paynow-done">Done</button></div>');
+  const el = $('paynow-qr');
+  if (typeof QRCode === 'undefined') el.textContent = 'Pay to UEN ' + uen + ' with reference ' + order.reference;
+  else new QRCode(el, { text: buildPayNow(uen, merchant, order.total, order.reference), width: 220, height: 220, colorDark: '#000', colorLight: '#fff', correctLevel: QRCode.CorrectLevel.M });
+  $('paynow-done').onclick = closeModal;
+}
+
+// Back from Stripe: ?order=CODE&session=cs_… (or &cancelled=1).
+async function returnFromStripe(params) {
+  const code = params.get('order'), session = params.get('session');
+  history.replaceState(null, '', location.pathname + location.hash);
+  if (params.get('cancelled')) { toast('Payment cancelled. Nothing was charged.'); return; }
+  if (!code || !session) return;
+  modal('<div class="success-box"><h2>Checking your payment…</h2><p class="sub">This takes a few seconds.</p><div style="display:flex;justify-content:center;margin:20px"><span class="spinner" style="width:32px;height:32px;border:3px solid var(--deep);border-right-color:transparent;border-radius:50%;animation:spin .7s linear infinite;display:block"></span></div></div>');
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const r = await post(PACK_URL, { action: 'status', code, sessionId: session });
+    if (r.ok && r.paid) {
+      const access = r.order.accessCode;
+      local('access', access.replace('-', ''));
+      modal('<div class="success-box"><svg class="tick" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="30"/><path d="M19 33l9 9 17-19"/></svg>'
+        + '<h2 style="padding:0">Payment received. Thank you!</h2><p class="sub">' + escapeHtml(r.order.packTitle) + '</p>'
+        + '<p class="note">Your access code</p><div class="code-big mono">' + escapeHtml(access) + '</div>'
+        + '<p class="note">We have also emailed it to you. It is saved on this device too.</p>'
+        + '<div class="pay-buttons" style="margin-top:14px"><button class="btn dark" type="button" id="open-now">Open my revision pack</button></div></div>');
+      $('open-now').onclick = () => { closeModal(); openPack(access); };
+      return;
+    }
+    if (r.ok && r.state === 'cancelled') break;
+    if (!r.ok && r.status === 404) break;
+    await new Promise(res => setTimeout(res, 2500));
+  }
+  modal('<h2>We are still waiting for the payment</h2><p class="sub">If you paid, your access code will arrive by email within a few minutes. If it does not, WhatsApp us with order <b class="mono">' + escapeHtml(code) + '</b> and we will sort it out.</p>'
+    + '<a class="btn dark" href="https://wa.me/' + WHATSAPP + '?text=' + encodeURIComponent('Hi Polymath, I paid for a revision pack by card (order ' + code + ') but have not received the access code.') + '">💬 WhatsApp us</a>');
+}
+
+// ═══════════════════════════════════════════════════════════
+// The buyer's pack
+// ═══════════════════════════════════════════════════════════
+let packData = null, accessCode = '';
+$('access-form').addEventListener('submit', e => { e.preventDefault(); openPack($('access-input').value, $('access-go')); });
+$('my-pack-link').onclick = e => { e.preventDefault(); const code = local('access'); if (code) openPack(code); };
+
+async function openPack(code, button) {
+  const clean = String(code || '').toUpperCase().replace(/[\s-]+/g, '');
+  $('access-error').textContent = '';
+  if (!/^[A-Z2-9]{8}$/.test(clean)) { $('access-error').textContent = 'An access code has 8 letters and numbers, like ABCD-EFGH.'; show('shop'); return; }
+  busy(button, true);
+  const r = await post(PACK_URL, { action: 'open', access: clean });
+  busy(button, false);
+  if (!r.ok) {
+    show('shop');
+    $('access-input').value = clean.slice(0, 4) + '-' + clean.slice(4);
+    $('access-error').textContent = say(r.error);
+    if (r.error === 'access-not-found' || r.error === 'access-ended' || r.error === 'access-cancelled') { if (local('access') === clean) local('access', null); $('my-pack-link').classList.add('hidden'); }
+    return;
+  }
+  accessCode = clean;
+  local('access', clean);
+  $('my-pack-link').classList.remove('hidden');
+  packData = r;
+  renderPack();
+  show('pack');
+  if (!location.search.includes('access=')) history.replaceState(null, '', location.pathname + '?access=' + clean);
+}
+// What this device has ticked as done, and the best times, per access code.
+function progress() { try { return JSON.parse(local('progress:' + accessCode) || '{}'); } catch (e) { return {}; } }
+function saveProgress(p) { local('progress:' + accessCode, JSON.stringify(p)); }
+function paperDone(p, id) { return !!(p.done && p.done[id]); }
+function topicDone(p, topic) { return topic.papers.length ? topic.papers.every(x => paperDone(p, x.id)) : !!(p.topics && p.topics[topic.id]); }
+
+// The plan: what is left, spread over the weeks to the exam, the last week kept for
+// review. With more weeks than topics each topic gets a run of weeks (Weeks 1–5); with
+// more topics than weeks, a week holds several.
+function weekPlan(pack, p) {
+  const left = pack.topics.filter(t => !topicDone(p, t));
+  const days = pack.examDate ? daysUntil(pack.examDate) : null;
+  const weeks = days === null ? Math.max(1, left.length) : Math.max(1, Math.ceil(Math.max(days, 1) / 7));
+  const studyWeeks = weeks > 2 ? weeks - 1 : weeks;
+  const blocks = [];
+  if (!left.length) return { weeks, plan: [] };
+  if (left.length <= studyWeeks) {
+    left.forEach((t, i) => {
+      const from = Math.floor(i * studyWeeks / left.length), to = Math.floor((i + 1) * studyWeeks / left.length) - 1;
+      blocks.push({ from, to, topics: [t] });
+    });
+  } else {
+    for (let w = 0; w < studyWeeks; w++) blocks.push({ from: w, to: w, topics: [] });
+    left.forEach((t, i) => { blocks[Math.min(studyWeeks - 1, Math.floor(i * studyWeeks / left.length))].topics.push(t); });
+  }
+  if (weeks > 2) blocks.push({ from: weeks - 1, to: weeks - 1, review: true, topics: [] });
+  return { weeks, plan: blocks.filter(b => b.review || b.topics.length) };
+}
+function weekLabel(from, to) {
+  const day = 86400000, today = Date.parse(sgToday() + 'T00:00:00Z');
+  const f = ms => new Date(ms).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+  return f(today + from * 7 * day) + ' – ' + f(today + (to * 7 + 6) * day);
+}
+function renderPack() {
+  const r = packData, pack = r.pack, p = progress();
+  const c = countdownWords(pack);
+  const subjectClass = pack.subject === 'math' ? 'math' : pack.subject === 'science' ? 'science' : '';
+  const papers = pack.topics.flatMap(t => t.papers);
+  const doneCount = papers.filter(x => paperDone(p, x.id)).length;
+  const pct = papers.length ? Math.round(doneCount * 100 / papers.length) : 0;
+  const { plan } = weekPlan(pack, p);
+  const name = r.buyer.student || r.buyer.name;
+  let html = '<div class="pack-hero"><div><span class="eyebrow">' + escapeHtml([pack.levelName, pack.subjectName].filter(Boolean).join(' · ') || 'Revision pack') + '</span>'
+    + '<h1 style="margin-top:10px">' + escapeHtml(pack.title) + '</h1>'
+    + '<p>' + (name ? 'Welcome, ' + escapeHtml(name) + '. ' : '') + escapeHtml(pack.tagline || '') + '</p>'
+    + '<div class="progress-line"><div class="progress-bar"><div style="width:' + pct + '%"></div></div>'
+    + '<div class="progress-label">' + doneCount + ' of ' + papers.length + ' practice papers done on this device (' + pct + '%)</div></div>'
+    + '<div class="meta-line"><span>Access code <b class="mono">' + escapeHtml(r.access) + '</b></span>'
+    + (r.accessEndsAt ? '<span>Open until ' + escapeHtml(fmtMs(r.accessEndsAt - 1).replace(/,? \d+:\d+.*$/, '')) + '</span>' : '') + '</div></div>'
+    + (c.big ? '<div class="big-count ' + subjectClass + '"><b>' + escapeHtml(c.big) + '</b><span>' + escapeHtml(c.label) + '</span><small>' + escapeHtml(fmtDate(pack.examDate)) + '</small></div>' : '') + '</div>';
+  if (pack.description) html += '<p style="color:var(--ink-soft);max-width:720px;margin:var(--space-lg) 0 0;white-space:pre-wrap">' + escapeHtml(pack.description) + '</p>';
+  html += '<h2 class="section-title">Your plan, week by week</h2>';
+  if (!plan.length) html += '<div class="state">🎉 Every topic is done. Redo the papers you found hardest under timed conditions, and look over the mind maps the night before.</div>';
+  else html += '<div class="plan">' + plan.map((w, i) => '<div class="week' + (i === 0 ? ' now' : '') + '"><h4><span>' + (w.review ? 'Final week' : w.from === w.to ? 'Week ' + (w.from + 1) : 'Weeks ' + (w.from + 1) + '–' + (w.to + 1)) + ' · ' + weekLabel(w.from, w.to) + '</span>' + (i === 0 ? '<em>This week</em>' : '') + '</h4><ul>'
+    + (w.review ? '<li>🔁 Redo the papers you found hardest, timed</li><li>🧠 Read through the mind maps</li>'
+      : w.topics.map(t => '<li><button type="button" data-goto="' + escapeHtml(t.id) + '">' + escapeHtml(t.title) + '</button></li>').join('')) + '</ul></div>').join('') + '</div>'
+    + '<p class="note" style="margin-top:8px">The plan spreads what is left over the weeks to the exam, and moves on as you tick papers done.</p>';
+  html += '<h2 class="section-title">Topics</h2>';
+  html += pack.topics.map((t, i) => topicHtml(t, i, p)).join('');
+  $('view-pack').innerHTML = '<div class="fade-in">' + html + '</div>';
+  wirePack();
+}
+function topicHtml(t, i, p) {
+  const done = topicDone(p, t);
+  const papers = t.papers.map(x => {
+    const best = p.best && p.best[x.id];
+    return '<div class="paper"><div class="paper-head"><b>📝 ' + escapeHtml(x.name) + '</b>'
+      + (x.pages ? '<span class="note">' + x.pages + ' pages</span>' : '')
+      + '<label class="done-toggle"><input type="checkbox" data-done="' + escapeHtml(x.id) + '"' + (paperDone(p, x.id) ? ' checked' : '') + '> Done</label></div>'
+      + (best ? '<div class="best">Last timed attempt: finished in ' + escapeHtml(clock(best)) + '</div>' : '')
+      + '<div class="paper-actions">'
+      + (x.paper ? '<button class="btn dark small" type="button" data-timed="' + escapeHtml(x.id) + '">⏱️ Start timed paper (' + t.minutes + ' min)</button>'
+        + '<a class="btn ghost small" href="' + escapeHtml(x.paper) + '" target="_blank" rel="noopener">Open paper</a>' : '<span class="note">The paper file is being prepared.</span>')
+      + (x.key ? '<a class="btn ghost small" href="' + escapeHtml(x.key) + '" target="_blank" rel="noopener">✅ Answer key</a>' : '')
+      + (x.videos ? '<a class="btn ghost small" href="' + escapeHtml(x.videos) + '" target="_blank" rel="noopener">🎬 Videos (' + x.videoCount + ')</a>' : '')
+      + '</div></div>';
+  }).join('');
+  const maps = t.maps.map(mapHtml).join('');
+  const markTopic = !t.papers.length ? '<label class="done-toggle" style="margin-top:10px"><input type="checkbox" data-topic-done="' + escapeHtml(t.id) + '"' + (done ? ' checked' : '') + '> I have revised this</label>' : '';
+  return '<article class="topic' + (done ? ' done' : '') + '" id="topic-' + escapeHtml(t.id) + '"><div class="topic-head" role="button" tabindex="0" data-toggle="' + escapeHtml(t.id) + '">'
+    + '<div class="topic-num">' + (done ? '✓' : i + 1) + '</div><h3>' + escapeHtml(t.title) + '</h3>'
+    + '<span class="note">' + [t.papers.length ? t.papers.length + ' paper' + (t.papers.length > 1 ? 's' : '') : '', t.maps.length ? t.maps.length + ' map' + (t.maps.length > 1 ? 's' : '') : ''].filter(Boolean).join(' · ') + '</span>'
+    + '<span class="chev">›</span></div><div class="topic-body">' + (t.note ? '<p class="topic-note">' + escapeHtml(t.note) + '</p>' : '') + papers + maps + markTopic + '</div></article>';
+}
+// A mind map as a foldable outline.
+function mapHtml(map) {
+  const kids = {};
+  map.nodes.forEach(n => { (kids[n.parentId || ''] = kids[n.parentId || ''] || []).push(n); });
+  const icon = n => (n.type === 'note' ? '📝 ' : n.type === 'image' ? '🖼️ ' : n.type === 'question' ? '❓ ' : '');
+  const seen = new Set();
+  function node(n, depth) {
+    if (seen.has(n.id) || depth > 12) return '';
+    seen.add(n.id);
+    const children = (kids[n.id] || []).filter(c => c.id !== n.id);
+    const fold = depth >= 2 && children.length;
+    return '<li class="mm-node' + (depth === 0 ? ' mm-root' : '') + (fold ? ' folded' : '') + '"><span class="mm-label c-' + escapeHtml(n.color) + (children.length ? ' has-kids' : '') + '">'
+      + (children.length ? '<span class="mm-caret">▾</span>' : '') + icon(n) + escapeHtml(n.text || (n.type === 'image' ? 'Picture' : '…')) + '</span>'
+      + (n.note ? '<span class="mm-note">' + escapeHtml(n.note) + '</span>' : '')
+      + (n.image ? '<img class="mm-img" loading="lazy" alt="" src="' + escapeHtml(n.image) + '">' : '')
+      + (children.length ? '<ul>' + children.map(c => node(c, depth + 1)).join('') + '</ul>' : '') + '</li>';
+  }
+  const root = map.nodes.find(n => n.id === map.rootId) || map.nodes.find(n => !n.parentId);
+  const roots = root ? [root].concat(map.nodes.filter(n => !n.parentId && n.id !== root.id)) : [];
+  return '<div class="mindmap"><h4>🧠 ' + escapeHtml(map.title) + '</h4><ul class="mm-tree">' + roots.map(n => node(n, 0)).join('') + '</ul></div>';
+}
+function wirePack() {
+  const view = $('view-pack');
+  view.querySelectorAll('[data-toggle]').forEach(h => {
+    const toggle = () => h.parentElement.classList.toggle('open');
+    h.onclick = toggle;
+    h.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } };
+  });
+  view.querySelectorAll('[data-goto]').forEach(b => { b.onclick = () => { const t = $('topic-' + b.dataset.goto); if (t) { t.classList.add('open'); t.scrollIntoView({ behavior: 'smooth' }); } }; });
+  view.querySelectorAll('[data-done]').forEach(box => { box.onchange = () => { const p = progress(); p.done = p.done || {}; if (box.checked) p.done[box.dataset.done] = Date.now(); else delete p.done[box.dataset.done]; saveProgress(p); rerenderKeepOpen(); }; });
+  view.querySelectorAll('[data-topic-done]').forEach(box => { box.onchange = () => { const p = progress(); p.topics = p.topics || {}; if (box.checked) p.topics[box.dataset.topicDone] = Date.now(); else delete p.topics[box.dataset.topicDone]; saveProgress(p); rerenderKeepOpen(); }; });
+  view.querySelectorAll('.mm-label.has-kids').forEach(l => { l.onclick = () => l.parentElement.classList.toggle('folded'); });
+  view.querySelectorAll('[data-timed]').forEach(b => { b.onclick = () => startTimer(b.dataset.timed); });
+  // The first topic not done is open, so there is always a next step in view.
+  if (!view.querySelector('.topic.open')) { const next = view.querySelector('.topic:not(.done)'); if (next) next.classList.add('open'); }
+}
+function rerenderKeepOpen() {
+  const open = [...document.querySelectorAll('.topic.open')].map(t => t.id);
+  const y = window.scrollY;
+  renderPack();
+  open.forEach(id => { const t = $(id); if (t) t.classList.add('open'); });
+  window.scrollTo({ top: y });
+}
+
+// ─── Timed practice ───
+let timer = null;
+function clock(seconds) { const s = Math.max(0, Math.round(seconds)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+function findPaper(id) {
+  for (const t of packData.pack.topics) for (const x of t.papers) if (x.id === id) return { topic: t, paper: x };
+  return null;
+}
+function startTimer(id) {
+  const found = findPaper(id);
+  if (!found) return;
+  if (timer && !confirmSwitch()) return;
+  stopTimer(false);
+  window.open(found.paper.paper, '_blank', 'noopener');
+  const total = found.topic.minutes * 60;
+  timer = { id, name: found.paper.name, total, startedAt: Date.now(), tick: null };
+  const bar = document.createElement('div');
+  bar.className = 'timer-bar'; bar.id = 'timer-bar';
+  bar.innerHTML = '<div class="t-clock" id="t-clock">' + clock(total) + '</div><div class="t-name">' + escapeHtml(found.paper.name) + '<br><span id="t-sub">Time left. The paper opened in a new tab.</span></div>'
+    + '<button class="btn small good" type="button" id="t-finish">I finished</button><button class="btn small ghost" type="button" id="t-stop" aria-label="Stop the timer">✕</button>'
+    + '<div class="timer-progress"><div id="t-progress" style="width:100%"></div></div>';
+  document.body.appendChild(bar);
+  $('t-finish').onclick = () => stopTimer(true);
+  $('t-stop').onclick = () => stopTimer(false);
+  const update = () => {
+    if (!timer) return;
+    const used = (Date.now() - timer.startedAt) / 1000, left = timer.total - used;
+    $('t-clock').textContent = left >= 0 ? clock(left) : '+' + clock(-left);
+    $('t-progress').style.width = Math.max(0, Math.min(100, left * 100 / timer.total)) + '%';
+    bar.classList.toggle('low', left < 300);
+    if (left < 0) $('t-sub').textContent = 'Time is up! Finish the question you are on, then mark it.';
+  };
+  timer.tick = setInterval(update, 1000);
+  update();
+}
+function confirmSwitch() { return true; }
+function stopTimer(finished) {
+  if (!timer) return;
+  clearInterval(timer.tick);
+  const used = (Date.now() - timer.startedAt) / 1000;
+  if (finished) {
+    const p = progress();
+    p.best = p.best || {}; p.done = p.done || {};
+    p.best[timer.id] = used; p.done[timer.id] = Date.now();
+    saveProgress(p);
+    toast('Well done! Finished in ' + clock(used) + '. Now check your answers with the answer key.');
+  }
+  timer = null;
+  const bar = $('timer-bar'); if (bar) bar.remove();
+  if (finished) rerenderKeepOpen();
+}
+
+// ═══════════════════════════════════════════════════════════
+// Admin: /revision/#admin (Google sign-in; the server checks the account again)
+// ═══════════════════════════════════════════════════════════
+let auth = null, adminData = null, adminTab = 'packs', orderFilter = 'pending', editing = null;
+const firebaseConfig = {
+  apiKey: "AIzaSyAUSI3Uh28IeqASEp0JhH4QPaVt-O3meBo", authDomain: "mathgen--app.firebaseapp.com", projectId: "mathgen--app",
+  storageBucket: "mathgen--app.firebasestorage.app", messagingSenderId: "165654161198", appId: "1:165654161198:web:16c8bd60eb3a2aa7edbcbf"
+};
+function firebaseReady() {
+  if (auth) return true;
+  if (!window.firebase || !firebase.initializeApp) return false;
+  firebase.initializeApp(firebaseConfig);
+  auth = firebase.auth();
+  auth.onAuthStateChanged(onAuth);
+  return true;
+}
+const isAdminUser = u => !!(u && u.email && ADMIN_EMAILS.indexOf(u.email.toLowerCase()) > -1);
+async function adminSignIn() {
+  if (!firebaseReady()) { toast('Sign-in is still loading. Please try again in a moment.', true); return; }
+  try {
+    const res = await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+    if (!isAdminUser(res.user)) { const who = res.user ? res.user.email : 'unknown'; await auth.signOut(); toast('Access denied. ' + who + ' is not an admin account.', true); }
+  } catch (e) {
+    if (e && (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request')) return;
+    if (e && e.code === 'auth/popup-blocked') {
+      modal('<h2>Teacher login</h2><p class="sub">Sign in with your Google account to manage revision packs.</p><button class="btn dark" id="login-go" type="button">Continue with Google</button>');
+      $('login-go').onclick = () => { closeModal(); adminSignIn(); };
+      return;
+    }
+    toast('Sign-in failed: ' + (e.message || e), true);
+  }
+}
+function onAuth(user) {
+  const admin = isAdminUser(user);
+  $('page-version').textContent = 'Revision page ' + REVISION_PAGE_VERSION;
+  $('page-version').classList.toggle('hidden', !admin);
+  if (!admin) { if (!$('view-admin').classList.contains('hidden')) show('shop'); return; }
+  $('admin-who').textContent = user.email;
+  if (location.hash === '#admin') { show('admin'); adminLoad(); }
+}
+$('admin-link').onclick = e => { e.preventDefault(); location.hash = '#admin'; enterAdmin(); };
+$('admin-out').onclick = async () => { if (auth) await auth.signOut(); location.hash = ''; show('shop'); };
+async function enterAdmin() {
+  if (!firebaseReady()) { setTimeout(enterAdmin, 400); return; }
+  await new Promise(res => { const off = auth.onAuthStateChanged(() => { off(); res(); }); });
+  if (isAdminUser(auth.currentUser)) { show('admin'); adminLoad(); } else adminSignIn();
+}
+window.addEventListener('hashchange', () => { if (location.hash === '#admin') enterAdmin(); });
+async function adminCall(body) {
+  if (!auth || !isAdminUser(auth.currentUser)) { toast('Admin sign-in required.', true); return { ok: false, error: 'sign-in-required' }; }
+  const token = await auth.currentUser.getIdToken();
+  const r = await post(ADMIN_URL, body, token);
+  if (!r.ok) {
+    const words = { 'admin-only': 'This account is not an admin.', 'sign-in-required': 'Please sign in again.', 'invalid-price': 'The price must be between $1 and $2000.',
+      'invalid-exam-date': 'Please check the exam date.', 'invalid-minutes': 'Minutes for a paper must be between 5 and 240.', 'too-many-topics': 'A pack can have at most 40 topics.',
+      'too-many-items': 'A topic can have at most 30 worksheets and 10 mind maps.', 'pack-has-buyers': 'Someone has bought this pack, so it cannot be deleted. Switch it off instead.',
+      'already-paid': 'That order is already paid.', 'receipt-just-sent': 'The email was just sent. Try again in a minute.', 'order-not-pending': 'Only a PayNow order waiting for payment can be marked paid.',
+      'invalid-request': 'Please check the fields (every topic needs a title).' };
+    toast(words[r.error] || say(r.error), true);
+  }
+  return r;
+}
+async function adminLoad() {
+  $('admin-body').innerHTML = '<div class="state">Loading…</div>';
+  const r = await adminCall({ action: 'load' });
+  if (!r.ok) { $('admin-body').innerHTML = '<div class="state">Could not load. ' + escapeHtml(say(r.error)) + '</div>'; return; }
+  adminData = r;
+  const pending = r.orders.filter(o => o.status === 'pending').length;
+  $('pending-badge').textContent = pending; $('pending-badge').classList.toggle('hidden', !pending);
+  renderAdmin();
+}
+$('admin-tabs').addEventListener('click', e => {
+  const b = e.target.closest('[data-tab]'); if (!b) return;
+  adminTab = b.dataset.tab; editing = null;
+  document.querySelectorAll('#admin-tabs .tab').forEach(t => t.classList.toggle('on', t === b));
+  renderAdmin();
+});
+function renderAdmin() {
+  if (!adminData) return;
+  if (adminTab === 'orders') return renderOrders();
+  if (editing) return renderEditor();
+  const d = adminData;
+  let html = d.cardPayments ? '' : '<div class="warn-box">Card payment is switched off (Products → Manage → Card payments, or no Stripe key). Buyers can only use PayNow.</div>';
+  html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"><button class="btn dark" type="button" id="new-pack">＋ New pack</button><a class="btn ghost" href="./" target="_blank">See the shop page</a></div>';
+  html += d.packs.length ? d.packs.map(p => {
+    const left = p.daysLeft;
+    return '<div class="card admin-pack"><div><h3>' + escapeHtml(p.title) + '</h3><div class="meta">'
+      + (p.onSale ? '<span class="pill on">On sale</span>' : '<span class="pill off">' + (p.active ? 'Not on sale (exam over or no topics)' : 'Hidden') + '</span>')
+      + (p.starter ? ' <span class="pill warn">Starter pack: please check the exam date and price</span>' : '')
+      + ' · ' + money2(p.price) + ' · ' + p.topics.length + ' topics · ' + p.sold + ' sold'
+      + (p.examDate ? ' · ' + escapeHtml(p.examName || 'Exam') + ' ' + escapeHtml(fmtDate(p.examDate)) + (left !== null && left >= 0 ? ' (' + left + ' days)' : '') : ' · no exam date') + '</div></div>'
+      + '<div class="order-actions"><button class="btn small" type="button" data-edit="' + escapeHtml(p.id) + '">Edit</button>'
+      + '<button class="btn small ghost" type="button" data-flip="' + escapeHtml(p.id) + '">' + (p.active ? 'Hide' : 'Show') + '</button></div></div>';
+  }).join('') : '<div class="state">No packs yet. Press New pack to make one.</div>';
+  $('admin-body').innerHTML = html;
+  $('new-pack').onclick = () => { editing = { title: '', tagline: '', description: '', level: 'P6', subject: 'math', examName: 'PSLE', examDate: '', price: 49, active: false, accessDaysAfterExam: 30, accessDays: 365, sort: 0, topics: [] }; renderEditor(); };
+  document.querySelectorAll('[data-edit]').forEach(b => { b.onclick = () => { editing = JSON.parse(JSON.stringify(d.packs.find(p => p.id === b.dataset.edit))); renderEditor(); }; });
+  document.querySelectorAll('[data-flip]').forEach(b => { b.onclick = async () => {
+    const p = JSON.parse(JSON.stringify(d.packs.find(x => x.id === b.dataset.flip)));
+    p.active = !p.active;
+    busy(b, true);
+    const r = await adminCall({ action: 'savePack', pack: packForSave(p) });
+    busy(b, false);
+    if (r.ok) { toast(p.active ? 'The pack is on sale.' : 'The pack is hidden from the shop.'); adminLoad(); }
+  }; });
+}
+function packForSave(p) {
+  return { id: p.id || '', title: p.title, tagline: p.tagline || '', description: p.description || '', level: p.level || '', subject: p.subject || '',
+    examName: p.examName || '', examDate: p.examDate || '', price: Number(p.price), active: !!p.active,
+    accessDaysAfterExam: Number(p.accessDaysAfterExam), accessDays: Number(p.accessDays), sort: Number(p.sort) || 0,
+    topics: p.topics.map(t => ({ id: t.id || '', title: t.title, note: t.note || '', worksheetIds: t.worksheetIds, mindmapIds: t.mindmapIds, minutes: Number(t.minutes) || 60 })) };
+}
+const sheetName = id => { const s = adminData.sheets[id]; return s && s.name ? s.name : id; };
+const mapName = id => { const m = adminData.maps.find(x => x.id === id); return m ? m.title : id + ' (not published)'; };
+function renderEditor() {
+  const p = editing, d = adminData;
+  const opt = (value, label, current) => '<option value="' + escapeHtml(value) + '"' + (value === current ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
+  let html = '<div class="card"><div style="display:flex;gap:8px;align-items:center;margin-bottom:12px"><button class="btn ghost small" type="button" id="ed-back">← All packs</button><h2 style="font-size:1.15rem;flex:1">' + (p.id ? 'Edit pack' : 'New pack') + '</h2></div>'
+    + (p.starter ? '<div class="warn-box">This starter pack was made from the /online classes. Please check the exam date (a placeholder) and the price.</div>' : '')
+    + '<label class="field">Title<input type="text" id="ed-title" maxlength="120" value="' + escapeHtml(p.title) + '"></label>'
+    + '<label class="field">One-line pitch <small>(on the shop card)</small><input type="text" id="ed-tagline" maxlength="200" value="' + escapeHtml(p.tagline) + '"></label>'
+    + '<label class="field">Description <small>(on the pack page)</small><textarea id="ed-desc" maxlength="2000">' + escapeHtml(p.description) + '</textarea></label>'
+    + '<div class="row2"><label class="field">Level<select id="ed-level">' + opt('', 'Any', p.level) + ['P3', 'P4', 'P5', 'P6'].map(l => opt(l, 'Primary ' + l.slice(1), p.level)).join('') + '</select></label>'
+    + '<label class="field">Subject<select id="ed-subject">' + opt('math', 'Maths', p.subject) + opt('science', 'Science', p.subject) + opt('both', 'Maths & Science', p.subject) + opt('', 'Other', p.subject) + '</select></label></div>'
+    + '<div class="row2"><label class="field">Exam name<input type="text" id="ed-exam" maxlength="40" value="' + escapeHtml(p.examName) + '" placeholder="PSLE"></label>'
+    + '<label class="field">Exam date <small>(the countdown counts to this day)</small><input type="date" id="ed-date" value="' + escapeHtml(p.examDate) + '"></label></div>'
+    + '<div class="row2"><label class="field">Price (SGD)<input type="number" id="ed-price" min="1" max="2000" step="0.01" value="' + escapeHtml(p.price) + '"></label>'
+    + '<label class="field">Access after the exam <small>(days)</small><input type="number" id="ed-after" min="0" max="365" value="' + escapeHtml(p.accessDaysAfterExam) + '"></label></div>'
+    + '<label class="field" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="ed-active"' + (p.active ? ' checked' : '') + ' style="width:20px;height:20px"> On sale (shown on /revision and /products)</label>'
+    + '</div><h3 style="margin:18px 0 10px">Topics</h3><div id="ed-topics"></div>'
+    + '<div class="card"><b>Add topics</b><p class="note" style="margin:4px 0 10px">Pick an /online class: you can add one topic per worksheet, or add its worksheets to one topic.</p>'
+    + '<div class="row2"><label class="field">Class<select id="ed-course">' + opt('', 'Choose a class…', '') + d.courses.map(c => opt(c.id, c.title + ' (' + c.worksheets + ' worksheets)', '')).join('') + '</select></label>'
+    + '<div style="display:flex;align-items:flex-end;gap:8px;margin-bottom:12px"><button class="btn ghost" type="button" id="ed-empty">＋ Empty topic</button></div></div><div id="ed-course-list"></div></div>'
+    + '<div class="card" style="display:flex;gap:8px;flex-wrap:wrap;position:sticky;bottom:12px;box-shadow:var(--shadow-modal)"><button class="btn dark" type="button" id="ed-save">Save pack</button>'
+    + (p.id ? '<button class="btn danger" type="button" id="ed-delete">Delete pack</button>' : '') + '</div>';
+  $('admin-body').innerHTML = html;
+  renderTopicsEditor();
+  const read = () => {
+    p.title = $('ed-title').value; p.tagline = $('ed-tagline').value; p.description = $('ed-desc').value; p.level = $('ed-level').value;
+    p.subject = $('ed-subject').value; p.examName = $('ed-exam').value; p.examDate = $('ed-date').value; p.price = $('ed-price').value;
+    p.accessDaysAfterExam = $('ed-after').value; p.active = $('ed-active').checked;
+  };
+  ['ed-title', 'ed-tagline', 'ed-desc', 'ed-level', 'ed-subject', 'ed-exam', 'ed-date', 'ed-price', 'ed-after', 'ed-active'].forEach(id => $(id).addEventListener('change', read));
+  $('ed-back').onclick = () => { editing = null; renderAdmin(); };
+  $('ed-empty').onclick = () => { read(); p.topics.push({ title: 'New topic', note: '', worksheetIds: [], mindmapIds: [], minutes: 60 }); renderTopicsEditor(); };
+  $('ed-course').onchange = async () => {
+    const id = $('ed-course').value;
+    $('ed-course-list').innerHTML = id ? '<p class="note">Loading worksheets…</p>' : '';
+    if (!id) return;
+    const r = await adminCall({ action: 'course', courseId: id });
+    if (!r.ok) return;
+    r.worksheets.forEach(w => { adminData.sheets[w.id] = w; });
+    $('ed-course-list').innerHTML = '<div class="picker-list">' + r.worksheets.map(w => '<label><input type="checkbox" value="' + escapeHtml(w.id) + '"> ' + escapeHtml(w.name)
+      + ' <span class="note">' + [w.hasKey ? 'key' : 'no key yet', w.videos ? w.videos + ' videos' : ''].filter(Boolean).join(' · ') + '</span></label>').join('') + '</div>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn small" type="button" id="ed-each">One topic per ticked worksheet</button>'
+      + '<button class="btn small ghost" type="button" id="ed-one">Ticked worksheets as one topic</button><button class="btn small ghost" type="button" id="ed-all">Tick all</button></div>';
+    const ticked = () => [...document.querySelectorAll('#ed-course-list input:checked')].map(i => i.value);
+    $('ed-all').onclick = () => document.querySelectorAll('#ed-course-list input').forEach(i => { i.checked = true; });
+    $('ed-each').onclick = () => { read(); ticked().forEach(w => p.topics.push({ title: sheetName(w), note: '', worksheetIds: [w], mindmapIds: [], minutes: 60 })); renderTopicsEditor(); toast('Added. Remember to save.'); };
+    $('ed-one').onclick = () => { read(); const ids = ticked(); if (ids.length) p.topics.push({ title: sheetName(ids[0]), note: '', worksheetIds: ids, mindmapIds: [], minutes: 60 }); renderTopicsEditor(); toast('Added. Remember to save.'); };
+  };
+  $('ed-save').onclick = async e => {
+    read();
+    const b = e.currentTarget;
+    busy(b, true, 'Saving…');
+    const r = await adminCall({ action: 'savePack', pack: packForSave(p) });
+    busy(b, false);
+    if (r.ok) { toast('Saved.'); editing = null; adminLoad(); }
+  };
+  if ($('ed-delete')) $('ed-delete').onclick = async e => {
+    if (!window.confirm('Delete "' + p.title + '"? This cannot be undone.')) return;
+    const r = await adminCall({ action: 'deletePack', packId: p.id });
+    if (r.ok) { toast('Deleted.'); editing = null; adminLoad(); }
+  };
+}
+function renderTopicsEditor() {
+  const p = editing, d = adminData;
+  $('ed-topics').innerHTML = p.topics.length ? p.topics.map((t, i) => '<div class="editor-topic" data-i="' + i + '"><div class="editor-topic-head">'
+    + '<label class="field">Topic ' + (i + 1) + '<input type="text" data-f="title" maxlength="120" value="' + escapeHtml(t.title) + '"></label>'
+    + '<label class="field mins">Minutes<input type="number" data-f="minutes" min="5" max="240" value="' + escapeHtml(t.minutes) + '"></label></div>'
+    + '<label class="field">Note for students <small>(optional)</small><input type="text" data-f="note" maxlength="500" value="' + escapeHtml(t.note) + '"></label>'
+    + '<div class="note">Practice papers</div><div class="item-list">' + (t.worksheetIds.map(w => {
+      const s = d.sheets[w];
+      return '<span class="item">📝 ' + escapeHtml(sheetName(w)) + (s ? ' <span class="flag">' + (s.hasKey ? '✓ key' : 'no key') + (s.videos ? ' · ' + s.videos + ' videos' : '') + '</span>' : '') + '<button type="button" data-rm-ws="' + escapeHtml(w) + '" aria-label="Remove">×</button></span>';
+    }).join('') || '<span class="note">None</span>') + '</div>'
+    + '<div class="note">Mind maps</div><div class="item-list">' + (t.mindmapIds.map(m => '<span class="item">🧠 ' + escapeHtml(mapName(m)) + '<button type="button" data-rm-map="' + escapeHtml(m) + '" aria-label="Remove">×</button></span>').join('') || '<span class="note">None</span>') + '</div>'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap"><select data-add-map style="width:auto;margin:0"><option value="">＋ Add a mind map…</option>'
+    + d.maps.filter(m => t.mindmapIds.indexOf(m.id) < 0).map(m => '<option value="' + escapeHtml(m.id) + '">' + escapeHtml(m.title) + '</option>').join('') + '</select>'
+    + '<button class="btn small ghost" type="button" data-move="-1"' + (i ? '' : ' disabled') + '>↑</button><button class="btn small ghost" type="button" data-move="1"' + (i < p.topics.length - 1 ? '' : ' disabled') + '>↓</button>'
+    + '<button class="btn small danger" type="button" data-rm-topic>Remove topic</button></div></div>').join('') : '<div class="state">No topics yet. Add some below.</div>';
+  document.querySelectorAll('.editor-topic').forEach(box => {
+    const t = p.topics[Number(box.dataset.i)];
+    box.querySelectorAll('[data-f]').forEach(input => input.addEventListener('change', () => { t[input.dataset.f] = input.value; }));
+    box.querySelectorAll('[data-rm-ws]').forEach(b => { b.onclick = () => { t.worksheetIds = t.worksheetIds.filter(x => x !== b.dataset.rmWs); renderTopicsEditor(); }; });
+    box.querySelectorAll('[data-rm-map]').forEach(b => { b.onclick = () => { t.mindmapIds = t.mindmapIds.filter(x => x !== b.dataset.rmMap); renderTopicsEditor(); }; });
+    box.querySelector('[data-add-map]').onchange = e => { if (e.target.value) { t.mindmapIds.push(e.target.value); renderTopicsEditor(); } };
+    box.querySelector('[data-rm-topic]').onclick = () => { p.topics.splice(Number(box.dataset.i), 1); renderTopicsEditor(); };
+    box.querySelectorAll('[data-move]').forEach(b => { b.onclick = () => { const i = Number(box.dataset.i), j = i + Number(b.dataset.move); [p.topics[i], p.topics[j]] = [p.topics[j], p.topics[i]]; renderTopicsEditor(); }; });
+  });
+}
+function renderOrders() {
+  const d = adminData;
+  const list = d.orders.filter(o => orderFilter === 'all' || o.status === orderFilter);
+  const label = { pending: 'Waiting for PayNow', paid: 'Paid', cancelled: 'Cancelled' };
+  let html = '<div class="tabs" id="order-filter">' + [['pending', 'Waiting for PayNow'], ['paid', 'Paid'], ['all', 'All']].map(([k, l]) => '<button class="tab' + (orderFilter === k ? ' on' : '') + '" data-f="' + k + '" type="button">' + l + '</button>').join('') + '</div>';
+  html += '<div class="card">' + (list.length ? list.map(o => '<div class="order-row"><div><div class="who">' + escapeHtml(o.buyer.name || '') + ' <span class="pill ' + (o.status === 'paid' ? 'on' : o.status === 'pending' ? 'warn' : 'off') + '">' + escapeHtml(label[o.status] || o.status) + '</span></div>'
+    + '<div class="meta">' + escapeHtml(o.packTitle) + ' · ' + money2(o.total) + ' · ' + (o.payment === 'card' ? 'Card' : 'PayNow ref <b class="mono">' + escapeHtml(o.reference) + '</b>') + '</div>'
+    + '<div class="meta">' + escapeHtml(o.buyer.email || '') + (o.buyer.phone ? ' · ' + escapeHtml(o.buyer.phone) : '') + (o.buyer.student ? ' · student ' + escapeHtml(o.buyer.student) : '') + '</div>'
+    + '<div class="meta">Ordered ' + escapeHtml(fmtMs(o.createdAtMs)) + (o.paidAtMs ? ' · paid ' + escapeHtml(fmtMs(o.paidAtMs)) : '') + (o.accessCode ? ' · code <b class="mono">' + escapeHtml(o.accessCode) + '</b>' : '')
+    + (o.mailSentAtMs ? ' · emailed ' + escapeHtml(fmtMs(o.mailSentAtMs)) : '') + (o.opens ? ' · opened ' + o.opens + '×' : '') + '</div>'
+    + (o.amountCheck ? '<div class="meta" style="color:var(--bad)">' + escapeHtml(o.amountCheck) + '</div>' : '') + '</div>'
+    + '<div class="order-actions">' + (o.status === 'pending' ? '<button class="btn small good" type="button" data-act="markPaid" data-code="' + o.code + '">Mark paid</button>' : '')
+    + (o.status === 'paid' ? '<button class="btn small ghost" type="button" data-act="resend" data-code="' + o.code + '">Resend code</button>' : '')
+    + (o.status !== 'cancelled' ? '<button class="btn small ghost" type="button" data-act="cancel" data-code="' + o.code + '">Cancel</button>' : '') + '</div></div>').join('')
+    : '<div class="state" style="box-shadow:none">No orders here.</div>') + '</div>';
+  $('admin-body').innerHTML = html;
+  document.querySelectorAll('#order-filter [data-f]').forEach(b => { b.onclick = () => { orderFilter = b.dataset.f; renderOrders(); }; });
+  document.querySelectorAll('[data-act]').forEach(b => { b.onclick = async () => {
+    if (b.dataset.act === 'cancel' && !window.confirm('Cancel this order? Its access code stops working. Refunds are done in Stripe or by bank transfer.')) return;
+    busy(b, true);
+    const r = await adminCall({ action: b.dataset.act, code: b.dataset.code });
+    busy(b, false);
+    if (r.ok) { toast(b.dataset.act === 'markPaid' ? 'Paid. The access code was emailed to the buyer.' : b.dataset.act === 'resend' ? 'Sent to ' + r.sentTo + '.' : 'Cancelled.'); adminLoad(); }
+  }; });
+}
+
+// ─── Start ───
+(function start() {
+  const params = new URLSearchParams(location.search);
+  if (local('access')) $('my-pack-link').classList.remove('hidden');
+  if (location.hash === '#admin') { show('admin'); enterAdmin(); return; }
+  firebaseReady();
+  loadCatalogue();
+  if (params.get('order')) returnFromStripe(params);
+  else if (params.get('access')) openPack(params.get('access'));
+})();
+</script>
+</body>
+</html>
