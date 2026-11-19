@@ -15,6 +15,7 @@ const { createRevisionService, REVISION_SOURCE } = require('./revision');
 const { createRevisionStore } = require('./revision-store');
 const { createRepository } = require('./repository');
 const { createStripe } = require('./stripe');
+const { createMapsService, createMapsStore, MAPS_SOURCE } = require('./maps');
 initializeApp();
 // Both keys arrive as environment variables written at deploy time from the GitHub
 // repository secrets STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET (see
@@ -42,10 +43,15 @@ const revision = createRevisionService({
   stripe, http: createHttp(report), hashIp: hash, verifyIdToken: token => getAuth().verifyIdToken(token),
   cardConfigured: !!process.env.STRIPE_SECRET_KEY, report
 });
+// Mr Chung's Maps library on /maps: the monthly subscription for people outside the centre.
+const maps = createMapsService({
+  store: createMapsStore(getFirestore(), Timestamp), stripe, http: createHttp(report),
+  verifyIdToken: token => getAuth().verifyIdToken(token), report
+});
 const service = createService({
   repository, stripe,
   webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
-  paidSessionHandlers: { [BOOKING_SOURCE]: bookings.handlePaidSession, [REVISION_SOURCE]: revision.handlePaidSession },
+  paidSessionHandlers: { [BOOKING_SOURCE]: bookings.handlePaidSession, [REVISION_SOURCE]: revision.handlePaidSession, [MAPS_SOURCE]: maps.handlePaidSession },
   // The admin's Google sign-in on the products page, for sendShopReceipt.
   verifyIdToken: token => getAuth().verifyIdToken(token),
   report
@@ -64,3 +70,4 @@ exports.trialAdmin = onRequest(web, trials.trialAdmin);
 exports.trialMaterial = onRequest(Object.assign({}, web, { timeoutSeconds: 120, concurrency: 10 }), trials.trialMaterial);
 exports.revisionPack = onRequest(Object.assign({}, web, { timeoutSeconds: 120, concurrency: 10 }), revision.revisionPack);
 exports.revisionPackAdmin = onRequest(web, revision.revisionPackAdmin);
+exports.mapsLibrary = onRequest(web, maps.mapsLibrary);
