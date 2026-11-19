@@ -22,6 +22,8 @@ export const SCHEDULE_CHECKOUT_ENDPOINT = BASE + 'createScheduleCheckout';
 export const SCHEDULE_STATUS_ENDPOINT = BASE + 'scheduleCheckoutStatus';
 // Free diagnostic test bookings on /diagnostic, served from the same origins.
 export const DIAGNOSTIC_ENDPOINT = BASE + 'bookDiagnostic';
+// The parent's diagnostic report page (/diagnostic/report/), read with the key in their link.
+export const DIAGNOSTIC_REPORT_ENDPOINT = BASE + 'diagnosticReport';
 // The /trial page: booking with a one-time code or a class link, and its admin panel.
 export const TRIAL_ENDPOINT = BASE + 'trialBooking';
 export const TRIAL_ADMIN_ENDPOINT = BASE + 'trialAdmin';
@@ -40,7 +42,7 @@ async function preflight(endpoint, origin, fetchImpl) {
 
 export async function smokeProblems({ webhookExpected = true, fetchImpl = globalThis.fetch } = {}) {
   const problems = [];
-  for (const endpoint of [CHECKOUT_ENDPOINT, STATUS_ENDPOINT, RECEIPT_ENDPOINT, SCHEDULE_CHECKOUT_ENDPOINT, SCHEDULE_STATUS_ENDPOINT, DIAGNOSTIC_ENDPOINT, TRIAL_ENDPOINT, TRIAL_ADMIN_ENDPOINT]) {
+  for (const endpoint of [CHECKOUT_ENDPOINT, STATUS_ENDPOINT, RECEIPT_ENDPOINT, SCHEDULE_CHECKOUT_ENDPOINT, SCHEDULE_STATUS_ENDPOINT, DIAGNOSTIC_ENDPOINT, DIAGNOSTIC_REPORT_ENDPOINT, TRIAL_ENDPOINT, TRIAL_ADMIN_ENDPOINT]) {
     const name = endpoint.slice(BASE.length);
     for (const origin of ORIGINS) {
       try {
