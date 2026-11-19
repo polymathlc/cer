@@ -15,7 +15,8 @@ name: Polymath weekly parent reports
 # service account cannot create scheduler jobs, so the schedule lives here.
 #
 # Run workflow by hand: "preview" builds this week's reports and emails the
-# office only; "dry run" reads everything and writes nothing. The log shows
+# office only; "dry run" builds this week's reports from the real data and writes
+# and sends nothing. The log shows
 # counts only (this repository is public).
 
 on:
@@ -88,7 +89,7 @@ jobs:
           WHAT: ${{ github.event_name == 'workflow_dispatch' && inputs.what || 'check' }}
         run: |
           case "$WHAT" in
-            dry-run) node tools/weekly-reports.mjs --dry-run ;;
+            dry-run) node tools/weekly-reports.mjs --dry-run --force-preview ;;
             preview) node tools/weekly-reports.mjs --force-preview ;;
             *) node tools/weekly-reports.mjs ;;
           esac
