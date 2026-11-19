@@ -370,3 +370,18 @@ test('the emails escape what the parent typed and leave out what is not there', 
   assert.equal(fmtDayKey('2026-10-29'), 'Thursday 29 October 2026');
   assert.equal(fmtDayKey('soon'), '');
 });
+
+test('a referral code from a family\'s link travels into the booking; a bad one is dropped, never refused', async () => {
+  assert.equal(validateBooking(form({ referralCode: 'k7m2qx' }), NOW).referralCode, 'K7M2QX');
+  assert.equal(validateBooking(form({ referralCode: 'PLC K7M2QX' }), NOW).referralCode, 'K7M2QX');
+  for (const code of ['', 'ABC', 'I0O1LZ', 'K7M2QXX', 42, null]) assert.equal(validateBooking(form({ referralCode: code }), NOW).referralCode, '', String(code));
+  const h = harness();
+  const res = await h.call(h.bookings.createCheckout, form({ referralCode: 'K7M2QX' }));
+  assert.equal(res.statusCode, 201);
+  const saved = [...h.db.rows.entries()].find(([path]) => path.startsWith('shop_checkouts/'))[1];
+  assert.equal(saved.booking.referralCode, 'K7M2QX');
+  const none = harness();
+  await none.call(none.bookings.createCheckout, form());
+  const plain = [...none.db.rows.entries()].find(([path]) => path.startsWith('shop_checkouts/'))[1];
+  assert.equal('referralCode' in plain.booking, false, 'a booking without a referral keeps exactly its fields');
+});

@@ -452,7 +452,20 @@
 
 // Shown to the signed-in teacher in the footer, so a deploy can be checked.
 // Bump it on every change to this page.
-const DIAGNOSTIC_PAGE_VERSION = 'v1.1.0';
+const DIAGNOSTIC_PAGE_VERSION = 'v1.1.1';
+// A family's referral code (Polymath Office v1.17.0): from ?ref= on this page, or
+// kept on this device by /schedule/?ref=…, sent with the booking. Staff confirm
+// the enrolment in the Office before anybody gets a reward.
+const referralCode = (function () {
+  const clean = v => { const c = String(v || '').toUpperCase().replace(/^PLC/, '').replace(/[^A-Z0-9]/g, ''); return /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}$/.test(c) ? c : ''; };
+  let code = '';
+  try { code = clean(new URLSearchParams(location.search).get('ref')); } catch (e) { code = ''; }
+  try {
+    if (code) localStorage.setItem('polymath-referral', JSON.stringify({ code, at: Date.now() }));
+    else { const x = JSON.parse(localStorage.getItem('polymath-referral') || 'null'); if (x && Date.now() - (Number(x.at) || 0) < 60 * 86400000) code = clean(x.code); }
+  } catch (e) { /* private window */ }
+  return code;
+})();
 const ADMIN_EMAIL = 'chungzhikai@gmail.com';
 const BOOK_URL = 'https://us-central1-mathgen--app.cloudfunctions.net/bookDiagnostic';
 const CONFIG_CACHE_KEY = 'pl_diagnostic_schedule_v1';
@@ -755,7 +768,7 @@ async function submitDiagnostic() {
     const res = await fetch(BOOK_URL, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ slot: chosenSession.slot, date: chosenSession.date, parentName, email, studentName,
-        subject: chosenSubject, level, pageVersion: DIAGNOSTIC_PAGE_VERSION })
+        subject: chosenSubject, level, pageVersion: DIAGNOSTIC_PAGE_VERSION, ...(referralCode ? { referralCode } : {}) })
     });
     status = res.status;
     answer = await res.json().catch(() => null);

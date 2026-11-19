@@ -92,7 +92,9 @@ export async function runAutopilot({ db, FieldValue, now = Date.now(), dryRun = 
       if (!(inv.total > 0)) return null;
       t.set(ref, Object.assign({}, inv, { linkToken: token, createdAt: ts(), updatedAt: ts(), createdBy: 'autopilot' }));
       t.set(db.collection(COL.links).doc(token), Object.assign(C.publicInvoiceDoc(inv, settings), { updatedAt: ts() }));
-      if (inv.creditUsed > 0) t.update(db.collection(COL.families).doc(fam.id), { credit: C.round2((Number(fSnap.data().credit) || 0) - inv.creditUsed), updatedAt: ts() });
+      // Credit from an overpayment and referral rewards (v1.16.0) are used in the same write.
+      const fu = C.familyUpdateForInvoice(fSnap.data(), inv);
+      if (Object.keys(fu).length) t.update(db.collection(COL.families).doc(fam.id), Object.assign(fu, { updatedAt: ts() }));
       return Object.assign({}, inv, { linkToken: token });
     });
     if (made) created.push(made);

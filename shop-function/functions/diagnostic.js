@@ -152,7 +152,7 @@ function oneLine(value, max, min = 0) {
 
 function validateDiagnostic(body) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) fail();
-  const keys = new Set(['slot', 'date', 'parentName', 'email', 'studentName', 'subject', 'level', 'pageVersion']);
+  const keys = new Set(['slot', 'date', 'parentName', 'email', 'studentName', 'subject', 'level', 'pageVersion', 'referralCode']);
   if (Object.keys(body).some(key => !keys.has(key))) fail();
   const slot = oneLine(body.slot, 8, 1);
   if (!SLOT_ID.test(slot)) fail('unknown-session');
@@ -165,7 +165,13 @@ function validateDiagnostic(body) {
   if (!DIAGNOSTIC_SUBJECTS.includes(body.subject)) fail('invalid-subject');
   if (!DIAGNOSTIC_LEVELS.includes(body.level)) fail('invalid-level');
   return { slot, date, parentName, email, studentName, subject: body.subject, level: body.level,
-    pageVersion: oneLine(body.pageVersion, 20) };
+    pageVersion: oneLine(body.pageVersion, 20), referralCode: referralCode(body.referralCode) };
+}
+// A family's referral code (Polymath Office v1.17.0); anything else is dropped, never refused.
+function referralCode(value) {
+  if (typeof value !== 'string') return '';
+  const code = value.toUpperCase().replace(/^PLC/, '').replace(/[^A-Z0-9]/g, '');
+  return /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}$/.test(code) ? code : '';
 }
 
 // Checks the session against the timetable as it is now. A Master Class that has
@@ -218,7 +224,8 @@ function diagnosticFields(request, slot, code) {
     paymentRef: referenceFor(code),
     receiptURL: '', receiptFilename: '',
     status: 'pending',
-    pageVersion: request.pageVersion
+    pageVersion: request.pageVersion,
+    ...(request.referralCode ? { referralCode: request.referralCode } : {})
   };
 }
 

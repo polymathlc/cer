@@ -428,7 +428,7 @@ try {
   await check('the teacher previews the timetable and sees the page version', async () => {
     const { context, page, errors } = await openPage({ admin: true });
     assert.equal(await page.getAttribute('#view-day', 'aria-pressed'), 'true', 'The teacher still starts on the editing view.');
-    assert.equal(await page.textContent('#page-version'), 'Schedule page v1.7.0');
+    assert.equal(await page.textContent('#page-version'), 'Schedule page v1.8.0');
     assert.ok(await page.isVisible('#page-version'));
     await page.click('#view-week');
     assert.match(await page.textContent('#schedule-grid'), /This is the weekly timetable parents see/);
@@ -659,6 +659,67 @@ try {
     assert.equal(wrote, null, 'Nothing was staged for saving.');
     assert.match(await page.textContent('body'), /has not loaded yet, so nothing was saved/);
     await context.close();
+  });
+
+  // ─── A family's referral link (Polymath Office v1.16.0) ───
+  await check('a referral link: the invitation, the code filled in, and kept on a PayNow booking and its emails', async () => {
+    const { context, page, errors } = await openPage({ query: '?ref=k7m2qx' });
+    assert.ok(await page.isVisible('#ref-banner'));
+    assert.match(await page.textContent('#ref-banner'), /A Polymath family invited you\..*K7M2QX/);
+    await shot(page, 'referral-banner-desktop');
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('polymath-referral')).code), 'K7M2QX', 'Kept for a later visit.');
+    await page.click('#view-week');
+    await page.click('.tt-class[data-slot="MON-1"]');
+    await page.click('#tt-m-body .tt-m-actions .btn:not(.enrol)');
+    assert.equal(await page.inputValue('#b-ref'), 'K7M2QX');
+    await page.fill('#b-parent', 'Lim Wei Jie');
+    await page.fill('#b-child', 'Chloe');
+    await page.selectOption('#b-level', 'Primary 5');
+    await page.fill('#b-email', 'lim@example.com');
+    await page.fill('#b-wa', '9123 4567');
+    await page.click('#pay-paynow');
+    await page.setInputFiles('#b-file', { name: 'paynow.png', mimeType: 'image/png', buffer: PNG });
+    await shot(page, 'referral-booking-form');
+    await page.click('#booking-submit');
+    await page.waitForSelector('#booking-success:not(.hidden)');
+    const store = await page.evaluate(() => window.__store);
+    assert.equal(store.bookings.length, 1);
+    assert.equal(store.bookings[0].referralCode, 'K7M2QX');
+    for (const m of store.mail) assert.match(m.message.text, /Referral code: K7M2QX \(from a Polymath family\)/);
+    assert.deepEqual(errors, []);
+    await context.close();
+  });
+
+  await check('a referral code typed by the parent goes to the card checkout; a mistyped one is left out', async () => {
+    const { context, page, errors, apiCalls } = await openPage({ api: {
+      createScheduleCheckout: () => ({ status: 201, json: { ok: true, code: 'ABC234', total: 30, url: 'https://checkout.stripe.com/c/pay/cs_test_abc' } })
+    } });
+    assert.equal(await page.isVisible('#ref-banner'), false, 'No invitation without a link.');
+    await page.click('#view-week');
+    await page.click('.tt-class[data-slot="MON-1"]');
+    await page.click('#tt-m-body .tt-m-actions .btn:not(.enrol)');
+    assert.equal(await page.inputValue('#b-ref'), '');
+    await page.fill('#b-parent', 'Lim Wei Jie');
+    await page.fill('#b-child', 'Chloe');
+    await page.selectOption('#b-level', 'Primary 5');
+    await page.fill('#b-email', 'lim@example.com');
+    await page.fill('#b-wa', '9123 4567');
+    await page.fill('#b-ref', 'plc k7m2qx');
+    await Promise.all([page.waitForURL(/checkout\.stripe\.com/), page.click('#booking-submit')]);
+    assert.equal(apiCalls[0].body.referralCode, 'K7M2QX');
+    assert.deepEqual(errors, []);
+    await context.close();
+    const again = await openPage({ api: {
+      createScheduleCheckout: () => ({ status: 201, json: { ok: true, code: 'ABC235', total: 30, url: 'https://checkout.stripe.com/c/pay/cs_test_def' } })
+    } });
+    await again.page.click('#view-week');
+    await again.page.click('.tt-class[data-slot="MON-1"]');
+    await again.page.click('#tt-m-body .tt-m-actions .btn:not(.enrol)');
+    for (const [sel, v] of [['#b-parent', 'A'], ['#b-child', 'B'], ['#b-email', 'a@example.com'], ['#b-wa', '9123 4567'], ['#b-ref', 'oops']]) await again.page.fill(sel, v);
+    await again.page.selectOption('#b-level', 'Primary 5');
+    await Promise.all([again.page.waitForURL(/checkout\.stripe\.com/), again.page.click('#booking-submit')]);
+    assert.equal('referralCode' in again.apiCalls[0].body, false);
+    await again.context.close();
   });
 
   // ─── Phones ───
