@@ -378,6 +378,74 @@ function emailSheetLinks(booking, materials, now) {
   return { until, current: link(materials && materials.current), next: link(materials && materials.next) };
 }
 const bookingPageUrl = access => TRIAL_URL + '#b=' + access;
+
+// ─── 🎟 The trial's own live-lesson link (trial page v1.5.0, 20 Nov 2026, Zhi Kai) ───
+// Every booking (and every class-link visit) has ONE link into the live lesson
+// in Ans Key, for its own lesson:  polymathlc.com.sg/live/?trial=<CODE>.<mac>.
+// The page there waits for the lesson and then opens
+// polymathlc.github.io/anskey/?live&trial=<CODE>.<mac>, where the live class
+// server (polymathlc/anskey functions/live-class.js) checks the same mac,
+// the lesson day and that the class on now is this booking's class, and lets
+// the child in as a Trial student named from the booking. The parent is told
+// to use it first; the Zoom link stays as the backup.
+// The mac is an HMAC of the booking code keyed with the booking's own secret
+// (linkKey; 'legacy:' + viewToken for the oldest bookings), so the link opens
+// the lesson and nothing else: not the trial page and not the worksheets.
+// anskey's trialLiveMac must give the same answer (both test one fixed example).
+// "One use" is one LESSON: a refresh or another device still works during it.
+const LIVE_PAGE_URL = 'https://polymathlc.com.sg/live/';
+const ANSKEY_LIVE_URL = 'https://polymathlc.github.io/anskey/?live';
+const TRIAL_LIVE_INFO = 'live-lesson-v1|';
+const LIVE_PATTERN = /^([A-Z2-9]{6})\.([A-Za-z0-9_-]{16})$/;
+// The /live page forwards to the lesson this early, and calls a lesson over
+// this long after it starts (lessons are 1h45; a lesson may run over).
+const LIVE_EARLY_MS = 15 * 60000;
+const LIVE_LATE_MS = 3 * HOUR;
+function trialLiveMac(booking, code) {
+  const b = booking && typeof booking === 'object' ? booking : {};
+  const key = typeof b.linkKey === 'string' && b.linkKey ? b.linkKey : 'legacy:' + String(b.viewToken || '');
+  return createHmac('sha256', key).update(TRIAL_LIVE_INFO + String(code || '')).digest('base64url').slice(0, 16);
+}
+function trialLiveCode(booking) {
+  const code = String(booking && booking.code || '');
+  return /^[A-Z2-9]{6}$/.test(code) && (booking.linkKey || booking.viewToken) ? code + '.' + trialLiveMac(booking, code) : '';
+}
+function parseLive(value) {
+  const match = LIVE_PATTERN.exec(typeof value === 'string' ? value.trim() : '');
+  return match ? { code: match[1], mac: match[2] } : null;
+}
+const liveLessonUrl = booking => { const c = trialLiveCode(booking); return c ? LIVE_PAGE_URL + '?trial=' + c : ''; };
+const anskeyTrialUrl = live => ANSKEY_LIVE_URL + '&trial=' + live;
+// The lesson a live link is for, as seen at `now`: when it starts, when the
+// /live page forwards to it, when it is over, and which of those it is.
+// A booking has its one date; a class-link visit has the next lesson of its
+// class (today's while it lasts) before the class link ends.
+function liveWindow(booking, link, now) {
+  const b = booking || {};
+  const out = { state: 'ended', startsAtMs: 0, opensAtMs: 0, closesAtMs: 0, sessionLabel: b.sessionLabel || slotLabel(b.slot) };
+  if (b.status === 'cancelled') return Object.assign(out, { state: 'cancelled' });
+  const at = start => Object.assign(out, { startsAtMs: start, opensAtMs: start - LIVE_EARLY_MS, closesAtMs: start + LIVE_LATE_MS,
+    state: now < start - LIVE_EARLY_MS ? 'early' : now <= start + LIVE_LATE_MS ? 'open' : 'ended' });
+  if (b.kind === 'link') {
+    if (!link || link.revoked) return out;
+    const until = Math.min(num(link.expiresAtMs, 0), num(b.accessUntilMs, Infinity));
+    if (!(now < until) || !SLOT_ID.test(b.slot || '')) return out;
+    const today = sgDayKey(now);
+    for (let i = 0; i <= LINK_DAYS + 1; i++) {
+      const day = addDays(today, i);
+      if (weekdayOfKey(day) !== WEEKDAY_OF_CODE[b.slot.split('-')[0]] || isPublicHoliday(day)) continue;
+      const start = lessonStart(day, b.slot);
+      if (!Number.isFinite(start) || now > start + LIVE_LATE_MS) continue;
+      if (start - LIVE_EARLY_MS >= until) break;
+      at(start);
+      out.sessionLabel = sessionLabel(b.slot, day);
+      return out;
+    }
+    return out;
+  }
+  const start = num(b.lessonStartMs, lessonStart(b.lessonDate, b.slot));
+  return Number.isFinite(start) ? at(start) : out;
+}
 const linkPageUrl = token => TRIAL_URL + '#l=' + token;
 
 // ─── Validation ───
@@ -506,7 +574,7 @@ function publicBooking(booking, extras) {
   const linkUntil = Math.min(num(extras.now, Date.now()) + PAGE_LINK_MS, accessUntil);
   const sheet = info => info ? Object.assign({}, info, { url: info.available ? materialUrl(booking, info.id, linkUntil) : '' }) : null;
   return {
-    code: booking.code, kind: booking.kind, access, pageUrl: bookingPageUrl(access),
+    code: booking.code, kind: booking.kind, access, pageUrl: bookingPageUrl(access), liveUrl: liveLessonUrl(booking),
     slot: booking.slot, date: booking.lessonDate || '', sessionLabel: booking.sessionLabel || slotLabel(booking.slot),
     time: slotTime(booking.slot), level: booking.classLevel, subject: booking.classSubject,
     className: (levelName(booking.classLevel) + ' ' + subjectName(booking.classSubject)).trim(),
@@ -532,6 +600,23 @@ const rowsText = rows => rows.map(([k, v]) => k + ': ' + v).join('\n');
 const linkHtml = (url, label) => '<a href="' + escapeHtml(url) + '" style="color:#056c76;font-weight:700">' + escapeHtml(label || url) + '</a>';
 function sheetLine(info) { return info ? info.name + (info.pages ? ' (' + info.pages + ' pages)' : '') : ''; }
 
+const LIVE_ROW_NOTE = 'Opens the lesson in the browser at the lesson time. Use Zoom only if it does not work.';
+// The words that tell the parent which link to use (the live link first, Zoom as the backup).
+function liveFirstLine(booking, zoom) {
+  const live = liveLessonUrl(booking);
+  if (!live) return null;
+  const zoomWords = zoom && zoom.url ? ' If it does not work, join on Zoom instead (the backup): ' : ' If it does not work, use the Zoom link (the backup).';
+  return {
+    text: 'Please join with the live lesson link first, a few minutes early: ' + live + ' It opens the lesson in the browser (phone, tablet or computer) '
+      + 'with the worksheet and questions on screen, and lets ' + (booking.studentName || 'your child') + ' in when the lesson starts.'
+      + zoomWords + (zoom && zoom.url ? zoom.url + (zoom.note ? ' (' + zoom.note + ')' : '') : ''),
+    html: '<b>Please join with the live lesson link first</b>, a few minutes early: ' + linkHtml(live, 'Join the live lesson')
+      + '. It opens the lesson in the browser (phone, tablet or computer) with the worksheet and questions on screen, and lets '
+      + escapeHtml(booking.studentName || 'your child') + ' in when the lesson starts.' + escapeHtml(zoomWords)
+      + (zoom && zoom.url ? linkHtml(zoom.url) + (zoom.note ? ' (' + escapeHtml(zoom.note) + ')' : '') : '')
+  };
+}
+
 function lessonRows(booking, zoom, materials, links) {
   const rows = [
     ['Booking code', booking.code],
@@ -542,8 +627,12 @@ function lessonRows(booking, zoom, materials, links) {
   if (booking.parentName) rows.push(['Parent', booking.parentName]);
   rows.push(['Email', booking.email]);
   if (booking.whatsapp) rows.push(['WhatsApp', booking.whatsapp]);
-  rows.push(zoom && zoom.url ? ['Zoom link', zoom.url, linkHtml(zoom.url) + (zoom.note ? '<br>' + escapeHtml(zoom.note) : '')]
-    : ['Zoom link', 'We will send it before the lesson']);
+  const live = liveLessonUrl(booking);
+  if (live) rows.push(['Live lesson link (use this first)', live + '\n' + LIVE_ROW_NOTE,
+    linkHtml(live, 'Join the live lesson') + '<br><span style="color:#5C5C5C;font-size:13px">' + escapeHtml(LIVE_ROW_NOTE) + '</span>']);
+  const zoomLabel = live ? 'Zoom link (backup)' : 'Zoom link';
+  rows.push(zoom && zoom.url ? [zoomLabel, zoom.url, linkHtml(zoom.url) + (zoom.note ? '<br>' + escapeHtml(zoom.note) : '')]
+    : [zoomLabel, 'We will send it before the lesson']);
   const sheetRow = (label, info, url) => {
     if (!info) return;
     if (!url) return rows.push([label, sheetLine(info)]);
@@ -579,14 +668,15 @@ function parentConfirmationMail(booking, zoom, materials, now) {
     + 'The worksheet download links work for one week. The worksheets follow the class, so the reminder we email the afternoon before the lesson '
     + 'brings the latest worksheets with fresh links, and your trial page always has them too.';
   const page = bookingPageUrl(access);
+  const first = liveFirstLine(booking, zoom);
   return {
     to: [booking.email],
     from: FROM, replyTo: SENDER_EMAIL,
     message: {
       subject: 'Trial lesson booked: ' + booking.sessionLabel,
-      html: parentShell([escapeHtml(greeting), escapeHtml(lead), escapeHtml(what)], rows, { url: page, label: 'Open your trial page' }),
-      text: [greeting, '', lead, '', what, '', 'Your trial page: ' + page, '', rowsText(rows), '',
-        'Need a different time? Reply to this email or WhatsApp us at ' + WHATSAPP_DISPLAY + '.', '', 'Thank you,', SENDER_NAME].join('\n')
+      html: parentShell([escapeHtml(greeting), escapeHtml(lead)].concat(first ? [first.html] : [], [escapeHtml(what)]), rows, { url: page, label: 'Open your trial page' }),
+      text: [greeting, '', lead, ''].concat(first ? [first.text, ''] : [], [what, '', 'Your trial page: ' + page, '', rowsText(rows), '',
+        'Need a different time? Reply to this email or WhatsApp us at ' + WHATSAPP_DISPLAY + '.', '', 'Thank you,', SENDER_NAME]).join('\n')
     },
     polymathTrial: { code: booking.code, kind: 'trial-parent' }
   };
@@ -604,15 +694,16 @@ function reminderMail(booking, zoom, materials, now) {
     ? 'Please have the worksheets ready (printed, or open on a tablet). Their download links are below and work for one week.'
     : 'Your trial page has everything for the lesson.';
   const page = bookingPageUrl(access);
+  const first = liveFirstLine(booking, zoom);
   return {
     to: [booking.email],
     from: FROM, replyTo: SENDER_EMAIL,
     message: {
       subject: 'Reminder: trial lesson tomorrow at ' + slotStart(booking.slot) + ' (' + fmtDayKey(booking.lessonDate) + ')',
       html: parentShell([escapeHtml(greeting), escapeHtml(lead),
-        zoom && zoom.url ? 'Join on Zoom a few minutes early: ' + linkHtml(zoom.url) + (zoom.note ? ' (' + escapeHtml(zoom.note) + ')' : '') : escapeHtml(join),
+        first ? first.html : zoom && zoom.url ? 'Join on Zoom a few minutes early: ' + linkHtml(zoom.url) + (zoom.note ? ' (' + escapeHtml(zoom.note) + ')' : '') : escapeHtml(join),
         escapeHtml(prepare)], rows, { url: page, label: 'Open your trial page and worksheets' }),
-      text: [greeting, '', lead, '', join + (zoom && zoom.note ? ' (' + zoom.note + ')' : ''), '', prepare, 'Your trial page: ' + page, '',
+      text: [greeting, '', lead, '', first ? first.text : join + (zoom && zoom.note ? ' (' + zoom.note + ')' : ''), '', prepare, 'Your trial page: ' + page, '',
         rowsText(rows), '', 'Need a different time? Reply to this email or WhatsApp us at ' + WHATSAPP_DISPLAY + '.', '', 'Thank you,', SENDER_NAME].join('\n')
     },
     polymathTrial: { code: booking.code, kind: 'trial-reminder' }
@@ -634,15 +725,16 @@ function materialsMail(booking, zoom, materials, now, { resend = false } = {}) {
   const join = zoom && zoom.url ? 'Join on Zoom: ' + zoom.url + (zoom.note ? ' (' + zoom.note + ')' : '') : 'We will send the Zoom link before the lesson.';
   const until = 'The worksheet download links work for one week, until ' + fmtMoment(links.until) + '.';
   const page = bookingPageUrl(access);
+  const first = liveFirstLine(booking, zoom);
   return {
     to: [booking.email],
     from: FROM, replyTo: SENDER_EMAIL,
     message: {
       subject: 'Zoom link and worksheets: Polymath ' + name + ' class' + (booking.lessonDate ? ' (' + fmtDayKey(booking.lessonDate) + ')' : ''),
       html: parentShell([escapeHtml(greeting), escapeHtml(lead),
-        zoom && zoom.url ? 'Join on Zoom: ' + linkHtml(zoom.url) + (zoom.note ? ' (' + escapeHtml(zoom.note) + ')' : '') : escapeHtml(join),
+        first ? first.html : zoom && zoom.url ? 'Join on Zoom: ' + linkHtml(zoom.url) + (zoom.note ? ' (' + escapeHtml(zoom.note) + ')' : '') : escapeHtml(join),
         escapeHtml(until)], rows, { url: page, label: 'Open the class page' }),
-      text: [greeting, '', lead, '', join, '', until, 'Class page: ' + page, '', rowsText(rows), '',
+      text: [greeting, '', lead, '', first ? first.text : join, '', until, 'Class page: ' + page, '', rowsText(rows), '',
         'Questions? Reply to this email or WhatsApp us at ' + WHATSAPP_DISPLAY + '.', '', 'Thank you,', SENDER_NAME].join('\n')
     },
     polymathTrial: { code: booking.code, kind: resend ? 'trial-materials-resend' : 'trial-materials' }
@@ -709,6 +801,8 @@ function adminBooking(b) {
     'studentName', 'email', 'whatsapp', 'status', 'createdAtMs', 'reminderSentAtMs', 'reminderSentTo', 'confirmationSentTo',
     'linkToken', 'linkLabel', 'accessCode', 'via', 'materialsSentAtMs', 'materialsSentTo', 'opens', 'lastOpenedAtMs', 'accessUntilMs', 'pageVersion']) if (b[key] !== undefined) out[key] = b[key];
   if (b.viewToken) out.pageUrl = bookingPageUrl(accessFor(b));
+  const live = liveLessonUrl(b);
+  if (live) out.liveUrl = live;
   return out;
 }
 
@@ -819,6 +913,25 @@ function createTrialService({ store, http, hashIp, verifyIdToken = async () => {
         const extras = await extrasFor(booking.slot);
         if (link) extras.accessUntilMs = Math.min(num(link.expiresAtMs, 0), num(booking.accessUntilMs, Infinity));
         return res.status(200).json({ ok: true, booking: publicBooking(booking, extras) });
+      }
+      // 🎟 The /live page: whose live link this is, and when its lesson is.
+      // It shows only what that page needs (no email, no page access key).
+      if (action === 'live') {
+        checkKeys(body, ['action', 'live']);
+        const parsed = parseLive(body.live);
+        const booking = parsed ? await store.getBooking(parsed.code) : null;
+        if (!booking || !samePassword(trialLiveMac(Object.assign({}, booking, { code: parsed.code }), parsed.code), parsed.mac))
+          throw new ShopError(404, 'live-link-unknown');
+        const link = booking.kind === 'link' ? await store.getLink(booking.linkToken) : null;
+        const win = liveWindow(booking, link, at);
+        const { zoom } = await extrasFor(booking.slot);
+        const live = parsed.code + '.' + parsed.mac;
+        return res.status(200).json({ ok: true, live: {
+          code: parsed.code, kind: booking.kind, state: win.state, now: at,
+          startsAtMs: win.startsAtMs, opensAtMs: win.opensAtMs, closesAtMs: win.closesAtMs,
+          sessionLabel: win.sessionLabel, slot: booking.slot, time: slotTime(booking.slot),
+          studentName: booking.studentName || '', className: (levelName(booking.classLevel) + ' ' + subjectName(booking.classSubject)).trim(),
+          joinUrl: win.state === 'cancelled' ? '' : anskeyTrialUrl(live), zoomUrl: zoom.url || '', zoomNote: zoom.note || '' } });
       }
       if (action === 'linkInfo') {
         checkKeys(body, ['action', 'link']);
@@ -1084,6 +1197,7 @@ module.exports = {
   TRIAL_URL, MATERIAL_ENDPOINT, TRIAL_HORIZON_DAYS, LINK_DAYS, BOOKING_ACCESS_DAYS_AFTER, LIMITS, STATUSES, SG_PUBLIC_HOLIDAYS, MAIL_PREFIX,
   sgDayKey, validDayKey, addDays, fmtDayKey, fmtMoment, slotTime, slotStart, sessionLabel, bookingWindow, trialSlot, trialSlotIds, trialSessions,
   lessonStart, ansKeyAt, currentAndNext, courseForSlot, courseTitle, materialsFor, readSettings, zoomFor,
+  LIVE_PAGE_URL, ANSKEY_LIVE_URL, LIVE_EARLY_MS, LIVE_LATE_MS, trialLiveMac, trialLiveCode, parseLive, liveLessonUrl, anskeyTrialUrl, liveWindow, liveFirstLine,
   normalPassword, hashPassword, passwordMatches, newPasswordFields, randomToken, accessFor, parseAccess, materialUrl, bookingPageUrl, linkPageUrl,
   validateBook, validateLinkOpen, checkSession, cleanWhatsapp, bookingRecord, linkVisitRecord, accessOpen, linkState, publicBooking,
   parentConfirmationMail, reminderMail, adminBookingMail, materialsMail, emailSheetLinks, materialSignature, MAIL_LINK_DAYS, dueReminders, mailIdFor, adminSlotRows, publicLink, adminBooking, trialAdminFrom,

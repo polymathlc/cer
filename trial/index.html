@@ -152,6 +152,17 @@
   .zoom-box .txt { flex:1; min-width:200px; font-size:14px; }
   .zoom-box .txt b { display:block; font-size:15px; }
   .zoom-box .url { word-break:break-all; color:var(--gray-600); font-size:12px; }
+  /* 🎟 The live lesson link (v1.5.0, Zhi Kai 20 Nov 2026): the trial's own link into the live lesson,
+     ABOVE the Zoom link and marked "use this first"; Zoom is labelled the backup. */
+  .live-box { margin-top:18px; border:2px solid #f3b8b2; background:linear-gradient(180deg,#fff3f1,#fff); border-radius:12px; padding:16px; display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
+  .live-box .icon { width:44px; height:44px; border-radius:12px; background:#e0483e; color:#fff; display:flex; align-items:center; justify-content:center; font-size:22px; flex:0 0 auto; }
+  .live-box .txt { flex:1; min-width:200px; font-size:14px; }
+  .live-box .txt b { display:block; font-size:15px; }
+  .live-box .first { display:inline-block; background:#e0483e; color:#fff; border-radius:999px; padding:2px 9px; font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; margin-bottom:4px; }
+  .live-box .url { word-break:break-all; color:var(--gray-600); font-size:12px; }
+  .btn.live { background:#e0483e; border-color:#e0483e; }
+  .btn.live:hover { background:#c73b32; }
+  .zoom-box .backup { display:inline-block; background:#eef4ff; color:var(--zoom); border-radius:999px; padding:2px 9px; font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; margin-bottom:4px; }
   .sheets { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px; }
   .sheet { border:1px solid var(--line); border-radius:12px; padding:16px; background:#fff; display:flex; flex-direction:column; gap:8px; position:relative; }
   .sheet .kind { font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--plum); }
@@ -485,6 +496,7 @@
             <div class="sub" id="lesson-sub"></div>
           </div>
         </div>
+        <div class="live-box hidden" id="live-box"></div>
         <div class="zoom-box" id="zoom-box"></div>
         <div class="row-actions" id="lesson-actions"></div>
       </div>
@@ -536,7 +548,7 @@
 
 // Shown to the signed-in admin in the footer, so a deploy can be checked.
 // Bump it on every change to this page.
-const TRIAL_PAGE_VERSION = 'v1.4.0';
+const TRIAL_PAGE_VERSION = 'v1.5.0';
 // 🎥 The Join Zoom button at the top (v1.2.0). A lesson with its own Zoom link (admin, Classes & Zoom)
 // uses that one; otherwise this, the centre's class Zoom. Keep equal to CLASS_ZOOM_URL in
 // student/student-account.js (a test checks).
@@ -722,6 +734,10 @@ function errorText(r, fallback) {
 // ═══════════════════════════════════════════════════════════
 const VIEWS = ['gate-view', 'book-view', 'link-view', 'lesson-view'];
 let currentView = '';
+// 🎟 The trial's own live lesson link (v1.5.0), made by the server for this booking only.
+const LIVE_LINK_RE = /^https:\/\/polymathlc\.com\.sg\/live\/\?trial=[A-Z2-9]{6}\.[A-Za-z0-9_-]{16}$/;
+function liveLinkOf(b) { return b && typeof b.liveUrl === 'string' && LIVE_LINK_RE.test(b.liveUrl) ? b.liveUrl : ''; }
+
 // 🎥 Join Zoom at the top: never on the code screen (a visitor without a code sees nothing), shown
 // once the family is in, and always for a signed-in admin. A lesson's own Zoom link wins.
 function setZoomTop() {
@@ -741,7 +757,7 @@ function show(view) {
     'gate-view': ['Online trial lesson · Zoom', 'Join a Polymath class online', "Choose your child's level and a lesson that suits you. You get the Zoom link and the worksheets the class is using, so your child can join straight in."],
     'book-view': ['Online trial lesson · Zoom', 'Book your online trial lesson', 'Lessons follow our weekly class timetable. Pick the one that suits you.'],
     'link-view': ['Your class · Zoom', 'Your Polymath class', 'Everything your child needs for the lesson: the Zoom link and the worksheets.'],
-    'lesson-view': ['Your trial lesson', 'See you on Zoom!', 'The Zoom link and worksheets are below. They follow the class, so check this page again the day before.']
+    'lesson-view': ['Your trial lesson', 'See you in class!', 'Your live lesson link, the Zoom link (the backup) and the worksheets are below. They follow the class, so check this page again the day before.']
   }[view];
   if (heroes) { $('hero-eyebrow').textContent = heroes[0]; $('hero-title').textContent = heroes[1]; $('hero-text').textContent = heroes[2]; }
 }
@@ -1013,8 +1029,17 @@ function showLesson(b, note, justBooked) {
   // v1.2.0: a lesson without its own Zoom link uses the centre's class Zoom (CLASS_ZOOM_URL), the same one
   // as the Join Zoom button at the top, instead of "coming soon".
   const zoomUrl = b.zoomUrl || CLASS_ZOOM_URL;
-  $('zoom-box').innerHTML = '<div class="icon">🎥</div><div class="txt"><b>Join on Zoom</b>' + (b.zoomUrl && b.zoomNote ? escapeHtml(b.zoomNote) + '<br>' : '')
-      + 'Join a few minutes before the lesson starts.<div class="url">' + escapeHtml(zoomUrl) + '</div></div>'
+  // 🎟 v1.5.0: the live lesson link first; Zoom becomes the backup.
+  const live = liveLinkOf(b);
+  $('live-box').classList.toggle('hidden', !live);
+  $('live-box').innerHTML = live ? '<div class="icon">🔴</div><div class="txt"><span class="first">Use this first</span><b>Join the live lesson</b>'
+      + 'Opens the lesson in the browser on a phone, tablet or computer, with the worksheet and questions on screen. '
+      + 'Open it a few minutes early: it lets ' + escapeHtml(b.studentName || 'your child') + ' in when the lesson starts. '
+      + 'This link is only for ' + (dated ? 'this trial lesson' : 'this class') + '.<div class="url">' + escapeHtml(live) + '</div></div>'
+      + '<a class="btn live" href="' + escapeHtml(live) + '" target="_blank" rel="noopener">Join live lesson</a>'
+      + '<button class="btn ghost small" onclick="copyText(liveLinkOf(currentLesson), \'Live lesson link copied\')">Copy link</button>' : '';
+  $('zoom-box').innerHTML = '<div class="icon">🎥</div><div class="txt">' + (live ? '<span class="backup">Backup</span>' : '') + '<b>Join on Zoom</b>' + (b.zoomUrl && b.zoomNote ? escapeHtml(b.zoomNote) + '<br>' : '')
+      + (live ? 'Use Zoom only if the live lesson link does not work.' : 'Join a few minutes before the lesson starts.') + '<div class="url">' + escapeHtml(zoomUrl) + '</div></div>'
       + '<a class="btn zoom" href="' + escapeHtml(zoomUrl) + '" target="_blank" rel="noopener">Open Zoom</a>'
       + '<button class="btn ghost small" onclick="copyText(currentLesson.zoomUrl || CLASS_ZOOM_URL, \'Zoom link copied\')">Copy link</button>';
   setZoomTop();
@@ -1050,7 +1075,7 @@ function downloadIcs() {
   const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Polymath Learning Centre//Trial//EN', 'BEGIN:VEVENT',
     'UID:trial-' + b.code + '@polymathlc.com.sg', 'DTSTAMP:' + stamp(Date.now()), 'DTSTART:' + stamp(start), 'DTEND:' + stamp(end),
     'SUMMARY:' + esc('Polymath trial lesson: ' + b.className), 'LOCATION:' + esc(b.zoomUrl || 'Zoom'),
-    'DESCRIPTION:' + esc((b.zoomUrl ? 'Zoom: ' + b.zoomUrl + '\n' : '') + 'Worksheets: ' + b.pageUrl),
+    'DESCRIPTION:' + esc((liveLinkOf(b) ? 'Live lesson (use this first): ' + liveLinkOf(b) + '\n' : '') + (b.zoomUrl ? 'Zoom' + (liveLinkOf(b) ? ' (backup)' : '') + ': ' + b.zoomUrl + '\n' : '') + 'Worksheets: ' + b.pageUrl),
     'BEGIN:VALARM', 'TRIGGER:-PT30M', 'ACTION:DISPLAY', 'DESCRIPTION:Trial lesson in 30 minutes', 'END:VALARM',
     'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
   const a = document.createElement('a');
@@ -1210,6 +1235,7 @@ function renderBookings() {
         + '<td><span class="badge ' + escapeHtml(status) + '">' + escapeHtml(status) + '</span>' + reminder + '</td>'
         + '<td><div class="acts-cell">'
         + (b.pageUrl ? '<button class="btn small ghost" onclick="copyText(\'' + escapeHtml(b.pageUrl) + '\', \'Their page link copied\')">Page link</button>' : '')
+        + (liveLinkOf(b) ? '<button class="btn small ghost" onclick="copyText(\'' + escapeHtml(liveLinkOf(b)) + '\', \'Their live lesson link copied\')">Live link</button>' : '')
         + (status !== 'cancelled' ? '<button class="btn small ghost" onclick="emailMaterials(\'' + b.code + '\')">Email Zoom + worksheets</button>' : '')
         + (link ? '' : act('attended', 'Attended') + act('no-show', 'No-show') + act('booked', 'Booked') + act('cancelled', 'Cancel')
           + (status !== 'cancelled' ? '<button class="btn small ghost" onclick="sendReminder(\'' + b.code + '\')">' + (b.reminderSentAtMs ? 'Resend' : 'Send') + ' reminder</button>' : ''))

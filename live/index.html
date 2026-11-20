@@ -38,6 +38,17 @@
   PIN — the same checks as before. My Polymath (/student) shows the Live
   button only to approved families, staff and admins, beside Join Zoom.
 
+  🎟 TRIAL LESSONS (v1.1.0, 20 Nov 2026, Zhi Kai): a trial booking on
+  /trial gets ONE live link of its own,  /live/?trial=<BOOKING>.<mac>. The
+  page asks the trial server (trialBooking, action 'live') whose it is and
+  when its lesson is, says "Hi Ava! Your trial lesson…", counts down, and at
+  15 minutes before the lesson opens Ans Key by itself as
+  …/anskey/?live&trial=<BOOKING>.<mac> — named from the booking, no list, no
+  account. Ans Key's live class server checks the same link again (the day,
+  the class) and lets them in as a Trial student. The link is good for that
+  one lesson on any device; after it, the page says it has ended. Zoom is
+  shown as the backup, from the trial's own answer (never written in here).
+
   Lives in polymathlc/cer under live/ and reaches polymathlc.com.sg/live
   through the website sync. Tests: tools/live-page-tests.mjs.
 -->
@@ -176,6 +187,18 @@
   footer { text-align: center; padding: 20px 16px 32px; color: var(--ink-faint); font-size: .8rem; }
   footer a { color: var(--ink-soft); }
   .version { font-variant-numeric: tabular-nums; }
+  /* 🎟 A trial lesson's own link (v1.1.0) */
+  .trial { display: none; margin: 0 auto 18px; max-width: 480px; padding: 14px 16px; border-radius: 14px; background: var(--live-wash); border: 1px solid var(--live); text-align: left; }
+  .trial.is-on { display: block; }
+  .trial-row { display: flex; gap: 10px; align-items: baseline; font-size: .95rem; }
+  .trial-row + .trial-row { margin-top: 6px; }
+  .trial-row .k { color: var(--ink-soft); min-width: 64px; font-size: .85rem; }
+  .trial-row .v { font-weight: 700; }
+  .countdown { margin: 0 0 16px; font-size: 1.05rem; font-weight: 700; color: var(--live-ink); font-variant-numeric: tabular-nums; min-height: 1.4em; }
+  .join.is-wait { background: var(--ink-faint); box-shadow: none; }
+  .chip.zoom { border-color: #c7d7fe; color: #0b5cff; }
+  .backup { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: #eef4ff; color: #0b5cff; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; }
+  .is-hidden { display: none !important; }
 </style>
 </head>
 <body>
@@ -194,10 +217,12 @@
     <h1 id="title">Join your live lesson</h1>
     <p class="lead" id="lead">See and hear your teacher, follow the worksheet, and answer the questions that pop up on your screen — all in one window, on a phone, tablet or computer.</p>
     <p class="who" id="who" aria-live="polite"></p>
+    <div class="trial" id="trialBox" aria-live="polite"></div>
+    <p class="countdown is-hidden" id="countdown" role="timer" aria-live="polite"></p>
     <a class="join" id="joinButton" href="https://polymathlc.github.io/anskey/?live" rel="noopener">
       <span class="dot" aria-hidden="true"></span><span>Join live lesson</span>
     </a>
-    <div class="alt">
+    <div class="alt" id="altRow">
       <a class="chip" id="pinButton" href="https://polymathlc.github.io/anskey/?live&amp;pin" rel="noopener">🔢 I have a PIN</a>
       <a class="chip" href="https://polymathlc.com.sg/student/">🏠 My Polymath (Zoom is there too)</a>
     </div>
@@ -205,7 +230,7 @@
   </section>
 
   <h2>Live or Zoom?</h2>
-  <p class="section-lead">Both get you into the same lesson with the same teacher. Use whichever works for you — <b>Live</b> also keeps track of how you do, so your parent gets a progress report after class.</p>
+  <p class="section-lead" id="compareLead">Both get you into the same lesson with the same teacher. Use whichever works for you — <b>Live</b> also keeps track of how you do, so your parent gets a progress report after class.</p>
   <table class="compare">
     <thead><tr><th scope="col"></th><th scope="col">Live</th><th scope="col">Zoom</th></tr></thead>
     <tbody>
@@ -230,7 +255,7 @@
     <li>Charge your phone, tablet or computer, and sit somewhere quiet.</li>
     <li>Use headphones if you can, so the class does not echo.</li>
     <li>When the browser asks, press <b>Allow</b> for the camera and microphone.</li>
-    <li>Tap <b>Join live lesson</b>, then find your name (or use your own link or PIN) and press <b>Join</b>.</li>
+    <li id="stepJoin">Tap <b>Join live lesson</b>, then find your name (or use your own link or PIN) and press <b>Join</b>.</li>
     <li>Keep the lesson screen open until the class ends — it counts towards your focus.</li>
   </ol>
 
@@ -255,14 +280,14 @@
 
 <footer>
   <span>Polymath Learning Centre · <a href="https://wa.me/6596450588">WhatsApp +65 9645 0588</a></span><br>
-  <span class="version" id="version">v1.0.0</span>
+  <span class="version" id="version">v1.1.0</span>
 </footer>
 
 <script>
 (function () {
   'use strict';
 
-  var VERSION = 'v1.0.0';
+  var VERSION = 'v1.1.0';
   // Ans Key's own address: the students' sign-in lives on this origin.
   var ANSKEY_LIVE = 'https://polymathlc.github.io/anskey/?live';
   // The public mirror the live class writes ({open, slot, startedAt, letIn}). It decides nothing.
@@ -271,6 +296,12 @@
   var NAME_KEY = 'polymath.live.name.v1';
   // The same shape as Ans Key's personal link code (live-class.js PASS_CODE_RE).
   var CODE_RE = /^[A-Za-z0-9-]{1,60}_[A-Za-z0-9-]{1,60}\.\d{1,6}\.[A-Za-z0-9_-]{16}$/;
+  // 🎟 A trial booking's own link (v1.1.0): /live/?trial=<BOOKING>.<mac>.
+  var TRIAL_RE = /^[A-Z2-9]{6}\.[A-Za-z0-9_-]{16}$/;
+  var TRIAL_ENDPOINT = 'https://us-central1-mathgen--app.cloudfunctions.net/trialBooking';
+  // Only these may be opened from the trial server's answer.
+  var JOIN_RE = /^https:\/\/polymathlc\.github\.io\/anskey\/\?live&trial=[A-Z2-9]{6}\.[A-Za-z0-9_-]{16}$/;
+  var ZOOM_RE = /^https:\/\/([a-z0-9-]+\.)*zoom\.(us|com)\/[^\s"'<>]*$/i;
   var DAYS = { MON: 'Monday', TUE: 'Tuesday', WED: 'Wednesday', THU: 'Thursday', FRI: 'Friday', SAT: 'Saturday', SUN: 'Sunday' };
 
   function cleanCode(v) {
@@ -314,7 +345,50 @@
     return m && DAYS[m[1]] ? DAYS[m[1]] + ' lesson' : '';
   }
 
-  var helpers = { VERSION: VERSION, ANSKEY_LIVE: ANSKEY_LIVE, cleanCode: cleanCode, codeFrom: codeFrom, joinUrl: joinUrl, pinUrl: pinUrl, fieldOf: fieldOf, mirrorState: mirrorState, slotWords: slotWords, CODE_KEY: CODE_KEY };
+  function trialFrom(search) {
+    var out = '';
+    String(search || '').replace(/^\?/, '').split('&').forEach(function (part) {
+      var i = part.indexOf('=');
+      if (i < 0 || out || part.slice(0, i) !== 'trial') return;
+      var v = part.slice(i + 1);
+      try { v = decodeURIComponent(v.replace(/\+/g, ' ')).trim(); } catch (e) { v = ''; }
+      out = TRIAL_RE.test(v) ? v : '';
+    });
+    return out;
+  }
+  function safeJoin(url) { return JOIN_RE.test(String(url || '')) ? String(url) : ''; }
+  function safeZoom(url) { return ZOOM_RE.test(String(url || '')) ? String(url) : ''; }
+  // "in 2 days 3 h", "in 1 h 5 min", "in 4 min 10 s" — what the countdown says.
+  function untilWords(ms) {
+    var s = Math.max(0, Math.round(Number(ms) / 1000));
+    var d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
+    if (d) return d + (d === 1 ? ' day ' : ' days ') + h + ' h';
+    if (h) return h + ' h ' + m + ' min';
+    if (m >= 10) return m + ' min';
+    return m + ' min ' + x + ' s';
+  }
+  // Singapore wall time of an instant: "6:45pm".
+  function sgTime(ms) {
+    var d = new Date(Number(ms) + 8 * 3600000);
+    var h = d.getUTCHours(), m = d.getUTCMinutes();
+    return ((h % 12) || 12) + ':' + (m < 10 ? '0' : '') + m + (h < 12 ? 'am' : 'pm');
+  }
+  // What the trial part of the page shows, from the trial server's answer and
+  // the time now (on the server's clock): pure, so the tests can walk it.
+  function trialView(live, nowMs) {
+    var l = live || {};
+    var state = String(l.state || '');
+    var join = safeJoin(l.joinUrl);
+    if (state === 'cancelled') return { mode: 'stop', title: 'This trial lesson was cancelled', text: 'Need another time? WhatsApp us at +65 9645 0588.' };
+    if (state === 'ended' || !join) return { mode: 'stop', title: 'This trial lesson has ended', text: 'This link was for ' + (l.sessionLabel || 'your trial lesson') + '. To book another lesson, WhatsApp us at +65 9645 0588.' };
+    var opens = Number(l.opensAtMs) || 0, starts = Number(l.startsAtMs) || 0, closes = Number(l.closesAtMs) || 0;
+    if (closes && nowMs > closes) return { mode: 'stop', title: 'This trial lesson has ended', text: 'This link was for ' + (l.sessionLabel || 'your trial lesson') + '. To book another lesson, WhatsApp us at +65 9645 0588.' };
+    if (opens && nowMs < opens) return { mode: 'wait', join: join, left: opens - nowMs,
+      text: 'Your lesson starts at ' + sgTime(starts) + ' (Singapore time). This page opens it for you at ' + sgTime(opens) + ' — leave it open, or come back then.' };
+    return { mode: 'go', join: join, text: 'Your lesson is open. Taking you in…' };
+  }
+
+  var helpers = { VERSION: VERSION, trialFrom: trialFrom, safeJoin: safeJoin, safeZoom: safeZoom, untilWords: untilWords, sgTime: sgTime, trialView: trialView, TRIAL_ENDPOINT: TRIAL_ENDPOINT, ANSKEY_LIVE: ANSKEY_LIVE, cleanCode: cleanCode, codeFrom: codeFrom, joinUrl: joinUrl, pinUrl: pinUrl, fieldOf: fieldOf, mirrorState: mirrorState, slotWords: slotWords, CODE_KEY: CODE_KEY };
   window.PolymathLive = { version: VERSION, helpers: helpers };
   if (typeof document === 'undefined' || !document.getElementById) return;
 
@@ -329,6 +403,10 @@
   var statusWords = document.getElementById('statusWords');
   var hint = document.getElementById('hint');
   document.getElementById('version').textContent = VERSION;
+
+  // 🎟 A trial lesson's own link: its own little flow, and nothing is kept.
+  var trialCode = trialFrom(location.search);
+  if (trialCode) { startTrial(trialCode); return; }
 
   // A personal link that arrived here is kept, and taken out of the address bar.
   var arrived = codeFrom(location.search, location.hash);
@@ -361,10 +439,10 @@
     if (st.open) {
       var words = slotWords(st.slot);
       statusWords.textContent = 'Live now' + (words ? ' · ' + words : '');
-      hint.textContent = 'Your class is on. Tap Join live lesson.';
+      if (!trialCode) hint.textContent = 'Your class is on. Tap Join live lesson.';
     } else {
       statusWords.textContent = 'Not live yet';
-      hint.textContent = 'The lesson opens a little before it starts. If you are early, the page waits and lets you in by itself.';
+      if (!trialCode) hint.textContent = 'The lesson opens a little before it starts. If you are early, the page waits and lets you in by itself.';
     }
   }
   function check() {
@@ -376,6 +454,108 @@
   }
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') check(); });
   check();
+
+  function startTrial(code) {
+    var title = document.getElementById('title');
+    var lead = document.getElementById('lead');
+    var box = document.getElementById('trialBox');
+    var count = document.getElementById('countdown');
+    var eyebrow = document.querySelector('.eyebrow');
+    var alt = document.getElementById('altRow');
+    eyebrow.textContent = '🔴 Your trial lesson';
+    title.textContent = 'Your live trial lesson';
+    lead.textContent = 'Checking your lesson…';
+    document.getElementById('compareLead').innerHTML = 'Both get you into the same lesson with the same teacher. <b>Use the live lesson link first</b>: it also keeps track of how you do, so your parent gets a progress report after class. Zoom is the backup.';
+    document.getElementById('stepJoin').innerHTML = 'At the lesson time this page opens the lesson for you. Press <b>Join the class</b> there.';
+    var joinWords = joinButton.querySelector('span:last-child');
+    joinButton.setAttribute('href', '#');
+    joinButton.classList.add('is-wait');
+    clear(alt);
+    var skew = 0, live = null, timer = 0, went = false;
+    function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+    function row(k, v) {
+      var r = document.createElement('div'); r.className = 'trial-row';
+      var a = document.createElement('span'); a.className = 'k'; a.textContent = k;
+      var b = document.createElement('span'); b.className = 'v'; b.textContent = v;
+      r.appendChild(a); r.appendChild(b); return r;
+    }
+    function chip(text, href, cls, extra) {
+      var a = document.createElement('a'); a.className = 'chip' + (cls ? ' ' + cls : '');
+      a.href = href; a.target = '_blank'; a.rel = 'noopener'; a.textContent = text;
+      if (extra) { var s = document.createElement('span'); s.className = 'backup'; s.textContent = extra; a.appendChild(s); }
+      return a;
+    }
+    function backups(l) {
+      clear(alt);
+      var zoom = safeZoom(l && l.zoomUrl);
+      if (zoom) alt.appendChild(chip('🎥 Join on Zoom', zoom, 'zoom', 'backup'));
+      else { var note = document.createElement('span'); note.className = 'chip zoom'; note.textContent = '🎥 Zoom link (backup): in your booking email'; alt.appendChild(note); }
+      alt.appendChild(chip('💬 WhatsApp us', 'https://wa.me/6596450588', ''));
+    }
+    function paint() {
+      clearTimeout(timer);
+      if (!live) return;
+      var v = trialView(live, Date.now() + skew);
+      if (v.mode === 'stop') {
+        title.textContent = v.title;
+        lead.textContent = v.text;
+        joinButton.classList.add('is-hidden');
+        count.classList.add('is-hidden');
+        hint.textContent = '';
+        return;
+      }
+      joinButton.classList.remove('is-hidden');
+      joinButton.setAttribute('href', v.join);
+      lead.textContent = 'Use this live lesson link first: it opens the lesson in your browser, with the worksheet and questions on your screen. Zoom is the backup.';
+      count.classList.remove('is-hidden');
+      if (v.mode === 'wait') {
+        joinButton.classList.add('is-wait');
+        joinWords.textContent = 'Opens at ' + sgTime(live.opensAtMs);
+        count.textContent = 'Opens in ' + untilWords(v.left);
+        hint.textContent = v.text;
+        timer = setTimeout(paint, v.left > 7200000 ? 60000 : 1000);
+        return;
+      }
+      joinButton.classList.remove('is-wait');
+      joinWords.textContent = 'Join live lesson';
+      count.textContent = 'Your lesson is open';
+      hint.textContent = 'Taking you in… If nothing happens, tap Join live lesson.';
+      if (!went) { went = true; setTimeout(function () { location.assign(v.join); }, 1500); }
+    }
+    joinButton.addEventListener('click', function (e) {
+      if (joinButton.classList.contains('is-wait') || joinButton.getAttribute('href') === '#') e.preventDefault();
+    });
+    function load() {
+      if (!window.fetch) { lead.textContent = 'Please update your browser, or use the Zoom link in your email.'; return; }
+      fetch(TRIAL_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'live', live: code }), cache: 'no-store' })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, body: j }; }, function () { return { ok: false, status: r.status, body: null }; }); })
+        .then(function (res) {
+          if (!res.ok || !res.body || !res.body.live) {
+            title.textContent = res.status === 404 ? 'This trial lesson link is not working' : 'We could not check your lesson';
+            lead.textContent = res.status === 404 ? 'Please use the Zoom link in your email, or WhatsApp us at +65 9645 0588.' : 'Check your connection and try again, or use the Zoom link in your email.';
+            joinButton.classList.add('is-hidden');
+            backups(null);
+            return;
+          }
+          live = res.body.live;
+          skew = Number(live.now) ? Number(live.now) - Date.now() : 0;
+          title.textContent = 'Hi ' + (live.studentName || 'there') + '!';
+          clear(box);
+          box.classList.add('is-on');
+          box.appendChild(row('Lesson', (live.className || 'Trial lesson') + ' trial lesson'));
+          box.appendChild(row('When', live.sessionLabel || ''));
+          backups(live);
+          paint();
+        }, function () {
+          title.textContent = 'We could not check your lesson';
+          lead.textContent = 'Check your connection and try again, or use the Zoom link in your email.';
+          backups(null);
+        });
+    }
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && !went) load(); });
+    load();
+    check();
+  }
 })();
 </script>
 </body>
