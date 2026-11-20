@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>/* HTTPS UPGRADE — a page opened over plain http:// on the custom domain moves to https://, but only after a probe proves the secure address answers. If https is broken the page stays put. */(function(){var l=location;if(l.protocol!=='http:'||!/(^|\.)polymathlc\.com\.sg$/i.test(l.hostname))return;try{fetch('https://'+l.host+'/?https-check='+Date.now(),{mode:'no-cors',cache:'no-store'}).then(function(){l.replace('https://'+l.host+l.pathname+l.search+l.hash)},function(){})}catch(e){}})();</script>
+<title>Free Question of the Day | Primary Maths &amp; Science | Polymath Learning Centre</title>
+<!-- ❓ Free Question of the Day (Nov 2026): one Primary Maths and one Science question a day,
+     with the worked answer the next day, on this page and by email (daily or weekly).
+     Questions, sign-ups and the admin list come from the dailyQuestion function
+     (shop-function/functions/daily-question*.js); the emails from tools/daily-question-send.mjs. -->
+<link rel="canonical" href="https://polymathlc.com.sg/question/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Polymath Learning Centre">
+<meta property="og:locale" content="en_SG">
+<meta property="og:title" content="Free Question of the Day | Polymath Learning Centre">
+<meta property="og:description" content="A new Primary Maths and Science question every day, with a step-by-step worked answer the next day. Try today's question, or get it by email for free.">
+<meta property="og:url" content="https://polymathlc.com.sg/question/">
+<meta property="og:image" content="https://polymathlc.com.sg/assets/branding/polymath-learning-centre.png">
+<meta property="og:image:alt" content="Polymath Learning Centre logo">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Free Question of the Day | Polymath Learning Centre">
+<meta name="twitter:description" content="A new Primary Maths and Science question every day, with a step-by-step worked answer the next day.">
+<meta name="twitter:image" content="https://polymathlc.com.sg/assets/branding/polymath-learning-centre.png">
+<meta name="description" content="A new Primary Maths and Science question every day for P3 to P6, with a step-by-step worked answer the next day. Try today's question, or get it by email for free from Polymath Learning Centre in Clementi.">
+<link rel="icon" href="../assets/branding/polymath-learning-centre.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://us-central1-mathgen--app.cloudfunctions.net" crossorigin>
+<!-- Today's questions are asked for at once, before the rest of the page has loaded. -->
+<script>try{if(window.fetch){var __d=(location.search.match(/[?&]d=(\d{4}-\d{2}-\d{2})/)||[])[1];window.__qotdEarly=fetch('https://us-central1-mathgen--app.cloudfunctions.net/dailyQuestion',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(__d?{action:'today',day:__d}:{action:'today'})}).then(function(r){return r.json().then(function(j){return {status:r.status,body:j}})}).catch(function(){return null})}}catch(e){}</script>
+<style>
+  *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+  :root {
+    --white:#fff; --gray-50:#fafafa; --gray-100:#f5f5f5; --gray-200:#e5e5e5; --gray-300:#d4d4d4; --gray-400:#a3a3a3;
+    --gray-500:#737373; --gray-600:#525252; --gray-700:#404040; --gray-900:#171717;
+    --success:#16a34a; --success-bg:#f0fdf4; --success-border:#bbf7d0;
+    --danger:#dc2626; --danger-bg:#fef2f2; --danger-border:#fecaca;
+    --warn:#b45309; --warn-bg:#fffbeb; --warn-border:#fde68a;
+    --ink:#10303a; --teal:#2e9ca6; --deep:#056c76; --aqua:#56c4d0; --pink:#ec008c; --plum:#b51f6b; --paper:#f2f9fa; --line:#d1eaee;
+    --math:#1d4ed8; --math-bg:#eff6ff; --math-border:#bfdbfe; --sci:#15803d; --sci-bg:#f0fdf4; --sci-border:#bbf7d0;
+    --font:'DM Sans',system-ui,sans-serif;
+    --radius:14px; --radius-sm:9px;
+  }
+  html { scroll-behavior:smooth; }
+  body { font-family:var(--font); background:var(--paper); color:var(--ink); line-height:1.6; -webkit-font-smoothing:antialiased; }
+  button, input, select, textarea { font-family:inherit; font-size:15px; }
+  a { color:var(--deep); }
+  .hidden { display:none !important; }
+  .sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+
+  /* ─── Top bar ─── */
+  .topbar { position:sticky; top:0; z-index:50; background:var(--white); box-shadow:0 2px 14px rgba(5,108,118,.08);
+    border-bottom:3px solid transparent; border-image:linear-gradient(90deg,var(--teal),var(--aqua),var(--pink)) 1; }
+  .topbar-inner { max-width:980px; margin:0 auto; padding:0 16px; display:flex; align-items:center; gap:16px; min-height:62px; }
+  .brand { display:flex; align-items:center; gap:10px; text-decoration:none; color:var(--ink); }
+  .brand img { width:52px; height:40px; object-fit:contain; }
+  .brand-name { font-size:14px; line-height:1.25; font-weight:700; }
+  .brand-name span { display:block; font-size:11px; font-weight:400; color:#5e6d6f; letter-spacing:.3px; }
+  .topbar-contact { display:flex; align-items:center; gap:10px; margin-left:auto; }
+  .contact-link { color:var(--deep); font-weight:700; font-size:14px; text-decoration:none; padding:8px 4px; white-space:nowrap; }
+  .contact-link:hover { color:var(--pink); text-decoration:underline; }
+  .wa-btn { display:inline-flex; align-items:center; gap:7px; background:#25d366; color:#fff; border-radius:999px; padding:8px 14px;
+    font-weight:700; font-size:14px; text-decoration:none; white-space:nowrap; box-shadow:0 2px 8px rgba(37,211,102,.28); }
+  .wa-btn:hover { background:#1ebe5b; }
+  .wa-btn svg { width:18px; height:18px; fill:currentColor; flex:0 0 auto; }
+
+  .wrap { max-width:980px; margin:0 auto; padding:24px 16px 80px; }
+
+  /* ─── Status banner (confirm, unsubscribe, manage) ─── */
+  .banner { border-radius:var(--radius); padding:18px 20px; margin-bottom:20px; border:1px solid; display:flex; gap:14px; align-items:flex-start; }
+  .banner .ico { font-size:28px; line-height:1; flex:0 0 auto; }
+  .banner h2 { font-size:18px; margin-bottom:2px; }
+  .banner p { font-size:14px; color:var(--gray-700); }
+  .banner .acts { margin-top:10px; display:flex; flex-wrap:wrap; gap:8px; }
+  .banner.ok { background:var(--success-bg); border-color:var(--success-border); }
+  .banner.ok h2 { color:var(--success); }
+  .banner.info { background:#fff; border-color:var(--line); }
+  .banner.info h2 { color:var(--deep); }
+  .banner.bad { background:var(--danger-bg); border-color:var(--danger-border); }
+  .banner.bad h2 { color:var(--danger); }
+
+  /* ─── Hero ─── */
+  .hero { position:relative; overflow:hidden; color:#fff; border-radius:20px; padding:40px 36px; margin-bottom:22px;
+    background:radial-gradient(circle at 92% 8%,rgba(236,0,140,.38),transparent 46%),linear-gradient(135deg,var(--deep),var(--teal) 60%,var(--aqua));
+    box-shadow:0 14px 34px rgba(5,108,118,.24); }
+  .hero::after { content:"?"; position:absolute; right:26px; bottom:-46px; font-size:230px; font-weight:700; line-height:1; color:rgba(255,255,255,.09); font-family:Georgia,serif; }
+  .hero .eyebrow { display:inline-block; font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; background:rgba(255,255,255,.16);
+    border:1px solid rgba(255,255,255,.3); border-radius:999px; padding:4px 12px; margin-bottom:14px; }
+  .hero h1 { font-size:36px; line-height:1.15; letter-spacing:-.6px; margin-bottom:10px; max-width:640px; position:relative; z-index:1; }
+  .hero h1 em { font-family:Georgia,'Times New Roman',serif; font-weight:400; }
+  .hero p { color:rgba(255,255,255,.92); max-width:600px; font-size:16px; position:relative; z-index:1; }
+  .hero-pills { display:flex; flex-wrap:wrap; gap:10px; margin-top:18px; position:relative; z-index:1; }
+  .pill { display:inline-flex; align-items:center; gap:8px; background:rgba(255,255,255,.14); color:#fff; border:1px solid rgba(255,255,255,.35);
+    font-weight:700; font-size:14px; padding:7px 15px; border-radius:999px; }
+  .hero .cta { position:relative; z-index:1; display:inline-flex; margin-top:22px; background:var(--pink); color:#fff; font-weight:700; font-size:16px;
+    padding:13px 24px; border-radius:12px; text-decoration:none; box-shadow:0 6px 16px rgba(236,0,140,.35); }
+  .hero .cta:hover { background:var(--plum); }
+
+  /* ─── Cards ─── */
+  .card { background:var(--white); border:1px solid var(--line); border-radius:var(--radius); padding:24px; margin-bottom:20px; box-shadow:0 2px 10px rgba(5,108,118,.05); }
+  .card h2 { font-size:20px; color:var(--deep); margin-bottom:6px; letter-spacing:-.2px; }
+  .card .lead { color:var(--gray-600); font-size:14px; margin-bottom:16px; }
+  .card-head { display:flex; justify-content:space-between; align-items:flex-end; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+  .card-head h2 { margin-bottom:0; }
+  .day-label { font-size:13px; color:var(--gray-500); font-weight:600; }
+
+  /* ─── Subject tabs ─── */
+  .tabs { display:inline-flex; background:var(--paper); border:1px solid var(--line); border-radius:999px; padding:4px; gap:4px; }
+  .tab { border:0; background:transparent; color:var(--deep); border-radius:999px; padding:8px 18px; font-weight:700; font-size:14px; cursor:pointer; }
+  .tab.on.math { background:var(--math); color:#fff; }
+  .tab.on.science { background:var(--sci); color:#fff; }
+  .tab:focus-visible { outline:2px solid var(--pink); outline-offset:2px; }
+
+  /* ─── A question ─── */
+  .q { border:1.5px solid var(--line); border-radius:16px; padding:22px; background:linear-gradient(180deg,#fff,#fbfefe); position:relative; }
+  .q.math { border-top:5px solid var(--math); }
+  .q.science { border-top:5px solid var(--sci); }
+  .q-tags { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:12px; }
+  .tag { display:inline-block; font-size:12px; font-weight:700; padding:3px 10px; border-radius:999px; border:1px solid; }
+  .tag.math { background:var(--math-bg); border-color:var(--math-border); color:var(--math); }
+  .tag.science { background:var(--sci-bg); border-color:var(--sci-border); color:var(--sci); }
+  .q-topic { font-size:13px; color:var(--gray-500); }
+  .q-text { font-size:19px; font-weight:600; line-height:1.55; margin-bottom:16px; white-space:pre-line; }
+  .opts { display:grid; gap:10px; }
+  .opt { display:flex; align-items:center; gap:12px; text-align:left; width:100%; border:1.5px solid var(--line); background:#fff; border-radius:12px; padding:12px 14px;
+    cursor:pointer; font-size:16px; color:var(--ink); transition:border-color .12s, box-shadow .12s, transform .12s; }
+  .opt:hover:not(:disabled) { border-color:var(--deep); transform:translateY(-1px); box-shadow:0 4px 12px rgba(5,108,118,.1); }
+  .opt:focus-visible { outline:2px solid var(--pink); outline-offset:2px; }
+  .opt .letter { flex:0 0 auto; width:32px; height:32px; border-radius:50%; background:var(--paper); border:1px solid var(--line); color:var(--deep);
+    font-weight:700; display:flex; align-items:center; justify-content:center; font-size:14px; }
+  .opt:disabled { cursor:default; }
+  .opt.picked { border-color:var(--pink); box-shadow:0 0 0 3px rgba(236,0,140,.12); }
+  .opt.picked .letter { background:var(--pink); border-color:var(--pink); color:#fff; }
+  .opt.right { border-color:var(--success); background:var(--success-bg); }
+  .opt.right .letter { background:var(--success); border-color:var(--success); color:#fff; }
+  .opt.wrong { border-color:var(--danger-border); background:var(--danger-bg); }
+  .opt.wrong .letter { background:var(--danger); border-color:var(--danger); color:#fff; }
+  .locked { margin-top:14px; border-radius:12px; padding:14px 16px; background:#fdf2f8; border:1px solid #fbcfe8; color:var(--plum); font-size:14px; }
+  .locked b { display:block; font-size:15px; margin-bottom:2px; }
+  .locked a { color:var(--plum); font-weight:700; }
+  .verdict { margin-top:14px; border-radius:12px; padding:12px 16px; font-weight:700; font-size:15px; }
+  .verdict.yes { background:var(--success-bg); border:1px solid var(--success-border); color:var(--success); }
+  .verdict.no { background:var(--danger-bg); border:1px solid var(--danger-border); color:var(--danger); }
+  .verdict.none { background:var(--paper); border:1px solid var(--line); color:var(--deep); }
+  .working { margin-top:14px; background:var(--paper); border-radius:12px; padding:16px 18px; }
+  .working h4 { font-size:14px; color:var(--deep); margin-bottom:8px; text-transform:uppercase; letter-spacing:.08em; }
+  .working ol { padding-left:20px; font-size:15px; }
+  .working li { margin-bottom:6px; }
+  .idea { margin-top:10px; padding:10px 14px; border-left:4px solid var(--pink); background:#fff; border-radius:0 10px 10px 0; font-size:14px; color:var(--plum); }
+  .idea b { color:var(--plum); }
+  .reveal-btn { margin-top:12px; }
+  .two-col { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+
+  /* ─── Archive ─── */
+  details.past { border:1px solid var(--line); border-radius:12px; margin-bottom:10px; background:#fff; overflow:hidden; }
+  details.past > summary { cursor:pointer; padding:12px 16px; font-weight:700; display:flex; align-items:center; gap:10px; list-style:none; flex-wrap:wrap; }
+  details.past > summary::-webkit-details-marker { display:none; }
+  details.past > summary::before { content:"▸"; color:var(--deep); transition:transform .15s; }
+  details.past[open] > summary::before { transform:rotate(90deg); }
+  details.past > summary .muted { font-weight:500; color:var(--gray-500); font-size:13px; }
+  details.past .past-body { padding:0 16px 16px; display:grid; gap:14px; }
+
+  /* ─── Sign-up ─── */
+  .join { border:2px solid var(--pink); position:relative; }
+  .join .ribbon { position:absolute; top:-13px; left:20px; background:var(--pink); color:#fff; font-size:12px; font-weight:700; letter-spacing:.08em;
+    text-transform:uppercase; border-radius:999px; padding:3px 12px; }
+  .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .field { margin-bottom:12px; }
+  .field label, .field .label { display:block; font-size:13px; font-weight:700; color:var(--gray-700); margin-bottom:5px; }
+  .field input, .field select { width:100%; padding:11px 12px; border:1px solid var(--gray-300); border-radius:var(--radius-sm); background:var(--white); color:var(--gray-900); }
+  .field input:focus, .field select:focus { outline:none; border-color:var(--deep); box-shadow:0 0 0 3px rgba(5,108,118,.12); }
+  .field .hint { font-size:12px; color:var(--gray-500); margin-top:4px; }
+  .req { color:var(--danger); }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; }
+  .chip { border:1px solid var(--gray-300); background:#fff; color:var(--ink); border-radius:999px; padding:9px 16px; cursor:pointer; font-weight:600; font-size:14px; }
+  .chip:hover { border-color:var(--deep); }
+  .chip.on { background:var(--deep); border-color:var(--deep); color:#fff; }
+  .chip:focus-visible { outline:2px solid var(--pink); outline-offset:2px; }
+  .consent { display:flex; gap:10px; align-items:flex-start; font-size:13px; color:var(--gray-700); background:var(--paper); border-radius:10px; padding:12px; margin:4px 0 14px; cursor:pointer; }
+  .consent input { width:18px; height:18px; margin-top:2px; accent-color:var(--deep); flex:0 0 auto; }
+  .honey { position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden; }
+  .form-error { color:var(--danger); font-size:14px; font-weight:600; margin:0 0 10px; }
+
+  .btn { display:inline-flex; justify-content:center; align-items:center; gap:6px; background:var(--deep); color:#fff; border:1px solid var(--deep); padding:11px 16px;
+    border-radius:var(--radius-sm); font-weight:700; cursor:pointer; text-decoration:none; font-size:15px; }
+  .btn:hover { background:#04565e; }
+  .btn:disabled { opacity:.55; cursor:not-allowed; }
+  .btn.big { width:100%; padding:15px; font-size:16px; background:var(--pink); border-color:var(--pink); }
+  .btn.big:hover { background:var(--plum); border-color:var(--plum); }
+  .btn.ghost { background:#fff; color:var(--deep); border-color:var(--gray-300); }
+  .btn.ghost:hover { background:var(--gray-100); }
+  .btn.danger { background:#fff; color:var(--danger); border-color:var(--danger-border); }
+  .btn.small { padding:6px 10px; font-size:12px; }
+  .fineprint { font-size:12px; color:var(--gray-500); margin-top:10px; text-align:center; }
+  .success { text-align:center; padding:12px 4px; }
+  .success .tick { width:64px; height:64px; border-radius:50%; background:var(--success-bg); color:var(--success); font-size:34px; display:flex; align-items:center;
+    justify-content:center; margin:0 auto 12px; border:2px solid var(--success-border); }
+  .success h3 { font-size:22px; color:var(--deep); margin-bottom:6px; }
+  .success p { color:var(--gray-700); max-width:520px; margin:0 auto 10px; font-size:15px; }
+
+  /* ─── How it works & CTA ─── */
+  .steps { list-style:none; display:grid; grid-template-columns:repeat(3,1fr); gap:14px; counter-reset:step; }
+  .steps li { counter-increment:step; position:relative; padding:16px 16px 16px 56px; border-radius:12px; background:var(--paper); font-size:14px; }
+  .steps li::before { content:counter(step); position:absolute; left:16px; top:16px; width:28px; height:28px; border-radius:50%; background:var(--deep); color:#fff;
+    font-weight:700; display:flex; align-items:center; justify-content:center; font-size:14px; }
+  .steps b { display:block; color:var(--ink); }
+  .steps span { color:var(--gray-600); font-size:13px; }
+  .cta-card { background:linear-gradient(135deg,var(--deep),var(--teal)); color:#fff; border:none; }
+  .cta-card h2 { color:#fff; }
+  .cta-card p { color:rgba(255,255,255,.92); font-size:15px; margin-bottom:14px; max-width:640px; }
+  .cta-card .row { display:flex; flex-wrap:wrap; gap:10px; }
+  .cta-card .btn { background:var(--pink); border-color:var(--pink); }
+  .cta-card .btn:hover { background:var(--plum); }
+  .cta-card .btn.ghost { background:transparent; color:#fff; border-color:rgba(255,255,255,.6); }
+
+  /* ─── Loading ─── */
+  .state { text-align:center; color:var(--gray-500); padding:28px 12px; font-size:14px; border:1px dashed var(--line); border-radius:12px; }
+  .spin { display:inline-block; width:20px; height:20px; border:3px solid var(--line); border-top-color:var(--deep); border-radius:50%; animation:spin .8s linear infinite;
+    vertical-align:middle; margin-right:8px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .skeleton { height:16px; border-radius:6px; background:linear-gradient(90deg,#eef6f7,#f8fcfc,#eef6f7); background-size:200% 100%; animation:shimmer 1.2s infinite; margin-bottom:10px; }
+  @keyframes shimmer { to { background-position:-200% 0; } }
+
+  /* ─── Admin ─── */
+  .admin-banner { background:var(--warn-bg); border:1px solid var(--warn-border); color:var(--warn); padding:10px 14px; border-radius:var(--radius-sm); font-size:13px; margin-bottom:16px;
+    display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+  .admin-tools { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:12px; }
+  .admin-tools input, .admin-tools select { padding:8px 10px; border:1px solid var(--gray-300); border-radius:8px; font-size:14px; }
+  .admin-tools input[type=search] { min-width:220px; flex:1 1 220px; }
+  .admin-stats { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin-bottom:16px; }
+  .stat { background:var(--paper); border-radius:10px; padding:12px; }
+  .stat b { display:block; font-size:22px; color:var(--deep); }
+  .stat span { font-size:12px; color:var(--gray-600); }
+  .gauge { margin:4px 0 16px; }
+  .gauge .bar { height:10px; border-radius:999px; background:var(--gray-100); overflow:hidden; }
+  .gauge .fill { height:100%; background:linear-gradient(90deg,var(--teal),var(--deep)); }
+  .gauge .fill.warn { background:linear-gradient(90deg,#f59e0b,var(--danger)); }
+  .gauge p { font-size:13px; color:var(--gray-600); margin-top:6px; }
+  .settings-row { display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:12px 14px; border:1px solid var(--line); border-radius:12px; margin-bottom:14px; font-size:14px; }
+  .settings-row input[type=number] { width:96px; padding:8px; border:1px solid var(--gray-300); border-radius:8px; }
+  .sub-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .sub-table th { text-align:left; background:var(--paper); padding:8px 10px; font-size:12px; color:var(--gray-700); position:sticky; top:0; cursor:pointer; white-space:nowrap; }
+  .sub-table td { padding:8px 10px; border-top:1px solid var(--line); vertical-align:top; }
+  .sub-table tr:hover td { background:#fbfefe; }
+  .table-wrap { max-height:560px; overflow:auto; border:1px solid var(--line); border-radius:12px; }
+  .badge { font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px; border:1px solid; white-space:nowrap; }
+  .badge.active { background:var(--success-bg); color:var(--success); border-color:var(--success-border); }
+  .badge.pending { background:var(--warn-bg); color:var(--warn); border-color:var(--warn-border); }
+  .badge.unsubscribed { background:var(--gray-100); color:var(--gray-500); border-color:var(--gray-200); }
+  .upcoming { display:grid; gap:10px; }
+  .upcoming .row { border:1px solid var(--line); border-radius:12px; padding:10px 14px; font-size:13px; }
+  .upcoming .row b { color:var(--deep); }
+  .runs { width:100%; border-collapse:collapse; font-size:13px; }
+  .runs td, .runs th { padding:6px 8px; border-top:1px solid var(--line); text-align:left; }
+
+  .toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(140px); background:var(--deep); color:#fff; padding:12px 18px; border-radius:var(--radius-sm);
+    font-size:14px; transition:transform .25s ease; z-index:200; max-width:92vw; box-shadow:0 8px 20px rgba(0,0,0,.18); }
+  .toast.show { transform:translateX(-50%) translateY(0); }
+  .toast.err { background:var(--danger); }
+  .footer { text-align:center; font-size:12px; color:var(--gray-500); margin-top:32px; padding-top:20px; border-top:1px solid var(--line); }
+  .link-btn { background:none; border:none; color:var(--gray-600); text-decoration:underline; cursor:pointer; font-size:12px; }
+
+  @media (max-width:760px) {
+    .steps, .two-col, .grid-2 { grid-template-columns:1fr; }
+    .admin-stats { grid-template-columns:1fr 1fr 1fr; }
+    .hero { padding:24px 20px; margin-bottom:16px; }
+    .hero h1 { font-size:25px; }
+    .hero p { font-size:14px; }
+    .hero-pills { display:none; }
+    .hero .cta { margin-top:14px; padding:11px 18px; font-size:15px; }
+    .brand-name { display:none; }
+    .card { padding:18px; }
+    .q { padding:16px; }
+    .q-text { font-size:17px; }
+    .opt { font-size:15px; padding:11px 12px; }
+    .card-head { align-items:flex-start; }
+    .sub-table .opt-col { display:none; }
+  }
+  @media (max-width:420px) { .contact-link { display:none; } .admin-stats { grid-template-columns:1fr 1fr; } }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="../"><img src="../assets/branding/polymath-learning-centre.png" alt="Polymath Learning Centre logo"><div class="brand-name">Polymath<span>Learning Centre</span></div></a>
+    <div class="topbar-contact">
+      <a class="contact-link" href="../schedule/">Class schedule</a>
+      <a class="wa-btn" href="https://wa.me/6596450588" target="_blank" rel="noopener" aria-label="WhatsApp us at +65 9645 0588" title="WhatsApp +65 9645 0588">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.47 14.38c-.3-.15-1.75-.86-2.02-.96-.27-.1-.47-.15-.67.15-.2.3-.77.96-.94 1.16-.17.2-.35.22-.64.07-.3-.15-1.25-.46-2.38-1.47-.88-.79-1.47-1.76-1.65-2.06-.17-.3-.02-.46.13-.6.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.03-.52-.07-.15-.67-1.61-.92-2.2-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.79.37-.27.3-1.04 1.02-1.04 2.48s1.07 2.88 1.21 3.08c.15.2 2.1 3.2 5.08 4.49.71.31 1.26.49 1.69.63.71.23 1.36.2 1.87.12.57-.09 1.75-.72 2-1.41.25-.69.25-1.29.17-1.41-.07-.12-.27-.2-.57-.35zM12.04 21.5h-.01a9.46 9.46 0 0 1-4.82-1.32l-.35-.21-3.58.94.96-3.49-.23-.36a9.44 9.44 0 0 1-1.45-5.03c0-5.22 4.25-9.47 9.49-9.47a9.4 9.4 0 0 1 6.7 2.78 9.41 9.41 0 0 1 2.77 6.7c0 5.23-4.25 9.47-9.48 9.47zm8.06-17.53A11.33 11.33 0 0 0 12.04.63C5.76.63.65 5.74.65 12.02c0 2 .52 3.96 1.52 5.69L.55 23.6l6.04-1.58a11.36 11.36 0 0 0 5.44 1.39h.01c6.28 0 11.39-5.11 11.39-11.39 0-3.04-1.18-5.9-3.33-8.05z"/></svg>
+        <span>WhatsApp</span>
+      </a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- Confirm / unsubscribe / manage messages from an emailed link. -->
+  <div id="status"></div>
+
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="eyebrow">Free · Primary Maths &amp; Science</div>
+    <h1 id="hero-title">Question of the Day.<br><em>One question. One idea. Every day.</em></h1>
+    <p>A new PSLE-style question every day, chosen by Mr Chung for P3 to P6. Let your child try it today, and see the step-by-step worked answer tomorrow, here or in your inbox.</p>
+    <div class="hero-pills"><span class="pill">🔢 Maths P4–P6</span><span class="pill">🔬 Science P3–P6</span><span class="pill">✉️ Daily or weekly email</span></div>
+    <a class="cta" href="#join">Get it by email, free</a>
+  </section>
+
+  <section class="card" id="today" aria-labelledby="today-title">
+    <div class="card-head">
+      <div><h2 id="today-title">Today's question</h2><div class="day-label" id="today-day">&nbsp;</div></div>
+      <div class="tabs" role="tablist" aria-label="Subject">
+        <button class="tab math on" role="tab" aria-selected="true" data-subject="math" type="button">🔢 Maths</button>
+        <button class="tab science" role="tab" aria-selected="false" data-subject="science" type="button">🔬 Science</button>
+      </div>
+    </div>
+    <div id="today-body"><div class="skeleton" style="width:40%"></div><div class="skeleton" style="width:90%"></div><div class="skeleton" style="width:75%"></div><div class="skeleton" style="height:48px"></div><div class="skeleton" style="height:48px"></div></div>
+  </section>
+
+  <section class="card hidden" id="yesterday" aria-labelledby="yesterday-title">
+    <div class="card-head">
+      <div><h2 id="yesterday-title">Yesterday's answer</h2><div class="day-label" id="yesterday-day"></div></div>
+      <div class="tabs" role="tablist" aria-label="Subject for yesterday's answer">
+        <button class="tab math on" role="tab" aria-selected="true" data-subject="math" type="button">🔢 Maths</button>
+        <button class="tab science" role="tab" aria-selected="false" data-subject="science" type="button">🔬 Science</button>
+      </div>
+    </div>
+    <div id="yesterday-body"></div>
+  </section>
+
+  <section class="card join" id="join" aria-labelledby="join-title">
+    <span class="ribbon">Free</span>
+    <div id="join-form-wrap">
+      <h2 id="join-title">Get the question in your inbox</h2>
+      <p class="lead">Every morning at about 6 a.m.: today's question, and yesterday's worked answer. Or once a week on Saturday, with the whole week's questions and answers. Unsubscribe with one click, any time.</p>
+      <form id="join-form" novalidate autocomplete="on">
+        <div class="grid-2">
+          <div class="field"><label for="j-email">Your email <span class="req">*</span></label><input id="j-email" type="email" inputmode="email" autocomplete="email" maxlength="120" required placeholder="you@example.com"></div>
+          <div class="field"><label for="j-name">Your name</label><input id="j-name" type="text" autocomplete="name" maxlength="80" placeholder="e.g. Mrs Lim (optional)"></div>
+        </div>
+        <div class="grid-2">
+          <div class="field"><span class="label">Subjects</span>
+            <div class="chips" id="j-subjects" role="group" aria-label="Subjects">
+              <button type="button" class="chip on" data-value="math" aria-pressed="true">🔢 Maths</button>
+              <button type="button" class="chip on" data-value="science" aria-pressed="true">🔬 Science</button>
+            </div>
+          </div>
+          <div class="field"><span class="label">How often</span>
+            <div class="chips" id="j-frequency" role="radiogroup" aria-label="How often">
+              <button type="button" class="chip on" data-value="daily" role="radio" aria-checked="true">Every morning</button>
+              <button type="button" class="chip" data-value="weekly" role="radio" aria-checked="false">Saturdays only</button>
+            </div>
+          </div>
+        </div>
+        <div class="field"><label for="j-level">Your child's level</label>
+          <select id="j-level"><option value="">Choose (optional)</option><option>P1</option><option>P2</option><option>P3</option><option>P4</option><option>P5</option><option>P6</option><option>Secondary</option><option>Other</option></select>
+          <div class="hint">Helps us choose future questions. Every subscriber gets the same daily questions.</div>
+        </div>
+        <div class="honey" aria-hidden="true"><label for="j-website">Leave this empty</label><input id="j-website" type="text" tabindex="-1" autocomplete="off"></div>
+        <label class="consent"><input type="checkbox" id="j-consent"><span id="j-consent-text">I agree to receive the Free Question of the Day and occasional news about Polymath classes by email from Polymath Learning Centre. I can unsubscribe at any time.</span></label>
+        <p class="form-error hidden" id="j-error" role="alert"></p>
+        <button class="btn big" type="submit" id="j-submit">Send me the questions</button>
+        <p class="fineprint">We send one email to confirm your address first. Your details are only used for these emails and are never shared.</p>
+      </form>
+    </div>
+    <div id="join-done" class="success hidden" aria-live="polite">
+      <div class="tick">✉️</div>
+      <h3>Almost done! Check your inbox.</h3>
+      <p>We have sent a confirmation email to <b id="join-done-email"></b>. Click <b>"Yes, send me the questions"</b> in it to start. It can take a minute; check your Promotions or Spam folder if it is not there.</p>
+      <button class="link-btn" type="button" id="join-again">Use a different email</button>
+    </div>
+  </section>
+
+  <section class="card hidden" id="archive" aria-labelledby="archive-title">
+    <h2 id="archive-title">Earlier this week</h2>
+    <p class="lead">Every question from the past week, with its worked answer. Try them before you peek.</p>
+    <div id="archive-body"></div>
+  </section>
+
+  <section class="card" aria-labelledby="how-title">
+    <h2 id="how-title">How it works</h2>
+    <p class="lead">Five minutes a day builds the habit of thinking a question through.</p>
+    <ol class="steps">
+      <li><b>Try today's question</b><span>Your child picks an answer. No sign-in needed.</span></li>
+      <li><b>Come back tomorrow</b><span>See the full working, why the other options are wrong, and the key idea to remember.</span></li>
+      <li><b>Keep the streak going</b><span>A new Maths and Science question every day, from P3 to PSLE.</span></li>
+    </ol>
+  </section>
+
+  <section class="card cta-card" aria-labelledby="cta-title">
+    <h2 id="cta-title">Want to know exactly where your child stands?</h2>
+    <p>Book a free diagnostic test (worth $100) at our Clementi centre. You get a personal report with marks for every topic, a week-by-week study plan and the class we recommend.</p>
+    <div class="row">
+      <a class="btn" href="../diagnostic/">Book a free diagnostic test</a>
+      <a class="btn ghost" href="../schedule/">See classes &amp; book a trial</a>
+    </div>
+  </section>
+
+  <!-- ═══ Admin (polymathlc.com.sg/question/#admin) ═══ -->
+  <section class="card hidden" id="admin-section" aria-labelledby="admin-title">
+    <div class="admin-banner"><span id="admin-who"></span><span><button class="btn small ghost" type="button" id="admin-refresh">Refresh</button> <button class="btn small ghost" type="button" id="admin-out">Sign out</button></span></div>
+    <h2 id="admin-title">Question of the Day subscribers</h2>
+    <p class="lead">Parents who signed up on this page or the home page. Only confirmed ("Active") subscribers get emails. These parents agreed to hear about Polymath classes.</p>
+    <div id="admin-body"><div class="state"><span class="spin"></span>Loading…</div></div>
+  </section>
+
+  <div class="footer">
+    <p>© Polymath Learning Centre · Clementi, Singapore · <a href="../">polymathlc.com.sg</a> · <a href="https://wa.me/6596450588">WhatsApp +65 9645 0588</a></p>
+    <p style="margin-top:6px"><button class="link-btn" type="button" id="admin-login-link">Teacher login</button> <span id="page-version" class="hidden"></span></p>
+  </div>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" defer></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js" defer></script>
+<script src="question-app.js" defer></script>
+</body>
+</html>
