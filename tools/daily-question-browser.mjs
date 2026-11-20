@@ -388,7 +388,7 @@ assert.ok(welcome, 'the welcome email was queued');
   assert.equal(await page.locator('.pv-day').count(), 7);
   assert.match(await page.textContent('.pv-day >> nth=0'), /perimeter/);
   assert.match(await page.textContent('.pv-day >> nth=1'), /area of the rectangle/);
-  await page.click('.pv-day >> nth=1 >> [data-img]');
+  // Pictures load by themselves, with no click.
   await page.waitForSelector('.pv-day >> nth=1 >> .pv-q img');
   const preview = page.locator('.pv-day >> nth=1');
   await preview.scrollIntoViewIfNeeded();
