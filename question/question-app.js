@@ -17,7 +17,7 @@
   'use strict';
 
   var API = 'https://us-central1-mathgen--app.cloudfunctions.net/dailyQuestion';
-  var PAGE_VERSION = 'v2.0.0';
+  var PAGE_VERSION = 'v2.1.0';
   var LEVELS = ['P3', 'P4', 'P5', 'P6'];
   // Keep equal to QOTD_ADMINS in shop-function/functions/daily-question-core.js.
   var ADMINS = ['chungzhikai@gmail.com', 'admin@polymathlc.com.sg', 'support@polymathlc.com.sg'];
@@ -148,6 +148,13 @@
       + '<ol>' + (q.steps || []).map(function (st) { return '<li>' + mathText(st) + '</li>'; }).join('') + '</ol>'
       + '<div class="idea"><b>Key idea:</b> ' + mathText(q.idea) + '</div></div>';
   }
+  // The pictures of a question (pool questions; bank questions have none).
+  function figsHtml(q) {
+    if (!q.images || !q.images.length) return '';
+    return '<div class="q-figs">' + q.images.map(function (img) {
+      return '<img src="' + esc(img.url) + '" alt="' + esc(img.alt) + '" width="' + Math.round(img.w / 2) + '" height="' + Math.round(img.h / 2) + '" loading="lazy" decoding="async">';
+    }).join('') + '</div>';
+  }
   function openHtml(q, mode) {
     var saved = getAnswer(q) || {};
     var busy = state.marking[q.day + '|' + q.subject];
@@ -155,11 +162,7 @@
     html += '<div class="q-tags"><span class="tag ' + q.subject + '">' + esc(q.level + ' ' + q.subjectLabel) + '</span><span class="q-topic">' + esc(q.topic) + '</span></div>';
     html += levelNote(q);
     html += '<p class="q-text">' + mathText(q.q) + '</p>';
-    if (q.images && q.images.length) {
-      html += '<div class="q-figs">' + q.images.map(function (img) {
-        return '<img src="' + esc(img.url) + '" alt="' + esc(img.alt) + '" width="' + Math.round(img.w / 2) + '" height="' + Math.round(img.h / 2) + '" loading="lazy" decoding="async">';
-      }).join('') + '</div>';
-    }
+    html += figsHtml(q);
     var revealed = mode === 'answer' || (mode === 'try' && revealedOnce[q.day + '|' + q.subject]);
     if (!revealed || saved.answer) {
       var key = esc(q.day) + '|' + q.subject;
@@ -193,7 +196,7 @@
     var html = '<div class="q ' + q.subject + '" data-qid="' + esc(q.id) + '">';
     html += '<div class="q-tags"><span class="tag ' + q.subject + '">' + esc(q.level + ' ' + q.subjectLabel) + '</span><span class="q-topic">' + esc(q.topic) + '</span></div>';
     html += levelNote(q);
-    html += '<p class="q-text">' + mathText(q.q) + '</p><div class="opts" role="group" aria-label="Answer options">';
+    html += '<p class="q-text">' + mathText(q.q) + '</p>' + figsHtml(q) + '<div class="opts" role="group" aria-label="Answer options">';
     q.options.forEach(function (option, index) {
       var cls = 'opt';
       if (revealed) {
@@ -217,7 +220,7 @@
       if (pick === null) html += '<div class="verdict none">Answer: ' + LETTERS[q.answer] + '. ' + esc(q.options[q.answer]) + '</div>';
       else if (pick === q.answer) html += '<div class="verdict yes">🎉 You picked ' + LETTERS[pick] + '. That is correct!</div>';
       else html += '<div class="verdict no">You picked ' + LETTERS[pick] + '. The answer is ' + LETTERS[q.answer] + '. ' + esc(q.options[q.answer]) + '</div>';
-      html += '<div class="working"><h4>Worked answer</h4><ol>' + q.steps.map(function (st) { return '<li>' + mathText(st) + '</li>'; }).join('') + '</ol>'
+      html += '<div class="working"><h4>Worked answer</h4>' + (q.model && q.source !== 'bank' ? '<p class="model">' + mathText(q.model) + '</p>' : '') + '<ol>' + q.steps.map(function (st) { return '<li>' + mathText(st) + '</li>'; }).join('') + '</ol>'
         + '<div class="idea"><b>Key idea:</b> ' + mathText(q.idea) + '</div></div>';
     } else if (mode === 'try') {
       html += '<button type="button" class="btn ghost small reveal-btn" data-reveal="' + esc(q.day) + '|' + q.subject + '">Just show me the answer</button>';
@@ -665,16 +668,20 @@
     if (q.check) html += ' · check score ' + q.check.score + '/5';
     html += '</div>';
     html += '<p style="margin:6px 0">' + mathText(q.q) + '</p>';
+    (q.images || []).forEach(function (img) {
+      if (!img.id) return;
+      var cached = state.adminImages[img.id];
+      html += cached ? '<img src="' + cached + '" alt="' + esc(img.alt || '') + '">'
+        : '<button type="button" class="btn small ghost" data-img="' + esc(img.id) + '">Show picture</button> ';
+    });
     if (q.kind === 'mcq') {
       html += '<ol type="A" style="margin:0 0 6px;padding-left:22px">' + q.options.map(function (o, i) {
         return '<li' + (i === q.answer ? ' class="ans"' : '') + '>' + mathText(o) + '</li>';
       }).join('') + '</ol>';
+      if (q.source !== 'bank' && q.steps && q.steps.length) html += '<details><summary>Worked steps</summary><ol>' + q.steps.map(function (st) { return '<li>' + mathText(st) + '</li>'; }).join('') + '</ol>'
+        + (q.idea ? '<p><b>Key idea:</b> ' + mathText(q.idea) + '</p>' : '') + '</details>';
+      if (q.check && q.check.solvedAnswer) html += '<div class="src">The independent check chose: ' + esc(q.check.solvedAnswer) + '</div>';
     } else {
-      (q.images || []).forEach(function (img) {
-        var cached = state.adminImages[img.id];
-        html += cached ? '<img src="' + cached + '" alt="' + esc(img.alt || '') + '">'
-          : '<button type="button" class="btn small ghost" data-img="' + esc(img.id) + '">Show picture</button> ';
-      });
       html += '<p style="margin:6px 0"><span class="ans">Answer:</span> ' + mathText(q.answer || '') + '</p>';
       if (q.model && q.model !== q.answer) html += '<p style="margin:0 0 6px"><span class="ans">Model answer:</span> ' + mathText(q.model) + '</p>';
       if (q.steps && q.steps.length) html += '<details><summary>Worked steps</summary><ol>' + q.steps.map(function (st) { return '<li>' + mathText(st) + '</li>'; }).join('') + '</ol>'
@@ -688,12 +695,13 @@
   function upcomingHtml(a) {
     var html = '<h3 style="margin:22px 0 4px;color:var(--deep)">The next 7 days</h3>'
       + '<p class="fineprint" style="text-align:left;margin:0 0 4px">What a child at each level sees. Questions come from Ans Key worksheets and the CER Science bank, and every one has passed the quality check. '
+      + 'Every third day is a multiple-choice day. Science questions always have a picture. '
       + 'Skip any that look wrong: it is never shown and the next one moves up. When nothing is waiting, the built-in question bank fills the day.</p>';
     html += '<div class="lvl-tabs" role="tablist">' + (a.levels || LEVELS).map(function (l) {
       return '<button type="button" class="lvl' + (l === state.adminLevel ? ' on' : '') + '" data-admin-level="' + l + '" aria-pressed="' + (l === state.adminLevel) + '">' + l + '</button>';
     }).join('') + '</div>';
     html += a.upcoming.map(function (u, i) {
-      var head = (u.today ? 'Today · ' : '') + fmtDayKey(u.day);
+      var head = (u.today ? 'Today · ' : '') + fmtDayKey(u.day) + (u.mcqDay ? ' · multiple-choice day' : '');
       return '<div class="pv-day"><h4>' + esc(head) + '</h4><div class="pv-grid">'
         + ['math', 'science'].map(function (s) {
           var level = state.adminLevel, q = null;

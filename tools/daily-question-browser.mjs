@@ -154,6 +154,11 @@ async function seedPool() {
       keywords: ['steel', 'magnetic material'], steps: ['Only magnetic materials are attracted to magnets.', 'Steel is magnetic; copper and plastic are not.'],
       idea: 'Iron, steel, nickel and cobalt are magnetic materials.', images: [], origin: { label: 'P4 Science worksheet 7', page: 3, number: '2' } }
   ];
+  items.push({ source: 'cer', subject: 'science', level: 'P6', topic: 'Forces', kind: 'mcq',
+    q: 'The diagram shows a block resting on a table. Which force keeps the block from falling through the table?',
+    options: ['Gravitational force', 'Frictional force', 'Elastic spring force', 'The table pushing up on the block'], answerIndex: 4,
+    model: 'The table pushes up on the block, balancing the gravitational force on it.', steps: ['Gravity pulls the block down.', 'The table pushes up on it with an equal force.'],
+    idea: 'Balanced forces keep an object still.', images: [{ alt: 'A block on a table' }], origin: { label: 'CER Science bank', page: 0, number: '' } });
   const queue = core.pool.emptyQueue();
   for (const [n, raw] of items.entries()) {
     const id = core.pool.itemId(raw.source, 'browser-' + n);
@@ -266,6 +271,17 @@ await seedSubscribers();
   if (p3.questions.math) assert.ok(['P3'].includes(p3.questions.math.level), 'never above P3');
   await page.locator('#today').scrollIntoViewIfNeeded();
   await shot(page, 'page-desktop-p3', { clip: await page.locator('#today').boundingBox() });
+  // P6 on a multiple-choice day: the Science question is a picture MCQ.
+  await page.click('#level-pick .lvl[data-level=P6]');
+  await page.click('#today .tab.science');
+  await page.waitForSelector('#today-body .opt');
+  await page.waitForFunction(() => { const img = document.querySelector('#today-body .q-figs img'); return img && img.complete && img.naturalWidth > 0; });
+  assert.equal(await page.locator('#today-body .opt').count(), 4);
+  await page.click('#today-body .opt >> nth=3');
+  await page.waitForSelector('#today-body .locked');
+  await page.locator('#today').scrollIntoViewIfNeeded();
+  await shot(page, 'page-desktop-picture-mcq', { clip: await page.locator('#today').boundingBox() });
+  await page.click('#today .tab.math');
   await page.click('#level-pick .lvl[data-level=P5]');
   await page.waitForSelector('#today-body .answer-box textarea, #today-body .mark');
   // Yesterday's answer, with the working.

@@ -18,13 +18,47 @@
 const {
   ROOT, SUBSCRIBERS, DAYS, RUNS, MAIL_COLLECTION, LIMIT_COLLECTION, QotdError, pickForDay, defaultPick, SUBJECTS, pool
 } = require('./daily-question-core');
-const { POOL, IMAGES, META, QUEUE_DOC, SOURCES_DOC, PREPARE_RUNS, LEVELS, readQueue } = pool;
+const { POOL, IMAGES, META, QUEUE_DOC, SOURCES_DOC, PREPARE_RUNS, LEVELS, readQueue, isMcqDay } = pool;
 
-// How far down a queue the pinning looks for a question still marked ready.
-const QUEUE_LOOKAHEAD = 4;
+// How far down a queue the pinning looks for a question still marked ready (far
+// enough to find one of the day's kind among the other kind).
+const QUEUE_LOOKAHEAD = 10;
 // The fields of a pool question that travel into the day it is shown on.
-const DAY_FIELDS = ['id', 'kind', 'source', 'subject', 'level', 'topic', 'q', 'images', 'answerType', 'answer', 'accepted', 'model', 'steps', 'idea', 'keywords', 'marks'];
+const DAY_FIELDS = ['id', 'kind', 'source', 'subject', 'level', 'topic', 'q', 'images', 'options', 'answerIndex', 'answerType', 'answer', 'accepted', 'model', 'steps', 'idea', 'keywords', 'marks'];
+
+// Which waiting question a slot takes on `day`: on a multiple-choice day (every
+// third day) the first ready multiple-choice question, else the first ready open
+// one; on the other days the other way round. Questions past the look-ahead stay
+// for another day; ones no longer ready are dropped from the queue.
+// Returns { chosen, keep, changed }.
+function chooseFromLine(day, subject, level, line, found) {
+  const order = isMcqDay(day) ? ['mcq', 'open'] : ['open', 'mcq'];
+  const ready = [];
+  const keep = [];
+  let changed = false;
+  for (const id of line) {
+    const snap = found.get(subject + '|' + level + '|' + id);
+    if (!snap) { keep.push(id); continue; }
+    const item = snap.exists ? snap.data() : null;
+    if (item && item.status === 'ready' && item.subject === subject && item.level === level) { ready.push(Object.assign({ id }, item)); keep.push(id); }
+    else changed = true;
+  }
+  let chosen = null;
+  for (const kind of order) { chosen = ready.find(item => (item.kind || 'open') === kind) || null; if (chosen) break; }
+  if (chosen) { keep.splice(keep.indexOf(chosen.id), 1); changed = true; }
+  return { chosen, keep, changed };
+}
 const forDay = item => Object.fromEntries(DAY_FIELDS.filter(k => item[k] !== undefined).map(k => [k, item[k]]));
+
+// Does any slot of the day hold a bank question (one not from the pool)?
+function hasBankSlot(pick) {
+  if (!pick || !pick.picks) return false;
+  for (const subject of SUBJECTS) for (const level of LEVELS) {
+    const id = pick.picks[subject] && pick.picks[subject][level];
+    if (id && !(pick.items && pick.items[id])) return true;
+  }
+  return false;
+}
 
 function createDailyQuestionStore(db, Timestamp) {
   const root = () => db.collection(ROOT[0]).doc(ROOT[1]);
@@ -40,6 +74,52 @@ function createDailyQuestionStore(db, Timestamp) {
   const countOf = snapshot => (snapshot.exists ? Number(snapshot.data().count) || 0 : 0);
   const timestamp = ms => (Timestamp ? Timestamp.fromMillis(ms) : new Date(ms));
 
+  // Pins the day: each subject and level takes a waiting question (chooseFromLine),
+  // a level with none takes the bank's question. With `upgrade`, an existing day
+  // keeps every slot it has from the pool and only fills its bank slots.
+  async function fill(day, at, upgrade) {
+    const ref = days().doc(day);
+    return db.runTransaction(async transaction => {
+      const again = await transaction.get(ref);
+      if (again.exists && !upgrade) return pickForDay(day, again.data());
+      const queueRef = meta().doc(QUEUE_DOC), runRef = runs().doc(day);
+      const [queueSnap, runSnap] = await transaction.getAll(queueRef, runRef);
+      const base = again.exists ? pickForDay(day, again.data()) : null;
+      if (upgrade && (!base || runSnap.exists || !hasBankSlot(base))) {
+        // The morning emails went out with this day: it never changes again.
+        if (base && runSnap.exists && !again.data().settledAt) transaction.set(ref, { settledAt: at }, { merge: true });
+        return base;
+      }
+      const queue = readQueue(queueSnap.exists ? queueSnap.data() : null);
+      const pick = base ? { v: 2, picks: JSON.parse(JSON.stringify(base.picks)), items: Object.assign({}, base.items) } : defaultPick(day);
+      const open = [];
+      for (const subject of SUBJECTS) for (const level of LEVELS) {
+        if (base && pick.picks[subject][level] && pick.items[pick.picks[subject][level]]) continue;   // already from the pool
+        if (queue[subject][level].length) open.push({ subject, level });
+      }
+      const looks = [];
+      for (const { subject, level } of open) for (const id of queue[subject][level].slice(0, QUEUE_LOOKAHEAD)) looks.push({ subject, level, id });
+      const snaps = looks.length ? await transaction.getAll(...looks.map(l => poolCol().doc(l.id))) : [];
+      const found = new Map(looks.map((l, i) => [l.subject + '|' + l.level + '|' + l.id, snaps[i]]));
+      const used = [];
+      let changed = false;
+      for (const { subject, level } of open) {
+        const result = chooseFromLine(day, subject, level, queue[subject][level], found);
+        if (result.chosen) {
+          pick.picks[subject][level] = result.chosen.id;
+          pick.items[result.chosen.id] = forDay(result.chosen);
+          used.push(result.chosen.id);
+        }
+        if (result.changed) { queue[subject][level] = result.keep; changed = true; }
+      }
+      if (!base) transaction.create(ref, Object.assign({}, pick, { createdAt: at }));
+      else if (used.length) transaction.set(ref, Object.assign({}, pick, { createdAt: again.data().createdAt || at, upgradedAt: at }));
+      for (const id of used) transaction.update(poolCol().doc(id), { status: 'used', usedOn: day, usedAt: at });
+      if (changed) transaction.set(queueRef, Object.assign({}, queue, { updatedAt: at }));
+      return pickForDay(day, pick);
+    });
+  }
+
   return {
     async getSettings() { const s = await root().get(); return s.exists ? s.data() : {}; },
     async saveSettings(patch) { await root().set(patch, { merge: true }); },
@@ -50,47 +130,15 @@ function createDailyQuestionStore(db, Timestamp) {
     async ensureDay(day, at) {
       const ref = days().doc(day);
       const snapshot = await ref.get();
-      if (snapshot.exists) return pickForDay(day, snapshot.data());
-      return db.runTransaction(async transaction => {
-        const again = await transaction.get(ref);
-        if (again.exists) return pickForDay(day, again.data());
-        const queueRef = meta().doc(QUEUE_DOC);
-        const queueSnap = await transaction.get(queueRef);
-        const queue = readQueue(queueSnap.exists ? queueSnap.data() : null);
-        const looks = [];
-        for (const subject of SUBJECTS) for (const level of LEVELS) {
-          for (const id of queue[subject][level].slice(0, QUEUE_LOOKAHEAD)) looks.push({ subject, level, id });
-        }
-        const snaps = looks.length ? await transaction.getAll(...looks.map(l => poolCol().doc(l.id))) : [];
-        const found = new Map(looks.map((l, i) => [l.subject + '|' + l.level + '|' + l.id, snaps[i]]));
-        const pick = defaultPick(day);
-        const used = [];
-        let changed = false;
-        for (const subject of SUBJECTS) for (const level of LEVELS) {
-          const line = queue[subject][level];
-          const keep = [];
-          let chosen = null;
-          for (const id of line) {
-            if (chosen) { keep.push(id); continue; }
-            const snap = found.get(subject + '|' + level + '|' + id);
-            if (!snap) { keep.push(id); continue; }            // past the look-ahead: left for another day
-            const item = snap.exists ? snap.data() : null;
-            if (item && item.status === 'ready' && item.subject === subject && item.level === level) chosen = Object.assign({ id }, item);
-            else changed = true;                                  // used, skipped or gone: dropped from the queue
-          }
-          if (chosen) {
-            pick.picks[subject][level] = chosen.id;
-            pick.items[chosen.id] = forDay(chosen);
-            used.push(chosen.id);
-            changed = true;
-          }
-          queue[subject][level] = keep;
-        }
-        transaction.create(ref, Object.assign({}, pick, { createdAt: at }));
-        for (const id of used) transaction.update(poolCol().doc(id), { status: 'used', usedOn: day, usedAt: at });
-        if (changed) transaction.set(queueRef, Object.assign({}, queue, { updatedAt: at }));
-        return pickForDay(day, pick);
-      });
+      if (snapshot.exists) {
+        const current = pickForDay(day, snapshot.data());
+        // A day that had to fall back to the built-in bank takes waiting questions as
+        // soon as there are some, until its morning emails have gone out (after that
+        // the day never changes, so the emails and tomorrow's answer always match).
+        if (!hasBankSlot(current) || snapshot.data().settledAt) return current;
+        return fill(day, at, true);
+      }
+      return fill(day, at, false);
     },
     // Past days: the stored questions, else the bank's (a day nobody asked for).
     async getDays(list) {
@@ -262,4 +310,4 @@ function createDailyQuestionStore(db, Timestamp) {
   };
 }
 
-module.exports = { createDailyQuestionStore, QUEUE_LOOKAHEAD, forDay };
+module.exports = { createDailyQuestionStore, QUEUE_LOOKAHEAD, forDay, chooseFromLine, hasBankSlot };

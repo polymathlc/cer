@@ -167,7 +167,8 @@ function defaultPick(day) {
   return { v: 2, picks, items: {} };
 }
 const validPoolItem = (item, subject, level) => !!(item && pool.ID_PATTERN.test(item.id || '') && item.subject === subject && item.level === level
-  && typeof item.q === 'string' && item.q && typeof item.answer === 'string');
+  && typeof item.q === 'string' && item.q && typeof item.answer === 'string'
+  && (item.kind !== 'mcq' || (Array.isArray(item.options) && item.options.length === 4 && Number.isInteger(item.answerIndex) && item.answerIndex >= 0 && item.answerIndex < 4)));
 // A day's slots: the stored ones when they are valid, the bank's otherwise.
 // A day stored before v2 ({ math: id, science: id }) keeps its two bank questions in
 // the slot of their own level, so a parent who answered that day sees the same one.
@@ -467,8 +468,8 @@ function questionCardHtml(q, { heading, reveal = false, link = '' } = {}) {
   if (heading) out += '<div style="font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:' + COLOURS.deep + ';margin:0 0 8px">' + escapeHtml(heading) + '</div>';
   out += '<div style="margin:0 0 10px">' + tag(q) + '</div>';
   out += '<p style="font-size:16px;line-height:1.6;margin:0 0 12px;color:' + COLOURS.ink + ';font-weight:600">' + mathHtml(q.q) + '</p>';
-  if (open) out += imagesHtml(q);
-  else out += optionsHtml(q, { reveal });
+  out += imagesHtml(q);
+  if (!open) out += optionsHtml(q, { reveal });
   if (reveal && open) {
     out += '<div style="margin:14px 0 0;padding:14px 16px;border-radius:10px;background:' + COLOURS.paper + '">'
       + '<div style="font-size:14px;font-weight:700;color:' + COLOURS.sci + ';margin:0 0 6px">Answer: ' + mathHtml(q.answer) + '</div>'
@@ -496,8 +497,8 @@ function questionText(q, { heading, reveal = false, link = '' } = {}) {
   const open = q.kind === 'open';
   if (heading) lines.push(heading.toUpperCase());
   lines.push(q.level + ' ' + q.subjectLabel + ' · ' + q.topic, '', q.q, '');
-  if (open) { if ((q.images || []).length) lines.push('(' + q.images.length + ' picture' + (q.images.length > 1 ? 's' : '') + ': see the email or the website)', ''); }
-  else q.options.forEach((option, index) => lines.push('  ' + LETTERS[index] + '. ' + option + (reveal && index === q.answer ? '   ✓' : '')));
+  if ((q.images || []).length) lines.push('(' + q.images.length + ' picture' + (q.images.length > 1 ? 's' : '') + ': see the email or the website)', '');
+  if (!open) q.options.forEach((option, index) => lines.push('  ' + LETTERS[index] + '. ' + option + (reveal && index === q.answer ? '   ✓' : '')));
   if (reveal) {
     if (open) lines.push('', 'Answer: ' + q.answer, 'Model answer: ' + q.model, 'Worked answer:');
     else lines.push('', 'Answer: ' + q.answerLetter + '. ' + q.options[q.answer], 'Worked answer:');

@@ -175,7 +175,7 @@ test('the pages to read are spread over worksheets and go to the levels that nee
   assert.equal(new Set(plan.map(p => p.ws.id + p.page)).size, plan.length, 'no page twice');
 });
 
-test('a CER bank question is read with its parts, pictures and the teacher\'s answers; multiple choice is never used', () => {
+test('a CER bank question is read with its parts, pictures and the teacher\'s answers; picture multiple choice becomes a multiple-choice item', () => {
   const q = { id: 'c1', level: 'P5', topic: 'Heat', blocks: [
     { type: 'text', content: '<p>Ali put a metal spoon in hot water.</p>' },
     { type: 'image', url: 'https://example.test/a.png', caption: 'Set-up' },
@@ -187,15 +187,24 @@ test('a CER bank question is read with its parts, pictures and the teacher\'s an
   assert.match(src.text, /\[picture 1\]/);
   assert.equal(src.images.length, 1);
   assert.match(src.answers[0], /Claim: The spoon became warmer/);
-  assert.equal(pool.cerSource({ level: 'P5', blocks: [{ type: 'text', content: 'Which is a magnet?' }, { type: 'mcq', options: [], correctId: 'a' }] }), null, 'multiple choice only: never used');
-  const mixed = pool.cerSource({ level: 'P5', blocks: [{ type: 'text', content: '(a) Pick one.' }, { type: 'mcq', options: [] },
+  const pic = { type: 'image', url: 'https://example.test/p.png' };
+  assert.equal(pool.cerSource({ level: 'P5', blocks: [{ type: 'text', content: 'Which is a magnet?' }, { type: 'answer', claim: 'x' }] }), null,
+    'a Science question with no picture is never used');
+  const choice = pool.cerSource({ level: 'P5', blocks: [pic, { type: 'text', content: 'Which material is a magnetic material?' },
+    { type: 'mcq', correctId: 'o3', options: [{ id: 'o1', text: 'Copper' }, { id: 'o2', text: 'Plastic' }, { id: 'o3', text: '<b>Steel</b>' }, { id: 'o4', text: 'Wood' }] }] });
+  assert.ok(choice, 'a picture multiple-choice question is used');
+  assert.match(choice.text, /\[multiple choice: 1\) Copper 2\) Plastic 3\) Steel 4\) Wood \| the teacher's right option: 3\]/);
+  assert.match(choice.answers[0], /option 3/);
+  assert.equal(pool.cerSource({ level: 'P5', blocks: [pic, { type: 'mcq', options: [{ id: 'a', text: 'Yes' }, { id: 'b', text: 'No' }], correctId: 'a' }] }), null,
+    'a two-option multiple choice gives no answer to use');
+  const mixed = pool.cerSource({ level: 'P5', blocks: [pic, { type: 'text', content: '(a) Pick one.' }, { type: 'mcq', options: [] },
     { type: 'text', content: '(b) Explain why the ice melted.' }, { type: 'answer', claim: 'It gained heat from the warmer air.', marks: 2 }] });
-  assert.ok(mixed, 'a question with an open part beside a multiple-choice part is still used');
-  assert.match(mixed.text, /\[a multiple-choice part: leave it out\]/);
-  const table = pool.cerSource({ level: 'P4', blocks: [{ type: 'text', content: 'The table shows the results.' },
+  assert.ok(mixed, 'an open part beside an unusable multiple-choice part is still used');
+  assert.match(mixed.text, /\[a multiple-choice part that cannot be used: leave it out\]/);
+  const table = pool.cerSource({ level: 'P4', blocks: [pic, { type: 'text', content: 'The table shows the results.' },
     { type: 'table', rows: [{ c: ['Material', 'Floats?'] }, { c: ['<b>Cork</b>', 'Yes'] }] }, { type: 'plainanswer', content: 'Cork' }] });
   assert.match(table.text, /\[table: Material \| Floats\? \/ Cork \| Yes\]/, 'newer cer tables (rows of c) are read, HTML stripped');
-  const grid = pool.cerSource({ level: 'P4', blocks: [{ type: 'table', data: { 0: { 0: 'A', 1: 'B' }, 1: { 0: '1', 1: '2' } } }, { type: 'plainanswer', content: 'x' }] });
+  const grid = pool.cerSource({ level: 'P4', blocks: [pic, { type: 'table', data: { 0: { 0: 'A', 1: 'B' }, 1: { 0: '1', 1: '2' } } }, { type: 'plainanswer', content: 'x' }] });
   assert.match(grid.text, /A \| B \/ 1 \| 2/, 'older grids keyed by number are read');
   assert.equal(pool.cerSource({ level: 'P5', blocks: [{ type: 'text', content: 'No answer here' }] }), null, 'no model answer: never used');
   const need = { math: {}, science: { P3: 0, P4: 0, P5: 2, P6: 0 } };

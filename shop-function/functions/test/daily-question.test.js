@@ -503,3 +503,107 @@ test('the admin summary lists new subscribers for the centre', () => {
   assert.match(mail.message.html, /Mrs Lim/);
   assert.match(mail.message.html, /Home page/);
 });
+
+/* ─── Pool questions: open and multiple choice, pictures, the every-third-day rule ─── */
+const pool = require('../daily-question-pool');
+function poolItem(n, overrides = {}) {
+  const id = pool.itemId('anskey', 'test-' + n);
+  return Object.assign({
+    id, kind: 'open', source: 'anskey', subject: 'math', level: 'P5', topic: 'Area', q: 'A rectangle is 8 cm long and 5 cm wide. What is its area?',
+    images: [], answerType: 'number', answer: '40 cm²', accepted: ['40'], model: 'The area is 40 cm².', steps: ['8 × 5 = 40'], idea: 'Area = length × breadth.',
+    keywords: [], marks: 2, status: 'ready', group: 'g' + n
+  }, overrides);
+}
+const mcqItem = (n, overrides = {}) => poolItem(n, Object.assign({ kind: 'mcq', subject: 'science', topic: 'Magnets',
+  q: 'The diagram shows four rods. Which rod is made of a magnetic material?', options: ['Copper', 'Plastic', 'Steel', 'Wood'], answerIndex: 2, answer: 'Steel',
+  answerType: 'short', accepted: [], images: [{ id: pool.imageId(pool.itemId('anskey', 'test-' + n), 0), w: 600, h: 400, alt: 'Four rods' }] }, overrides));
+async function seedQueue(store, items) {
+  const queue = pool.emptyQueue();
+  for (const item of items) { await store.savePoolItem(item, []); queue[item.subject][item.level].push(item.id); }
+  await store.saveQueue(queue, NOW);
+}
+
+test('every third day is a multiple-choice day, from Sunday 22 November 2026', () => {
+  assert.deepEqual(['2026-11-20', '2026-11-21', '2026-11-22', '2026-11-23', '2026-11-24', '2026-11-25'].map(pool.isMcqDay), [false, false, true, false, false, true]);
+});
+
+test('a Science question needs a picture; a Maths one may have none', () => {
+  const sci = pool.cleanItem({ kind: 'open', subject: 'science', level: 'P5', topic: 'Heat', q: 'Why does the ice melt in the room?', answer: 'It gains heat.',
+    model: 'It gains heat from the warmer air.', steps: ['The air is warmer.', 'Ice gains heat and melts.'], idea: 'Gaining heat melts ice.' });
+  assert.ok(pool.qualityIssues(sci, []).includes('a Science question needs a picture'));
+  const maths = pool.cleanItem(poolItem(1));
+  assert.ok(!pool.qualityIssues(maths, []).some(i => /picture/.test(i)));
+  assert.ok(!pool.qualityIssues(pool.cleanItem(Object.assign({}, sci, { images: [{ id: 'x', w: 400, h: 300 }] })), [{ ok: true, w: 400, h: 300, bytes: 1000 }]).some(i => /picture/.test(i)));
+});
+
+test('a multiple-choice pool question keeps four options and its right one, and is checked like the others', () => {
+  const raw = { kind: 'mcq', subject: 'science', level: 'P4', topic: 'Magnets', q: 'The diagram shows four rods. Which rod is made of a magnetic material?',
+    options: ['Copper', 'Plastic', 'Steel', 'Wood'], answerIndex: 3, model: 'Steel is a magnetic material.', steps: ['Steel contains iron.', 'Iron is magnetic.'],
+    idea: 'Iron and steel are magnetic.', images: [{ id: 'i', w: 600, h: 400 }] };
+  const item = pool.cleanItem(raw);
+  assert.equal(item.kind, 'mcq');
+  assert.equal(item.answerIndex, 2, 'the editor counts 1 to 4; stored 0 to 3');
+  assert.equal(item.answer, 'Steel');
+  assert.deepEqual(pool.qualityIssues(item, [{ ok: true, w: 600, h: 400, bytes: 1000 }]), []);
+  assert.ok(pool.qualityIssues(pool.cleanItem(Object.assign({}, raw, { options: ['Copper', 'Steel', 'Wood'] })), [{ ok: true, w: 600, h: 400, bytes: 1000 }])
+    .includes('a multiple-choice question needs exactly 4 options'));
+  assert.ok(pool.qualityIssues(pool.cleanItem(Object.assign({}, raw, { q: 'Which rod is magnetic?\n(1) Copper (2) Steel' })), [{ ok: true, w: 600, h: 400, bytes: 1000 }])
+    .includes('the options are written into the wording'));
+  const good = pool.cleanVerdict({ solvedAnswer: 'Steel', solvedOption: 3, agrees: true, publish: true, scores: { wording: 5, pictures: 5, answer: 5, working: 5, standalone: 5, level: 5 } });
+  assert.deepEqual(pool.verdictIssues(good, item), []);
+  const other = pool.cleanVerdict(Object.assign({}, good, { solvedOption: 2, scores: good.scores, publish: true, agrees: true }));
+  assert.ok(pool.verdictIssues(other, item).includes('the checker picked a different option'));
+  assert.match(pool.verifyPrompt(item), /Options: 1\) Copper {2}2\) Plastic {2}3\) Steel {2}4\) Wood/);
+  const shown = pool.publicOpen(item, '2026-11-22', false, { imageUrl: id => 'u/' + id, dayLabel: 'x', dayShort: 'y' });
+  assert.equal(shown.kind, 'mcq');
+  assert.deepEqual(shown.options, ['Copper', 'Plastic', 'Steel', 'Wood']);
+  assert.equal(shown.answer, undefined, 'no answer on the day');
+  assert.equal(pool.publicOpen(item, '2026-11-22', true, { imageUrl: id => id, dayLabel: '', dayShort: '' }).answerLetter, 'C');
+});
+
+test('the pinning takes an open question on open days and a multiple-choice one every third day, each falling back to the other kind', async () => {
+  const { store } = harness();
+  const open1 = poolItem(1, { subject: 'science', images: [{ id: pool.imageId(pool.itemId('anskey', 'test-1'), 0), w: 600, h: 400, alt: 'x' }], topic: 'Heat',
+    q: 'The diagram shows a cup of ice. Why does the ice melt?', answerType: 'explain', answer: 'It gains heat.', accepted: [], model: 'It gains heat from the air.' });
+  const choice = mcqItem(2);
+  await seedQueue(store, [open1, choice]);
+  const friday = await store.ensureDay('2026-11-20', NOW);              // an open day
+  assert.equal(friday.picks.science.P5, open1.id);
+  const sunday = await store.ensureDay('2026-11-22', NOW + 2 * DAY);    // a multiple-choice day
+  assert.equal(sunday.picks.science.P5, choice.id);
+  assert.equal(sunday.items[choice.id].kind, 'mcq');
+  assert.equal(sunday.items[choice.id].answerIndex, 2);
+});
+
+test('a day that fell back to the bank takes waiting questions until its morning emails go out, then never changes', async () => {
+  const { store, call } = harness();
+  const before = await store.ensureDay('2026-11-20', NOW);
+  assert.ok(!Object.keys(before.items).length, 'nothing waiting: the bank');
+  const maths = poolItem(3);
+  await seedQueue(store, [maths]);
+  const after = await store.ensureDay('2026-11-20', NOW + HOUR);
+  assert.equal(after.picks.math.P5, maths.id, 'the bank slot took the waiting question');
+  assert.equal(after.picks.science.P5, before.picks.science.P5, 'other slots are unchanged');
+  const page = await call({ action: 'today', level: 'P5' });
+  assert.equal(page.body.questions.math.kind, 'open');
+  // The morning run went out: the day is settled, a new question waits for tomorrow.
+  await store.saveRun('2026-11-20', { sent: 1 });
+  const later = poolItem(4, { level: 'P6', group: 'g4' });
+  await seedQueue(store, [later]);
+  const settled = await store.ensureDay('2026-11-20', NOW + 2 * HOUR);
+  assert.notEqual(settled.picks.math.P6, later.id);
+  const pool2 = await store.getPoolItem(later.id);
+  assert.equal(pool2.status, 'ready', 'still waiting for another day');
+});
+
+test('a multiple-choice pool question is picked on the page, never sent to Chung GPT', async () => {
+  const { store, call } = harness();
+  await store.ensureDay('2026-11-20', NOW);
+  await seedQueue(store, [mcqItem(5)]);
+  await store.ensureDay('2026-11-20', NOW);
+  const today = await call({ action: 'today', level: 'P5' });
+  assert.equal(today.body.questions.science.kind, 'mcq');
+  assert.equal(today.body.questions.science.images.length, 1, 'with its picture');
+  const marked = await call({ action: 'mark', subject: 'science', level: 'P5', answer: 'Steel' });
+  assert.equal(marked.statusCode, 409);
+});

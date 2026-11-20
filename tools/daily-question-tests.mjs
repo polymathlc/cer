@@ -309,7 +309,7 @@ test('the workflow prepares the pool every evening, masks the key and keeps the 
   assert.match(yml, /::add-mask::\$KEY/, 'the AI key is masked before use');
   assert.match(yml, /node --test tools\/daily-question-prepare-tests\.mjs/, 'the prepare tests run before the prepare run');
   assert.match(yml, /retention-days: 1/, 'the encrypted preview is short-lived');
-  assert.match(yml, /case "\$PAGES" in ''\|\*\[!0-9\]\*\) PAGES=6/, 'hand-typed numbers are checked');
+  assert.match(yml, /case "\$PAGES" in ''\|\*\[!0-9\]\*\) PAGES=12/, 'hand-typed numbers are checked');
   assert.doesNotMatch(yml, /set -x/);
 });
 

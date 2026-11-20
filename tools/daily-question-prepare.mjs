@@ -60,8 +60,8 @@ export const PAGE_PX = 2000;              // the page is drawn this big (Rapid a
 export const CONTEXT_PX = 1100;           // the page before, for context only
 export const IMAGE_MAX_W = 1200;          // pictures are stored at most this wide
 export const ITEMS_PER_PAGE = 4;
-export const DEFAULT_PAGES = 6;
-export const DEFAULT_CER = 6;
+export const DEFAULT_PAGES = 12;
+export const DEFAULT_CER = 16;
 const DAY_MS = 86400000;
 const BAD_NAME = /answer\s*key|answers?\b|solution|marking\s*scheme|\bmark\s*scheme|\bans\b|teacher'?s?\s*copy/i;
 
@@ -423,12 +423,13 @@ export async function prepareRun(ctx) {
 /* ═════════ The real marker, on ready questions (a live check, no website needed) ═════════ */
 export async function checkMarking({ store, ai, log = console.log, count = 3 }) {
   const queue = await store.getQueue();
-  const ids = [].concat(...SUBJECTS.map(s => [].concat(...LEVELS.map(l => queue[s][l].slice(0, 1))))).slice(0, count);
+  const ids = [].concat(...SUBJECTS.map(s => [].concat(...LEVELS.map(l => queue[s][l].slice(0, 3))))).slice(0, count * 3);
   const items = await store.getPoolItems(ids);
   const result = { checked: 0, ok: 0, problems: [] };
   for (const id of ids) {
     const item = items[id];
-    if (!item || item.status !== 'ready') continue;
+    if (!item || item.status !== 'ready' || item.kind === 'mcq') continue;   // multiple choice is checked on the page, not by Chung GPT
+    if (result.checked >= count) break;
     result.checked++;
     const tries = [
       { answer: item.model, want: ['correct'] },
@@ -461,6 +462,7 @@ export function previewHtml(made, summary) {
     return '<section class="' + (r.status === 'ready' ? 'ok' : 'bad') + '"><h3>' + (r.status === 'ready' ? '✅ Ready' : '❌ Rejected') + ' · ' + escapeHtml(r.level + ' ' + r.subject + ' · ' + r.topic)
       + ' <small>' + escapeHtml(r.origin.source + ' · ' + r.origin.label + (r.origin.page ? ' p' + r.origin.page : '') + ' · Q' + r.origin.number) + '</small></h3>'
       + '<p class="q">' + escapeHtml(r.q).replace(/\n/g, '<br>') + '</p>'
+      + (r.kind === 'mcq' ? '<ol>' + (r.options || []).map((o, i) => '<li' + (i === r.answerIndex ? ' style="font-weight:700;color:#16a34a"' : '') + '>' + escapeHtml(o) + '</li>').join('') + '</ol>' : '')
       + m.pictures.map(p => '<img src="data:' + p.mime + ';base64,' + p.data + '" width="' + Math.min(560, p.w) + '">').join('')
       + '<p><b>Answer:</b> ' + escapeHtml(r.answer) + '</p><p><b>Model:</b> ' + escapeHtml(r.model) + '</p><ol>' + (r.steps || []).map(s => '<li>' + escapeHtml(s) + '</li>').join('') + '</ol>'
       + '<p><b>Key idea:</b> ' + escapeHtml(r.idea) + '</p>'

@@ -65,6 +65,20 @@ const ANSWER_MAX = 200;
 const MODEL_MAX = 700;
 const STEP_MAX = 320;
 const STEPS_MAX = 8;
+const OPTION_MAX = 160;
+// Science is a picture subject: every Science question of the day has a picture.
+// A Maths question may have none.
+const PICTURE_REQUIRED = Object.freeze({ science: true, math: false });
+// Every third day is a multiple-choice day (counted from Sunday 22 November 2026);
+// the other days are open-ended (typed) questions.
+const MCQ_EVERY = 3;
+const MCQ_FROM = Date.UTC(2026, 10, 22);
+function isMcqDay(day) {
+  const t = Date.parse(String(day) + 'T00:00:00Z');
+  if (!Number.isFinite(t)) return false;
+  const n = Math.round((t - MCQ_FROM) / 86400000);
+  return ((n % MCQ_EVERY) + MCQ_EVERY) % MCQ_EVERY === 0;
+}
 
 // Marking limits (each typed answer is one AI call): per connection an hour and a
 // day, per connection per question a day, and for everyone a day.
@@ -166,8 +180,15 @@ function cleanItem(raw) {
     id: String(img && img.id || ''), w: Math.round(Number(img && img.w) || 0), h: Math.round(Number(img && img.h) || 0),
     alt: oneLineText(img && img.alt, 160) || 'Picture for the question ' + (n + 1)
   }));
-  return {
-    id: String(r.id || ''), kind: 'open', source: SOURCES.includes(r.source) ? r.source : 'anskey',
+  // A multiple-choice question keeps its four options and which one is right
+  // ("answerIndex" from the editor is 1 to 4; stored 0 to 3).
+  const options = Array.isArray(r.options) ? r.options.map(o => oneLineText(o, OPTION_MAX + 40)).slice(0, 6) : [];
+  const isMcq = r.kind === 'mcq' || (options.length && r.answerIndex !== undefined);
+  let answerIndex = Math.round(Number(r.answerIndex));
+  if (isMcq) answerIndex = r.indexBase === 0 ? answerIndex : answerIndex - 1;
+  const mcq = isMcq ? { options, answerIndex: Number.isInteger(answerIndex) && answerIndex >= 0 && answerIndex < options.length ? answerIndex : -1 } : null;
+  const out = {
+    id: String(r.id || ''), kind: isMcq ? 'mcq' : 'open', source: SOURCES.includes(r.source) ? r.source : 'anskey',
     subject: SUBJECTS.includes(r.subject) ? r.subject : 'science', level: LEVELS.includes(r.level) ? r.level : '',
     topic: oneLineText(r.topic, 60), q: plain(r.q, TEXT_MAX + 200), images,
     answerType: ['number', 'short', 'explain'].includes(r.answerType) ? r.answerType : 'short',
@@ -175,6 +196,16 @@ function cleanItem(raw) {
     steps: list(r.steps, STEPS_MAX + 2, STEP_MAX + 80), idea: oneLineText(r.idea, 260), keywords: list(r.keywords, 6, 60),
     marks: Math.max(0, Math.min(10, Math.round(Number(r.marks) || 0)))
   };
+  if (mcq) {
+    out.options = mcq.options;
+    out.answerIndex = mcq.answerIndex;
+    out.answerType = 'short';
+    // The answer is the right option's words, so every other check reads it the same way.
+    if (mcq.answerIndex >= 0) out.answer = mcq.options[mcq.answerIndex];
+    out.accepted = [];
+    out.keywords = [];
+  }
+  return out;
 }
 
 /* ══════════════ Gate 1 and 2: rules nobody needs a model for ══════════════ */
@@ -222,6 +253,18 @@ function qualityIssues(item, images = []) {
   if (/[^\x09\x0a\x0d\x20-\x7e -ɏͰ-Ͽ‐-‧‰-⁞⁰-₟€℀-⅏←-⇿∀-⋿⌀-⏿■-◿☀-⛿✀-➿°]/.test(q))
     issues.push('the wording has unusual characters');
   if (MENTIONS_PICTURE.test(q) && !images.length && !(item.images || []).length) issues.push('the wording mentions a picture that is not there');
+  const pictureCount = Math.max(images.length, (item.images || []).length);
+  if (PICTURE_REQUIRED[item.subject] && !pictureCount) issues.push('a Science question needs a picture');
+  if (item.kind === 'mcq') {
+    const opts = item.options || [];
+    if (opts.length !== 4) issues.push('a multiple-choice question needs exactly 4 options');
+    if (opts.some(o => !o)) issues.push('an option is empty');
+    if (new Set(opts.map(o => o.toLowerCase())).size !== opts.length) issues.push('two options are the same');
+    if (opts.some(o => o.length > OPTION_MAX)) issues.push('an option is too long');
+    if (!(item.answerIndex >= 0 && item.answerIndex < opts.length)) issues.push('the right option is not one of the options');
+    if (/(?:^|\n)\s*\(?(?:[1-4]|[A-D])\s*[).]\s+\S/.test(q)) issues.push('the options are written into the wording');
+    for (const [pattern, why] of LEFTOVERS) if (opts.some(o => pattern.test(o)) && !/question number|part label/.test(why)) issues.push('an option ' + why);
+  }
   if (!item.topic) issues.push('there is no topic');
   if (!item.answer) issues.push('there is no answer');
   if (item.answer.length > ANSWER_MAX) issues.push('the answer is too long');
@@ -270,6 +313,7 @@ function cleanVerdict(raw) {
   }
   return {
     publish: r.publish === true, agrees: r.agrees === true, solvedAnswer: oneLineText(r.solvedAnswer, 200),
+    solvedOption: Number.isInteger(Number(r.solvedOption)) ? Number(r.solvedOption) : 0,
     scores, issues: list(r.issues, 8, 200), fixes: r.fixes && typeof r.fixes === 'object' ? r.fixes : null
   };
 }
@@ -282,8 +326,10 @@ function verdictIssues(verdict, item) {
     if (k === 'pictures' && !(item.images || []).length && v.scores[k] === 0) continue;
     if (v.scores[k] < MIN_SCORE) out.push('the checker scored the ' + k + ' ' + v.scores[k] + ' out of 5');
   }
+  // For multiple choice the checker must pick the same option (1 to 4).
+  if (item && item.kind === 'mcq' && v.solvedOption !== item.answerIndex + 1) out.push('the checker picked a different option');
   // For a number answer the checker's own number must be the same number.
-  if (item && item.answerType === 'number') {
+  if (item && item.kind !== 'mcq' && item.answerType === 'number') {
     const mine = numbersIn(item.answer), theirs = numbersIn(v.solvedAnswer);
     if (mine.length && theirs.length && !theirs.some(n => Math.abs(n - mine[mine.length - 1]) < 1e-6)) out.push('the checker\'s number is different');
   }
@@ -349,6 +395,14 @@ function publicOpen(item, day, withAnswer, { imageUrl, dayLabel, dayShort }) {
     images: (item.images || []).map(img => ({ url: imageUrl(img.id, day), w: img.w, h: img.h, alt: img.alt })),
     day, dayLabel, dayShort
   };
+  if (item.kind === 'mcq') {
+    // The same shape as a bank question (options; the answer as its index the next day).
+    out.kind = 'mcq';
+    out.options = (item.options || []).slice();
+    if (withAnswer) Object.assign(out, { answer: item.answerIndex, answerLetter: 'ABCD'[item.answerIndex] || '', answerText: item.answer, model: item.model,
+      steps: item.steps.slice(), idea: item.idea });
+    return out;
+  }
   if (withAnswer) Object.assign(out, { answer: item.answer, model: item.model, steps: item.steps.slice(), idea: item.idea, keywords: (item.keywords || []).slice() });
   return out;
 }
@@ -424,7 +478,12 @@ function cleanMark(raw, item, answer, { revealOk = false } = {}) {
 
 /* ══════════════ The prompts the prepare run uses (kept here so tests can read them) ══════════════ */
 const EDITOR_RULES = 'RULES FOR EVERY QUESTION YOU RETURN. '
-  + 'It is ONE open-ended question a child answers by typing a number, a word, a short phrase or one to three sentences. '
+  + 'Each item is EITHER an open-ended question ("kind":"open") a child answers by typing a number, a word, a short phrase or one to three sentences, '
+  + 'OR, when the printed question is multiple choice with four options, a multiple-choice question ("kind":"mcq") with "options": the four options in the printed order, '
+  + 'polished, without their numbers or letters, and "answerIndex": the number (1 to 4) of the right option. For "mcq" the options are NEVER written into "q", '
+  + '"answer" is the right option\'s words, and "steps" explain why it is right and why the others are wrong. '
+  + 'SCIENCE QUESTIONS ALWAYS HAVE A PICTURE: return a Science item only when it comes with a picture, table, graph or diagram the child looks at. '
+  + 'A Maths item may have no picture. '
   + 'A printed question with parts (a), (b), (c) or (i), (ii) becomes ONE ITEM PER PART, and each item must stand completely on its own: '
   + 'restate in its own wording every fact from the stem and from earlier parts that it needs, and when a later part uses the result of an earlier part, '
   + 'give that result as a fact ("The total cost of the pens is $24."). Never write "part (a)", "the previous question", "above" or "below" for a part. '
@@ -443,7 +502,7 @@ const EDITOR_RULES = 'RULES FOR EVERY QUESTION YOU RETURN. '
   + '"topic" is the short syllabus topic (for example "Fractions", "Area and perimeter", "Heat", "Plant transport"). '
   + 'Work every answer out carefully and check the arithmetic against the printed numbers; when the teacher\'s own answer is given, it WINS. '
   + 'DO NOT RETURN a question (leave it out completely) when: the child must draw, shade, label, tick, circle, colour or measure on the paper; '
-  + 'it needs a table or diagram on the page to be completed; it is multiple choice and makes no sense without its options; '
+  + 'it needs a table or diagram on the page to be completed; it is multiple choice but its four options cannot all be read; '
   + 'part of it is cut off or printed on another page; it depends on handwriting or marks on the page; '
   + 'the answer cannot be worked out with certainty from what is given; or it would not be a good, interesting question for parents to see. '
   + 'Quality matters far more than quantity: return at most 4 items, the best ones, and an empty list is a perfectly good answer.';
@@ -456,21 +515,25 @@ const ANSKEY_EXTRACT_SYSTEM = 'You are Chung GPT, Mr Chung\'s question editor at
   + 'A rectangle holds the complete figure: every label, unit, arrow, legend, axis title and number, table header and border, and leaves clear white space beyond the last letter on every side; '
   + 'it never holds the question sentences, the question number, the part labels, the marks or the answer lines around the figure. '
   + 'An item that needs no picture has "figures": []. '
-  + 'Reply with STRICT JSON only: {"items":[{"number":"3b","q":"…","figures":[…],"answerType":"number|short|explain","answer":"…","accepted":["…"],'
-  + '"model":"…","steps":["…"],"idea":"…","keywords":["…"],"topic":"…","marks":2}]}';
+  + 'Reply with STRICT JSON only: {"items":[{"number":"3b","kind":"open|mcq","q":"…","options":["…","…","…","…"],"answerIndex":2,"figures":[…],'
+  + '"answerType":"number|short|explain","answer":"…","accepted":["…"],"model":"…","steps":["…"],"idea":"…","keywords":["…"],"topic":"…","marks":2}]} '
+  + '(options and answerIndex only for "mcq").';
 const CER_EXTRACT_SYSTEM = 'You are Chung GPT, Mr Chung\'s question editor at Polymath Learning Centre, Singapore (P3 to P6, MOE syllabus). '
   + 'You are given ONE question from the centre\'s CER Science question bank: its wording with its part labels, its pictures (attached in order as images 1, 2, …), '
   + 'and the teacher\'s own model answers (claim, evidence, reasoning or a written answer), which are AUTHORITATIVE. '
   + 'You turn it into polished free Questions of the Day that parents and children across Singapore will see. It must be perfect. '
   + EDITOR_RULES + ' '
-  + 'A part marked "[a multiple-choice part: leave it out]" is never made into an item, and no item may depend on its options. '
+  + 'A multiple-choice part is shown as "[multiple choice: 1) … 2) … 3) … 4) … | the teacher\'s right option: 2]": make it a "kind":"mcq" item with those options '
+  + 'and that right option (the teacher\'s choice WINS). '
   + 'PICTURES. For each item, "figures" lists the numbers of the attached images the child needs for THAT item (for example [1]); [] when none is needed. '
   + 'Never use a picture that shows the answer. '
-  + 'Reply with STRICT JSON only: {"items":[{"number":"b","q":"…","figures":[1],"answerType":"number|short|explain","answer":"…","accepted":["…"],'
-  + '"model":"…","steps":["…"],"idea":"…","keywords":["…"],"topic":"…","marks":2}]}';
+  + 'Reply with STRICT JSON only: {"items":[{"number":"b","kind":"open|mcq","q":"…","options":["…","…","…","…"],"answerIndex":2,"figures":[1],'
+  + '"answerType":"number|short|explain","answer":"…","accepted":["…"],"model":"…","steps":["…"],"idea":"…","keywords":["…"],"topic":"…","marks":2}]} '
+  + '(options and answerIndex only for "mcq").';
 const VERIFY_SYSTEM = 'You are a strict second checker at Polymath Learning Centre, Singapore, and you have NOT seen the worksheet. '
   + 'You see exactly what a parent will see on the free Question of the Day page: the wording, and the pictures attached (if any). '
   + 'First solve the question yourself from ONLY what is given, the way a top P6 pupil would, and write your final answer in "solvedAnswer". '
+  + 'For a multiple-choice question, also give the number (1 to 4) of the option you choose in "solvedOption", and check that exactly one option is right. '
   + 'Then compare with the proposed answer, model answer and working. Set "agrees" true only when your answer and theirs are the same (equivalent wording or units are fine). '
   + 'Score each 1 to 5 (5 = perfect, ready to publish): "wording" (clear, correct English, no typos, no leftover question numbers, part labels, marks or answer lines, '
   + 'reads well on a phone), "pictures" (each picture is complete, nothing cut off at an edge, sharp, holds only the figure and no stray question text, part labels, '
@@ -479,17 +542,18 @@ const VERIFY_SYSTEM = 'You are a strict second checker at Polymath Learning Cent
   + 'something not shown), "level" (right for the stated level, not above it). '
   + 'List every problem in "issues" (empty when none). Set "publish" true ONLY when every score is at least 4, "agrees" is true and you would be proud to send it '
   + 'to thousands of parents under the centre\'s name. When in doubt, do not publish. '
-  + 'Reply with STRICT JSON only: {"solvedAnswer":"…","agrees":true,"scores":{"wording":5,"pictures":5,"answer":5,"working":5,"standalone":5,"level":5},"issues":[],"publish":true}';
+  + 'Reply with STRICT JSON only: {"solvedAnswer":"…","solvedOption":0,"agrees":true,"scores":{"wording":5,"pictures":5,"answer":5,"working":5,"standalone":5,"level":5},"issues":[],"publish":true}';
 function verifyPrompt(item) {
   return [
     'Stated level: ' + item.level + ' ' + (item.subject === 'math' ? 'Maths' : 'Science') + (item.topic ? ' · topic ' + item.topic : ''),
     (item.images || []).length ? 'Pictures attached: ' + item.images.length + '.' : 'No pictures are attached.',
     'Question: ' + JSON.stringify(item.q),
-    'Proposed final answer: ' + JSON.stringify(item.answer),
+    item.kind === 'mcq' ? 'Multiple choice. Options: ' + (item.options || []).map((o, i) => (i + 1) + ') ' + o).join('  ') : '',
+    item.kind === 'mcq' ? 'Proposed right option: ' + (item.answerIndex + 1) + ') ' + JSON.stringify(item.answer) : 'Proposed final answer: ' + JSON.stringify(item.answer),
     'Proposed model answer: ' + JSON.stringify(item.model),
     'Proposed working: ' + JSON.stringify(item.steps),
     'Proposed key idea: ' + JSON.stringify(item.idea)
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 }
 
 // A CER bank question (users/{adminUid}/questions/{id}) as the editor reads it:
@@ -536,7 +600,16 @@ function cerSource(q) {
       }
       // A multiple-choice part is left out (the day's question is typed, not picked);
       // the other parts of the question can still be used.
-      case 'mcq': mcq++; lines.push(head + '[a multiple-choice part: leave it out]'); break;
+      case 'mcq': {
+        const opts = (Array.isArray(b.options) ? b.options : []).map(o => oneLineText(o && typeof o === 'object' ? o.text : o, OPTION_MAX + 40));
+        const right = (Array.isArray(b.options) ? b.options : []).findIndex(o => o && b.correctId && o.id === b.correctId);
+        if (opts.length === 4 && opts.every(Boolean) && right >= 0) {
+          mcq++;
+          lines.push(head + '[multiple choice: ' + opts.map((o, i) => (i + 1) + ') ' + o).join(' ') + ' | the teacher\'s right option: ' + (right + 1) + ']');
+          answers.push((lab || 'multiple choice') + ': option ' + (right + 1));
+        } else lines.push(head + '[a multiple-choice part that cannot be used: leave it out]');
+        break;
+      }
       case 'fillblank': {
         const t = plain(String(b.text || '').replace(/\[\[([\s\S]+?)\]\]/g, (m, a) => { answers.push((lab || 'blank') + ': ' + oneLineText(a, 80)); return '____'; }), 1200);
         if (t) lines.push(head + t);
@@ -562,13 +635,14 @@ function cerSource(q) {
   }
   if (!lines.length || !answers.length) return null;
   if (images.length > 6) return null;
-  if (mcq && !answers.length) return null;
+  // Science questions of the day always have a picture.
+  if (!images.length) return null;
   return { text: lines.join('\n'), images, answers, level: normaliseLevel(q.level), topic: oneLineText(q.topic, 60) };
 }
 
 module.exports = {
   LEVELS, LEVEL_RANK, SUBJECTS, SOURCES, POOL, IMAGES, META, QUEUE_DOC, SOURCES_DOC, PREPARE_RUNS, MARK_PREFIX, POOL_TARGET, MIN_SCORE,
-  MAX_IMAGES, MAX_IMAGE_BYTES, MARK_LIMITS, MARK_MODEL, VERDICTS, ID_PATTERN, IMAGE_ID_PATTERN, SCORE_KEYS,
+  MAX_IMAGES, MAX_IMAGE_BYTES, MARK_LIMITS, PICTURE_REQUIRED, MCQ_EVERY, isMcqDay, OPTION_MAX, MARK_MODEL, VERDICTS, ID_PATTERN, IMAGE_ID_PATTERN, SCORE_KEYS,
   levelRank, normaliseLevel, questionLevelFor, levelsAtOrBelow, familyLevels, itemId, imageId, fingerprint, plain, oneLineText,
   cleanItem, qualityIssues, cleanVerdict, verdictIssues, orderQueue, emptyQueue, readQueue, queueCounts, publicOpen,
   normAnswer, exactMatch, numbersIn, MARK_SYSTEM, markPrompt, cleanMark,
