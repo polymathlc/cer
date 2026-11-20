@@ -33,7 +33,8 @@ jobs:
         run: |
           node --check office/office-app.mjs
           node --check office/lesson-updates.mjs
-          node --test tools/office-core-tests.mjs tools/office-referral-tests.mjs tools/office-rules-tests.mjs tools/office-autopilot-tests.mjs tools/office-lessons-tests.mjs
+          node --check office/attendance-core.mjs
+          node --test tools/office-core-tests.mjs tools/office-referral-tests.mjs tools/office-rules-tests.mjs tools/office-autopilot-tests.mjs tools/office-lessons-tests.mjs tools/office-attendance-tests.mjs
 
       - name: Install the page libraries and Chromium
         run: |

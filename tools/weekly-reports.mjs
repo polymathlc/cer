@@ -16,6 +16,7 @@
 //   users/*/liveClassProgress/main                                the Ans Key live-lesson progress book
 //   studentProfiles (officeId, name, level, tutorGaps)            Study Buddy's marked worksheets
 //   studentAccess (parentEmail, email, children)                  which account is whose child
+//   officeSettings/attend-<day>                                   🙋 who was absent (attendance-core.mjs)
 // What it writes:
 //   mail/polymath-office-weekly-<Sunday>-<familyId>               one per family per week, create-only
 //   mail/polymath-office-weekly-preview-<Sunday>-<time>           the office's preview / copy
@@ -100,10 +101,22 @@ export async function gather(db, { fetchImpl } = {}) {
   };
 }
 
+/** 🙋 The week's attendance records: { day: normalized } (missing days are simply absent). */
+export async function loadAttendance(db, win) {
+  const ids = W.weekAttendanceIds(win);
+  const refs = ids.map(id => db.collection(C.COLLECTIONS.settings).doc(id));
+  let snaps;
+  try { snaps = typeof db.getAll === 'function' ? await db.getAll(...refs) : await Promise.all(refs.map(r => r.get())); }
+  catch (e) { snaps = await Promise.all(refs.map(r => r.get())); }
+  const docs = [];
+  snaps.forEach(s => { if (s && s.exists) docs.push(Object.assign({}, s.data() || {}, { id: s.id })); });
+  return W.attendanceDocs(docs);
+}
+
 /** Every family's report for a week. */
 export function buildReports(data, weekly, win, now, clock = lessonClock()) {
   const ctx = { schedule: data.schedule, courses: data.courses, docNames: data.docNames, live: data.live, practice: data.practice,
-    tags: data.tags, clock, win, now, weekly };
+    tags: data.tags, clock, win, now, weekly, attendance: data.attendance || {} };
   return data.families.map(f => W.familyReport(f, ctx));
 }
 
@@ -140,6 +153,7 @@ export async function runWeekly({ db, FieldValue, now = Date.now(), dryRun = fal
 
   const win = W.weekWindow(plan.weekKey, now);
   const data = await gather(db, { fetchImpl });
+  data.attendance = await loadAttendance(db, win);
   const reports = buildReports(data, weekly, win, now, clock || lessonClock());
   const withReport = reports.filter(r => !r.empty);
   const ready = withReport.filter(r => r.to.length);
