@@ -32,6 +32,8 @@
                   checks the key with the Admin SDK)
        students   { <studentId>: [ result, … ] }
        parentUpdatedAt  when a parent last added or changed a result (ms)
+       parentChanged    { <studentId>: ms } the child whose results they changed
+       officeSeen       { <studentId>: ms } when the office last opened the child
        linkSentAt / linkSentVia   when the office last sent the link
    A result: { id, subject, exam, label, date, mark, max, grade, by, at }
      subject  'Math' | 'Science'
@@ -287,6 +289,17 @@ export function stampMs(v) {
   const t = Date.parse(v);
   return Number.isFinite(t) ? t : 0;
 }
+function msMap(v) {
+  const out = {};
+  if (v && typeof v === 'object' && !Array.isArray(v)) Object.keys(v).forEach(k => { const t = stampMs(v[k]); if (t) out[k] = t; });
+  return out;
+}
+// A child whose results a parent changed since the office last opened them.
+export function changedByParent(doc, studentId) {
+  if (!doc) return false;
+  const at = (doc.parentChanged || {})[studentId] || 0;
+  return at > ((doc.officeSeen || {})[studentId] || 0);
+}
 export function normalizeResultsDoc(raw) {
   const d = raw && typeof raw === 'object' ? raw : {};
   const students = {};
@@ -300,7 +313,8 @@ export function normalizeResultsDoc(raw) {
     token: typeof d.token === 'string' ? d.token : '',
     students,
     parentUpdatedAt: stampMs(d.parentUpdatedAt),
-    officeSeenAt: stampMs(d.officeSeenAt),
+    parentChanged: msMap(d.parentChanged),
+    officeSeen: msMap(d.officeSeen),
     linkSentAt: stampMs(d.linkSentAt),
     linkSentVia: String(d.linkSentVia || ''),
     updatedAt: stampMs(d.updatedAt)
@@ -505,7 +519,7 @@ export function headlineSentences(h) {
 //   opts: { join, level, subjects, width, height, labels, compact, today, title }
 export function chartSvg(results, opts) {
   const o = opts || {};
-  const W = o.width || 560, H = o.height || (o.compact ? 132 : 220);
+  const W = o.width || (o.compact ? 360 : 560), H = o.height || (o.compact ? 150 : 220);
   const padL = o.compact ? 30 : 38, padR = 14, padT = o.compact ? 12 : 22, padB = o.compact ? 22 : 30;
   const subjects = (o.subjects && o.subjects.length ? o.subjects : SUBJECTS).filter(s => SUBJECTS.includes(s));
   const list = sortResults((results || []).filter(r => r && subjects.includes(r.subject)));
@@ -568,7 +582,9 @@ export function chartSvg(results, opts) {
       if (o.labels !== false && !o.compact && sp.length <= 10) {
         const g = resultGrade(p.r, o.level);
         const lab = (resultPercent(p.r) != null ? Math.round(resultPercent(p.r)) : '') + (g.grade && !g.worked ? (resultPercent(p.r) != null ? ' ' : '') + g.grade : '');
-        const above = p.v < 88;
+        // Two subjects close together: the higher one's label goes above, the lower one's below.
+        const near = pts.find(q => q.r.subject !== sub && Math.abs(q.t - p.t) < 45 * 86400e3);
+        const above = near ? (p.v > near.v || (p.v === near.v && sub === 'Math') ? p.v < 88 : p.v < 14) : p.v < 88;
         parts.push('<text x="' + x(p.t).toFixed(1) + '" y="' + (above ? y(p.v) - 9 : y(p.v) + 17).toFixed(1) + '" text-anchor="middle" font-size="11" font-weight="700" fill="' + col + '" font-family="inherit">' + esc(lab) + '</text>');
       }
     });

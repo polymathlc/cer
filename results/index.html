@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>School Results | Polymath Learning Centre</title>
+<!-- 📊 A family's school results (Nov 2026). The office emails or WhatsApps each
+     family their own link from the Office's Results tab (?f=FAMILY&k=KEY). The
+     parent adds every Maths and Science test and exam result of their children;
+     the page talks only to the schoolResults function
+     (shop-function/functions/school-results.js), never to Firestore, and draws
+     the chart with office/school-results-core.mjs, the same code the Office uses.
+     Not in the sitemap. -->
+<link rel="icon" href="../assets/branding/polymath-learning-centre.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://us-central1-mathgen--app.cloudfunctions.net" crossorigin>
+<style>
+  :root {
+    --ink:#10303a; --ink-2:#3d5a61; --teal:#2e9ca6; --deep:#056c76; --pink:#ec008c; --paper:#f2f9fa; --line:#d1eaee; --muted:#5c6b70;
+    --bg:#f2f6f7; --card:#ffffff; --green:#0f8a4b; --green-bg:#e6f6ee; --red:#c0392b; --red-bg:#fdecea; --amber:#a15c00; --amber-bg:#fff4e0;
+    --font:'DM Sans',system-ui,sans-serif;
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; padding:0; }
+  body { background:var(--bg); color:var(--ink); font-family:var(--font); -webkit-font-smoothing:antialiased; }
+  a { color:var(--deep); }
+  button, input, select { font:inherit; color:inherit; }
+  .topbar { background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5; }
+  .topbar-inner { max-width:760px; margin:0 auto; padding:10px 16px; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .brand { display:flex; align-items:center; gap:10px; text-decoration:none; color:var(--ink); }
+  .brand img { height:38px; width:auto; }
+  .brand-name { font-weight:800; font-size:15px; line-height:1.1; }
+  .brand-name span { display:block; font-weight:500; font-size:12px; color:var(--muted); }
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; border:0; border-radius:10px; padding:10px 16px; font:700 14px var(--font);
+    cursor:pointer; background:var(--deep); color:#fff; text-decoration:none; min-height:42px; }
+  .btn:disabled { opacity:.55; cursor:default; }
+  .btn.ghost { background:#fff; color:var(--deep); border:1.5px solid var(--line); }
+  .btn.small { padding:6px 11px; min-height:34px; font-size:13px; }
+  .btn.danger { background:#fff; color:var(--red); border:1.5px solid #f3c6c0; }
+  .btn.wa { background:#25d366; }
+  .wrap { max-width:760px; margin:0 auto; padding:22px 16px 48px; }
+  .state { text-align:center; padding:60px 16px; color:var(--muted); font-size:15px; line-height:1.6; background:#fff; border-radius:22px; }
+  .state h1 { color:var(--ink); font-size:22px; margin:0 0 8px; }
+  .spin { display:inline-block; width:22px; height:22px; border:3px solid var(--line); border-top-color:var(--deep); border-radius:50%;
+    animation:spin .8s linear infinite; vertical-align:middle; margin-right:10px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .hero { background:linear-gradient(135deg, #056c76, #2e9ca6); color:#fff; border-radius:22px; padding:24px 24px 22px; margin-bottom:18px; position:relative; overflow:hidden; }
+  .hero::after { content:''; position:absolute; right:-40px; top:-40px; width:180px; height:180px; border-radius:50%; background:rgba(255,255,255,.08); }
+  .hero h1 { margin:0 0 6px; font-size:26px; font-weight:800; letter-spacing:-.01em; }
+  .hero p { margin:0; font-size:15px; line-height:1.55; color:#dff4f6; max-width:560px; }
+  .hero .who { font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#b8e4e8; margin-bottom:6px; }
+  .kid { background:var(--card); border-radius:22px; padding:22px 22px 18px; box-shadow:0 10px 40px rgba(16,48,58,.07); margin-bottom:18px; }
+  .kid-head { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .kid-head h2 { margin:0; font-size:21px; font-weight:800; flex:1; min-width:0; }
+  .lvl { background:var(--paper); color:var(--deep); border:1px solid var(--line); border-radius:999px; padding:3px 10px; font-size:13px; font-weight:700; }
+  .since { font-size:13px; color:var(--muted); margin-top:4px; }
+  .chart-box { margin:14px 0 6px; background:#fbfdfd; border:1px solid var(--line); border-radius:16px; padding:6px; }
+  .chart-box svg { display:block; width:100%; height:auto; }
+  .legend { display:flex; gap:14px; flex-wrap:wrap; font-size:12.5px; color:var(--ink-2); margin:6px 4px 0; }
+  .legend i { display:inline-block; width:12px; height:12px; border-radius:50%; vertical-align:-1px; margin-right:5px; }
+  .legend .joined i { border-radius:0; width:2px; height:13px; background:none; border-left:2px dashed var(--ink); }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0 4px; }
+  .chip { border-radius:12px; padding:8px 12px; font-size:13.5px; line-height:1.35; border:1px solid var(--line); background:#fff; }
+  .chip b { display:block; font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); }
+  .chip.up { background:var(--green-bg); border-color:#bfe6d0; }
+  .chip.up .d { color:var(--green); font-weight:800; }
+  .chip.down { background:var(--amber-bg); border-color:#f5d9a8; }
+  .chip.down .d { color:var(--amber); font-weight:800; }
+  .list { margin:12px 0 0; border-top:1px solid var(--line); }
+  .row { display:flex; align-items:center; gap:10px; padding:11px 2px; border-bottom:1px solid #eaf3f5; }
+  .row:last-child { border-bottom:none; }
+  .subj { flex:0 0 auto; font-size:11.5px; font-weight:800; text-transform:uppercase; letter-spacing:.05em; border-radius:8px; padding:4px 8px; }
+  .subj.Math { background:#e3f3f5; color:var(--deep); }
+  .subj.Science { background:#fde6f3; color:#b0006a; }
+  .row .what { flex:1; min-width:0; }
+  .row .what b { font-size:15px; }
+  .row .what .when { font-size:12.5px; color:var(--muted); }
+  .row .score { font-weight:800; font-size:15px; white-space:nowrap; text-align:right; }
+  .row .score span { display:block; font-size:12px; color:var(--muted); font-weight:600; }
+  .row .acts { display:flex; gap:6px; }
+  .centre-tag { font-size:11.5px; color:var(--muted); white-space:nowrap; }
+  .empty { color:var(--muted); font-size:14px; padding:12px 2px 4px; }
+  .add-bar { margin-top:12px; }
+  .form { margin-top:12px; background:var(--paper); border:1px solid var(--line); border-radius:16px; padding:16px; }
+  .form h3 { margin:0 0 12px; font-size:16px; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .field label { display:block; font-size:12.5px; font-weight:700; color:var(--ink-2); margin-bottom:5px; }
+  .field input, .field select { width:100%; border:1.5px solid var(--line); border-radius:10px; padding:10px 11px; background:#fff; font-size:15px; min-height:44px; }
+  .field input:focus, .field select:focus { outline:none; border-color:var(--teal); box-shadow:0 0 0 3px rgba(46,156,166,.18); }
+  .field .hint { font-size:12px; color:var(--muted); margin-top:4px; }
+  .field.full { grid-column:1 / -1; }
+  .seg { display:flex; gap:8px; }
+  .seg button { flex:1; border:1.5px solid var(--line); background:#fff; border-radius:10px; padding:10px; font-weight:800; cursor:pointer; min-height:44px; }
+  .seg button.on.Math { background:var(--deep); color:#fff; border-color:var(--deep); }
+  .seg button.on.Science { background:var(--pink); color:#fff; border-color:var(--pink); }
+  .marks { display:flex; align-items:center; gap:8px; }
+  .marks input { flex:1; }
+  .marks span { color:var(--muted); font-weight:700; }
+  .form-acts { display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+  .err { background:var(--red-bg); color:var(--red); border-radius:10px; padding:9px 12px; font-size:14px; font-weight:600; margin-top:12px; }
+  .note { font-size:13px; color:var(--muted); line-height:1.6; text-align:center; margin:8px 0 0; }
+  .toast { position:fixed; left:50%; bottom:22px; transform:translateX(-50%) translateY(30px); background:var(--ink); color:#fff; padding:11px 18px; border-radius:12px;
+    font-weight:700; font-size:14px; opacity:0; transition:all .25s; z-index:20; pointer-events:none; max-width:90vw; text-align:center; }
+  .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+  .toast.err { background:var(--red); }
+  .hidden { display:none !important; }
+  @media (max-width:560px) {
+    .brand-name { display:none; }
+    .wrap { padding:14px 10px 36px; }
+    .hero { padding:20px 18px 18px; border-radius:18px; }
+    .hero h1 { font-size:22px; }
+    .kid { padding:16px 14px 14px; border-radius:18px; }
+    .grid { grid-template-columns:1fr; }
+    .row { flex-wrap:wrap; }
+    .row .what { flex-basis:calc(100% - 90px); }
+    .row .acts { width:100%; justify-content:flex-end; }
+  }
+</style>
+</head>
+<body>
+<header class="topbar"><div class="topbar-inner">
+  <a class="brand" href="https://polymathlc.com.sg/"><img src="../assets/branding/polymath-learning-centre.png" alt="Polymath Learning Centre"><div class="brand-name">Polymath Learning Centre<span>School results</span></div></a>
+  <a class="btn wa small" id="wa" href="https://wa.me/6596450588" target="_blank" rel="noopener">💬 WhatsApp us</a>
+</div></header>
+<main class="wrap" id="main">
+  <div class="state" id="loading"><span class="spin"></span>Loading your family's results…</div>
+</main>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script type="module">
+import * as S from '../office/school-results-core.mjs?v=1.0.0';
+
+const ENDPOINT = 'https://us-central1-mathgen--app.cloudfunctions.net/schoolResults';
+const PAGE_VERSION = '1.0.0';
+const q = new URLSearchParams(location.search);
+const FAMILY = (q.get('f') || '').trim();
+const TOKEN = (q.get('k') || '').trim();
+const esc = S.esc;
+const P = { loading: true, error: '', parentName: '', students: [], today: S.sgToday(), form: null, busy: false };
+
+const REASONS = {
+  'invalid-result': 'Please check the result.', 'date': 'Choose the date of the test.', 'date-future': 'That date is in the future.',
+  'date-old': 'That date is too long ago.', 'max': 'The total marks should be between 1 and 500.', 'mark': 'The marks cannot be more than the total.',
+  'mark-or-grade': 'Type the marks, or choose the grade (AL), or both.', 'subject': 'Choose Maths or Science.', 'exam': 'Choose which test or exam it was.',
+  'entered-by-centre': 'The centre entered this result, so only the centre can change it. WhatsApp us if it is wrong.',
+  'too-many-results': 'That is the most results we can keep for one child. WhatsApp us and we will make room.',
+  'too-many-changes': 'That is a lot of changes for one day. Please try again tomorrow.',
+  'result-not-found': 'That result was already removed.', 'link-not-found': 'This link no longer works. Please ask the centre for a new one.'
+};
+
+async function call(body) {
+  const res = await fetch(ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ family: FAMILY, token: TOKEN }, body)) });
+  let data = null;
+  try { data = await res.json(); } catch (e) { data = null; }
+  if (!res.ok || !data || !data.ok) {
+    const code = (data && data.error) || 'temporarily-unavailable';
+    const reason = data && Array.isArray(data.problems) && data.problems[0];
+    const err = new Error(REASONS[reason] || REASONS[code] || 'Something went wrong. Please try again in a minute.');
+    err.code = code;
+    throw err;
+  }
+  return data;
+}
+function toast(msg, kind) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (kind === 'err' ? ' err' : '');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), kind === 'err' ? 6000 : 2800);
+}
+
+/* ─── The view ─── */
+function chips(kid) {
+  const out = [];
+  S.SUBJECTS.forEach(sub => {
+    const list = kid.results.filter(r => r.subject === sub);
+    if (!list.length) return;
+    const cmp = S.compareSubject(list, kid.joined, kid.level);
+    const latest = list[list.length - 1];
+    if (cmp.comparable) {
+      const tone = S.changeTone(cmp);
+      out.push('<div class="chip ' + (tone === 'up' ? 'up' : tone === 'down' ? 'down' : '') + '"><b>' + esc(S.SUBJECT_LABEL[sub]) + ' since joining</b>'
+        + esc(S.resultText(cmp.before, kid.level)) + ' → ' + esc(S.resultText(cmp.after, kid.level))
+        + (S.changeText(cmp) ? ' <span class="d">' + esc(S.changeText(cmp)) + '</span>' : '') + '</div>');
+    } else {
+      out.push('<div class="chip"><b>' + esc(S.SUBJECT_LABEL[sub]) + ' latest</b>' + esc(S.examName(latest)) + ': ' + esc(S.resultText(latest, kid.level)) + '</div>');
+    }
+  });
+  return out.length ? '<div class="chips">' + out.join('') + '</div>' : '';
+}
+function resultRow(kid, r) {
+  const pct = S.resultPercent(r);
+  const g = S.resultGrade(r, kid.level);
+  const main = r.mark != null ? (r.max === 100 ? r.mark + '%' : r.mark + ' / ' + r.max) : g.grade;
+  const sub = r.mark != null ? [r.max === 100 ? '' : Math.round(pct) + '%', g.grade ? (g.worked ? '≈ ' : '') + g.grade : ''].filter(Boolean).join(' · ') : '';
+  return '<div class="row" data-result="' + esc(r.id) + '"><span class="subj ' + esc(r.subject) + '">' + esc(S.SUBJECT_LABEL[r.subject]) + '</span>'
+    + '<div class="what"><b>' + esc(S.examLongName(r)) + '</b><div class="when">' + esc(S.dayLabel(r.date)) + '</div></div>'
+    + '<div class="score">' + esc(main) + (sub ? '<span>' + esc(sub) + '</span>' : '') + '</div>'
+    + (r.by === 'office' ? '<span class="centre-tag">Entered by the centre</span>'
+      : '<div class="acts"><button class="btn ghost small" data-a="edit" data-s="' + esc(kid.id) + '" data-r="' + esc(r.id) + '">Edit</button>'
+        + '<button class="btn danger small" data-a="remove" data-s="' + esc(kid.id) + '" data-r="' + esc(r.id) + '" aria-label="Remove">✕</button></div>')
+    + '</div>';
+}
+function examOptions(sel) {
+  return '<option value="">Choose…</option>' + S.EXAMS.map(e => '<option value="' + esc(e.key) + '"' + (e.key === sel ? ' selected' : '') + '>' + esc(e.label) + '</option>').join('');
+}
+function gradeOptions(level, sel) {
+  const scale = S.scaleFor(level);
+  return '<option value="">' + (scale === 'AL' ? 'Not given (worked out from the marks)' : 'Not given') + '</option>'
+    + S.GRADES[scale].map(g => '<option value="' + g + '"' + (g === sel ? ' selected' : '') + '>' + g + '</option>').join('');
+}
+function formHtml(kid) {
+  const f = P.form;
+  const custom = f.exam === 'Test' || f.exam === 'Other';
+  return '<div class="form" id="form"><h3>' + (f.id ? 'Change this result' : 'Add a result for ' + esc(S.firstName(kid.name))) + '</h3>'
+    + '<div class="grid">'
+    + '<div class="field full"><label>Subject</label><div class="seg">' + S.SUBJECTS.map(sub => '<button type="button" class="' + sub + (f.subject === sub ? ' on' : '') + '" data-a="subject" data-v="' + sub + '">' + S.SUBJECT_LABEL[sub] + '</button>').join('') + '</div></div>'
+    + '<div class="field"><label for="f-exam">Test or exam</label><select id="f-exam" data-in="exam">' + examOptions(f.exam) + '</select></div>'
+    + '<div class="field"><label for="f-date">Date</label><input id="f-date" type="date" data-in="date" max="' + esc(S.addDays(P.today, 7)) + '" value="' + esc(f.date) + '"><div class="hint">Roughly is fine.</div></div>'
+    + (custom ? '<div class="field full"><label for="f-label">Name of the test (optional)</label><input id="f-label" data-in="label" maxlength="' + S.LIMITS.label + '" placeholder="e.g. Fractions topical test" value="' + esc(f.label) + '"></div>' : '')
+    + '<div class="field"><label for="f-mark">Marks</label><div class="marks"><input id="f-mark" data-in="mark" inputmode="decimal" placeholder="e.g. 72" value="' + esc(f.mark) + '"><span>out of</span><input id="f-max" data-in="max" inputmode="decimal" value="' + esc(f.max) + '" aria-label="Out of"></div></div>'
+    + '<div class="field"><label for="f-grade">Grade' + (S.scaleFor(kid.level) === 'AL' ? ' (AL)' : '') + '</label><select id="f-grade" data-in="grade">' + gradeOptions(kid.level, f.grade) + '</select></div>'
+    + '</div>'
+    + (f.error ? '<div class="err">' + esc(f.error) + '</div>' : '')
+    + '<div class="form-acts"><button class="btn" data-a="save" ' + (P.busy ? 'disabled' : '') + '>' + (P.busy ? 'Saving…' : 'Save result') + '</button><button class="btn ghost" data-a="cancel">Cancel</button></div></div>';
+}
+function kidCard(kid) {
+  const open = P.form && P.form.studentId === kid.id;
+  const subjects = S.SUBJECTS.filter(sub => kid.results.some(r => r.subject === sub));
+  return '<section class="kid" data-kid="' + esc(kid.id) + '"><div class="kid-head"><h2>' + esc(kid.name) + '</h2>' + (kid.level ? '<span class="lvl">' + esc(kid.level) + '</span>' : '') + '</div>'
+    + (kid.joined ? '<div class="since">With Polymath since ' + esc(S.monthLabel(kid.joined)) + '</div>' : '')
+    + (kid.results.length ? '<div class="chart-box">' + S.chartSvg(kid.results, { join: kid.joined, level: kid.level, title: kid.name + '\'s marks', width: window.innerWidth < 560 ? 380 : 560, height: window.innerWidth < 560 ? 240 : 220 }) + '</div>'
+      + '<div class="legend">' + subjects.map(sub => '<span><i style="background:' + S.SUBJECT_COLOUR[sub] + '"></i>' + S.SUBJECT_LABEL[sub] + ' (marks %)</span>').join('')
+      + (kid.joined ? '<span class="joined"><i></i>Joined Polymath</span>' : '') + '</div>' + chips(kid) : '')
+    + '<div class="list">' + (kid.results.length ? kid.results.slice().reverse().map(r => resultRow(kid, r)).join('') : '<div class="empty">No results yet. Add the latest test or exam, and any from before ' + esc(S.firstName(kid.name)) + ' joined us if you have them.</div>') + '</div>'
+    + (open ? formHtml(kid) : '<div class="add-bar"><button class="btn" data-a="add" data-s="' + esc(kid.id) + '">+ Add a result</button></div>')
+    + '</section>';
+}
+function render() {
+  const main = document.getElementById('main');
+  if (P.loading) return;
+  if (P.error) {
+    main.innerHTML = '<div class="state"><h1>This link does not work</h1>' + esc(P.error) + '<p><a class="btn wa" href="https://wa.me/6596450588" target="_blank" rel="noopener">💬 WhatsApp the centre</a></p></div>';
+    return;
+  }
+  const keep = document.activeElement && document.activeElement.id;
+  main.innerHTML = '<div class="hero"><div class="who">' + esc(P.parentName ? P.parentName + '\'s family' : 'Your family') + '</div><h1>📊 School results</h1>'
+    + '<p>Add each Maths and Science test and exam result here. We look at every one next to what we teach, and the chart shows the marks from before your child joined us until now.</p></div>'
+    + (P.students.length ? P.students.map(kidCard).join('') : '<div class="state">No children are listed for this family yet. Please WhatsApp the centre.</div>')
+    + '<p class="note">Only Polymath Learning Centre sees these results. This link is for your family only, so please do not share it.<br>Page ' + PAGE_VERSION + '</p>';
+  if (keep && document.getElementById(keep)) { const el = document.getElementById(keep); el.focus(); }
+}
+
+/* ─── Actions ─── */
+function kidById(id) { return P.students.find(k => k.id === id); }
+function blankForm(studentId) {
+  return { studentId, id: '', subject: 'Math', exam: '', date: '', label: '', mark: '', max: '100', grade: '', error: '' };
+}
+// The usual date of the exam, this year if that has passed, else last year.
+function suggestDate(exam) {
+  const y = Number(P.today.slice(0, 4));
+  const d = S.defaultExamDate(exam, y);
+  if (!d) return P.today;
+  return d <= P.today ? d : S.defaultExamDate(exam, y - 1);
+}
+const ACT = {
+  add(el) { P.form = blankForm(el.dataset.s); render(); const f = document.getElementById('form'); if (f) f.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); },
+  edit(el) {
+    const kid = kidById(el.dataset.s);
+    const r = kid && kid.results.find(x => x.id === el.dataset.r);
+    if (!r) return;
+    P.form = { studentId: kid.id, id: r.id, subject: r.subject, exam: r.exam, date: r.date, label: r.label || '', mark: r.mark == null ? '' : String(r.mark), max: String(r.max || 100), grade: r.grade || '', error: '' };
+    render();
+    const f = document.getElementById('form'); if (f) f.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  },
+  cancel() { P.form = null; render(); },
+  subject(el) { P.form.subject = el.dataset.v; render(); },
+  async save() {
+    const f = P.form;
+    if (!f || P.busy) return;
+    const v = S.validateResult({ subject: f.subject, exam: f.exam, date: f.date, label: f.label, mark: f.mark, max: f.max, grade: f.grade }, { today: P.today });
+    if (v.error) { f.error = v.error; render(); return; }
+    P.busy = true; f.error = ''; render();
+    try {
+      const out = await call({ action: 'save', studentId: f.studentId, result: Object.assign({}, v.result, { id: f.id || '', by: undefined, at: undefined }) });
+      P.students = out.students;
+      const kid = kidById(f.studentId);
+      P.form = null;
+      toast('Saved ✓ Thank you!');
+      if (kid) setTimeout(() => { const card = document.querySelector('[data-kid="' + CSS.escape(kid.id) + '"]'); if (card) card.scrollIntoView({ block: 'start', behavior: 'smooth' }); }, 30);
+    } catch (e) { f.error = e.message; }
+    P.busy = false; render();
+  },
+  async remove(el) {
+    const kid = kidById(el.dataset.s);
+    const r = kid && kid.results.find(x => x.id === el.dataset.r);
+    if (!r) return;
+    if (!confirm('Remove ' + S.SUBJECT_LABEL[r.subject] + ' ' + S.examLongName(r) + ' (' + S.dayLabel(r.date) + ')?')) return;
+    try {
+      const out = await call({ action: 'remove', studentId: kid.id, resultId: r.id });
+      P.students = out.students;
+      if (P.form && P.form.id === r.id) P.form = null;
+      render();
+      toast('Removed');
+    } catch (e) { toast(e.message, 'err'); }
+  }
+};
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-a]');
+  if (!el || !ACT[el.dataset.a]) return;
+  e.preventDefault();
+  ACT[el.dataset.a](el);
+});
+document.addEventListener('input', e => {
+  const el = e.target.closest('[data-in]');
+  if (!el || !P.form) return;
+  P.form[el.dataset.in] = el.value;
+  // A correction clears the last complaint.
+  if (P.form.error) { P.form.error = ''; const box = document.querySelector('#form .err'); if (box) box.remove(); }
+});
+document.addEventListener('change', e => {
+  const el = e.target.closest('[data-in]');
+  if (!el || !P.form) return;
+  P.form[el.dataset.in] = el.value;
+  if (el.dataset.in === 'exam') {
+    P.form.date = suggestDate(el.value);
+    if (el.value === 'PSLE' && !P.form.mark) P.form.max = '100';
+    render();
+  }
+});
+
+/* ─── Start ─── */
+(async function start() {
+  if (!FAMILY || !TOKEN) {
+    P.loading = false; P.error = 'The link is incomplete. Please open it straight from the email or WhatsApp the centre sent you.'; render(); return;
+  }
+  try {
+    const out = await call({ action: 'load' });
+    P.parentName = out.parentName || '';
+    P.students = Array.isArray(out.students) ? out.students : [];
+    if (out.today) P.today = out.today;
+  } catch (e) {
+    P.error = e.code === 'link-not-found' ? 'This link no longer works, or part of it is missing. Please ask the centre for a new one.' : e.message;
+  }
+  P.loading = false;
+  render();
+})();
+window.PolymathResults = { P, ACT, version: PAGE_VERSION };
+</script>
+</body>
+</html>

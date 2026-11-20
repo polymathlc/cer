@@ -9,11 +9,11 @@
 //
 //   officeSettings/results-<familyId>
 //     { kind: 'school-results', familyId, token, students: { <studentId>: [result] },
-//       parentUpdatedAt, parentWrites: { day, n }, … }
+//       parentUpdatedAt, parentChanged: { <studentId>: ms }, parentWrites: { day, n }, … }
 //   officeFamilies/<familyId>   read only: the children's names and levels
 //
 //   schoolResults  POST { action: 'load',   family, token }
-//                    → { ok, parentName, students: [{ id, name, level, results }], today }
+//                    → { ok, parentName, students: [{ id, name, level, joined, results }], today }
 //                  POST { action: 'save',   family, token, studentId, result }
 //                    → { ok, result, students }      a new result, or one of the
 //                                                    parent's own changed (same id)
@@ -128,6 +128,8 @@ function pageStudents(family, doc) {
   const kids = (Array.isArray(family.students) ? family.students : []).filter(s => s && s.id && s.name && STUDENT_ID.test(String(s.id)));
   return kids.filter(s => s.status !== 'left' || storedList(doc, s.id).length).slice(0, LIMITS.students).map(s => ({
     id: String(s.id), name: oneLine(s.name, 80), level: oneLine(s.level, 4),
+    // When the child joined us (their own family's link), so the chart can mark it.
+    joined: isDayKey(s.startDate) ? s.startDate : isDayKey(family.signUpDate) ? family.signUpDate : '',
     results: sortList(storedList(doc, s.id)).map(publicResult)
   }));
 }
@@ -217,7 +219,9 @@ function createSchoolResultsService({ store, http, now = Date.now, makeId = newR
         }
         const students = Object.assign({}, doc.students && typeof doc.students === 'object' ? doc.students : {});
         students[q.studentId] = next;
-        const write = Object.assign({}, doc, { students, parentUpdatedAt: at, updatedAt: at, updatedBy: 'parent',
+        // Which child the parent changed, and when: the Office marks them 🆕 until opened.
+        const changed = Object.assign({}, doc.parentChanged && typeof doc.parentChanged === 'object' ? doc.parentChanged : {}, { [q.studentId]: at });
+        const write = Object.assign({}, doc, { students, parentUpdatedAt: at, parentChanged: changed, updatedAt: at, updatedBy: 'parent',
           parentWrites: { day: today, n: writes + 1 } });
         return { write, saved, family, doc: write };
       });

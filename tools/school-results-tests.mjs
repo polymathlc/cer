@@ -236,3 +236,11 @@ test('the CSV has a line per result', () => {
   assert.equal(lines[0], 'Student,Level,Parent,With us since,Subject,Exam,Date,Marks,Out of,Percent,Grade,Grade worked out,Entered by');
   assert.equal(lines[1], 'Ethan Tan,P5,Mrs Tan,2026-06-01,Maths,Mid-year exam (SA1),2026-05-20,58,100,58,AL6,yes,parent');
 });
+
+test('a child the parent changed is new until the office opens them', () => {
+  const d = S.normalizeResultsDoc({ parentChanged: { a: 200, b: 100 }, officeSeen: { b: 150 } });
+  assert.equal(S.changedByParent(d, 'a'), true);
+  assert.equal(S.changedByParent(d, 'b'), false);
+  assert.equal(S.changedByParent(d, 'c'), false);
+  assert.equal(S.changedByParent(null, 'a'), false);
+});

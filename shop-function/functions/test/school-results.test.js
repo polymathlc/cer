@@ -53,6 +53,8 @@ test('the right link lists the children and their results, and nothing private',
   assert.equal(res.body.today, '2026-11-20');
   assert.deepEqual(res.body.students.map(s => s.name), ['Ethan Tan', 'Chloe Tan'], 'a child who left with no results is not listed');
   assert.deepEqual(res.body.students[0].results.map(r => r.id), ['rparent001', 'roffice001'], 'oldest first');
+  assert.equal(res.body.students[0].joined, '2026-03-01');
+  assert.deepEqual(Object.keys(res.body.students[0]).sort(), ['id', 'joined', 'level', 'name', 'results']);
   assert.equal(res.body.students[0].results[1].by, 'office');
   const text = JSON.stringify(res.body);
   for (const secret of [TOKEN, 'tan@example.com', '6591110001', '1 Secret Road', 'TAN2AA'])
@@ -87,6 +89,7 @@ test('a parent adds a result: cleaned, stamped as theirs, and kept in date order
   const stored = db.rows.get('officeSettings/results-tanfam');
   assert.deepEqual(stored.students.k1.map(r => r.id), ['rparent001', 'roffice001', 'rnew0001']);
   assert.equal(stored.parentUpdatedAt, NOW);
+  assert.deepEqual(stored.parentChanged, { k1: NOW });
   assert.equal(stored.token, TOKEN, 'the key stays');
   assert.deepEqual(stored.parentWrites, { day: '2026-11-20', n: 1 });
   assert.equal(res.body.students[0].results.length, 3);
