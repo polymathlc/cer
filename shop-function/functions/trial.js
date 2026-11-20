@@ -17,7 +17,7 @@
 //   2. A class link. An admin makes a link for one class slot on /trial/#admin.
 //      Whoever opens it is asked for an email and WhatsApp number, then sees that
 //      class's Zoom link and worksheets straight away, with no password and no
-//      date. A link works for LINK_DAYS (one week) and then stops, here on the
+//      date. A link works for LINK_DAYS (two months) and then stops, here on the
 //      server. Each use is saved in trialBookings with kind 'link', so the admins
 //      see who used it.
 //
@@ -48,7 +48,8 @@ const TRIAL_CODES = 'trialCodes';
 const ACCESS_CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const ACCESS_CODE_PATTERN = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{8}$/;
 // Unused codes stop working after this many days.
-const ACCESS_CODE_DAYS = 60;
+// Two months (Zhi Kai, 20 Nov 2026), the same as class links and how far ahead a trial can be booked.
+const ACCESS_CODE_DAYS = 62;
 const MAX_CODES_AT_ONCE = 30;
 const COURSES = 'onlineCourses';
 const SHEETS = 'pdfAnnotator';
@@ -69,9 +70,11 @@ const MAIL_PREFIX = 'polymath-trial-';
 const HOUR = 3600000, DAY = 86400000;
 const SG_OFFSET = 8 * HOUR;
 // A trial can be booked from tomorrow (Singapore) up to this many days ahead.
-const TRIAL_HORIZON_DAYS = 56;
-// A class link works for one week from when it is made.
-const LINK_DAYS = 7;
+// Two months (Zhi Kai, 20 Nov 2026: some parents arrange a trial really early).
+const TRIAL_HORIZON_DAYS = 62;
+// A class link works for two months from when it is made (was one week until 20 Nov 2026;
+// Zhi Kai: some parents arrange a trial really early).
+const LINK_DAYS = 62;
 // Worksheet download links in emails work for one week from when the email is
 // written; the page's own links for a day (the page makes fresh ones each visit).
 const MAIL_LINK_DAYS = 7;
@@ -1129,7 +1132,7 @@ function createTrialService({ store, http, hashIp, verifyIdToken = async () => {
           'booking-not-found': 'This worksheet link is not valid.',
           'booking-cancelled': 'This trial booking was cancelled.',
           'booking-ended': 'This trial booking has ended.',
-          'link-expired': 'The class link this came from has expired (links last one week).',
+          'link-expired': 'The class link this came from has expired (links last two months).',
           'too-many-attempts': 'Too many downloads from this connection. Please try again in an hour.'
         };
         return page(error.status, words[error.code] || 'This worksheet is not available.');
