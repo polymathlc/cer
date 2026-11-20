@@ -246,3 +246,11 @@ test('class links (v1.4.0): a name is required, a new link is sent from its own 
   assert.ok(!page.includes("copyText(window.__links["), 'no Copy link button in the list rows');
   assert.ok(page.includes("'link-name-required'"), 'the server refusal has words');
 });
+
+test('the staff tutorial lives only inside the admin panel', () => {
+  const admin = page.slice(page.indexOf('id="admin-section"'), page.indexOf('<!-- ═════════════════ PARENTS'));
+  assert.ok(admin.includes('data-tab="tutorial"'), 'a Tutorial tab in the admin tabs');
+  assert.ok(admin.includes('id="pane-tutorial"'), 'the Tutorial section is inside #admin-section, hidden from families');
+  assert.match(page, /const TOUR_KEY = 'pl_trial_tour_done_v1';/);
+  assert.ok(/maybeFirstTour\(\)/.test(page), 'the walkthrough opens by itself the first time');
+});

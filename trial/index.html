@@ -257,6 +257,43 @@
   .modal { background:#fff; border-radius:var(--radius); max-width:380px; width:100%; padding:24px; text-align:center; }
   .modal h2 { font-size:18px; margin-bottom:6px; }
   .modal p { color:var(--gray-600); font-size:14px; margin-bottom:14px; }
+  /* 🎓 Staff tutorial (v1.7.0): the first-login walkthrough and the Tutorial tab */
+  .tab.tutorial-tab { border-color:var(--deep); }
+  .tour-bg { position:fixed; inset:0; background:rgba(0,0,0,.5); display:flex; align-items:center; justify-content:center; z-index:160; padding:16px; }
+  .tour { background:#fff; border-radius:var(--radius); max-width:520px; width:100%; max-height:calc(100vh - 32px); overflow:auto; padding:22px 22px 18px; box-shadow:0 20px 60px rgba(0,0,0,.25); }
+  .tour .tour-step { font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--deep); opacity:.75; margin-bottom:4px; }
+  .tour h2 { font-size:20px; margin:0 0 10px; }
+  .tour .tour-body { font-size:15px; line-height:1.55; color:var(--gray-700, #374151); }
+  .tour .tour-body p { margin:0 0 10px; }
+  .tour .tour-body ol, .tour .tour-body ul { margin:0 0 10px 20px; padding:0; }
+  .tour .tour-body li { margin:0 0 6px; }
+  .tour .tour-dots { display:flex; gap:6px; justify-content:center; margin:14px 0 12px; }
+  .tour .tour-dots span { width:8px; height:8px; border-radius:50%; background:var(--gray-300, #d1d5db); }
+  .tour .tour-dots span.on { background:var(--deep); width:22px; border-radius:6px; }
+  .tour .tour-row { display:flex; gap:8px; justify-content:space-between; align-items:center; flex-wrap:wrap; }
+  .tour .tour-row .right { display:flex; gap:8px; margin-left:auto; }
+  .tour-spot { outline:3px solid #f59e0b !important; outline-offset:3px; border-radius:10px; }
+  .tour-tip { background:var(--warn-bg); border:1px solid var(--warn-border); color:var(--warn); border-radius:var(--radius-sm); padding:8px 12px; font-size:14px; margin:6px 0 10px; }
+  .tut h3 { font-size:17px; margin:22px 0 8px; color:var(--deep); }
+  .tut h3:first-of-type { margin-top:6px; }
+  .tut p, .tut li { font-size:15px; line-height:1.6; }
+  .tut ol, .tut ul { margin:0 0 10px 22px; padding:0; }
+  .tut li { margin-bottom:6px; }
+  .tut .tut-links { width:100%; border-collapse:collapse; margin:6px 0 12px; font-size:14px; }
+  .tut .tut-links th, .tut .tut-links td { text-align:left; vertical-align:top; padding:9px 10px; border-bottom:1px solid var(--line); }
+  .tut .tut-links th { background:var(--warn-bg); font-size:13px; }
+  .tut .tut-links td:first-child { font-weight:700; white-space:nowrap; }
+  .tut .tut-toc { display:flex; flex-wrap:wrap; gap:6px; margin:4px 0 6px; }
+  .tut .tut-toc a { font-size:13px; padding:5px 10px; border:1px solid var(--line); border-radius:999px; text-decoration:none; color:var(--deep); font-weight:600; }
+  .tut .tut-faq dt { font-weight:700; margin-top:10px; }
+  .tut .tut-faq dd { margin:2px 0 0; }
+  @media (max-width:560px) {
+    .tut .tut-links thead { display:none; }
+    .tut .tut-links tr { display:block; border-bottom:1px solid var(--line); padding:8px 0; }
+    .tut .tut-links td { display:block; border:0; padding:3px 4px; }
+    .tour { padding:18px 16px 14px; }
+    .tour h2 { font-size:18px; }
+  }
   /* 🔑 Admin password login (v1.6.0) */
   .modal form { display:flex; flex-direction:column; gap:10px; text-align:left; }
   .modal input[type=password] { width:100%; padding:11px 12px; border:1px solid var(--gray-300); border-radius:8px; font-size:16px; }
@@ -305,6 +342,7 @@
     <div class="admin-banner">
       <span id="admin-who">Admin</span>
       <span>
+        <button class="btn small ghost" onclick="startTour(0)" title="A short walkthrough of this page">How to use</button>
         <button class="btn small ghost" onclick="adminLoad()">Refresh</button>
         <button class="btn small ghost" onclick="adminSignOut()">Sign out</button>
       </span>
@@ -316,6 +354,9 @@
       <button class="tab" data-tab="codes">Access codes<span class="count" id="count-codes">0</span></button>
       <button class="tab" data-tab="classes">Classes &amp; Zoom</button>
       <button class="tab" data-tab="password">Password</button>
+      <!-- 🎓 v1.7.0 (Zhi Kai 20 Nov 2026): a Tutorial section for staff, shown only inside the admin panel
+           (after the admin password or an admin Google sign-in). -->
+      <button class="tab tutorial-tab" data-tab="tutorial">🎓 Tutorial</button>
     </div>
 
     <div class="card admin-pane hidden" id="pane-bookings">
@@ -425,6 +466,85 @@
         <input type="password" id="admin-password-new" maxlength="64" placeholder="New admin password (8+ characters)" autocomplete="new-password">
         <button class="btn small" onclick="saveAdminPassword()">Change admin password</button>
       </div>
+    </div>
+
+    <!-- ═════════════════ 🎓 TUTORIAL (staff only, inside the admin panel) ═════════════════ -->
+    <div class="card admin-pane hidden tut" id="pane-tutorial">
+      <h2>Tutorial: how to use this page</h2>
+      <p class="lead">This page gives parents a free online trial lesson on Zoom. Your main job here is to send a parent the right link for the right class. Read this once; open it again any time from this tab.</p>
+      <div class="row-actions" style="justify-content:flex-start;margin:0 0 6px"><button class="btn small" onclick="startTour(0)">▶ Play the short walkthrough</button></div>
+      <div class="tut-toc">
+        <a href="#tut-start">The usual job</a><a href="#tut-links">What each link is for</a><a href="#tut-codes">Access codes</a>
+        <a href="#tut-bookings">Bookings &amp; visits</a><a href="#tut-lesson">On lesson day</a><a href="#tut-leave">Leave alone</a><a href="#tut-faq">Questions</a>
+      </div>
+
+      <h3 id="tut-start">1. The usual job: send a parent a class link</h3>
+      <p>A parent asks for a trial (usually on WhatsApp). You already know their child's level and subject.</p>
+      <ol>
+        <li>Open the <b>Class links</b> tab.</li>
+        <li><b>1. Class</b>: choose the class the child will join (level, subject, day and time).</li>
+        <li><b>2. Who is this for?</b>: type the parent's or child's name, e.g. <i>Mrs Tan (Ethan)</i>. This is how you find the link later.</li>
+        <li>Press <b>Make link</b>. A pink <b>Ready to send</b> box appears.</li>
+        <li><b>Check the class in the pink box</b> is the one you meant. If not, press <i>Done, close this</i> and make a new one.</li>
+        <li>Type the parent's WhatsApp number and press <b>Open WhatsApp</b> (the message is written for you), or press <b>Copy message</b> and paste it into your chat.</li>
+      </ol>
+      <p>The link works for <b>7 days</b>. The parent types their email and WhatsApp, then sees the Zoom link and the class's worksheets straight away. They are also emailed the same.</p>
+      <p>To send a link again, open <b>Links already made</b> at the bottom of the tab, search the name and press <b>Send again</b>.</p>
+
+      <h3 id="tut-links">2. What each link is for</h3>
+      <table class="tut-links">
+        <thead><tr><th>Link or code</th><th>What it does</th><th>When you use it</th></tr></thead>
+        <tbody>
+          <tr><td>Class link</td><td>Opens one class's Zoom link and Current/Next worksheets after the parent types an email and WhatsApp. Stops after 7 days.</td><td>Most trials. You chose the class for the parent.</td></tr>
+          <tr><td>Access code</td><td>A one-time code like ABCD-2345. The parent types it on this page, then picks a date and time themselves. One code = one booking.</td><td>When the parent wants to choose the date themselves.</td></tr>
+          <tr><td>Page link</td><td>The parent's own page for a booking: their lesson, Zoom and worksheets. It is in their emails.</td><td>A parent lost the email. Copy it from <b>Bookings &amp; visits</b>.</td></tr>
+          <tr><td>Live link</td><td>The child's way into the live lesson. Works only on the lesson day, opens 15 minutes before the start. <b>Use this first.</b></td><td>On the lesson day, if the parent cannot find it. Copy it from <b>Bookings &amp; visits</b>.</td></tr>
+          <tr><td>Zoom link</td><td>The class on Zoom. It is the <b>backup</b> if the live link does not work.</td><td>Only if the live link fails. The blue <b>Join Zoom</b> button at the top is the centre's class Zoom.</td></tr>
+          <tr><td>Admin login</td><td>The button at the bottom of the page that opened this panel for you. It lasts 12 hours on this device.</td><td>Staff only. Never share the password with parents.</td></tr>
+        </tbody>
+      </table>
+
+      <h3 id="tut-codes">3. Access codes (when the parent picks the date)</h3>
+      <ol>
+        <li>Open the <b>Access codes</b> tab. Choose how many codes (usually 1) and type who it is for.</li>
+        <li>Press <b>Make codes</b> and send the code to the parent with this page's address: <b>polymathlc.com.sg/trial</b>.</li>
+        <li>The parent types the code, picks level, date and time, and fills in their details. They get a confirmation email, and a reminder the afternoon before.</li>
+      </ol>
+      <p>Each code works once. Unused codes stop after 60 days. Press <b>Revoke</b> to stop a code you sent by mistake.</p>
+
+      <h3 id="tut-bookings">4. Bookings &amp; visits: who is coming</h3>
+      <p>Everyone who booked with a code and everyone who opened a class link is listed here. Use <b>Upcoming</b>, <b>Past</b>, the month and the search box to find a family. On each row you can:</p>
+      <ul>
+        <li><b>Page link</b> / <b>Live link</b>: copy the family's link to send on WhatsApp.</li>
+        <li><b>Email Zoom + worksheets</b>: email the family their Zoom link and worksheets again.</li>
+        <li><b>Send reminder</b>: send the lesson reminder now (it is also sent by itself the afternoon before).</li>
+        <li>Mark the lesson <b>Attended</b> or <b>No-show</b> after the lesson, or press <b>Cancel</b> if the family cannot come. A cancelled booking's links stop working.</li>
+      </ul>
+      <p><b>Download CSV</b> gives you the list as a spreadsheet.</p>
+
+      <h3 id="tut-lesson">5. On the lesson day</h3>
+      <ul>
+        <li>The child opens the <b>live link</b> from 15 minutes before the start, and joins as a Trial student.</li>
+        <li>If something goes wrong, send the <b>Zoom link</b> instead (it is the backup).</li>
+        <li>After the lesson, mark the booking <b>Attended</b> or <b>No-show</b> in <b>Bookings &amp; visits</b>.</li>
+      </ul>
+
+      <h3 id="tut-leave">6. Tabs to leave alone</h3>
+      <p><b>Classes &amp; Zoom</b> (which Zoom link and worksheets each class uses) and <b>Password</b> (the parents' shared password and the admin password) change things for every family. Please ask Zhi Kai before changing anything there.</p>
+
+      <h3 id="tut-faq">7. Questions</h3>
+      <dl class="tut-faq">
+        <dt>I made a link for the wrong class.</dt>
+        <dd>Open <b>Links already made</b>, find it and press <b>Stop</b>, then make a new one for the right class.</dd>
+        <dt>The parent says the link has ended.</dt>
+        <dd>Class links last 7 days. Make a new one for them.</dd>
+        <dt>The class I need is not in the list.</dt>
+        <dd>Only open classes that run online (Online or Both on the schedule) can be chosen. Ask Zhi Kai.</dd>
+        <dt>The page says my admin login has ended.</dt>
+        <dd>It lasts 12 hours. Press <b>Admin login</b> at the bottom and type the password again.</dd>
+        <dt>I'm on a shared computer.</dt>
+        <dd>Press <b>Sign out</b> at the top when you finish.</dd>
+      </dl>
     </div>
   </section>
 
@@ -569,7 +689,7 @@
 
 // Shown to the signed-in admin in the footer, so a deploy can be checked.
 // Bump it on every change to this page.
-const TRIAL_PAGE_VERSION = 'v1.6.0';
+const TRIAL_PAGE_VERSION = 'v1.7.0';
 // 🎥 The Join Zoom button at the top (v1.2.0). A lesson with its own Zoom link (admin, Classes & Zoom)
 // uses that one; otherwise this, the centre's class Zoom. Keep equal to CLASS_ZOOM_URL in
 // student/student-account.js (a test checks).
@@ -1195,9 +1315,104 @@ function applyAdmin() {
   setZoomTop();
   $('admin-who').textContent = admin ? (googleAdminOn() ? 'Admin: ' + who : 'Admin (signed in with the admin password, until ' + fmtMs(pwSession.expiresAtMs, true) + ')') : '';
   // Reload only when someone new comes in (not on every Firebase auth tick).
-  if (admin && (!adminWasOn || who !== adminWho)) { adminData = null; adminLoad(); }
-  if (!admin) adminData = null;
+  if (admin && (!adminWasOn || who !== adminWho)) { adminData = null; adminLoad(); maybeFirstTour(); }
+  if (!admin) { adminData = null; if (tourIndex >= 0) endTour(false); }
   adminWasOn = admin; adminWho = who;
+}
+
+// ─── 🎓 Staff walkthrough (v1.7.0, Zhi Kai 20 Nov 2026) ───
+// Opens by itself the first time the admin panel opens on a device (after the admin password or an
+// admin Google sign-in), and again from "How to use" or the Tutorial tab. Each step opens the tab it
+// talks about and outlines it. The full written guide is the Tutorial tab (#pane-tutorial).
+const TOUR_KEY = 'pl_trial_tour_done_v1';
+const TOUR_STEPS = [
+  { tab: 'links', title: 'Welcome! Here is what this page is for',
+    body: '<p>This page gives parents a <b>free online trial lesson</b> on Zoom. Your main job is to send each parent the <b>right link for the right class</b>.</p><p>This walkthrough takes about a minute. You can open it again any time with <b>How to use</b> at the top, and read everything in the <b>🎓 Tutorial</b> tab.</p>' },
+  { tab: 'links', spot: '#link-make', title: 'Class links: the job you will do most',
+    body: '<ol><li>Choose the <b>class</b> the child will join.</li><li>Type <b>who it is for</b>, e.g. Mrs Tan (Ethan).</li><li>Press <b>Make link</b>.</li><li><b>Check the class</b> in the pink Ready to send box, then press <b>Open WhatsApp</b> or <b>Copy message</b>.</li></ol><p>The link works for <b>7 days</b>. The parent types an email and WhatsApp, then sees the Zoom link and worksheets.</p>' },
+  { tab: 'links', spot: '#link-old', title: 'Sending a link again',
+    body: '<p>Open <b>Links already made</b>, search the name and press <b>Send again</b>.</p><p>Made one for the wrong class? Press <b>Stop</b> on it and make a new one.</p>' },
+  { tab: 'codes', spot: '#pane-codes', title: 'Access codes: when the parent picks the date',
+    body: '<p>A code like <b>ABCD-2345</b> lets a parent choose their own date and time on <b>polymathlc.com.sg/trial</b>.</p><p>Make one, send it to the parent with the page address. <b>One code = one booking.</b> Unused codes stop after 60 days.</p>' },
+  { tab: 'bookings', spot: '#pane-bookings', title: 'Bookings & visits: who is coming',
+    body: '<p>Everyone who booked or opened a class link is here. On each row you can copy their <b>Page link</b> or <b>Live link</b>, <b>email the Zoom link and worksheets</b> again, or <b>send a reminder</b>.</p><p>After the lesson, mark it <b>Attended</b> or <b>No-show</b>.</p>' },
+  { tab: 'bookings', title: 'Live link first, Zoom as backup',
+    body: '<ul><li><b>Live link</b>: the child\'s way into the lesson. Works only on the lesson day, from 15 minutes before. <b>Use this first.</b></li><li><b>Zoom link</b>: the backup if the live link does not work. The blue <b>Join Zoom</b> button at the top is the centre\'s class Zoom.</li><li><b>Page link</b>: the family\'s own page with their lesson and worksheets, also in their emails.</li></ul>' },
+  { tab: 'tutorial', spot: '#admin-tabs', title: 'Leave these alone, and where to find help',
+    body: '<p><b>Classes &amp; Zoom</b> and <b>Password</b> change things for every family, so please ask Zhi Kai first.</p><p>Everything from this walkthrough is written out in the <b>🎓 Tutorial</b> tab. On a shared computer, press <b>Sign out</b> when you finish.</p>' }
+];
+let tourIndex = -1;
+function showAdminTab(name) {
+  const b = document.querySelector('#admin-tabs [data-tab="' + name + '"]');
+  if (b) b.click();
+}
+function tourClearSpot() { document.querySelectorAll('.tour-spot').forEach(el => el.classList.remove('tour-spot')); }
+function startTour(index) {
+  if (!adminOn()) return;
+  tourIndex = Math.max(0, Math.min(TOUR_STEPS.length - 1, index || 0));
+  renderTour();
+}
+function endTour(done) {
+  tourClearSpot();
+  const d = $('tour-bg'); if (d) d.remove();
+  tourIndex = -1;
+  if (done) storageSet(TOUR_KEY, '1');
+  document.removeEventListener('keydown', tourKeys);
+}
+function tourKeys(e) {
+  if (tourIndex < 0) return;
+  if (e.key === 'Escape') endTour(true);
+  else if (e.key === 'ArrowRight') { if (tourIndex < TOUR_STEPS.length - 1) { tourIndex++; renderTour(); } }
+  else if (e.key === 'ArrowLeft') { if (tourIndex > 0) { tourIndex--; renderTour(); } }
+}
+function renderTour() {
+  const step = TOUR_STEPS[tourIndex];
+  if (!step) return;
+  showAdminTab(step.tab);
+  tourClearSpot();
+  let d = $('tour-bg');
+  if (!d) {
+    d = document.createElement('div');
+    d.id = 'tour-bg'; d.className = 'tour-bg';
+    d.addEventListener('click', e => { if (e.target === d) endTour(true); });
+    document.body.appendChild(d);
+    document.addEventListener('keydown', tourKeys);
+  }
+  const last = tourIndex === TOUR_STEPS.length - 1;
+  d.innerHTML = '<div class="tour" role="dialog" aria-modal="true" aria-labelledby="tour-title">'
+    + '<div class="tour-step">Step ' + (tourIndex + 1) + ' of ' + TOUR_STEPS.length + '</div>'
+    + '<h2 id="tour-title">' + escapeHtml(step.title) + '</h2>'
+    + '<div class="tour-body">' + step.body + '</div>'
+    + '<div class="tour-dots" aria-hidden="true">' + TOUR_STEPS.map((_, i) => '<span' + (i === tourIndex ? ' class="on"' : '') + '></span>').join('') + '</div>'
+    + '<div class="tour-row">'
+    + '<button class="link-btn" type="button" id="tour-skip">' + (last ? '' : 'Skip') + '</button>'
+    + '<span class="right">'
+    + (tourIndex > 0 ? '<button class="btn ghost small" type="button" id="tour-back">Back</button>' : '')
+    + '<button class="btn small" type="button" id="tour-next">' + (last ? 'Open the Tutorial' : 'Next') + '</button>'
+    + '</span></div></div>';
+  if (last) d.querySelector('#tour-skip').classList.add('hidden');
+  d.querySelector('#tour-skip').onclick = () => endTour(true);
+  const back = d.querySelector('#tour-back'); if (back) back.onclick = () => { tourIndex--; renderTour(); };
+  d.querySelector('#tour-next').onclick = () => {
+    if (last) { endTour(true); showAdminTab('tutorial'); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    tourIndex++; renderTour();
+  };
+  // Outline what the step talks about, behind the box, so staff see where it is.
+  const spot = step.spot ? document.querySelector(step.spot) : null;
+  if (spot) spot.classList.add('tour-spot');
+  setTimeout(() => { const n = $('tour-next'); if (n) n.focus(); }, 20);
+}
+// The Tutorial's contents chips scroll to their section without touching the address (#…), which
+// this page uses to open bookings and class links.
+document.querySelectorAll('.tut-toc a').forEach(a => a.addEventListener('click', e => {
+  e.preventDefault();
+  const target = document.querySelector(a.getAttribute('href'));
+  if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}));
+// The first time the panel opens on this device, the walkthrough starts by itself.
+function maybeFirstTour() {
+  if (storageGet(TOUR_KEY) || tourIndex >= 0 || !adminOn()) return;
+  setTimeout(() => { if (adminOn() && !storageGet(TOUR_KEY) && tourIndex < 0 && !$('admin-pw-prompt')) startTour(0); }, 400);
 }
 
 // 🔑 The admin password box (v1.6.0). What is typed goes to the server (trialAdmin 'adminLogin'),
