@@ -19,6 +19,8 @@ const { createMapsService, createMapsStore, MAPS_SOURCE } = require('./maps');
 const { createNotebookService } = require('./notebook');
 const { createNotebookStore } = require('./notebook-store');
 const { createSchoolResultsService, createSchoolResultsStore } = require('./school-results');
+const { createDailyQuestionService } = require('./daily-question');
+const { createDailyQuestionStore } = require('./daily-question-store');
 initializeApp();
 // Both keys arrive as environment variables written at deploy time from the GitHub
 // repository secrets STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET (see
@@ -58,6 +60,13 @@ const notebook = createNotebookService({
 });
 // School results on /results: parents add each school test and exam result with their family's link.
 const schoolResults = createSchoolResultsService({ store: createSchoolResultsStore(getFirestore()), http: createHttp(report), report });
+// The Free Question of the Day on /question and the home page: the questions, sign-ups
+// (double opt-in), unsubscribes and the admin list. The morning emails are sent from
+// GitHub Actions (tools/daily-question-send.mjs).
+const dailyQuestions = createDailyQuestionService({
+  store: createDailyQuestionStore(getFirestore(), Timestamp), http: createHttp(report), hashIp: hash,
+  verifyIdToken: token => getAuth().verifyIdToken(token), report
+});
 const service = createService({
   repository, stripe,
   webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
@@ -83,3 +92,4 @@ exports.revisionPackAdmin = onRequest(web, revision.revisionPackAdmin);
 exports.mapsLibrary = onRequest(web, maps.mapsLibrary);
 exports.mistakeNotebook = onRequest(Object.assign({}, web, { timeoutSeconds: 60, memory: '512MiB' }), notebook.mistakeNotebook);
 exports.schoolResults = onRequest(web, schoolResults.schoolResults);
+exports.dailyQuestion = onRequest(web, dailyQuestions.dailyQuestion);
