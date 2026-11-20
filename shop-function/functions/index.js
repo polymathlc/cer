@@ -18,6 +18,7 @@ const { createStripe } = require('./stripe');
 const { createMapsService, createMapsStore, MAPS_SOURCE } = require('./maps');
 const { createNotebookService } = require('./notebook');
 const { createNotebookStore } = require('./notebook-store');
+const { createSchoolResultsService, createSchoolResultsStore } = require('./school-results');
 initializeApp();
 // Both keys arrive as environment variables written at deploy time from the GitHub
 // repository secrets STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET (see
@@ -55,6 +56,8 @@ const notebook = createNotebookService({
   store: createNotebookStore(getFirestore(), { bucket: getStorage().bucket('mathgen--app.firebasestorage.app') }),
   http: createHttp(report), verifyIdToken: token => getAuth().verifyIdToken(token), report
 });
+// School results on /results: parents add each school test and exam result with their family's link.
+const schoolResults = createSchoolResultsService({ store: createSchoolResultsStore(getFirestore()), http: createHttp(report), report });
 const service = createService({
   repository, stripe,
   webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
@@ -79,3 +82,4 @@ exports.revisionPack = onRequest(Object.assign({}, web, { timeoutSeconds: 120, c
 exports.revisionPackAdmin = onRequest(web, revision.revisionPackAdmin);
 exports.mapsLibrary = onRequest(web, maps.mapsLibrary);
 exports.mistakeNotebook = onRequest(Object.assign({}, web, { timeoutSeconds: 60, memory: '512MiB' }), notebook.mistakeNotebook);
+exports.schoolResults = onRequest(web, schoolResults.schoolResults);
