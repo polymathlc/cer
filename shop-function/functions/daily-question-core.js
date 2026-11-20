@@ -22,6 +22,7 @@
 const { createHash, randomBytes } = require('node:crypto');
 const { MATH, SCIENCE } = require('./daily-question-bank');
 const pool = require('./daily-question-pool');
+const optionTable = require('./option-table');
 
 const SENDER_EMAIL = 'admin@polymathlc.com.sg';
 const SENDER_NAME = 'Polymath Learning Centre';
@@ -443,7 +444,17 @@ function tag(q) {
     + (math ? '#bfdbfe' : '#bbf7d0') + '">' + escapeHtml(q.level + ' ' + q.subjectLabel) + '</span> '
     + '<span style="font-size:12px;color:' + COLOURS.muted + '">' + escapeHtml(q.topic) + '</span>';
 }
+// The options as a table when they were printed as one ("Circle: X; Triangle: Y; …"
+// in every option): a header row of the printed headings and one row per option,
+// lettered A to D, the right row green once the answer may be shown.
 function optionsHtml(q, { reveal = false } = {}) {
+  const table = optionTable.fromOptions(q.options);
+  if (table) {
+    return optionTable.html(table, {
+      labels: LETTERS, inline: true, cell: mathHtml, correct: reveal ? q.answer : undefined,
+      ink: COLOURS.ink, line: COLOURS.line, headBg: COLOURS.paper, right: COLOURS.sci
+    });
+  }
   return '<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:separate;border-spacing:0 6px">'
     + q.options.map((option, index) => {
       const right = reveal && index === q.answer;
@@ -483,7 +494,8 @@ function questionCardHtml(q, { heading, reveal = false, link = '' } = {}) {
       + '<div style="margin:10px 0 0;font-size:14px;line-height:1.5;color:' + COLOURS.plum + '"><b>Key idea:</b> ' + mathHtml(q.idea) + '</div></div>';
   } else if (reveal) {
     out += '<div style="margin:14px 0 0;padding:14px 16px;border-radius:10px;background:' + COLOURS.paper + '">'
-      + '<div style="font-size:14px;font-weight:700;color:' + COLOURS.sci + ';margin:0 0 6px">Answer: ' + escapeHtml(q.answerLetter) + '. ' + html(q.options[q.answer]) + '</div>'
+      + '<div style="font-size:14px;font-weight:700;color:' + COLOURS.sci + ';margin:0 0 6px">Answer: ' + escapeHtml(q.answerLetter) + '. '
+      + (optionTable.fromOptions(q.options) ? 'the green row in the table above' : html(q.options[q.answer])) + '</div>'
       + '<ol style="margin:0;padding:0 0 0 20px;font-size:14px;line-height:1.6;color:' + COLOURS.ink + '">'
       + q.steps.map(step => '<li style="margin:0 0 4px">' + html(step) + '</li>').join('') + '</ol>'
       + '<div style="margin:10px 0 0;font-size:14px;line-height:1.5;color:' + COLOURS.plum + '"><b>Key idea:</b> ' + html(q.idea) + '</div></div>';
@@ -502,7 +514,9 @@ function questionText(q, { heading, reveal = false, link = '' } = {}) {
   if (heading) lines.push(heading.toUpperCase());
   lines.push(q.level + ' ' + q.subjectLabel + ' · ' + q.topic, '', q.q, '');
   if ((q.images || []).length) lines.push('(' + q.images.length + ' picture' + (q.images.length > 1 ? 's' : '') + ': see the email or the website)', '');
-  if (!open) q.options.forEach((option, index) => lines.push('  ' + LETTERS[index] + '. ' + option + (reveal && index === q.answer ? '   ✓' : '')));
+  const table = open ? null : optionTable.fromOptions(q.options);
+  if (table) optionTable.plainText(table, LETTERS, reveal ? q.answer : undefined).forEach(line => lines.push(line));
+  else if (!open) q.options.forEach((option, index) => lines.push('  ' + LETTERS[index] + '. ' + option + (reveal && index === q.answer ? '   ✓' : '')));
   if (reveal) {
     if (open) lines.push('', 'Answer: ' + q.answer, 'Model answer: ' + q.model, 'Worked answer:');
     else lines.push('', 'Answer: ' + q.answerLetter + '. ' + q.options[q.answer], 'Worked answer:');
@@ -689,5 +703,5 @@ module.exports = {
   publicQuestion, publicPair, publicAll, slotFor, bankPick, strideFor, BANK_BY_LEVEL, SIGNUP_LEVELS, DEFAULT_PAGE_LEVEL, imageUrl, mathHtml,
   subscriberLevels, readSignupLevel, emptySlots, validPoolItem, pool, normaliseEmail, subscriberId, newToken, keyOf, parseKey, maskEmail, validateSubscribe, validatePreferences,
   planSubscribe, dueKind, planRun, readCap, stats, millis, confirmUrl, manageUrl, unsubscribeUrl, oneClickUrl, tryUrl, escapeHtml, validEmail,
-  confirmMail, alreadyMail, dailyMail, weeklyMail, adminSummaryMail, mailId, subscribersCsv, questionText
+  confirmMail, alreadyMail, dailyMail, weeklyMail, adminSummaryMail, mailId, subscribersCsv, questionText, questionCardHtml, optionsHtml
 };

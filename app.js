@@ -9987,6 +9987,7 @@ function mcqSetOptionText(blockId, optId, text) {
   // topic then shows "(3)" again rather than a stray "(C)".
   const m = String(text || '').trim().match(MCQ_BARE_RE);
   o.text = (m && _normMcqChoice(m[1]) === String(i + 1)) ? `(${i + 1})` : text;
+  _mcqTablePreviewRefresh(blockId);
 }
 function mcqAddOption(blockId) {
   const b = blocks.find(x => x.id === blockId);
@@ -10762,6 +10763,7 @@ function renderImportedBlockEditorBody(block) {
           <button class="btn btn-outline" style="margin-top:4px;" onclick="mcqAddOption('${id}')">+ Add option</button>
           <button class="btn btn-outline" style="margin-top:4px;margin-left:8px;" onclick="mcqNumberOptions('${id}')" title="Set every option to just its label — for options that are in the picture">＃ Make ${lab === 'letters' ? '(A)(B)(C)(D)' : '(1)(2)(3)(4)'}</button>
           ${emOwner ? '' : mcqLabelPickerHtml()}
+          <div id="otprev_${id}">${_mcqTablePreviewHtml(block)}</div>
         </div>`;
     }
     case 'answerLine':
@@ -10971,6 +10973,9 @@ function renderImportedBlockStudent(block, q) {
     case 'part':
       return `<div style="margin:10px 0 4px;font-weight:600;">${block.label ? escapeHtml(block.label) + ' ' : ''}<span style="font-weight:400;">${block.content || ''}</span></div>`;
     case 'mcq': {
+      // 📋 Options printed as a table are drawn as that table.
+      const optTable = mcqOptionTable(block);
+      if (optTable) return _mcqTableStudentHtml(block, q, optTable);
       const name = 'mcq_' + block.id;
       const lab = mcqLabelStyle(q);
       let h = `<div class="mcq-block" data-block="${block.id}" style="margin:10px 0;">`;
@@ -11033,6 +11038,81 @@ function renderImportedBlockStudent(block, q) {
 // highlight only — never reveal correctness here, or we'd give the answer away
 // before the student checks. Right/wrong colouring happens after Check answer
 // (see markOpenQuestion / markQuestionPart).
+// =====================================================================
+// 📋 ANSWER OPTIONS PRINTED AS A TABLE (option-table.js, shared with
+// Question of the Day and the Ans Key live class)
+// =====================================================================
+// A paper sometimes prints its four choices as a TABLE: column headings
+// (Circle | Triangle | Square) and one row per option. Every reader used to
+// flatten that into "Circle: X; triangle: Y; square: Z" and the student got
+// four lines of colons. The options keep that text — it is what the bank, the
+// answer key, the AI prompts and every older screen already read — and
+// wherever an option list spells out the SAME headings in the SAME order in
+// every option, it is DRAWN as the table it came from. Options that are not
+// written that way are never touched.
+//  • `_optionTableRule()` is the one instruction every AI reader is given, so
+//    a table comes out of ⚡ Rapid add, 🤖 Build from screenshot, the PDF
+//    import and the exam paper builder written the same way.
+//  • `_cqLocalFindings` flags options that only HALF look like a table (a
+//    table read wrongly) red, and ⚡ Rapid add reads the options once more off
+//    the source page (`otRapidSourceCheck`) and compares the two cell by cell.
+const OT_RULE_FALLBACK = 'ANSWER OPTIONS PRINTED AS A TABLE: when the answer options are printed as a TABLE (column headings across the top and one row per option), '
+  + 'write EACH option as that row\'s cells paired with the printed column headings, in the printed column order, as "Heading: cell; Heading: cell" '
+  + '(for example "Circle: X; Triangle: Y; Square: Z"), with the SAME headings in the SAME order in every option and each cell copied exactly as printed '
+  + '(a tick as ✓ and a cross as ✗). Never leave out a column or a heading. When the options are NOT printed as a table, write them exactly as printed '
+  + 'and never invent headings or turn them into "Heading: cell" pairs.';
+function _ot() { return (typeof window !== 'undefined' && window.PolymathOptionTable) || null; }
+function _optionTableRule() {
+  const T = _ot();
+  return '- ' + (T && T.PROMPT_RULE ? T.PROMPT_RULE : OT_RULE_FALLBACK) + '\n';
+}
+// The plain words of each option (an option may hold rich text or a picture).
+function _otOptionTexts(block) {
+  return ((block && block.options) || []).map(o => stripHtml(String((o && o.text) || '')).replace(/\s+/g, ' ').trim());
+}
+// The table an MCQ block's options spell out, or null.
+function mcqOptionTable(block) {
+  const T = _ot();
+  if (!T || !block || block.type !== 'mcq') return null;
+  return T.fromOptions(_otOptionTexts(block));
+}
+// The block as a student sees it: a header row of the printed headings, then
+// ONE <label> per option — the same radio and the same label-per-option every
+// marker, painter and ⓘ badge in this file walks by index, laid out as a grid
+// row. Every style is written on the element, because this HTML is also what a
+// print window draws, and that window has none of this page's stylesheet.
+function _mcqTableStudentHtml(block, q, table) {
+  const name = 'mcq_' + block.id;
+  const lab = mcqLabelStyle(q);
+  const cols = 'grid-template-columns:44px repeat(' + table.head.length + ',minmax(0,1fr));';
+  const cell = 'text-align:center;overflow-wrap:anywhere;';
+  let h = `<div class="mcq-block mcq-otable" data-block="${block.id}" style="margin:10px 0;">`;
+  h += `<div class="mcq-ot-head" aria-hidden="true" style="display:grid;${cols}gap:8px;align-items:end;padding:0 11px 4px;font-weight:700;font-size:0.92em;">`
+    + `<span></span>${table.head.map(x => `<span style="${cell}">${escapeHtml(x)}</span>`).join('')}</div>`;
+  (block.options || []).forEach((o, i) => {
+    const row = table.rows[i] || [];
+    h += `<label class="mcq-ot-row" aria-label="${escapeHtml(mcqLabelOf(i, lab) + '. ' + table.head.map((x, k) => x + ' ' + (row[k] || '')).join(', '))}" `
+      + `style="display:grid;${cols}gap:8px;align-items:center;padding:7px 10px;border:1px solid var(--border,#d1d5db);border-radius:8px;margin-bottom:6px;cursor:pointer;">`
+      + `<span style="display:flex;gap:6px;align-items:center;"><input type="radio" name="${name}" value="${o.id}" onchange="markMcqChoice(this)"><b>${mcqLabelOf(i, lab)}.</b></span>`
+      + row.map(c => `<span class="mcq-ot-cell" style="${cell}border-left:1px solid var(--border,#d1d5db);">${escapeHtml(c)}</span>`).join('')
+      + `</label>`;
+  });
+  return h + `</div>`;
+}
+// Under the option boxes in the editor: what a student will see.
+function _mcqTablePreviewHtml(block) {
+  const T = _ot();
+  const t = mcqOptionTable(block);
+  if (!T || !t) return '';
+  return `<div style="margin:8px 0 2px;font-size:0.8rem;color:var(--text-muted);">📋 Students see these options as a table:</div>`
+    + T.html(t, { labels: (block.options || []).map((o, i) => mcqLabelOf(i, mcqStyleForBlock(block.id))), inline: true });
+}
+function _mcqTablePreviewRefresh(blockId) {
+  const el = document.getElementById('otprev_' + blockId);
+  const b = (typeof blocks !== 'undefined' && Array.isArray(blocks)) ? blocks.find(x => x.id === blockId) : null;
+  if (el && b) el.innerHTML = _mcqTablePreviewHtml(b);
+}
+
 function markMcqChoice(input) {
   const wrap = input.closest('.mcq-block');
   if (!wrap) return;
@@ -17233,6 +17313,7 @@ function _bulkPagePrompt(pageNo, pageCount) {
     `  {"type":"plainanswer","text":"..."}\n` +
     `  {"type":"explanation","text":"teacher explanation of the model answer"}\n` +
     `Rules:\n` +
+    _optionTableRule() +
     `- ONE entry per question. Put an "image" block exactly where each diagram/picture/graph/figure/table belongs, interleaved with the text blocks.\n` +
     `- CONTINUATION: if the TOP of this page clearly continues a question that started on the previous page (it carries on mid-question, before any new question number), return that leftover part as the FIRST entry with "continuation":true — its "blocks" are just the continuation content. Every other entry has "continuation":false.\n` +
     _rectangleRules() +
@@ -17647,6 +17728,7 @@ function _aiBuildQuestionPrompt(isPdf, imageCount, levelHint, opts) {
     `  {"type":"plainanswer","text":"..."}\n` +
     `  {"type":"explanation","text":"teacher explanation of the model answer"}\n` +
     `Rules:\n` +
+    _optionTableRule() +
     `- List blocks in the SAME order they appear in the source. Put an "image" block exactly where each diagram/picture/graph/figure/table belongs, interleaved with the text blocks.\n` +
     (multi ? `- "page" on every "image" block: the 1-based index of the attached image the figure is on (1 = the first attached image). box_2d is measured on THAT image: 0,0 is its top-left corner, 1000,1000 its bottom-right corner.\n` : '') +
     _rectangleRules() +
@@ -20872,6 +20954,7 @@ function _autoChkRepairPrompt(q, findings, levelHint) {
     `  {"type":"plainanswer","text":"..."}\n` +
     `  {"type":"explanation","text":"teacher explanation of the model answer"}\n` +
     `Rules:\n` +
+    _optionTableRule() +
     _partsPromptRules() +
     `- If a text block lists labelled items or options inline, put EACH on its own line separated by a real line break ("\\n").\n` +
     `- Write every answer as plain prose: no brackets or markup of any kind around individual words.\n` +
@@ -21510,6 +21593,23 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
           }
         } catch (e) { console.warn('rapid auto-check skipped', e); }
       }
+
+      // 2d) 📋 THE OPTIONS, READ AGAIN OFF THE PAGE. A multiple-choice
+      //    question's options are copied once more off the untouched source page
+      //    by a reader that has not seen ours, and compared cell by cell: a table
+      //    on the page must be the same table here (so the ticked answer is still
+      //    the right row), and options that are not a table on the page must not
+      //    have become one. A mismatch lights the card red with the finding and a
+      //    one-tap "📋 Make the table" fix; it never withholds the question.
+      try {
+        const tableCheck = await otRapidSourceCheck(q, [{ mimeType: file.type, data: b64 }]);
+        if (tableCheck && tableCheck.state === 'mismatch') {
+          const mcqB = _cqMcqBlock(q);
+          const found = _otLocalFindings(q, mcqB).filter(f => f.title === 'Options table needs checking');
+          const prev = q.autoCheck || { tries: 1, findings: [] };
+          autoChkStamp(q, { state: 'red', tries: prev.tries || 1, findings: found.concat((prev.findings || []).filter(f => f.fix !== 'optionsTable')) });
+        }
+      } catch (e) { console.warn('rapid options-table check skipped', e); }
 
       // 3) Promote to a real Vetting question and persist. Done per question
       //    rather than in a batch at the end, so a failure on question 4 cannot
@@ -23719,6 +23819,7 @@ function _regenPrompt(q, remark, opts) {
     `  {"type":"plainanswer","text":"..."}\n` +
     `  {"type":"explanation","text":"teacher explanation of the model answer"}\n` +
     `Rules:\n` +
+    _optionTableRule() +
     `- Keep the SAME block types in the SAME order as the original (same number of image placeholders, same answer type, mcq stays mcq), and the SAME lettered parts — if the original is marked "PART (a)" / "PART (b)", the new copy has the same parts in the same order, each opening with its own "(a) " / "(b) " marker.\n` +
     `- Every question ends with an explanation even if the original had none.\n` +
     _partsPromptRules() +
@@ -28680,6 +28781,7 @@ function _epQuestionPrompt(n, from, total) {
     `  {"type":"plainanswer","text":"..."}\n` +
     `  {"type":"explanation","text":"teacher explanation of the model answer"}\n` +
     `Rules:\n` +
+    _optionTableRule() +
     (multi ? `- "page" on every "image" block: the 1-based index of the attached image the figure is on (1 = the first attached image). box_2d is measured on THAT image: 0,0 is its top-left corner, 1000,1000 its bottom-right corner.\n` : '') +
     `- CONTINUATION: if the FIRST attached image opens in the middle of a question that started BEFORE it — it carries on mid-question, before any new question number — return that leftover part as the FIRST entry with "continuation":true and just the leftover content in its "blocks". Every other entry has "continuation":false.\n` +
     `- "number": the question number EXACTLY as printed on the paper, INCLUDING its part letter — "7", "12", "3a", "15(b)". It is used ONLY to find this question's line on the marking scheme and is never shown to anyone. If no number is printed, use "".\n` +
@@ -30351,6 +30453,7 @@ function _cpbQuestionPrompt(n, from, total) {
     `  {"type":"plainanswer","text":"..."}\n` +
     `  {"type":"explanation","text":"teacher explanation of the model answer"}\n` +
     `Rules:\n` +
+    _optionTableRule() +
     (multi ? `- "page" on every "image" block: the 1-based index of the attached image the figure is on (1 = the first attached image). box_2d is measured on THAT image: 0,0 is its top-left corner, 1000,1000 its bottom-right corner.\n` : '') +
     `- "questionType" is the MOST IMPORTANT field on this job. "mcq" means the question offers a fixed set of numbered or lettered answer options to choose from, and nothing is written out. "open" means the child writes the answer — a sentence, a number, a table to fill in, a diagram to draw or label. A question that offers options AND asks for written working is "open".\n` +
     `- A "mcq" question has exactly ONE "mcq" block and NO "answer"/"plainanswer" block. An "open" question has NO "mcq" block and at least one answer block. Never both.\n` +
@@ -32321,6 +32424,7 @@ function _mpScriptPrompt(n, from, total, carry) {
     `- "type": "mcq" for a multiple-choice question, "open" for anything the student writes an answer to.\n` +
     `- "question": the printed wording of the question, as plain text. Do NOT include the number itself. If the question depends on a diagram, graph or table, add a short factual description of it in brackets at the end, e.g. "(diagram: a beaker of water on a lit Bunsen burner, thermometer reading 40 °C)".\n` +
     `- "options": for a multiple-choice question ONLY, every printed option as [{"label":"1","text":"…"}] using the labels the paper prints (1-4 or A-D). Empty array for an open question.\n` +
+    _optionTableRule().replace(/^- /, '- In "text": ') +
     `- "marks": the marks the paper allows for this question, from the [2] or (2 marks) printed beside it. Use null when the paper does not say.\n` +
     `- "student": THE STUDENT'S OWN HANDWRITTEN ANSWER, transcribed word for word — including their spelling and grammar mistakes, which are part of what is being marked. Keep their line breaks. For a multiple-choice question put ONLY the option they picked ("3" or "C") as they marked it — a circled option, a ticked box, a letter or a number written in the answer space. If they crossed something out and wrote again, transcribe the FINAL answer. If they drew or annotated instead of writing, describe what they drew in one sentence. If a word is genuinely illegible write [illegible] rather than guessing at it.\n` +
     `- "blank": true when the student left the answer space empty. "student" is then "".\n` +
@@ -51031,6 +51135,86 @@ function _cqTableLabelsChoices(tables, n, style) {
 }
 
 // ---- structural findings (instant, no AI) -------------------------------
+// 📋 The options-table findings, decidable in code:
+//  • options that only HALF look like a table (some "Heading: cell" rows and
+//    some not, or different headings) — almost always a table read wrongly;
+//  • ⚡ Rapid add's second reading of the source page disagreed with the
+//    options (`otRapidSourceCheck`), for as long as the options are the ones
+//    it read. Both are red: a wrong table is a wrong question.
+function _otLocalFindings(q, mcq) {
+  const T = _ot();
+  if (!T || !mcq) return [];
+  const out = [];
+  const texts = _otOptionTexts(mcq);
+  const misread = T.misreadTable(texts);
+  if (misread) {
+    out.push(_cqFinding('Options', 'high', 'Options table needs checking',
+      'These options look as if they came off a table, but they do not line up: ' + misread + '. Write every option as the same headings in the same order, "Heading: cell; Heading: cell", and they show as a table.'));
+  }
+  const chk = q && q.optionsTableCheck;
+  if (chk && chk.state === 'mismatch' && chk.sig === _otSig(mcq)) {
+    const canFix = !!(chk.table && Array.isArray(chk.table.rows) && chk.table.rows.length === (mcq.options || []).length);
+    const pageTable = chk.table ? T.clean(chk.table) : null;
+    const shown = pageTable ? ' The page shows: ' + pageTable.head.join(' | ') + ' — ' + pageTable.rows.map((r, i) => mcqLabelOf(i, mcqLabelStyle(q)) + ') ' + r.join(' | ')).join('; ') + '.' : '';
+    out.push(_cqFinding('Options', 'high', 'Options table needs checking',
+      'A second reading of the source page does not match these options: ' + (chk.issues || []).join('; ') + '.' + shown, canFix ? 'optionsTable' : ''));
+  }
+  return out;
+}
+function _otSig(mcq) { return _otOptionTexts(mcq).join('\u241f'); }
+// ⚡ Rapid add: read this question's options once more off the source page,
+// with a reader that has not seen ours, and compare cell by cell (option-table.js
+// `sourceIssues`). Kept on the question as `optionsTableCheck`, so the red
+// finding above stays on the card until the options are put right — by hand or
+// by the "📋 Make the table" button, which writes the table as the page shows it.
+async function otRapidSourceCheck(q, media) {
+  const T = _ot();
+  const mcq = _cqMcqBlock(q);
+  if (!T || !mcq || (mcq.options || []).length < 2 || !Array.isArray(media) || !media.length) return null;
+  if (!(window.__aiReady && window.__aiReady())) return null;
+  const wording = ((q && q.blocks) || []).filter(b => b && (b.type === 'text' || b.type === 'part'))
+    .map(b => stripHtml(String(b.content || b.text || ''))).join(' ').replace(/\s+/g, ' ').trim();
+  const prompt = T.SOURCE_CHECK_SYSTEM + '\n\n' + T.sourcePrompt(wording, mcq.options.length, { where: 'The attached image is the page (or screenshot) the question was read from.' });
+  const raw = await askGeminiVision(prompt, media, { maxOutputTokens: 3000, json: true });
+  const read = T.readSource(_parseAIJson(raw));
+  const issues = T.sourceIssues(read, _otOptionTexts(mcq));
+  q.optionsTableCheck = {
+    state: issues.length ? 'mismatch' : 'ok', printedAsTable: read.printedAsTable, issues: issues.slice(0, 8),
+    // Rows as { c: [...] }: Firestore cannot store an array inside an array.
+    table: read.table && read.table.rows.length <= 6 && read.table.head.length <= 6 ? { head: read.table.head, rows: read.table.rows.map(c => ({ c })) } : null,
+    sig: _otSig(mcq), at: new Date().toISOString()
+  };
+  return q.optionsTableCheck;
+}
+// The "📋 Make the table" fix: the options become the rows of the table the
+// second reading copied off the page, row for row, in printed order. The option
+// ids (and so the ticked answer) stay where they are.
+async function otFixOptions(scope, id) {
+  const T = _ot();
+  const q = scope === 'vet' ? (vettingList || []).find(x => x && String(x.id) === String(id))
+    : (typeof _docQById === 'function' ? _docQById(id) : null) || (questionBank || []).find(x => x && String(x.id) === String(id));
+  const mcq = q && _cqMcqBlock(q);
+  const chk = q && q.optionsTableCheck;
+  const pageTable = chk && chk.table && T ? T.clean(chk.table) : null;
+  if (!T || !mcq || !pageTable || pageTable.rows.length !== (mcq.options || []).length || T.shapeIssues(pageTable, mcq.options.length).length) {
+    showToast('There is no table from the page to use here — fix the options by hand', 'error');
+    return;
+  }
+  const before = mcq.options.map(o => o.text);
+  const rows = T.toOptions(pageTable);
+  mcq.options.forEach((o, i) => { o.text = rows[i]; });
+  const prevCheck = q.optionsTableCheck;
+  q.optionsTableCheck = Object.assign({}, chk, { state: 'ok', issues: [], sig: _otSig(mcq), fixedAt: new Date().toISOString() });
+  const ok = scope === 'vet' ? await saveVettingQuestion(q) : await saveQuestion(q);
+  if (!ok) { mcq.options.forEach((o, i) => { o.text = before[i]; }); q.optionsTableCheck = prevCheck; return; }
+  if (q.autoCheck && Array.isArray(q.autoCheck.findings)) q.autoCheck.findings = q.autoCheck.findings.filter(f => f.fix !== 'optionsTable');
+  try { const rec = _tlCache.get(String(q.id)); if (rec) rec.findings = (rec.findings || []).filter(f => f.fix !== 'optionsTable'); } catch (e) { /* no cache */ }
+  try { const rev = _cqReviews.get(id); if (rev) rev.findings = (rev.findings || []).filter(f => f.fix !== 'optionsTable'); } catch (e) { /* no review */ }
+  if (scope === 'vet') { renderVettingList(); try { tlRenderPanel(); } catch (e) { /* panel closed */ } }
+  else { if (document.querySelector('#page-bank.active')) renderQuestionBank(); try { _cqRender(); } catch (e) { /* not open */ } }
+  showToast('📋 The options are now the table from the page', 'success');
+}
+
 function _cqFinding(type, severity, title, detail, fix) {
   return { type, severity, title, detail, fix: fix || '' };
 }
@@ -51052,6 +51236,8 @@ function _cqLocalFindings(q, aiAnswered) {
     // 🔤 The question's own markers — what the fix would write.
     const lab = mcqLabelStyle(q);
     const mk = mcqMarkers(lab, ' ');
+    // ── 📋 OPTIONS PRINTED AS A TABLE ────────────────────────────────────
+    out.push(..._otLocalFindings(q, mcq));
     // ── THE HEADLINE CHECK, decidable half ──────────────────────────────
     if (fixable && tables.length && real.length >= 2) {
       const labelled = _cqTableLabelsChoices(tables, opts.length, lab);
@@ -51455,6 +51641,7 @@ function _cqFindingHtml(f, qid, scope) {
         <div class="cq-find-title">${escapeHtml(f.title)}</div>
         ${f.detail ? `<div class="cq-find-detail">${escapeHtml(f.detail)}</div>` : ''}
         ${f.fix === 'numberOptions' ? `<div class="cq-find-fix"><button class="btn btn-outline" style="font-size:0.8rem;padding:6px 12px;" onclick="${fixCall}">＃ Make options ${fixMk}</button></div>` : ''}
+        ${f.fix === 'optionsTable' && scope !== 'create' ? `<div class="cq-find-fix"><button class="btn btn-outline" style="font-size:0.8rem;padding:6px 12px;" onclick="otFixOptions('${scope === 'vet' ? 'vet' : 'bank'}','${escapeHtml(qid)}')">📋 Make the table as the page shows it</button></div>` : ''}
       </div>
     </div>`;
 }

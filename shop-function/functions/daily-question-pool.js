@@ -37,6 +37,10 @@
 // never given a question above their level: an unknown level gets nothing until it
 // is set, and a level without a question that day gets the nearest one BELOW it.
 const { createHash } = require('node:crypto');
+// Answer options printed as a table (Circle | Triangle | Square, one row per option)
+// are written "Circle: X; Triangle: Y; Square: Z" and drawn as a table by every
+// page and email; option-table.js is the one place that knows how.
+const optionTable = require('./option-table.js');
 
 const LEVELS = Object.freeze(['P3', 'P4', 'P5', 'P6']);
 const LEVEL_RANK = Object.freeze({ P1: 1, P2: 2, P3: 3, P4: 4, P5: 5, P6: 6, S1: 7, S2: 8, S3: 9, S4: 10, S5: 11, Secondary: 7 });
@@ -199,6 +203,11 @@ function cleanItem(raw) {
   if (mcq) {
     out.options = mcq.options;
     out.answerIndex = mcq.answerIndex;
+    // The table the reader says the options were printed as, kept so the checks can
+    // hold the option wording to it cell by cell.
+    const table = r.optionTable ? optionTable.clean(r.optionTable) : null;
+    // Rows as { c: [...] }: Firestore cannot store an array inside an array.
+    if (r.optionTable) out.optionTable = table ? { head: table.head, rows: table.rows.map(c => ({ c })) } : { head: [], rows: [] };
     out.answerType = 'short';
     // The answer is the right option's words, so every other check reads it the same way.
     if (mcq.answerIndex >= 0) out.answer = mcq.options[mcq.answerIndex];
@@ -264,6 +273,7 @@ function qualityIssues(item, images = []) {
     if (!(item.answerIndex >= 0 && item.answerIndex < opts.length)) issues.push('the right option is not one of the options');
     if (/(?:^|\n)\s*\(?(?:[1-4]|[A-D])\s*[).]\s+\S/.test(q)) issues.push('the options are written into the wording');
     for (const [pattern, why] of LEFTOVERS) if (opts.some(o => pattern.test(o)) && !/question number|part label/.test(why)) issues.push('an option ' + why);
+    issues.push(...optionTableIssues(item));
   }
   if (!item.topic) issues.push('there is no topic');
   if (!item.answer) issues.push('there is no answer');
@@ -300,6 +310,44 @@ function qualityIssues(item, images = []) {
     if (aspect > 8 || aspect < 0.125) issues.push(label + ' is a thin strip');
   });
   return [...new Set(issues)];
+}
+
+// The options of a multiple-choice question that was printed with its options in a
+// table. The options must spell the table out row for row ("Heading: cell; …", the
+// same headings in the same order), the table must be a clean table, and options
+// that only half look like a table (a table read wrongly) are never published.
+function optionTableIssues(item) {
+  if (!item || item.kind !== 'mcq') return [];
+  const opts = item.options || [];
+  const out = [];
+  if (item.optionTable) {
+    out.push(...optionTable.shapeIssues(item.optionTable, opts.length));
+    out.push(...optionTable.matchIssues(item.optionTable, opts));
+  } else {
+    const read = optionTable.fromOptions(opts);
+    if (read) out.push(...optionTable.shapeIssues(read, opts.length));
+    const misread = optionTable.misreadTable(opts);
+    if (misread) out.push(misread);
+  }
+  return [...new Set(out)];
+}
+
+/* ══════════════ Gate 2b: the options table, read again from the source ══════════════
+   A second Chung GPT call that has NOT seen our version reads the question's
+   options straight off the source (the worksheet page, or the bank question and
+   its pictures) and copies them out. The code then compares the two cell by cell:
+   a table on the page must be a table here with the same headings and the same
+   cells in every row (so the right answer is still the right row), and options
+   that are NOT a table on the page must not have been turned into one. */
+const TABLE_CHECK_SYSTEM = optionTable.SOURCE_CHECK_SYSTEM;
+function tableCheckPrompt(item, { number = '', where = '' } = {}) {
+  return optionTable.sourcePrompt(item.q, (item.options || []).length, { number, where });
+}
+const cleanTableCheck = raw => optionTable.readSource(raw);
+// Every reason the options do not match what the source prints.
+function tableCheckIssues(check, item) {
+  if (!item || item.kind !== 'mcq') return [];
+  return optionTable.sourceIssues(check || optionTable.readSource(null), item.options || []);
 }
 
 /* ══════════════ Gate 3: the independent check ══════════════ */
@@ -505,7 +553,10 @@ const EDITOR_RULES = 'RULES FOR EVERY QUESTION YOU RETURN. '
   + 'it needs a table or diagram on the page to be completed; it is multiple choice but its four options cannot all be read; '
   + 'part of it is cut off or printed on another page; it depends on handwriting or marks on the page; '
   + 'the answer cannot be worked out with certainty from what is given; or it would not be a good, interesting question for parents to see. '
-  + 'Quality matters far more than quantity: return at most 4 items, the best ones, and an empty list is a perfectly good answer.';
+  + 'Quality matters far more than quantity: return at most 4 items, the best ones, and an empty list is a perfectly good answer. '
+  + optionTable.PROMPT_RULE + ' '
+  + 'For such a question ALSO return "optionTable": {"head":["…"],"rows":[["…"],["…"],["…"],["…"]]}, the printed column headings and one row of cells per option '
+  + 'in the printed order, exactly matching the options you wrote. Leave "optionTable" out when the options are not printed as a table.';
 const ANSKEY_EXTRACT_SYSTEM = 'You are Chung GPT, Mr Chung\'s question editor at Polymath Learning Centre, Singapore (P3 to P6, MOE syllabus). '
   + 'From ONE page of a centre worksheet you choose the questions that will be published as the free Question of the Day, '
   + 'which parents and children across Singapore will see. It must be perfect: a flawed question reflects badly on the centre. '
@@ -517,7 +568,7 @@ const ANSKEY_EXTRACT_SYSTEM = 'You are Chung GPT, Mr Chung\'s question editor at
   + 'An item that needs no picture has "figures": []. '
   + 'Reply with STRICT JSON only: {"items":[{"number":"3b","kind":"open|mcq","q":"…","options":["…","…","…","…"],"answerIndex":2,"figures":[…],'
   + '"answerType":"number|short|explain","answer":"…","accepted":["…"],"model":"…","steps":["…"],"idea":"…","keywords":["…"],"topic":"…","marks":2}]} '
-  + '(options and answerIndex only for "mcq").';
+  + '(options and answerIndex only for "mcq"; optionTable only when the options are printed as a table).';
 const CER_EXTRACT_SYSTEM = 'You are Chung GPT, Mr Chung\'s question editor at Polymath Learning Centre, Singapore (P3 to P6, MOE syllabus). '
   + 'You are given ONE question from the centre\'s CER Science question bank: its wording with its part labels, its pictures (attached in order as images 1, 2, …), '
   + 'and the teacher\'s own model answers (claim, evidence, reasoning or a written answer), which are AUTHORITATIVE. '
@@ -529,11 +580,13 @@ const CER_EXTRACT_SYSTEM = 'You are Chung GPT, Mr Chung\'s question editor at Po
   + 'Never use a picture that shows the answer. '
   + 'Reply with STRICT JSON only: {"items":[{"number":"b","kind":"open|mcq","q":"…","options":["…","…","…","…"],"answerIndex":2,"figures":[1],'
   + '"answerType":"number|short|explain","answer":"…","accepted":["…"],"model":"…","steps":["…"],"idea":"…","keywords":["…"],"topic":"…","marks":2}]} '
-  + '(options and answerIndex only for "mcq").';
+  + '(options and answerIndex only for "mcq"; optionTable only when the options are printed as a table).';
 const VERIFY_SYSTEM = 'You are a strict second checker at Polymath Learning Centre, Singapore, and you have NOT seen the worksheet. '
   + 'You see exactly what a parent will see on the free Question of the Day page: the wording, and the pictures attached (if any). '
   + 'First solve the question yourself from ONLY what is given, the way a top P6 pupil would, and write your final answer in "solvedAnswer". '
   + 'For a multiple-choice question, also give the number (1 to 4) of the option you choose in "solvedOption", and check that exactly one option is right. '
+  + 'When the options are shown as a TABLE (column headings, one row per option), the parent sees that table: each option is one ROW, "solvedOption" is that row\'s number, '
+  + 'and every row must be complete with every column filled in. '
   + 'Then compare with the proposed answer, model answer and working. Set "agrees" true only when your answer and theirs are the same (equivalent wording or units are fine). '
   + 'Score each 1 to 5 (5 = perfect, ready to publish): "wording" (clear, correct English, no typos, no leftover question numbers, part labels, marks or answer lines, '
   + 'reads well on a phone), "pictures" (each picture is complete, nothing cut off at an edge, sharp, holds only the figure and no stray question text, part labels, '
@@ -548,7 +601,9 @@ function verifyPrompt(item) {
     'Stated level: ' + item.level + ' ' + (item.subject === 'math' ? 'Maths' : 'Science') + (item.topic ? ' · topic ' + item.topic : ''),
     (item.images || []).length ? 'Pictures attached: ' + item.images.length + '.' : 'No pictures are attached.',
     'Question: ' + JSON.stringify(item.q),
-    item.kind === 'mcq' ? 'Multiple choice. Options: ' + (item.options || []).map((o, i) => (i + 1) + ') ' + o).join('  ') : '',
+    item.kind === 'mcq' ? (optionTable.fromOptions(item.options)
+      ? 'Multiple choice. ' + optionTable.promptText(optionTable.fromOptions(item.options))
+      : 'Multiple choice. Options: ' + (item.options || []).map((o, i) => (i + 1) + ') ' + o).join('  ')) : '',
     item.kind === 'mcq' ? 'Proposed right option: ' + (item.answerIndex + 1) + ') ' + JSON.stringify(item.answer) : 'Proposed final answer: ' + JSON.stringify(item.answer),
     'Proposed model answer: ' + JSON.stringify(item.model),
     'Proposed working: ' + JSON.stringify(item.steps),
@@ -644,7 +699,7 @@ module.exports = {
   LEVELS, LEVEL_RANK, SUBJECTS, SOURCES, POOL, IMAGES, META, QUEUE_DOC, SOURCES_DOC, PREPARE_RUNS, MARK_PREFIX, POOL_TARGET, MIN_SCORE,
   MAX_IMAGES, MAX_IMAGE_BYTES, MARK_LIMITS, PICTURE_REQUIRED, MCQ_EVERY, isMcqDay, OPTION_MAX, MARK_MODEL, VERDICTS, ID_PATTERN, IMAGE_ID_PATTERN, SCORE_KEYS,
   levelRank, normaliseLevel, questionLevelFor, levelsAtOrBelow, familyLevels, itemId, imageId, fingerprint, plain, oneLineText,
-  cleanItem, qualityIssues, cleanVerdict, verdictIssues, orderQueue, emptyQueue, readQueue, queueCounts, publicOpen,
+  cleanItem, qualityIssues, optionTableIssues, TABLE_CHECK_SYSTEM, tableCheckPrompt, cleanTableCheck, tableCheckIssues, cleanVerdict, verdictIssues, orderQueue, emptyQueue, readQueue, queueCounts, publicOpen,
   normAnswer, exactMatch, numbersIn, MARK_SYSTEM, markPrompt, cleanMark,
   EDITOR_RULES, ANSKEY_EXTRACT_SYSTEM, CER_EXTRACT_SYSTEM, VERIFY_SYSTEM, verifyPrompt, cerSource
 };

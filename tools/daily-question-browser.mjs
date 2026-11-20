@@ -154,11 +154,12 @@ async function seedPool() {
       keywords: ['steel', 'magnetic material'], steps: ['Only magnetic materials are attracted to magnets.', 'Steel is magnetic; copper and plastic are not.'],
       idea: 'Iron, steel, nickel and cobalt are magnetic materials.', images: [], origin: { label: 'P4 Science worksheet 7', page: 3, number: '2' } }
   ];
-  items.push({ source: 'cer', subject: 'science', level: 'P6', topic: 'Forces', kind: 'mcq',
-    q: 'The diagram shows a block resting on a table. Which force keeps the block from falling through the table?',
-    options: ['Gravitational force', 'Frictional force', 'Elastic spring force', 'The table pushing up on the block'], answerIndex: 4,
-    model: 'The table pushes up on the block, balancing the gravitational force on it.', steps: ['Gravity pulls the block down.', 'The table pushes up on it with an equal force.'],
-    idea: 'Balanced forces keep an object still.', images: [{ alt: 'A block on a table' }], origin: { label: 'CER Science bank', page: 0, number: '' } });
+  // Its options were printed as a table on the paper (option-table.js draws them as one).
+  items.push({ source: 'cer', subject: 'science', level: 'P6', topic: 'Seed dispersal', kind: 'mcq',
+    q: 'The table shows the characteristics of fruits X, Y and Z. The diagram shows their dispersal patterns. Which option correctly matches each fruit to the shapes representing its parent plant and young plants in the diagram?',
+    options: ['Circle: X; triangle: Y; square: Z', 'Circle: Y; triangle: Z; square: X', 'Circle: Z; triangle: X; square: Y', 'Circle: Y; triangle: X; square: Z'], answerIndex: 4,
+    model: 'Y is dispersed by water, X by wind and Z by animals.', steps: ['Y has a fibrous husk, so it floats and is dispersed by water.', 'X has wing-like structures, so it is dispersed by wind.'],
+    idea: 'The way a fruit is dispersed matches its characteristics.', images: [{ alt: 'Dispersal of fruits X, Y and Z' }], origin: { label: 'CER Science bank', page: 0, number: '' } });
   const queue = core.pool.emptyQueue();
   for (const [n, raw] of items.entries()) {
     const id = core.pool.itemId(raw.source, 'browser-' + n);
@@ -277,6 +278,9 @@ await seedSubscribers();
   await page.waitForSelector('#today-body .opt');
   await page.waitForFunction(() => { const img = document.querySelector('#today-body .q-figs img'); return img && img.complete && img.naturalWidth > 0; });
   assert.equal(await page.locator('#today-body .opt').count(), 4);
+  // Options printed as a table show as a table: the printed headings, then one row each.
+  assert.deepEqual(await page.locator('#today-body .ot-head span').allTextContents(), ['', 'Circle', 'Triangle', 'Square']);
+  assert.deepEqual(await page.locator('#today-body .opt >> nth=3').locator('.ot-cell').allTextContents(), ['Y', 'X', 'Z']);
   await page.click('#today-body .opt >> nth=3');
   await page.waitForSelector('#today-body .locked');
   await page.locator('#today').scrollIntoViewIfNeeded();

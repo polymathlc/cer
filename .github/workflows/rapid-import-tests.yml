@@ -2,10 +2,10 @@ name: PDF import crop checks
 
 on:
   pull_request:
-    paths: ['app.js', 'index.html', 'rapid-import/**', 'tools/rapid-*', 'tools/preview-*', 'tools/hover-preview-tests.mjs', 'tools/question-merge-tests.mjs', 'tools/crop-tighten-tests.mjs', 'decisions-review-core.mjs', 'tools/decisions-review-tests.mjs', '.github/workflows/rapid-import-tests.yml']
+    paths: ['app.js', 'index.html', 'rapid-import/**', 'tools/rapid-*', 'tools/preview-*', 'tools/hover-preview-tests.mjs', 'tools/question-merge-tests.mjs', 'tools/crop-tighten-tests.mjs', 'decisions-review-core.mjs', 'tools/decisions-review-tests.mjs', 'option-table.js', '.github/workflows/rapid-import-tests.yml']
   push:
     branches: [main]
-    paths: ['app.js', 'index.html', 'rapid-import/**', 'tools/rapid-*', 'tools/preview-*', 'tools/hover-preview-tests.mjs', 'tools/question-merge-tests.mjs', 'tools/crop-tighten-tests.mjs', 'decisions-review-core.mjs', 'tools/decisions-review-tests.mjs', '.github/workflows/rapid-import-tests.yml']
+    paths: ['app.js', 'index.html', 'rapid-import/**', 'tools/rapid-*', 'tools/preview-*', 'tools/hover-preview-tests.mjs', 'tools/question-merge-tests.mjs', 'tools/crop-tighten-tests.mjs', 'decisions-review-core.mjs', 'tools/decisions-review-tests.mjs', 'option-table.js', '.github/workflows/rapid-import-tests.yml']
 
 permissions:
   contents: read
@@ -27,6 +27,7 @@ jobs:
       - name: Check shared Add preview and existing import controls
         run: |
           node tools/rapid-preview-tests.mjs
+          node tools/rapid-option-table-tests.mjs
           node tools/rapid-preview-concurrency-tests.mjs
           node tools/rapid-cloud-tests.mjs
           node tools/rapid-add-performance-tests.mjs

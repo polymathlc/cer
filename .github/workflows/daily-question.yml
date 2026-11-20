@@ -24,6 +24,9 @@ name: Question of the Day emails
 # nothing; "check" only counts; "send" sends now (it still never sends twice);
 # "prepare" tops up the pool now; "prepare-dry-run" reads and checks without saving;
 # "check-marking" tries Chung GPT's marking on waiting questions with made-up answers.
+# "recheck-tables" reads every waiting multiple-choice question's options again off
+# its source and skips any whose options table does not match the page (or that was
+# a table on the page but did not come out as one); "recheck-tables-dry-run" only counts.
 # A "preview_key" (an RSA public key, PEM or base64 PEM) makes the prepare run save
 # an encrypted preview of the questions as a short-lived artifact that only the
 # holder of the private key can read.
@@ -41,7 +44,7 @@ on:
         description: 'What to do'
         type: choice
         default: dry-run
-        options: [dry-run, check, send, prepare, prepare-dry-run, check-marking]
+        options: [dry-run, check, send, prepare, prepare-dry-run, check-marking, recheck-tables, recheck-tables-dry-run]
       pages:
         description: 'prepare: worksheet pages to read (1-30)'
         type: string
@@ -56,9 +59,9 @@ on:
         default: ''
   push:
     branches: [main]
-    paths: ['shop-function/functions/daily-question*', 'tools/daily-question*', 'question/**', 'question-of-the-day.js', '.github/workflows/daily-question.yml']
+    paths: ['shop-function/functions/daily-question*', 'shop-function/functions/option-table.js', 'option-table.js', 'tools/daily-question*', 'tools/option-table*', 'question/**', 'question-of-the-day.js', '.github/workflows/daily-question.yml']
   pull_request:
-    paths: ['shop-function/functions/daily-question*', 'tools/daily-question*', 'question/**', 'question-of-the-day.js', '.github/workflows/daily-question.yml']
+    paths: ['shop-function/functions/daily-question*', 'shop-function/functions/option-table.js', 'option-table.js', 'tools/daily-question*', 'tools/option-table*', 'question/**', 'question-of-the-day.js', '.github/workflows/daily-question.yml']
 
 permissions:
   contents: read
@@ -87,6 +90,7 @@ jobs:
           node --check tools/daily-question-prepare.mjs
           node --test tools/daily-question-tests.mjs
           node --test shop-function/functions/test/daily-question.test.js
+          node --test tools/option-table-tests.mjs
       - name: Install the worksheet reader (pdf.js and canvas)
         run: npm ci --prefix rapid-import/functions --no-audit --no-fund
       - name: Prepare-run tests
@@ -141,7 +145,7 @@ jobs:
     if: >-
       github.repository == 'polymathlc/cer' &&
       ((github.event_name == 'schedule' && github.event.schedule == '7 14 * * *') ||
-       (github.event_name == 'workflow_dispatch' && contains(fromJSON('["prepare","prepare-dry-run","check-marking"]'), inputs.what)))
+       (github.event_name == 'workflow_dispatch' && contains(fromJSON('["prepare","prepare-dry-run","check-marking","recheck-tables","recheck-tables-dry-run"]'), inputs.what)))
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -198,6 +202,8 @@ jobs:
           case "$WHAT" in
             prepare-dry-run) node tools/daily-question-prepare.mjs --dry-run "$@" ;;
             check-marking) node tools/daily-question-prepare.mjs --check-marking ;;
+            recheck-tables) node tools/daily-question-prepare.mjs --recheck-tables ;;
+            recheck-tables-dry-run) node tools/daily-question-prepare.mjs --recheck-tables --dry-run ;;
             *) node tools/daily-question-prepare.mjs "$@" ;;
           esac
 

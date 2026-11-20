@@ -10525,6 +10525,12 @@ html { scroll-behavior:smooth; }
         #landingPage .qd-opt.picked { border-color:var(--lp-pink); box-shadow:0 0 0 3px rgba(236,0,140,.12); }
         #landingPage .qd-letter { width:26px; height:26px; border-radius:50%; display:grid; place-items:center; background:var(--lp-paper); color:var(--lp-green); font-weight:700; font-size:12px; flex:0 0 auto; }
         #landingPage .qd-opt.picked .qd-letter { background:var(--lp-pink); color:#fff; }
+        /* Options printed as a table (option-table.js): a header row, then one tappable row per option. */
+        #landingPage .qd-opts.qd-otable { grid-template-columns:1fr; gap:6px; }
+        #landingPage .qd-otable .qd-ot-head, #landingPage .qd-otable .qd-opt { display:grid; grid-template-columns:26px repeat(var(--cols,3), minmax(0,1fr)); gap:8px; align-items:center; }
+        #landingPage .qd-otable .qd-ot-head { padding:0 13px; font-size:12px; font-weight:700; color:var(--lp-green); }
+        #landingPage .qd-otable .qd-ot-head span, #landingPage .qd-otable .qd-ot-cell { text-align:center; overflow-wrap:anywhere; }
+        #landingPage .qd-otable .qd-ot-cell { border-left:1px solid var(--lp-line); }
         #landingPage .qd-foot, #landingPage .qd-locked { display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-top:14px; font-size:12px; color:var(--lp-muted); }
         #landingPage .qd-locked { display:block; background:#fdf2f8; border:1px solid #fbcfe8; color:var(--lp-plum); border-radius:10px; padding:10px 12px; font-size:13px; }
         #landingPage .qd-foot a, #landingPage .qd-locked a { color:var(--lp-green); font-weight:700; }
@@ -10595,6 +10601,7 @@ html { scroll-behavior:smooth; }
           <noscript><a href="question/">Open today's question</a></noscript>
         </div>
       </div>
+      <script src="option-table.js" defer></script>
       <script src="question-of-the-day.js" defer></script>
     </section>
 

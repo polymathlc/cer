@@ -149,6 +149,13 @@
       + '<div class="idea"><b>Key idea:</b> ' + mathText(q.idea) + '</div></div>';
   }
   // The pictures of a question (pool questions; bank questions have none).
+  // The options as a table when every option is a row of the printed table
+  // ("Circle: X; Triangle: Y; …"); null otherwise (and when option-table.js has not
+  // loaded, so the options still show as lines).
+  function optionTableOf(q) {
+    var T = window.PolymathOptionTable;
+    return T && q && Array.isArray(q.options) ? T.fromOptions(q.options) : null;
+  }
   function figsHtml(q) {
     if (!q.images || !q.images.length) return '';
     return '<div class="q-figs">' + q.images.map(function (img) {
@@ -196,7 +203,12 @@
     var html = '<div class="q ' + q.subject + '" data-qid="' + esc(q.id) + '">';
     html += '<div class="q-tags"><span class="tag ' + q.subject + '">' + esc(q.level + ' ' + q.subjectLabel) + '</span><span class="q-topic">' + esc(q.topic) + '</span></div>';
     html += levelNote(q);
-    html += '<p class="q-text">' + mathText(q.q) + '</p>' + figsHtml(q) + '<div class="opts" role="group" aria-label="Answer options">';
+    // Options printed as a table: a header row of the printed headings, then each
+    // option one tappable row (the same buttons, so picking works the same way).
+    var table = optionTableOf(q);
+    html += '<p class="q-text">' + mathText(q.q) + '</p>' + figsHtml(q) + '<div class="opts' + (table ? ' otable' : '') + '" role="group" aria-label="Answer options"'
+      + (table ? ' style="--cols:' + table.head.length + '"' : '') + '>';
+    if (table) html += '<div class="ot-head" aria-hidden="true"><span></span>' + table.head.map(function (h) { return '<span>' + mathText(h) + '</span>'; }).join('') + '</div>';
     q.options.forEach(function (option, index) {
       var cls = 'opt';
       if (revealed) {
@@ -205,8 +217,10 @@
       } else if (index === pick) cls += ' picked';
       var locked = revealed || (mode === 'today' && pick !== null);
       html += '<button type="button" class="' + cls + '"' + (locked ? ' disabled' : '') + ' data-day="' + esc(q.day) + '" data-subject="' + q.subject
-        + '" data-index="' + index + '" data-mode="' + mode + '" aria-pressed="' + (index === pick) + '"><span class="letter">' + LETTERS[index] + '</span><span>'
-        + mathText(option) + '</span></button>';
+        + '" data-index="' + index + '" data-mode="' + mode + '" aria-pressed="' + (index === pick) + '"' + (table ? ' aria-label="' + esc(LETTERS[index] + '. ' + option) + '"' : '')
+        + '><span class="letter">' + LETTERS[index] + '</span>'
+        + (table ? table.rows[index].map(function (c) { return '<span class="ot-cell">' + mathText(c) + '</span>'; }).join('') : '<span>' + mathText(option) + '</span>')
+        + '</button>';
     });
     html += '</div>';
     if (mode === 'today' && pick !== null) {
@@ -217,9 +231,11 @@
       html += '<p class="fineprint" style="text-align:left">Pick an answer. We will show you the worked answer tomorrow.</p>';
     }
     if (revealed) {
-      if (pick === null) html += '<div class="verdict none">Answer: ' + LETTERS[q.answer] + '. ' + esc(q.options[q.answer]) + '</div>';
+      // With a table the right row is already green above, so the answer is its letter.
+      var said = table ? ' (the green row).' : '. ' + esc(q.options[q.answer]);
+      if (pick === null) html += '<div class="verdict none">Answer: ' + LETTERS[q.answer] + said + '</div>';
       else if (pick === q.answer) html += '<div class="verdict yes">🎉 You picked ' + LETTERS[pick] + '. That is correct!</div>';
-      else html += '<div class="verdict no">You picked ' + LETTERS[pick] + '. The answer is ' + LETTERS[q.answer] + '. ' + esc(q.options[q.answer]) + '</div>';
+      else html += '<div class="verdict no">You picked ' + LETTERS[pick] + '. The answer is ' + LETTERS[q.answer] + said + '</div>';
       html += '<div class="working"><h4>Worked answer</h4>' + (q.model && q.source !== 'bank' ? '<p class="model">' + mathText(q.model) + '</p>' : '') + '<ol>' + q.steps.map(function (st) { return '<li>' + mathText(st) + '</li>'; }).join('') + '</ol>'
         + '<div class="idea"><b>Key idea:</b> ' + mathText(q.idea) + '</div></div>';
     } else if (mode === 'try') {
@@ -675,9 +691,12 @@
         : '<div class="pv-img-wait" data-img="' + esc(img.id) + '" data-alt="' + esc(img.alt || '') + '"><span class="spin"></span>Loading the picture…</div>';
     });
     if (q.kind === 'mcq') {
-      html += '<ol type="A" style="margin:0 0 6px;padding-left:22px">' + q.options.map(function (o, i) {
-        return '<li' + (i === q.answer ? ' class="ans"' : '') + '>' + mathText(o) + '</li>';
-      }).join('') + '</ol>';
+      var pvTable = optionTableOf(q);
+      html += pvTable
+        ? window.PolymathOptionTable.html(pvTable, { labels: LETTERS, correct: q.answer, cell: mathText, className: 'pv-otable' })
+        : '<ol type="A" style="margin:0 0 6px;padding-left:22px">' + q.options.map(function (o, i) {
+          return '<li' + (i === q.answer ? ' class="ans"' : '') + '>' + mathText(o) + '</li>';
+        }).join('') + '</ol>';
       if (q.source !== 'bank' && q.steps && q.steps.length) html += '<details><summary>Worked steps</summary><ol>' + q.steps.map(function (st) { return '<li>' + mathText(st) + '</li>'; }).join('') + '</ol>'
         + (q.idea ? '<p><b>Key idea:</b> ' + mathText(q.idea) + '</p>' : '') + '</details>';
       if (q.check && q.check.solvedAnswer) html += '<div class="src">The independent check chose: ' + esc(q.check.solvedAnswer) + '</div>';

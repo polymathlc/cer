@@ -51,6 +51,7 @@ const { createDailyQuestionStore } = localRequire('../shop-function/functions/da
 const { createChungGpt } = localRequire('../shop-function/functions/daily-question-ai.js');
 
 const { LEVELS, SUBJECTS, POOL_TARGET, itemId, imageId, fingerprint, cleanItem, qualityIssues, cleanVerdict, verdictIssues,
+  TABLE_CHECK_SYSTEM, tableCheckPrompt, cleanTableCheck, tableCheckIssues,
   orderQueue, readQueue, ANSKEY_EXTRACT_SYSTEM, CER_EXTRACT_SYSTEM, VERIFY_SYSTEM, verifyPrompt, cerSource, normaliseLevel,
   exactMatch, MARK_SYSTEM, markPrompt, cleanMark, SCORE_KEYS } = pool;
 
@@ -229,6 +230,20 @@ export async function prepareRun(ctx) {
     const print = fingerprint(item.q);
     if (prints.has(print)) issues.push('the same question is already in the pool');
     let verdict = null;
+    // Multiple choice: a second reader copies the options straight off the source,
+    // and a table there must be the same table here, cell for cell (and options that
+    // are not a table there must not have been made into one).
+    let tableCheck = null;
+    if (!issues.length && item.kind === 'mcq' && meta.tableSource) {
+      try {
+        tableCheck = cleanTableCheck(await ai.ask(tableCheckPrompt(item, { number: raw.number, where: meta.tableSource.where }), {
+          system: TABLE_CHECK_SYSTEM, json: true, effort: 'high', maxTokens: 6000, timeoutMs: 120000, images: meta.tableSource.images
+        }));
+        issues = tableCheckIssues(tableCheck, item);
+      } catch (error) {
+        issues = ['the options table check could not run (' + (error && error.code || 'error') + ')'];
+      }
+    }
     if (!issues.length) {
       try {
         verdict = cleanVerdict(await ai.ask(verifyPrompt(item), {
@@ -247,7 +262,8 @@ export async function prepareRun(ctx) {
       group: meta.source + '|' + meta.key + '|' + String(raw.number || '').replace(/[^0-9]/g, '').slice(0, 4),
       fingerprint: print,
       origin: { source: meta.source, ref: meta.ref, label: meta.label, page: meta.page || 0, number: String(raw.number || '').slice(0, 12) },
-      check: { passed, score, solvedAnswer: verdict ? verdict.solvedAnswer : '', issues: issues.slice(0, 12), at: now }
+      check: { passed, score, solvedAnswer: verdict ? verdict.solvedAnswer : '', issues: issues.slice(0, 12), at: now,
+        optionsTable: tableCheck ? (tableCheck.printedAsTable ? 'table' : 'lines') : '' }
     });
     if (!passed) { record.images = []; delete record.answer; }   // nothing of a rejected question is kept that could be shown
     made.push({ record: Object.assign({}, record, { answer: item.answer }), pictures, issues, verdict });
@@ -310,7 +326,8 @@ export async function prepareRun(ctx) {
             facts.push(cut.facts);
             if (cut.picture) pictures.push(cut.picture);
           }
-          await finish(raw, pictures, facts, { source: 'anskey', subject: ws.subject, level: ws.level, key: ws.id + '#' + page, ref: ws.id, label: ws.name || '', page });
+          await finish(raw, pictures, facts, { source: 'anskey', subject: ws.subject, level: ws.level, key: ws.id + '#' + page, ref: ws.id, label: ws.name || '', page,
+            tableSource: { images: images.slice(0, 1), where: 'Image 1 is the worksheet page the question is printed on.' } });
         }
       } catch (error) {
         tally(summary.reasons, 'a page could not be read');
@@ -381,7 +398,8 @@ export async function prepareRun(ctx) {
             pictures.push(p);
             facts.push({ ok: true, w: p.w, h: p.h, bytes: p.bytes, clipped: [], blank: inkShare(c) < 0.002, pageShare: 0 });
           }
-          await finish(raw, pictures, facts, { source: 'cer', subject: 'science', level: source.level, key: q.id, ref: q.id, label: q.title || ('#' + (q.qno || '')), page: 0 });
+          await finish(raw, pictures, facts, { source: 'cer', subject: 'science', level: source.level, key: q.id, ref: q.id, label: q.title || ('#' + (q.qno || '')), page: 0,
+            tableSource: { images, where: 'The bank question\'s wording (its options are in it, or in one of the attached pictures):\n' + source.text } });
         }
       } catch (error) {
         tally(summary.reasons, 'a bank question could not be read');
@@ -418,6 +436,66 @@ export async function prepareRun(ctx) {
   if (Object.keys(summary.reasons).length) log('Why questions were rejected: ' + Object.entries(summary.reasons).sort((a, b) => b[1] - a[1]).map(([k, v]) => v + '× ' + k).join('; ') + '.');
   if (ai.usage) log(`Chung GPT calls: ${ai.usage.calls} (${ai.usage.failures} failed), ${ai.usage.inputTokens} input and ${ai.usage.outputTokens} output tokens.`);
   return summary;
+}
+
+/* ═════════ Options tables: check the questions already waiting ═════════ */
+// The waiting multiple-choice questions were made before the options-table check
+// existed. Each one is read again against its source with the same check a new
+// question gets (tableCheckIssues): a question whose options were a table on the
+// page but did not come out as one, or whose table does not match the page cell
+// for cell, is SKIPPED (never shown; an admin can restore it on /question/#admin).
+// A question that cannot be checked (its source is gone) is skipped too: quality
+// first. Options that were "Heading: cell; …" rows already show as a table.
+export async function recheckTables({ store, src, ai, canvasKit, now = Date.now(), log = console.log, dryRun = false }) {
+  const queue = await store.getQueue();
+  const ids = [].concat(...SUBJECTS.map(s => [].concat(...LEVELS.map(l => queue[s][l]))));
+  const items = await store.getPoolItems(ids);
+  const result = { checked: 0, ok: 0, tables: 0, skipped: 0, reasons: {} };
+  let worksheets = null, cerQuestions = null;
+  const pdfs = new Map();
+  for (const id of ids) {
+    const item = items[id];
+    if (!item || item.status !== 'ready' || item.kind !== 'mcq') continue;
+    result.checked++;
+    let issues = [];
+    try {
+      let images = [], where = '';
+      const origin = item.origin || {};
+      if (item.source === 'anskey') {
+        if (!worksheets) worksheets = await src.listWorksheets();
+        const ws = worksheets.find(w => w.id === origin.ref);
+        if (!ws || !(origin.page > 0)) throw Object.assign(new Error('gone'), { code: 'source-gone' });
+        if (!pdfs.has(ws.id)) pdfs.set(ws.id, await src.loadPdf(ws));
+        const canvas = await canvasKit.renderPage(pdfs.get(ws.id), origin.page, PAGE_PX);
+        images = [{ mimeType: 'image/jpeg', data: canvas.toBuffer('image/jpeg', 90).toString('base64') }];
+        where = 'Image 1 is the worksheet page the question is printed on.';
+      } else {
+        if (!cerQuestions) cerQuestions = await src.listCerQuestions();
+        const q = cerQuestions.find(x => x.id === origin.ref);
+        const source = q ? cerSource(q) : null;
+        if (!source) throw Object.assign(new Error('gone'), { code: 'source-gone' });
+        for (const img of source.images) images.push({ mimeType: 'image/jpeg', data: encodePicture(await src.loadImage(img.url), canvasKit.createCanvas).data });
+        where = 'The bank question\'s wording (its options are in it, or in one of the attached pictures):\n' + source.text;
+      }
+      const check = cleanTableCheck(await ai.ask(tableCheckPrompt(item, { number: origin.number, where }), {
+        system: TABLE_CHECK_SYSTEM, json: true, effort: 'high', maxTokens: 6000, timeoutMs: 120000, images
+      }));
+      issues = tableCheckIssues(check, item);
+      if (!issues.length && check.printedAsTable) result.tables++;
+    } catch (error) {
+      issues = ['the options could not be checked against the source (' + String(error && error.code || 'error').slice(0, 40) + ')'];
+    }
+    if (!issues.length) { result.ok++; continue; }
+    issues.forEach(i => tally(result.reasons, reasonKey(i)));
+    if (!dryRun) {
+      try { await store.setPoolStatus(id, 'skipped', now, 'options-table-check'); result.skipped++; }
+      catch { /* already taken out */ }
+    } else result.skipped++;
+  }
+  log(`Options-table check${dryRun ? ' (dry run, nothing changed)' : ''}: ${result.checked} waiting multiple-choice question(s) checked, ${result.ok} fine `
+    + `(${result.tables} printed as a table and now shown as one), ${result.skipped} skipped.`
+    + (Object.keys(result.reasons).length ? ' Why: ' + Object.entries(result.reasons).map(([k, v]) => v + '× ' + k).join('; ') + '.' : ''));
+  return result;
 }
 
 /* ═════════ The real marker, on ready questions (a live check, no website needed) ═════════ */
@@ -594,13 +672,15 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const args = process.argv.slice(2);
   const flag = name => args.includes(name);
   const value = (name, fallback) => { const i = args.indexOf(name); return i >= 0 && args[i + 1] !== undefined ? args[i + 1] : fallback; };
-  const known = ['--dry-run', '--check-marking', '--pages', '--cer', '--target', '--only', '--preview'];
+  const known = ['--dry-run', '--check-marking', '--recheck-tables', '--pages', '--cer', '--target', '--only', '--preview'];
   for (const a of args) if (a.startsWith('--') && !known.includes(a)) throw new Error('Unknown option ' + a);
   const env = await openAll();
   if (!env.apiKey) { console.log('::error::Chung GPT has no key: neither the OPENAI_API_KEY secret nor an admin\'s saved OpenAI key could be read.'); process.exit(1); }
   console.log('Chung GPT: ' + env.model + ' (key from ' + env.keyFrom + ').');
   const ai = createChungGpt({ apiKey: env.apiKey, model: env.model });
-  if (flag('--check-marking')) {
+  if (flag('--recheck-tables')) {
+    await recheckTables({ store: env.store, src: env.src, ai, canvasKit: env.canvasKit, dryRun: flag('--dry-run') });
+  } else if (flag('--check-marking')) {
     const r = await checkMarking({ store: env.store, ai });
     if (r.checked && r.ok < r.checked) process.exitCode = 1;
   } else {
