@@ -51,6 +51,32 @@ function createTrialStore(db, Timestamp, { bucket = null } = {}) {
       });
     },
 
+    // 🔑 Admin password (20 Nov 2026): refuse BEFORE the password is even checked
+    // once any of these limits is full, so a correct guess after the limit gets
+    // nowhere. countAttempts (above) then counts each wrong password.
+    async checkAttempts(quotas, errorCode) {
+      const snapshots = await db.getAll(...quotas.map(quota => limits().doc(quota.id)));
+      if (snapshots.some((snapshot, index) => countOf(snapshot) >= quotas[index].maximum)) throw new ShopError(429, errorCode);
+    },
+    async loadSettings() {
+      const snapshot = await settingsRef().get();
+      return snapshot.exists ? snapshot.data() || {} : {};
+    },
+    // The server's own random key that signs admin-password sessions, made the
+    // first time anyone logs in with the password. It never leaves the server;
+    // a new one (setAdminPassword) ends every password session at once.
+    async ensureAdminSessionKey(make) {
+      const ref = settingsRef();
+      return db.runTransaction(async transaction => {
+        const snapshot = await transaction.get(ref);
+        const data = snapshot.exists ? snapshot.data() || {} : {};
+        if (typeof data.adminSessionKey === 'string' && data.adminSessionKey.length >= 32) return data.adminSessionKey;
+        const key = make();
+        transaction.set(ref, Object.assign({}, data, { adminSessionKey: key }));
+        return key;
+      });
+    },
+
     // Whether a one-time code can open the page. With `record`, an active
     // code also notes when it was entered, so the admins see every use.
     async checkAccessCode(code, now, record) {

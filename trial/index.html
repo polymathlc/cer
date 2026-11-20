@@ -257,6 +257,13 @@
   .modal { background:#fff; border-radius:var(--radius); max-width:380px; width:100%; padding:24px; text-align:center; }
   .modal h2 { font-size:18px; margin-bottom:6px; }
   .modal p { color:var(--gray-600); font-size:14px; margin-bottom:14px; }
+  /* 🔑 Admin password login (v1.6.0) */
+  .modal form { display:flex; flex-direction:column; gap:10px; text-align:left; }
+  .modal input[type=password] { width:100%; padding:11px 12px; border:1px solid var(--gray-300); border-radius:8px; font-size:16px; }
+  .modal .pw-error { color:#b42318; font-size:13px; min-height:18px; margin:0; }
+  .modal .pw-row { display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
+  .admin-login-bar { margin-top:14px; text-align:center; }
+  .admin-login-bar .btn { min-width:180px; }
 
   @media (max-width:760px) {
     .grid-2, .sheets { grid-template-columns:1fr; }
@@ -410,6 +417,14 @@
         <input type="text" id="password-new" maxlength="64" placeholder="New password (not case-sensitive)" autocomplete="off">
         <button class="btn small" onclick="savePassword()">Change password</button>
       </div>
+
+      <h2 style="margin-top:26px">Admin login password</h2>
+      <p class="lead">The "Admin login" button at the bottom of the page opens this admin panel with a password, for anyone who is not signed in with an admin email. It lasts 12 hours on that device. The password is case-sensitive.</p>
+      <p class="muted" id="admin-password-state" style="margin:8px 0 14px"></p>
+      <div class="admin-tools" id="admin-password-tools">
+        <input type="password" id="admin-password-new" maxlength="64" placeholder="New admin password (8+ characters)" autocomplete="new-password">
+        <button class="btn small" onclick="saveAdminPassword()">Change admin password</button>
+      </div>
     </div>
   </section>
 
@@ -520,6 +535,11 @@
     Polymath Learning Centre · Clementi · WhatsApp +65 9645 0588 ·
     <button class="link-btn" id="admin-login-link" onclick="adminSignIn()">Teacher login</button>
     <span class="hidden" id="page-version"></span>
+    <!-- 🔑 v1.6.0 (Zhi Kai, 20 Nov 2026): an admin login by password, for anyone whose email is not an
+         admin email (or who is not signed in at all). The password is checked on the server only. -->
+    <div class="admin-login-bar" id="admin-password-bar">
+      <button class="btn small ghost" id="admin-password-link" onclick="showPasswordLogin()">Admin login</button>
+    </div>
   </div>
 </main>
 
@@ -539,7 +559,8 @@
 //   #l=<link>  → an admin's one-week class link: email + WhatsApp, then the
 //                class's Zoom link and worksheets straight away.
 //   #b=<key>   → a booked lesson's own page (from the emails), live.
-//   #admin     → the admins' panel (Google sign-in; checked again on the server).
+//   #admin     → the admins' panel (Google sign-in, or the admin password via "Admin login"
+//                at the bottom; both checked again on the server).
 // Nothing private is in this page or readable from the browser: the codes, links,
 // per-class Zoom links and bookings live in Firestore collections only the functions use.
 // The one exception is CLASS_ZOOM_URL below, the centre's class Zoom that Zhi Kai asked
@@ -548,7 +569,7 @@
 
 // Shown to the signed-in admin in the footer, so a deploy can be checked.
 // Bump it on every change to this page.
-const TRIAL_PAGE_VERSION = 'v1.5.0';
+const TRIAL_PAGE_VERSION = 'v1.6.0';
 // 🎥 The Join Zoom button at the top (v1.2.0). A lesson with its own Zoom link (admin, Classes & Zoom)
 // uses that one; otherwise this, the centre's class Zoom. Keep equal to CLASS_ZOOM_URL in
 // student/student-account.js (a test checks).
@@ -744,7 +765,7 @@ function setZoomTop() {
   const btn = $('zoom-top');
   if (!btn) return;
   const isIn = !!currentView && currentView !== 'gate-view';
-  const on = isIn || !!(typeof isAdminUser === 'function' && auth && isAdminUser(auth.currentUser));
+  const on = isIn || !!(typeof adminOn === 'function' && adminOn());
   const url = (currentView === 'lesson-view' && currentLesson && currentLesson.zoomUrl) || CLASS_ZOOM_URL;
   btn.href = on ? url : '#';
   btn.classList.toggle('hidden', !on);
@@ -1085,10 +1106,30 @@ function downloadIcs() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// Admin: /trial/#admin (Google sign-in; the server checks the account again)
+// Admin: /trial/#admin (Google sign-in, or the "Admin login" password at the bottom since
+// v1.6.0; the server checks the account or the password session again on every call)
 // ═══════════════════════════════════════════════════════════
 const ADMIN_EMAILS = ['chungzhikai@gmail.com', 'admin@polymathlc.com.sg', 'elsielcr@gmail.com', 'support@polymathlc.com.sg'];
 let auth = null, adminData = null, adminTab = 'links', bookingFilter = 'upcoming', codeFilter = 'active', freshCodes = [];
+// 🔑 Admin password session (v1.6.0): { token, expiresAtMs } from trialAdmin 'adminLogin'. The token is
+// signed by the server and checked there on every call; this page never knows the password.
+const ADMIN_PW_KEY = 'pl_trial_admin_pw_v1';
+let pwSession = readPwSession();
+function readPwSession() {
+  try {
+    const v = JSON.parse(storageGet(ADMIN_PW_KEY) || 'null');
+    if (v && typeof v.token === 'string' && v.token.indexOf('trialpw.') === 0 && v.expiresAtMs > Date.now()) return v;
+  } catch (e) {}
+  storageSet(ADMIN_PW_KEY, null);
+  return null;
+}
+function pwSessionOn() {
+  if (pwSession && !(pwSession.expiresAtMs > Date.now())) { pwSession = null; storageSet(ADMIN_PW_KEY, null); }
+  return !!pwSession;
+}
+function googleAdminOn() { return !!(auth && isAdminUser(auth.currentUser)); }
+// The panel is open for a Google admin, or for a live admin password session.
+function adminOn() { return googleAdminOn() || pwSessionOn(); }
 function firebaseReady() {
   if (auth) return true;
   if (!window.firebase || !firebase.initializeApp) return false;
@@ -1112,7 +1153,9 @@ async function adminSignIn() {
     if (!isAdminUser(res.user)) {
       const who = res.user ? res.user.email : 'unknown';
       await auth.signOut();
-      toast('Access denied. ' + who + ' is not an admin account.', true);
+      // 🔑 Not an admin email: offer the admin password instead (v1.6.0).
+      if (!pwSessionOn()) showPasswordLogin(who + ' is not an admin email. Enter the admin password to continue.');
+      else toast(who + ' is not an admin email.', true);
     }
   } catch (e) {
     if (e && (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request')) return;
@@ -1130,26 +1173,89 @@ function showAdminPrompt() {
   d.querySelector('#admin-prompt-go').onclick = () => { d.remove(); adminSignIn(); };
   d.querySelector('#admin-prompt-x').onclick = () => d.remove();
 }
-async function adminSignOut() { if (auth) await auth.signOut(); }
-function onAuth(user) {
-  const admin = isAdminUser(user);
+async function adminSignOut() {
+  // Ends both ways in: the Google sign-in and an admin password session on this device.
+  const hadPassword = !!pwSession;
+  pwSession = null; storageSet(ADMIN_PW_KEY, null);
+  if (auth && auth.currentUser) await auth.signOut();
+  else if (hadPassword) applyAdmin();
+}
+function onAuth() { applyAdmin(); }
+let adminWasOn = false, adminWho = '';
+function applyAdmin() {
+  const admin = adminOn();
+  const who = googleAdminOn() ? auth.currentUser.email : (admin ? 'admin password' : '');
   $('admin-section').classList.toggle('hidden', !admin);
   // The admin works in the panel; the parents' page is hidden while signed in.
   $('public-section').classList.toggle('hidden', admin);
   $('admin-login-link').classList.toggle('hidden', admin);
+  $('admin-password-bar').classList.toggle('hidden', admin);
   $('page-version').textContent = 'Trial page ' + TRIAL_PAGE_VERSION;
   $('page-version').classList.toggle('hidden', !admin);
   setZoomTop();
-  $('admin-who').textContent = admin ? 'Admin: ' + user.email : '';
-  adminData = null;
-  if (admin) adminLoad();
+  $('admin-who').textContent = admin ? (googleAdminOn() ? 'Admin: ' + who : 'Admin (signed in with the admin password, until ' + fmtMs(pwSession.expiresAtMs, true) + ')') : '';
+  // Reload only when someone new comes in (not on every Firebase auth tick).
+  if (admin && (!adminWasOn || who !== adminWho)) { adminData = null; adminLoad(); }
+  if (!admin) adminData = null;
+  adminWasOn = admin; adminWho = who;
 }
+
+// 🔑 The admin password box (v1.6.0). What is typed goes to the server (trialAdmin 'adminLogin'),
+// which answers with a signed session token or "wrong password". Wrong guesses are limited there.
+function showPasswordLogin(message) {
+  if ($('admin-pw-prompt')) { const i = $('admin-pw-input'); if (i) i.focus(); return; }
+  const d = document.createElement('div');
+  d.id = 'admin-pw-prompt'; d.className = 'modal-bg';
+  d.innerHTML = '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="admin-pw-title"><h2 id="admin-pw-title">Admin login</h2>'
+    + '<p>' + escapeHtml(message || 'Enter the admin password to manage trial lessons.') + '</p>'
+    + '<form id="admin-pw-form" autocomplete="off">'
+    + '<input type="password" id="admin-pw-input" maxlength="100" placeholder="Admin password" autocomplete="current-password" aria-label="Admin password" required>'
+    + '<p class="pw-error" id="admin-pw-error" role="alert"></p>'
+    + '<div class="pw-row"><button type="button" class="btn ghost" id="admin-pw-x">Cancel</button><button type="submit" class="btn" id="admin-pw-go">Log in</button></div>'
+    + '</form></div>';
+  document.body.appendChild(d);
+  const close = () => d.remove();
+  d.querySelector('#admin-pw-x').onclick = close;
+  d.addEventListener('click', e => { if (e.target === d) close(); });
+  d.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+  d.querySelector('#admin-pw-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const input = $('admin-pw-input'), go = $('admin-pw-go'), error = $('admin-pw-error');
+    const password = input.value;
+    if (!password.trim()) { error.textContent = 'Type the admin password.'; input.focus(); return; }
+    go.disabled = true; go.textContent = 'Checking…'; error.textContent = '';
+    const r = await post(ADMIN_URL, { action: 'adminLogin', password });
+    go.disabled = false; go.textContent = 'Log in';
+    if (r.ok && r.token) {
+      pwSession = { token: r.token, expiresAtMs: r.expiresAtMs };
+      storageSet(ADMIN_PW_KEY, JSON.stringify(pwSession));
+      close();
+      toast('Logged in with the admin password');
+      applyAdmin();
+      return;
+    }
+    const words = { 'wrong-admin-password': 'That password is not right. Passwords are case-sensitive.',
+      'too-many-attempts': 'Too many wrong tries. Please wait an hour and try again, or sign in with an admin Google account.',
+      'offline': 'You seem to be offline. Check the connection and try again.' };
+    error.textContent = words[r.error] || 'Could not log in just now. Please try again in a moment.';
+    input.select();
+  });
+  setTimeout(() => { const i = $('admin-pw-input'); if (i) i.focus(); }, 30);
+}
+
 async function adminCall(body) {
-  if (!auth || !isAdminUser(auth.currentUser)) { toast('Admin sign-in required.', true); return { ok: false, error: 'sign-in-required' }; }
-  const token = await auth.currentUser.getIdToken();
+  if (!adminOn()) { toast('Admin sign-in required.', true); return { ok: false, error: 'sign-in-required' }; }
+  const token = googleAdminOn() ? await auth.currentUser.getIdToken() : pwSession.token;
   const r = await post(ADMIN_URL, body, token);
+  if (!r.ok && r.error === 'admin-session-ended') {
+    pwSession = null; storageSet(ADMIN_PW_KEY, null);
+    applyAdmin();
+    showPasswordLogin('The admin login has ended. Enter the admin password again.');
+    return r;
+  }
   if (!r.ok) {
     const words = { 'admin-only': 'This account is not a trial admin.', 'sign-in-required': 'Please sign in again.', 'invalid-zoom-link': 'A Zoom link must start with https://',
+      'weak-admin-password': 'The admin password needs 8 to 64 characters.', 'google-admin-only': 'Only an admin signed in with Google can change the admin password.',
       'weak-password': 'The password needs 4 to 64 characters.', 'invalid-count': 'Make between 1 and 30 codes at a time.',
       'session-unavailable': 'That class is not open for online trials on the schedule.', 'reminder-just-sent': 'A reminder was just sent. Try again in a minute.',
       'materials-just-sent': 'That email was just sent. Try again in a minute.', 'booking-cancelled': 'That booking is cancelled.',
@@ -1165,9 +1271,10 @@ async function adminLoad() {
   renderAdmin();
 }
 async function maybeAdminFromHash() {
+  if (pwSessionOn()) { applyAdmin(); return; }
   if (!firebaseReady()) return;
   await new Promise(res => { const off = auth.onAuthStateChanged(() => { off(); res(); }); });
-  if (!isAdminUser(auth.currentUser)) adminSignIn();
+  if (!adminOn()) adminSignIn();
 }
 $('admin-tabs').addEventListener('click', e => {
   const b = e.target.closest('[data-tab]'); if (!b) return;
@@ -1477,6 +1584,18 @@ function renderPassword() {
   $('password-enabled').checked = !!s.passwordEnabled;
   $('password-state').textContent = (s.passwordEnabled ? 'On. ' : 'Off: only one-time codes and class links open the page. ')
     + (s.passwordIsDefault ? 'The password is the default (plctrial).' : 'Password changed ' + fmtMs(s.passwordSetAt, true) + (s.passwordSetBy ? ' by ' + s.passwordSetBy : '') + '.');
+  // 🔑 Admin login password: only a Google admin may change it (the server checks too).
+  const google = !adminData.byPassword;
+  $('admin-password-state').textContent = (s.adminPasswordIsDefault ? 'The admin password is the one Zhi Kai set on 20 Nov 2026.'
+    : 'Admin password changed ' + fmtMs(s.adminPasswordSetAt, true) + (s.adminPasswordSetBy ? ' by ' + s.adminPasswordSetBy : '') + '.')
+    + (google ? ' Changing it logs out everyone who used the old one.' : ' Sign in with an admin Google account (Teacher login) to change it.');
+  $('admin-password-tools').classList.toggle('hidden', !google);
+}
+async function saveAdminPassword() {
+  const password = $('admin-password-new').value.trim();
+  if (password.length < 8) { toast('The admin password needs at least 8 characters', true); return; }
+  const r = await adminCall({ action: 'setAdminPassword', password });
+  if (r.ok) { $('admin-password-new').value = ''; toast('Admin password changed'); adminLoad(); }
 }
 $('password-enabled').addEventListener('change', async e => {
   const r = await adminCall({ action: 'setPassword', enabled: e.target.checked });
@@ -1512,6 +1631,8 @@ document.addEventListener('visibilitychange', () => {
 loadConfig(false);
 firebaseReady();
 route();
+// 🔑 A saved admin password session opens the panel straight away (until it ends).
+if (pwSessionOn()) applyAdmin();
 </script>
 </body>
 </html>
