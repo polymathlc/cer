@@ -393,7 +393,8 @@ const SCIENCE_PAGES = {
   'video-review.html': ['student/access-gate.js?v=1.1.0', 'lesson-replay', ''],
   'online/index.html': ['../student/access-gate.js?v=1.1.0', 'online', ''],
   'mindmap/index.html': ['../student/access-gate.js?v=1.1.0', 'mindmap', ''],
-  'homework/index.html': ['../student/access-gate.js?v=1.1.0', 'homework', '']
+  'homework/index.html': ['../student/access-gate.js?v=1.1.0', 'homework', ''],
+  'notebook/index.html': ['../student/access-gate.js?v=1.1.0', 'notebook', '']
 };
 
 test('every student page here loads the gate, once, at the end of the page, with its subject', () => {

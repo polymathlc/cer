@@ -16,6 +16,8 @@ const { createRevisionStore } = require('./revision-store');
 const { createRepository } = require('./repository');
 const { createStripe } = require('./stripe');
 const { createMapsService, createMapsStore, MAPS_SOURCE } = require('./maps');
+const { createNotebookService } = require('./notebook');
+const { createNotebookStore } = require('./notebook-store');
 initializeApp();
 // Both keys arrive as environment variables written at deploy time from the GitHub
 // repository secrets STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET (see
@@ -48,6 +50,11 @@ const maps = createMapsService({
   store: createMapsStore(getFirestore(), Timestamp), stripe, http: createHttp(report),
   verifyIdToken: token => getAuth().verifyIdToken(token), report
 });
+// The mistake notebook on /notebook: every wrong worksheet and live-lesson question, and the weekly redo quiz.
+const notebook = createNotebookService({
+  store: createNotebookStore(getFirestore(), { bucket: getStorage().bucket('mathgen--app.firebasestorage.app') }),
+  http: createHttp(report), verifyIdToken: token => getAuth().verifyIdToken(token), report
+});
 const service = createService({
   repository, stripe,
   webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
@@ -71,3 +78,4 @@ exports.trialMaterial = onRequest(Object.assign({}, web, { timeoutSeconds: 120, 
 exports.revisionPack = onRequest(Object.assign({}, web, { timeoutSeconds: 120, concurrency: 10 }), revision.revisionPack);
 exports.revisionPackAdmin = onRequest(web, revision.revisionPackAdmin);
 exports.mapsLibrary = onRequest(web, maps.mapsLibrary);
+exports.mistakeNotebook = onRequest(Object.assign({}, web, { timeoutSeconds: 60, memory: '512MiB' }), notebook.mistakeNotebook);
