@@ -445,7 +445,7 @@ const subjectsWords = list => list.map(s => SUBJECT_LABEL[s]).join(' and ');
 
 function confirmMail(sub) {
   const subjects = subjectsWords(sub.subjects || SUBJECTS);
-  const how = sub.frequency === 'weekly' ? 'every Saturday, with the week\'s questions and worked answers' : 'every morning at about 7 a.m., with the worked answer the next day';
+  const how = sub.frequency === 'weekly' ? 'every Saturday, with the week\'s questions and worked answers' : 'every morning at about 6 a.m., with the worked answer the next day';
   const body = p(escapeHtml(greetingFor(sub)))
     + p('Thank you for signing up for the Free Question of the Day from Polymath Learning Centre. Please confirm your email address to start receiving '
       + escapeHtml(subjects) + ' questions ' + escapeHtml(how) + '.')

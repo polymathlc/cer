@@ -10480,6 +10480,91 @@ html { scroll-behavior:smooth; }
       </div>
     </section>
 
+    <!-- ❓ Free Question of the Day (Nov 2026): today's question from the dailyQuestion function, an answer
+         kept on this device, and a one-field email sign-up. The full page is question/ (question-of-the-day.js). -->
+    <section class="lp-section lp-qotd" id="lp-qotd" aria-labelledby="lp-qotd-title">
+      <style>
+        #landingPage .lp-qotd-grid { display:grid; grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr); gap:44px; align-items:center; }
+        #landingPage .lp-qotd h2 { font-size:clamp(30px,4vw,44px); line-height:1.12; letter-spacing:-.8px; margin:0 0 18px; }
+        #landingPage .lp-qotd-copy > p { color:var(--lp-muted); font-size:15px; line-height:1.8; margin:0 0 22px; max-width:440px; }
+        #landingPage .lp-qotd-points { list-style:none; padding:0; margin:0 0 24px; display:grid; gap:10px; font-size:14px; }
+        #landingPage .lp-qotd-points li { display:flex; gap:10px; align-items:flex-start; }
+        #landingPage .lp-qotd-points .lp-icon { width:18px; height:18px; color:var(--lp-green); flex:0 0 auto; margin-top:2px; }
+        #landingPage .qd-form { display:grid; gap:10px; max-width:460px; }
+        #landingPage .qd-row { display:flex; gap:8px; }
+        #landingPage .qd-row input[type=email] { flex:1 1 auto; min-width:0; min-height:51px; padding:12px 14px; border:1px solid #bdc9cb; border-radius:8px; font-size:15px; background:#fff; color:var(--lp-ink); }
+        #landingPage .qd-row input[type=email]:focus { outline:none; border-color:var(--lp-green); box-shadow:0 0 0 3px rgba(13,92,102,.14); }
+        #landingPage .qd-consent { display:flex; gap:8px; align-items:flex-start; font-size:12px; line-height:1.5; color:var(--lp-muted); cursor:pointer; }
+        #landingPage .qd-consent input { margin-top:2px; accent-color:var(--lp-green); width:16px; height:16px; flex:0 0 auto; }
+        #landingPage .qd-honey { position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden; }
+        #landingPage .qd-note { font-size:13px; min-height:1px; color:var(--lp-muted); }
+        #landingPage .qd-note.err { color:#c0262d; font-weight:700; }
+        #landingPage .qd-more { font-size:13px; color:var(--lp-green); font-weight:700; }
+        #landingPage .qd-done { background:#fff; border:1px solid var(--lp-line); border-radius:12px; padding:16px; font-size:14px; line-height:1.6; }
+        #landingPage .qd-done b { display:block; color:var(--lp-green); margin-bottom:4px; }
+        #landingPage .lp-qotd-card { background:#fff; border:1px solid var(--lp-line); border-radius:18px; padding:24px; box-shadow:0 18px 50px rgba(13,92,102,.1); position:relative; }
+        #landingPage .lp-qotd-card::before { content:"?"; position:absolute; left:-18px; top:-44px; font:400 92px/1 Georgia,serif; color:var(--lp-pink); opacity:.16; pointer-events:none; }
+        #landingPage .qd-top { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
+        #landingPage .qd-tabs { display:inline-flex; background:var(--lp-paper); border:1px solid var(--lp-line); border-radius:999px; padding:3px; gap:3px; }
+        #landingPage .qd-tab { border:0; background:transparent; border-radius:999px; padding:7px 14px; font-size:12px; font-weight:700; color:var(--lp-green); cursor:pointer; }
+        #landingPage .qd-tab.on.math { background:#1d4ed8; color:#fff; }
+        #landingPage .qd-tab.on.science { background:#15803d; color:#fff; }
+        #landingPage .qd-day { font-size:11px; font-weight:700; color:var(--lp-muted); letter-spacing:1px; text-transform:uppercase; }
+        #landingPage .qd-tags { margin-bottom:10px; }
+        #landingPage .qd-tag { display:inline-block; font-size:11px; font-weight:700; padding:3px 10px; border-radius:999px; border:1px solid; }
+        #landingPage .qd-tag.math { background:#eff6ff; border-color:#bfdbfe; color:#1d4ed8; }
+        #landingPage .qd-tag.science { background:#f0fdf4; border-color:#bbf7d0; color:#15803d; }
+        #landingPage .qd-topic { font-size:12px; color:var(--lp-muted); }
+        #landingPage .qd-q { font-size:17px; font-weight:600; line-height:1.55; margin:0 0 14px; white-space:pre-line; color:var(--lp-ink); }
+        #landingPage .qd-opts { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+        #landingPage .qd-opt { display:flex; gap:10px; align-items:center; text-align:left; border:1px solid var(--lp-line); background:#fff; border-radius:10px; padding:10px 12px; font-size:14px; color:var(--lp-ink); cursor:pointer; min-height:48px; }
+        #landingPage .qd-opt:hover:not(:disabled) { border-color:var(--lp-green); }
+        #landingPage .qd-opt:disabled { cursor:default; }
+        #landingPage .qd-opt.picked { border-color:var(--lp-pink); box-shadow:0 0 0 3px rgba(236,0,140,.12); }
+        #landingPage .qd-letter { width:26px; height:26px; border-radius:50%; display:grid; place-items:center; background:var(--lp-paper); color:var(--lp-green); font-weight:700; font-size:12px; flex:0 0 auto; }
+        #landingPage .qd-opt.picked .qd-letter { background:var(--lp-pink); color:#fff; }
+        #landingPage .qd-foot, #landingPage .qd-locked { display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-top:14px; font-size:12px; color:var(--lp-muted); }
+        #landingPage .qd-locked { display:block; background:#fdf2f8; border:1px solid #fbcfe8; color:var(--lp-plum); border-radius:10px; padding:10px 12px; font-size:13px; }
+        #landingPage .qd-foot a, #landingPage .qd-locked a { color:var(--lp-green); font-weight:700; }
+        #landingPage .qd-skel { height:14px; border-radius:6px; background:linear-gradient(90deg,#eef6f7,#f8fcfc,#eef6f7); background-size:200% 100%; animation:qdShimmer 1.2s infinite; margin-bottom:10px; }
+        @keyframes qdShimmer { to { background-position:-200% 0; } }
+        @media (max-width:860px) {
+          #landingPage .lp-qotd-grid { grid-template-columns:1fr; gap:30px; }
+          #landingPage .qd-opts { grid-template-columns:1fr; }
+          #landingPage .qd-row { flex-direction:column; }
+        }
+      </style>
+      <div class="lp-wrap lp-qotd-grid">
+        <div class="lp-qotd-copy">
+          <div class="lp-eyebrow">Free Question of the Day</div>
+          <h2 id="lp-qotd-title">One question a day.<br><em>The answer tomorrow.</em></h2>
+          <p>A new Primary Maths and Science question every day, chosen by Mr Chung for P3 to P6. Try it with your child, then see the step-by-step worked answer the next day.</p>
+          <ul class="lp-qotd-points">
+            <li><svg class="lp-icon" aria-hidden="true"><use href="#lp-check"/></svg><span>PSLE-style questions with full working and the key idea to remember</span></li>
+            <li><svg class="lp-icon" aria-hidden="true"><use href="#lp-check"/></svg><span>In your inbox every morning, or once a week on Saturday</span></li>
+            <li><svg class="lp-icon" aria-hidden="true"><use href="#lp-check"/></svg><span>Free, with one-click unsubscribe</span></li>
+          </ul>
+          <form class="qd-form" data-qotd-form novalidate>
+            <div class="qd-row">
+              <label class="lp-skip-label" for="qd-email" style="position:absolute;left:-9999px">Your email</label>
+              <input id="qd-email" type="email" name="email" inputmode="email" autocomplete="email" maxlength="120" placeholder="Your email address">
+              <button class="lp-button" type="submit">Email me the questions</button>
+            </div>
+            <div class="qd-honey" aria-hidden="true"><input type="text" name="website" tabindex="-1" autocomplete="off"></div>
+            <label class="qd-consent"><input type="checkbox" name="consent"><span>I agree to receive the Free Question of the Day and occasional news about Polymath classes by email. I can unsubscribe at any time.</span></label>
+            <div class="qd-note" data-qotd-note aria-live="polite"></div>
+            <a class="qd-more" href="question/#join">Choose Maths or Science, daily or weekly →</a>
+          </form>
+        </div>
+        <div class="lp-qotd-card" data-qotd-question aria-live="polite" aria-busy="true">
+          <div class="qd-skel" style="width:45%"></div><div class="qd-skel" style="width:92%"></div><div class="qd-skel" style="width:70%"></div>
+          <div class="qd-skel" style="height:44px"></div><div class="qd-skel" style="height:44px"></div>
+          <noscript><a href="question/">Open today's question</a></noscript>
+        </div>
+      </div>
+      <script src="question-of-the-day.js" defer></script>
+    </section>
+
     <section class="lp-section lp-about" id="lp-about" aria-labelledby="lp-about-title">
       <div class="lp-wrap">
         <div class="lp-section-head">
