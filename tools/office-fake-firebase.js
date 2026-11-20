@@ -74,6 +74,7 @@
     const data = store.get(path);
     return { id, exists: data !== undefined, data: () => (data === undefined ? undefined : revive(JSON.parse(JSON.stringify(data)))), ref: new DocRef(path) };
   }
+  function querySnap(docs) { return { docs, size: docs.length, empty: !docs.length, forEach: fn => docs.forEach(fn) }; }
   function notify() {
     setTimeout(() => listeners.forEach(l => { try { l(); } catch (e) { console.error(e); } }), 0);
   }
@@ -142,8 +143,8 @@
       if (this.lim) docs = docs.slice(0, this.lim);
       return docs;
     }
-    get() { const docs = this._docs(); return Promise.resolve({ docs, size: docs.length, empty: !docs.length }); }
-    onSnapshot(cb) { const run = () => { const docs = this._docs(); cb({ docs, size: docs.length, empty: !docs.length }); }; listeners.add(run); run(); return () => listeners.delete(run); }
+    get() { return Promise.resolve(querySnap(this._docs())); }
+    onSnapshot(cb) { const run = () => cb(querySnap(this._docs())); listeners.add(run); run(); return () => listeners.delete(run); }
   }
   const db = {
     settings() {},

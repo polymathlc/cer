@@ -340,7 +340,7 @@ function view() {
   if (R.coursesError) h += '<div class="banner amber"><div class="big">⚠️</div><div><b>Polymath Online could not be read.</b>The messages have no worksheet line (' + esc(R.coursesError) + ').</div></div>';
   if (!list.length) {
     const wd = L.weekdayName(R.day);
-    h += '<div class="card"><h2>No classes on ' + esc(L.dayLabel(R.day)) + '</h2><div class="sub">' + (wd === 'Sunday' ? 'There are no lessons on Sundays.' : 'No class on the timetable has students on a ' + esc(wd) + '.') + ' Use ◀ ▶ to pick another day.</div></div>';
+    h += '<div class="card"><h2>No classes on ' + esc(L.dayLabel(R.day).split(', ').pop()) + '</h2><div class="sub">' + (wd === 'Sunday' ? 'There are no lessons on Sundays.' : 'No class on the timetable has students on a ' + esc(wd) + '.') + ' Use ◀ ▶ to pick another day.</div></div>';
   } else {
     h += list.map(classCard).join('');
   }

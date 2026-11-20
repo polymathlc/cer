@@ -3,7 +3,8 @@ name: Polymath Office
 # polymathlc.com.sg/office (the admin app) and /pay (the parent's invoice page):
 # the shared core, the autopilot, and the whole month driven in Chromium with
 # Firebase replaced by tools/office-fake-firebase.js — import, prepare, email,
-# WhatsApp, a PDF and a CSV bank statement, reminders, the parent's page. Every
+# WhatsApp, a PDF and a CSV bank statement, reminders, the parent's page, and
+# the WhatsApp lesson updates to parents (tools/office-lessons-browser.mjs). Every
 # PayNow QR met on the way is decoded and held against its payload. Nothing is
 # sent anywhere.
 
@@ -31,7 +32,8 @@ jobs:
       - name: Core, rules and autopilot tests
         run: |
           node --check office/office-app.mjs
-          node --test tools/office-core-tests.mjs tools/office-referral-tests.mjs tools/office-rules-tests.mjs tools/office-autopilot-tests.mjs
+          node --check office/lesson-updates.mjs
+          node --test tools/office-core-tests.mjs tools/office-referral-tests.mjs tools/office-rules-tests.mjs tools/office-autopilot-tests.mjs tools/office-lessons-tests.mjs
 
       - name: Install the page libraries and Chromium
         run: |
@@ -50,6 +52,12 @@ jobs:
           PW: ${{ runner.temp }}/office-libs/node_modules/playwright/index.mjs
           OFFICE_SHOTS: artifacts/office/referrals
         run: node tools/office-referrals-browser.mjs
+
+      - name: WhatsApp lesson updates in a browser
+        env:
+          PW: ${{ runner.temp }}/office-libs/node_modules/playwright/index.mjs
+          OFFICE_SHOTS: artifacts/office/lessons
+        run: node tools/office-lessons-browser.mjs
 
       - uses: actions/upload-artifact@v4
         if: always()

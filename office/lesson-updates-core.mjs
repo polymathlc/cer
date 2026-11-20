@@ -28,7 +28,7 @@
    office sees which messages have no live-lesson record before sending.
 
    PURE: no Firebase, no DOM, no network. office/lesson-updates.mjs (the tab)
-   reads the data and calls these; tools/lesson-update-tests.mjs tests them.
+   reads the data and calls these; tools/office-lessons-tests.mjs tests them.
 
    Firestore (officeSettings, admins only, like the rest of the office):
      officeSettings/lessonUpdates          the settings (homework default line,

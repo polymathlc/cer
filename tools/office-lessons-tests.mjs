@@ -1,6 +1,6 @@
 // Tests for the parent WhatsApp lesson updates (office/lesson-updates-core.mjs).
 // Offline, on the same small centre as the weekly reports.
-//   node --test tools/lesson-update-tests.mjs
+//   node --test tools/office-lessons-tests.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as L from '../office/lesson-updates-core.mjs';
