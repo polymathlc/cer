@@ -1,7 +1,7 @@
 /* An in-memory stand-in for the Firebase compat SDK, for tools/office-browser.mjs.
    It implements exactly what office/office-app.mjs uses — auth (one admin), Firestore
-   (collections, documents, where/orderBy/limit, live listeners, transactions,
-   batches, serverTimestamp, arrayUnion) and a callable askOpenAi — so the real
+   (collections, collection groups, documents, where/orderBy/limit, live listeners,
+   transactions, batches, serverTimestamp, arrayUnion, FieldPath, deep merges) and a callable askOpenAi — so the real
    page can be driven end to end with nothing sent anywhere.
 
    The harness seeds it through window.__fakeSeed before the page loads and reads
@@ -42,7 +42,18 @@
     if (mode === 'delete') { store.delete(path); return; }
     if (mode === 'update' && !prev) throw Object.assign(new Error('No document to update: ' + path), { code: 'not-found' });
     const base = mode === 'set' ? {} : Object.assign({}, prev || {});
-    Object.keys(data || {}).forEach(k => {
+    // set(…, { merge: true }) merges maps all the way down, as Firestore does.
+    const isMap = v => v && typeof v === 'object' && !Array.isArray(v) && !v[SENTINEL] && !(typeof v.seconds === 'number' && typeof v.nanoseconds === 'number');
+    const mergeInto = (into, from) => {
+      Object.keys(from || {}).forEach(k => {
+        if (from[k] && from[k][SENTINEL] === 'delete') { delete into[k]; return; }
+        if (isMap(from[k]) && isMap(into[k])) { into[k] = Object.assign({}, into[k]); mergeInto(into[k], from[k]); return; }
+        const val = resolveValue(from[k], into[k]);
+        if (val !== undefined) into[k] = val;
+      });
+    };
+    if (mode === 'merge') mergeInto(base, data || {});
+    else Object.keys(data || {}).forEach(k => {
       const val = resolveValue(data[k], base[k]);
       if (data[k] && data[k][SENTINEL] === 'delete') delete base[k];
       else if (val !== undefined) base[k] = val;
@@ -71,21 +82,57 @@
     constructor(path) { this.path = path; this.id = path.split('/').pop(); }
     get() { return Promise.resolve(snapDoc(this.path)); }
     set(data, opts) { applyWrite(this.path, data, opts && opts.merge ? 'merge' : 'set'); notify(); return Promise.resolve(); }
-    update(data) { try { applyWrite(this.path, data, 'update'); } catch (e) { return Promise.reject(e); } notify(); return Promise.resolve(); }
+    update(data, ...rest) {
+      // update(fieldPath, value, fieldPath2, value2, …) with FieldPath objects:
+      // each path is set (or deleted) inside the maps, the rest left alone.
+      if (data instanceof FieldPath || (typeof data === 'string' && rest.length)) {
+        const prev = store.get(this.path);
+        if (!prev) return Promise.reject(Object.assign(new Error('No document to update: ' + this.path), { code: 'not-found' }));
+        const doc = JSON.parse(JSON.stringify(prev));
+        const pairs = [data, ...rest];
+        for (let i = 0; i < pairs.length; i += 2) {
+          const segs = pairs[i] instanceof FieldPath ? pairs[i].segs : String(pairs[i]).split('.');
+          const v = pairs[i + 1];
+          let o = doc;
+          for (let j = 0; j < segs.length - 1; j++) { if (!o[segs[j]] || typeof o[segs[j]] !== 'object') o[segs[j]] = {}; o = o[segs[j]]; }
+          const last = segs[segs.length - 1];
+          if (v && v[SENTINEL] === 'delete') delete o[last];
+          else o[last] = resolveValue(v, o[last]);
+        }
+        store.set(this.path, revive(doc));
+        notify();
+        return Promise.resolve();
+      }
+      try { applyWrite(this.path, data, 'update'); } catch (e) { return Promise.reject(e); } notify(); return Promise.resolve();
+    }
     delete() { applyWrite(this.path, null, 'delete'); notify(); return Promise.resolve(); }
     onSnapshot(cb) { const run = () => cb(snapDoc(this.path)); listeners.add(run); run(); return () => listeners.delete(run); }
   }
+  // FieldPath: a path into a document's maps, and documentId() for `where`.
+  const DOC_ID = '__name__';
+  class FieldPath {
+    constructor(...segs) { this.segs = segs; }
+    static documentId() { return new FieldPath(DOC_ID); }
+  }
   let autoId = 0;
   class Query {
-    constructor(col, filters, order, lim) { this.col = col; this.filters = filters || []; this.order = order || null; this.lim = lim || 0; }
+    constructor(col, filters, order, lim, group) { this.col = col; this.filters = filters || []; this.order = order || null; this.lim = lim || 0; this.group = !!group; }
     doc(id) { return new DocRef(this.col + '/' + (id || ('auto' + (++autoId) + Math.random().toString(36).slice(2, 8)))); }
-    where(f, op, v) { return new Query(this.col, this.filters.concat([[f, op, v]]), this.order, this.lim); }
-    orderBy(f, dir) { return new Query(this.col, this.filters, [f, dir || 'asc'], this.lim); }
-    limit(n) { return new Query(this.col, this.filters, this.order, n); }
+    where(f, op, v) { return new Query(this.col, this.filters.concat([[f, op, v]]), this.order, this.lim, this.group); }
+    orderBy(f, dir) { return new Query(this.col, this.filters, [f, dir || 'asc'], this.lim, this.group); }
+    limit(n) { return new Query(this.col, this.filters, this.order, n, this.group); }
     _docs() {
-      let docs = [...store.keys()].filter(p => p.startsWith(this.col + '/') && p.split('/').length === 2).map(snapDoc);
+      // A collection group: every collection of that name, at any depth.
+      let docs = [...store.keys()].filter(p => {
+        const parts = p.split('/');
+        return this.group ? parts.length % 2 === 0 && parts[parts.length - 2] === this.col : p.startsWith(this.col + '/') && parts.length === 2;
+      }).map(snapDoc);
       this.filters.forEach(([f, op, v]) => {
-        docs = docs.filter(d => { const x = d.data()[f]; return op === '>=' ? x >= v : op === '==' ? x === v : op === '<=' ? x <= v : true; });
+        const isId = f instanceof FieldPath && f.segs[0] === DOC_ID;
+        docs = docs.filter(d => {
+          const x = isId ? d.id : d.data()[f instanceof FieldPath ? f.segs[0] : f];
+          return op === '>=' ? x >= v : op === '==' ? x === v : op === '<=' ? x <= v : op === 'in' ? (v || []).includes(x) : true;
+        });
       });
       if (this.order) {
         const [f, dir] = this.order;
@@ -101,6 +148,7 @@
   const db = {
     settings() {},
     collection: name => new Query(name),
+    collectionGroup: name => new Query(name, [], null, 0, true),
     batch() {
       const ops = [];
       return {
@@ -156,6 +204,6 @@
     initializeApp: () => app,
     app: () => app,
     auth: Object.assign(() => auth, { GoogleAuthProvider }),
-    firestore: Object.assign(() => db, { FieldValue })
+    firestore: Object.assign(() => db, { FieldValue, FieldPath })
   };
 })();

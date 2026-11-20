@@ -16,6 +16,8 @@
                    families by reference code / known payer / name / amount /
                    ChatGPT, applied in one click; reminders to whoever still owes
      ⚙️ Settings   invoice day, due days, the autopilot, emails, PayNow, ChatGPT
+     💬 Lessons    (v1.18.0, lesson-updates.mjs) a WhatsApp to every parent after
+                   each lesson: covered, how the child did, homework; one tap each
 
    Everything that decides a NUMBER or a SENTENCE lives in office-core.mjs, which
    the parents' page (pay/) and the monthly autopilot (tools/office-autopilot.mjs)
@@ -35,7 +37,7 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 import * as C from './office-core.mjs?v=1.17.0';
 
-const OFFICE_VERSION = 'v1.17.0';
+const OFFICE_VERSION = 'v1.18.0';
 
 /* ═══════════════ Firebase — the CER project ═══════════════ */
 firebase.initializeApp({
