@@ -21,6 +21,7 @@
 // the parent clicks the link in it. Every email carries a one-click unsubscribe.
 const { createHash, randomBytes } = require('node:crypto');
 const { MATH, SCIENCE } = require('./daily-question-bank');
+const pool = require('./daily-question-pool');
 
 const SENDER_EMAIL = 'admin@polymathlc.com.sg';
 const SENDER_NAME = 'Polymath Learning Centre';
@@ -57,6 +58,10 @@ const SUBJECT_LABEL = Object.freeze({ math: 'Maths', science: 'Science' });
 const BANK = Object.freeze({ math: MATH, science: SCIENCE });
 const FREQUENCIES = Object.freeze(['daily', 'weekly']);
 const CHILD_LEVELS = Object.freeze(['', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'Secondary', 'Other']);
+// A new sign-up must give a level we set questions for, so nobody is sent one above their child.
+const SIGNUP_LEVELS = Object.freeze(['P3', 'P4', 'P5', 'P6']);
+// The level the page shows before a visitor picks one.
+const DEFAULT_PAGE_LEVEL = 'P5';
 const STATUSES = Object.freeze(['pending', 'active', 'unsubscribed']);
 // The weekly digest goes out on Saturday (Singapore), with the past seven days.
 const WEEKLY_WEEKDAY = 6;
@@ -118,7 +123,22 @@ function fmtDayShort(key) {
 }
 
 /* ══════════════ The rotation ══════════════ */
+// Since v2 every day has one question per subject PER LEVEL (P3 to P6), so no child
+// is given a question above their level. A day's slots are filled from the centre's
+// own material (the pool, daily-question-pool.js) when a ready question is waiting,
+// and otherwise from the hand-written bank below, by level. A level with nothing at
+// all (the bank has no P3 Maths) stays empty, and a child at that level gets the
+// nearest question BELOW it, or none.
 const mod = (a, n) => ((a % n) + n) % n;
+const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+// The smallest stride from `base` up that shares no factor with n.
+function strideFor(n, base) {
+  let k = Math.max(1, base);
+  while (n > 1 && gcd(k, n) !== 1) k++;
+  return k;
+}
+const BANK_BY_LEVEL = Object.freeze(Object.fromEntries(SUBJECTS.map(subject => [subject,
+  Object.freeze(Object.fromEntries(pool.LEVELS.map(level => [level, Object.freeze(BANK[subject].filter(q => q.level === level))])))])));
 function questionById(id) {
   if (typeof id !== 'string') return null;
   for (const subject of SUBJECTS) {
@@ -127,43 +147,107 @@ function questionById(id) {
   }
   return null;
 }
-// The pair a day gets when nobody has asked for it yet.
-function defaultPick(day) {
-  const index = dayIndex(day);
-  const pick = {};
-  for (const subject of SUBJECTS) {
-    const list = BANK[subject];
-    pick[subject] = list[mod(index * STRIDES[subject] + OFFSETS[subject], list.length)].id;
-  }
-  return pick;
+function emptySlots() {
+  const picks = {};
+  for (const subject of SUBJECTS) { picks[subject] = {}; for (const level of pool.LEVELS) picks[subject][level] = ''; }
+  return picks;
 }
-// A day's pair: the stored one when it is valid, else the default.
+// The bank's question for one subject and level on a day ('' when the bank has none).
+function bankPick(day, subject, level) {
+  const list = BANK_BY_LEVEL[subject][level];
+  if (!list.length) return '';
+  const index = dayIndex(day);
+  const stride = strideFor(list.length, STRIDES[subject]);
+  return list[mod(index * stride + OFFSETS[subject] + pool.LEVELS.indexOf(level) * 3, list.length)].id;
+}
+// The slots a day gets when nobody has asked for it yet and no pool question waits.
+function defaultPick(day) {
+  const picks = emptySlots();
+  for (const subject of SUBJECTS) for (const level of pool.LEVELS) picks[subject][level] = bankPick(day, subject, level);
+  return { v: 2, picks, items: {} };
+}
+const validPoolItem = (item, subject, level) => !!(item && pool.ID_PATTERN.test(item.id || '') && item.subject === subject && item.level === level
+  && typeof item.q === 'string' && item.q && typeof item.answer === 'string');
+// A day's slots: the stored ones when they are valid, the bank's otherwise.
+// A day stored before v2 ({ math: id, science: id }) keeps its two bank questions in
+// the slot of their own level, so a parent who answered that day sees the same one.
 function pickForDay(day, stored) {
   const fallback = defaultPick(day);
-  const pick = {};
+  const out = { v: 2, picks: emptySlots(), items: {} };
+  const items = stored && stored.items && typeof stored.items === 'object' ? stored.items : {};
   for (const subject of SUBJECTS) {
-    const id = stored && typeof stored[subject] === 'string' ? stored[subject] : '';
-    const found = id ? questionById(id) : null;
-    pick[subject] = found && found.subject === subject ? id : fallback[subject];
+    for (const level of pool.LEVELS) {
+      const id = stored && stored.picks && stored.picks[subject] ? stored.picks[subject][level] : undefined;
+      if (typeof id === 'string' && id) {
+        if (validPoolItem(items[id], subject, level)) { out.picks[subject][level] = id; out.items[id] = items[id]; continue; }
+        const found = questionById(id);
+        if (found && found.subject === subject && found.question.level === level) { out.picks[subject][level] = id; continue; }
+      }
+      if (stored && stored.picks && stored.picks[subject] && stored.picks[subject][level] === '') { out.picks[subject][level] = ''; continue; }
+      out.picks[subject][level] = fallback.picks[subject][level];
+    }
+    // Before v2: one bank question per subject, put in the slot of its own level.
+    const legacy = stored && !stored.picks && typeof stored[subject] === 'string' ? questionById(stored[subject]) : null;
+    if (legacy && legacy.subject === subject && pool.LEVELS.includes(legacy.question.level)) out.picks[subject][legacy.question.level] = legacy.question.id;
   }
-  return pick;
+  return out;
 }
+const imageUrl = (id, day) => FUNCTION_URL + '?img=' + encodeURIComponent(id) + '&d=' + encodeURIComponent(day);
 // A question as the page or an email may show it. The answer only when asked for.
-function publicQuestion(id, day, withAnswer) {
+function publicQuestion(id, day, withAnswer, pick) {
+  const item = pick && pick.items ? pick.items[id] : null;
+  if (item) return pool.publicOpen(item, day, withAnswer, { imageUrl, dayLabel: fmtDay(day), dayShort: fmtDayShort(day) });
   const found = questionById(id);
   if (!found) return null;
   const q = found.question;
   const out = {
-    id: q.id, subject: found.subject, subjectLabel: SUBJECT_LABEL[found.subject], level: q.level, topic: q.topic,
-    q: q.q, options: q.options.slice(), day, dayLabel: fmtDay(day), dayShort: fmtDayShort(day)
+    id: q.id, kind: 'mcq', source: 'bank', subject: found.subject, subjectLabel: SUBJECT_LABEL[found.subject], level: q.level, topic: q.topic,
+    q: q.q, options: q.options.slice(), images: [], day, dayLabel: fmtDay(day), dayShort: fmtDayShort(day)
   };
   if (withAnswer) Object.assign(out, { answer: q.answer, answerLetter: LETTERS[q.answer], steps: q.steps.slice(), idea: q.idea });
   return out;
 }
-function publicPair(day, pick, withAnswer) {
+// The slot for a child at `level`: their own level's question, else the nearest one below.
+function slotFor(pick, subject, level) {
+  for (const l of pool.levelsAtOrBelow(level)) {
+    const id = pick && pick.picks && pick.picks[subject] ? pick.picks[subject][l] : '';
+    if (id) return id;
+  }
+  return '';
+}
+// The questions one child sees on a day. `levels` is a level ('P5') or one per
+// subject ({ math: 'P5', science: 'P4' }); a subject with no question at or below the
+// level is null.
+function publicPair(day, pick, withAnswer, levels = DEFAULT_PAGE_LEVEL) {
+  const normal = pick && pick.v === 2 ? pick : pickForDay(day, pick);
   const out = {};
-  for (const subject of SUBJECTS) out[subject] = publicQuestion(pick[subject], day, withAnswer);
+  for (const subject of SUBJECTS) {
+    const level = typeof levels === 'string' ? levels : levels && levels[subject];
+    const id = slotFor(normal, subject, level);
+    out[subject] = id ? publicQuestion(id, day, withAnswer, normal) : null;
+    if (out[subject]) out[subject].forLevel = pool.questionLevelFor(level);
+  }
   return out;
+}
+// Every slot of a day, for the admin page.
+function publicAll(day, pick, withAnswer) {
+  const normal = pick && pick.v === 2 ? pick : pickForDay(day, pick);
+  const out = {};
+  for (const subject of SUBJECTS) {
+    out[subject] = {};
+    for (const level of pool.LEVELS) {
+      const id = normal.picks[subject][level];
+      out[subject][level] = id ? publicQuestion(id, day, withAnswer, normal) : null;
+    }
+  }
+  return out;
+}
+// The levels a subscriber gets questions at: the /student enrolment when the
+// family is approved there (familyLevels), else the level the parent chose.
+function subscriberLevels(sub, family) {
+  if (family) return { math: family.math || '', science: family.science || '' };
+  const level = pool.questionLevelFor(sub && sub.level);
+  return { math: level, science: level };
 }
 
 /* ══════════════ Subscribers ══════════════ */
@@ -207,6 +291,11 @@ function readLevel(value) {
   if (!CHILD_LEVELS.includes(level)) fail('invalid-level');
   return level;
 }
+// A sign-up (and a settings change) must name a level we set questions for.
+function readSignupLevel(value) {
+  if (!SIGNUP_LEVELS.includes(value)) fail('choose-level');
+  return value;
+}
 function checkKeys(body, allowed) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) fail();
   if (Object.keys(body).some(key => !allowed.includes(key))) fail();
@@ -222,7 +311,7 @@ function validateSubscribe(body) {
   return {
     email,
     name: oneLine(body.name, 80),
-    level: readLevel(body.level),
+    level: readSignupLevel(body.level),
     subjects: readSubjects(body.subjects === undefined ? SUBJECTS.slice() : body.subjects),
     frequency: readFrequency(body.frequency === undefined ? 'daily' : body.frequency),
     pageVersion: oneLine(body.pageVersion, 20),
@@ -237,7 +326,7 @@ function validatePreferences(body) {
   const patch = {};
   if (body.subjects !== undefined) patch.subjects = readSubjects(body.subjects);
   if (body.frequency !== undefined) patch.frequency = readFrequency(body.frequency);
-  if (body.level !== undefined) patch.level = readLevel(body.level);
+  if (body.level !== undefined) patch.level = readSignupLevel(body.level);
   if (body.name !== undefined) patch.name = oneLine(body.name, 80);
   if (!Object.keys(patch).length) fail();
   return { key, patch };
@@ -324,7 +413,7 @@ const manageUrl = sub => PAGE_URL + '?m=' + keyOf(sub);
 const unsubscribeUrl = sub => PAGE_URL + '?u=' + keyOf(sub);
 // The List-Unsubscribe header: mail apps POST here for one click unsubscribe.
 const oneClickUrl = sub => FUNCTION_URL + '?u=' + keyOf(sub);
-const tryUrl = (day, subject) => PAGE_URL + '?d=' + day + '#' + subject;
+const tryUrl = (day, subject, level) => PAGE_URL + '?d=' + day + (level ? '&l=' + level : '') + '#' + subject;
 
 /* ══════════════ Emails ══════════════ */
 function escapeHtml(value) {
@@ -360,33 +449,62 @@ function optionsHtml(q, { reveal = false } = {}) {
         + html(option) + (right ? ' &nbsp;✓' : '') + '</td></tr>';
     }).join('') + '</table>';
 }
+// Fractions as a parent would write them: 3/4 → ³⁄₄ style, 2 1/4 → 2 ¹⁄₄ (email-safe HTML).
+function mathHtml(text) {
+  return html(text).replace(/(^|[^\d/.])(\d{1,3})\/(\d{1,3})(?![\d/])/g,
+    (m, before, n, d) => before + '<span style="white-space:nowrap"><sup style="font-size:75%">' + n + '</sup>&frasl;<sub style="font-size:75%">' + d + '</sub></span>');
+}
+function imagesHtml(q) {
+  return (q.images || []).map(img => {
+    const width = Math.min(540, Math.round(img.w / 2) || 540);
+    return '<div style="margin:0 0 12px;text-align:center"><img src="' + escapeHtml(img.url) + '" alt="' + escapeHtml(img.alt) + '" width="' + width + '"'
+      + ' style="display:inline-block;width:100%;max-width:' + width + 'px;height:auto;border:1px solid ' + COLOURS.line + ';border-radius:8px;background:#ffffff"></div>';
+  }).join('');
+}
 function questionCardHtml(q, { heading, reveal = false, link = '' } = {}) {
+  const open = q.kind === 'open';
   let out = '<div style="border:1px solid ' + COLOURS.line + ';border-radius:14px;padding:18px 18px 16px;margin:0 0 18px;background:#ffffff">';
   if (heading) out += '<div style="font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:' + COLOURS.deep + ';margin:0 0 8px">' + escapeHtml(heading) + '</div>';
   out += '<div style="margin:0 0 10px">' + tag(q) + '</div>';
-  out += '<p style="font-size:16px;line-height:1.6;margin:0 0 12px;color:' + COLOURS.ink + ';font-weight:600">' + html(q.q) + '</p>';
-  out += optionsHtml(q, { reveal });
-  if (reveal) {
+  out += '<p style="font-size:16px;line-height:1.6;margin:0 0 12px;color:' + COLOURS.ink + ';font-weight:600">' + mathHtml(q.q) + '</p>';
+  if (open) out += imagesHtml(q);
+  else out += optionsHtml(q, { reveal });
+  if (reveal && open) {
+    out += '<div style="margin:14px 0 0;padding:14px 16px;border-radius:10px;background:' + COLOURS.paper + '">'
+      + '<div style="font-size:14px;font-weight:700;color:' + COLOURS.sci + ';margin:0 0 6px">Answer: ' + mathHtml(q.answer) + '</div>'
+      + (q.answerType === 'explain' || q.model !== q.answer ? '<div style="font-size:14px;line-height:1.6;margin:0 0 8px;color:' + COLOURS.ink + '"><b>Model answer:</b> ' + mathHtml(q.model) + '</div>' : '')
+      + '<ol style="margin:0;padding:0 0 0 20px;font-size:14px;line-height:1.6;color:' + COLOURS.ink + '">'
+      + q.steps.map(step => '<li style="margin:0 0 4px">' + mathHtml(step) + '</li>').join('') + '</ol>'
+      + '<div style="margin:10px 0 0;font-size:14px;line-height:1.5;color:' + COLOURS.plum + '"><b>Key idea:</b> ' + mathHtml(q.idea) + '</div></div>';
+  } else if (reveal) {
     out += '<div style="margin:14px 0 0;padding:14px 16px;border-radius:10px;background:' + COLOURS.paper + '">'
       + '<div style="font-size:14px;font-weight:700;color:' + COLOURS.sci + ';margin:0 0 6px">Answer: ' + escapeHtml(q.answerLetter) + '. ' + html(q.options[q.answer]) + '</div>'
       + '<ol style="margin:0;padding:0 0 0 20px;font-size:14px;line-height:1.6;color:' + COLOURS.ink + '">'
       + q.steps.map(step => '<li style="margin:0 0 4px">' + html(step) + '</li>').join('') + '</ol>'
       + '<div style="margin:10px 0 0;font-size:14px;line-height:1.5;color:' + COLOURS.plum + '"><b>Key idea:</b> ' + html(q.idea) + '</div></div>';
   }
-  if (link) out += '<div style="margin:14px 0 0">' + button(link, 'Try it on our website', COLOURS.teal) + '</div>';
+  if (link) {
+    out += open
+      ? '<div style="margin:14px 0 0">' + button(link, 'Type your answer: Chung GPT marks it', COLOURS.teal) + '</div>'
+        + '<div style="font-size:12px;color:' + COLOURS.muted + ';margin:6px 0 0">Your child types the answer on our website and gets instant feedback. The worked answer comes tomorrow.</div>'
+      : '<div style="margin:14px 0 0">' + button(link, 'Try it on our website', COLOURS.teal) + '</div>';
+  }
   return out + '</div>';
 }
 function questionText(q, { heading, reveal = false, link = '' } = {}) {
   const lines = [];
+  const open = q.kind === 'open';
   if (heading) lines.push(heading.toUpperCase());
   lines.push(q.level + ' ' + q.subjectLabel + ' · ' + q.topic, '', q.q, '');
-  q.options.forEach((option, index) => lines.push('  ' + LETTERS[index] + '. ' + option + (reveal && index === q.answer ? '   ✓' : '')));
+  if (open) { if ((q.images || []).length) lines.push('(' + q.images.length + ' picture' + (q.images.length > 1 ? 's' : '') + ': see the email or the website)', ''); }
+  else q.options.forEach((option, index) => lines.push('  ' + LETTERS[index] + '. ' + option + (reveal && index === q.answer ? '   ✓' : '')));
   if (reveal) {
-    lines.push('', 'Answer: ' + q.answerLetter + '. ' + q.options[q.answer], 'Worked answer:');
+    if (open) lines.push('', 'Answer: ' + q.answer, 'Model answer: ' + q.model, 'Worked answer:');
+    else lines.push('', 'Answer: ' + q.answerLetter + '. ' + q.options[q.answer], 'Worked answer:');
     q.steps.forEach((step, index) => lines.push('  ' + (index + 1) + '. ' + step));
     lines.push('Key idea: ' + q.idea);
   }
-  if (link) lines.push('', 'Try it on our website: ' + link);
+  if (link) lines.push('', (open ? 'Type your answer (Chung GPT marks it): ' : 'Try it on our website: ') + link);
   return lines.join('\n');
 }
 function ctaHtml() {
@@ -472,6 +590,8 @@ function alreadyMail(sub) {
 function dailyMail(sub, day, today, yesterday, { welcome = false, test = false } = {}) {
   const subjects = wanted(sub, today);
   const answers = yesterday ? wanted(sub, yesterday) : [];
+  // Nothing at or below the child's level today: no email rather than a wrong one.
+  if (!subjects.length) return null;
   const first = today[subjects[0]];
   const subject = (test ? '[Test] ' : '') + (welcome ? 'Welcome! Your first Question of the Day' : subjects.length > 1
     ? 'Today\'s questions: ' + subjects.map(s => today[s].level + ' ' + today[s].subjectLabel).join(' & ')
@@ -483,14 +603,14 @@ function dailyMail(sub, day, today, yesterday, { welcome = false, test = false }
       : 'Every morning you will get a new question, and the next day its full worked answer. Here is today\'s, to start you off.'))
     : p('Here ' + (subjects.length > 1 ? 'are today\'s questions' : 'is today\'s question') + ' for ' + escapeHtml(fmtDay(day))
       + '. Let your child try ' + (subjects.length > 1 ? 'them' : 'it') + ' first; the worked answer comes tomorrow.');
-  for (const s of subjects) body += questionCardHtml(today[s], { heading: 'Today · ' + today[s].subjectLabel, link: tryUrl(day, s) });
+  for (const s of subjects) body += questionCardHtml(today[s], { heading: 'Today · ' + today[s].subjectLabel, link: tryUrl(day, s, today[s].forLevel || today[s].level) });
   if (answers.length) {
     body += '<h3 style="font-size:17px;margin:24px 0 10px;color:' + COLOURS.deep + '">Yesterday\'s answer' + (answers.length > 1 ? 's' : '') + '</h3>';
     for (const s of answers) body += questionCardHtml(yesterday[s], { heading: 'Yesterday · ' + yesterday[s].subjectLabel, reveal: true });
   }
   body += ctaHtml() + footerHtml(sub);
   const textParts = [greetingFor(sub), '', welcome ? 'Welcome to the Free Question of the Day!' : 'Today\'s question' + (subjects.length > 1 ? 's' : '') + ' for ' + fmtDay(day) + ':', ''];
-  for (const s of subjects) textParts.push(questionText(today[s], { heading: 'Today · ' + today[s].subjectLabel, link: tryUrl(day, s) }), '');
+  for (const s of subjects) textParts.push(questionText(today[s], { heading: 'Today · ' + today[s].subjectLabel, link: tryUrl(day, s, today[s].forLevel || today[s].level) }), '');
   if (answers.length) {
     textParts.push('YESTERDAY\'S ANSWER' + (answers.length > 1 ? 'S' : ''), '');
     for (const s of answers) textParts.push(questionText(yesterday[s], { reveal: true }), '');
@@ -504,6 +624,7 @@ function dailyMail(sub, day, today, yesterday, { welcome = false, test = false }
 function weeklyMail(sub, day, week, { test = false } = {}) {
   const list = [];
   for (const entry of week) for (const s of wanted(sub, entry.pair)) list.push(entry.pair[s]);
+  if (!list.length) return null;
   const subject = (test ? '[Test] ' : '') + 'This week\'s ' + list.length + ' questions, with worked answers';
   let body = p(escapeHtml(greetingFor(sub)))
     + p('Here are this week\'s Questions of the Day with their full worked answers. A good way to use them: cover the answer, let your child try, then go through the working together.');
@@ -560,7 +681,8 @@ module.exports = {
   PAGE_URL, FUNCTION_URL, DIAGNOSTIC_URL, SCHEDULE_URL, START_DAY, STRIDES, OFFSETS, SUBJECTS, SUBJECT_LABEL, BANK, FREQUENCIES, CHILD_LEVELS,
   STATUSES, WEEKLY_WEEKDAY, DEFAULT_DAILY_CAP, MAX_DAILY_CAP, GMAIL_LIMITS, LIMITS, CONSENT_TEXT, CONSENT_VERSION, LETTERS, DAY_MS,
   QotdError, sgDayKey, sgHour, validDayKey, addDays, weekdayOf, dayIndex, fmtDay, fmtDayShort, questionById, defaultPick, pickForDay,
-  publicQuestion, publicPair, normaliseEmail, subscriberId, newToken, keyOf, parseKey, maskEmail, validateSubscribe, validatePreferences,
+  publicQuestion, publicPair, publicAll, slotFor, bankPick, strideFor, BANK_BY_LEVEL, SIGNUP_LEVELS, DEFAULT_PAGE_LEVEL, imageUrl, mathHtml,
+  subscriberLevels, readSignupLevel, emptySlots, validPoolItem, pool, normaliseEmail, subscriberId, newToken, keyOf, parseKey, maskEmail, validateSubscribe, validatePreferences,
   planSubscribe, dueKind, planRun, readCap, stats, millis, confirmUrl, manageUrl, unsubscribeUrl, oneClickUrl, tryUrl, escapeHtml, validEmail,
   confirmMail, alreadyMail, dailyMail, weeklyMail, adminSummaryMail, mailId, subscribersCsv, questionText
 };

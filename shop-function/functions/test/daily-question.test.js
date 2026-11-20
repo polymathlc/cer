@@ -33,13 +33,15 @@ function database() {
       async delete() { rows.delete(path); }
     };
   }
-  function collectionRef(path, order = null, max = Infinity) {
+  function collectionRef(path, order = null, max = Infinity, filters = []) {
     return {
       doc: id => docRef(path + '/' + id),
-      orderBy: (field, direction = 'asc') => collectionRef(path, { field, direction }, max),
-      limit: n => collectionRef(path, order, n),
+      orderBy: (field, direction = 'asc') => collectionRef(path, { field, direction }, max, filters),
+      limit: n => collectionRef(path, order, n, filters),
+      where: (field, op, value) => collectionRef(path, order, max, filters.concat([[field, op, value]])),
       async get() {
         let docs = children(path).map(p => snapshot(docRef(p)));
+        docs = docs.filter(d => filters.every(([field, op, value]) => op === '==' && d.data()[field] === value));
         if (order) docs.sort((a, b) => {
           const x = a.data()[order.field], y = b.data()[order.field];
           return (x < y ? -1 : x > y ? 1 : 0) * (order.direction === 'desc' ? -1 : 1);
@@ -142,13 +144,18 @@ test('every question has four different options, a valid answer, steps and a key
   }
 });
 
-test('the strides visit every question once before any repeats', () => {
+test('the bank rotation visits every question of a level once before any repeats', () => {
   const gcd = (a, b) => (b ? gcd(b, a % b) : a);
   for (const subject of core.SUBJECTS) {
-    assert.equal(gcd(core.STRIDES[subject], core.BANK[subject].length), 1, subject + ' stride shares no factor with the bank size');
-    const seen = new Set();
-    for (let i = 0; i < core.BANK[subject].length; i++) seen.add(core.defaultPick(core.addDays(core.START_DAY, i))[subject]);
-    assert.equal(seen.size, core.BANK[subject].length);
+    for (const level of core.pool.LEVELS) {
+      const list = core.BANK_BY_LEVEL[subject][level];
+      if (!list.length) { assert.equal(core.defaultPick('2026-11-25').picks[subject][level], '', 'no question at a level the bank lacks'); continue; }
+      assert.equal(gcd(core.strideFor(list.length, core.STRIDES[subject]), list.length), 1);
+      const seen = new Set();
+      for (let i = 0; i < list.length; i++) seen.add(core.defaultPick(core.addDays(core.START_DAY, i)).picks[subject][level]);
+      assert.equal(seen.size, list.length, subject + ' ' + level);
+      for (const id of seen) assert.equal(core.questionById(id).question.level, level, 'a slot holds its own level');
+    }
   }
 });
 
@@ -156,9 +163,14 @@ test('days are Singapore days, and the stored pair wins over the default', () =>
   assert.equal(core.sgDayKey(Date.UTC(2026, 10, 19, 16, 30)), '2026-11-20', '12:30 a.m. on the 20th in Singapore');
   assert.equal(core.fmtDay('2026-11-21'), 'Saturday 21 November 2026');
   assert.equal(core.weekdayOf('2026-11-21'), core.WEEKLY_WEEKDAY);
-  const stored = { math: 'm010', science: 's020' };
-  assert.deepEqual(core.pickForDay('2026-11-25', stored), stored);
+  // A day stored before v2 keeps its two questions, in the slots of their own levels.
+  const legacy = core.pickForDay('2026-11-25', { math: 'm010', science: 's020' });
+  assert.equal(legacy.picks.math[core.questionById('m010').question.level], 'm010');
+  assert.equal(legacy.picks.science[core.questionById('s020').question.level], 's020');
   assert.deepEqual(core.pickForDay('2026-11-25', { math: 's001', science: 'nope' }), core.defaultPick('2026-11-25'), 'wrong-subject ids fall back');
+  // A v2 slot holding a question of another level falls back too.
+  const wrongLevel = { v: 2, picks: { math: { P4: 'm036' }, science: {} }, items: {} };
+  assert.equal(core.pickForDay('2026-11-25', wrongLevel).picks.math.P4, core.defaultPick('2026-11-25').picks.math.P4);
 });
 
 test('a question only carries its answer when asked', () => {
@@ -244,7 +256,9 @@ test('sign-up checks the address, the consent box, the subjects and the level', 
   assert.equal((await h.call(signup({ subjects: [] }))).body.error, 'choose-subject');
   assert.equal((await h.call(signup({ subjects: ['english'] }))).body.error, 'choose-subject');
   assert.equal((await h.call(signup({ frequency: 'hourly' }))).body.error, 'invalid-frequency');
-  assert.equal((await h.call(signup({ level: 'P9' }))).body.error, 'invalid-level');
+  assert.equal((await h.call(signup({ level: 'P9' }))).body.error, 'choose-level');
+  assert.equal((await h.call(signup({ level: 'P2' }))).body.error, 'choose-level', 'questions start at P3');
+  assert.equal((await h.call(signup({ level: undefined }))).body.error, 'choose-level', 'the level is needed');
   assert.equal((await h.call(signup({ extra: 1 }))).statusCode, 400);
   assert.equal((await h.call(signup({ name: '<script>' }))).statusCode, 400);
   assert.equal(h.mails().length, 0);
@@ -392,7 +406,9 @@ test('the admin list shows every subscriber without their secret link, with tota
   assert.equal(res.body.settings.dailyCap, core.DEFAULT_DAILY_CAP);
   assert.equal(res.body.settings.mode, 'on');
   assert.equal(res.body.upcoming.length, 7);
-  assert.equal(typeof res.body.upcoming[0].questions.math.answer, 'number', 'the admin sees the answers ahead');
+  assert.equal(typeof res.body.upcoming[0].slots.math.P5.answer, 'number', 'the admin sees the answers ahead');
+  assert.equal(res.body.upcoming[0].slots.math.P3, null, 'no P3 Maths in the bank');
+  assert.deepEqual(res.body.pool.waiting.math, { P3: 0, P4: 0, P5: 0, P6: 0 });
   assert.equal(res.body.gmailLimits.gmail, 500);
 });
 
@@ -447,24 +463,24 @@ test('planRun: daily every day once, weekly on Saturdays, oldest first within th
 test('the morning email has today\'s question, yesterday\'s worked answer and an unsubscribe link', () => {
   const sub = { id: 'a'.repeat(24), token: 'b'.repeat(32), email: 'p@example.test', name: '', subjects: ['math'], frequency: 'daily', consent: { at: NOW } };
   const day = '2026-11-21';
-  const today = core.publicPair(day, core.defaultPick(day), false);
-  const yesterday = core.publicPair('2026-11-20', core.defaultPick('2026-11-20'), true);
+  const today = core.publicPair(day, core.defaultPick(day), false, 'P5');
+  const yesterday = core.publicPair('2026-11-20', core.defaultPick('2026-11-20'), true, 'P5');
   const mail = core.dailyMail(sub, day, today, yesterday);
-  assert.match(mail.message.subject, /^Question of the day: P\d Maths/);
-  assert.ok(mail.message.html.includes(core.escapeHtml(today.math.q).split('\n')[0]));
-  assert.ok(!mail.message.html.includes(core.escapeHtml(today.science.q).split('\n')[0]), 'only the chosen subject');
+  assert.match(mail.message.subject, /^Question of the day: P5 Maths/);
+  assert.ok(mail.message.html.includes(core.mathHtml(today.math.q).split('<br>')[0]));
+  assert.ok(!mail.message.html.includes(core.mathHtml(today.science.q).split('<br>')[0]), 'only the chosen subject');
   assert.ok(mail.message.text.includes('Answer: ' + yesterday.math.answerLetter));
   assert.ok(!mail.message.text.includes('Answer: ' + today.math.answerLetter + '. ' + today.math.options[today.math.answer] + '\n') || today.math.id === yesterday.math.id);
   assert.match(mail.message.html, /Dear Parent,/);
   assert.ok(mail.message.html.includes(core.unsubscribeUrl(sub)));
   assert.ok(mail.message.text.includes(core.manageUrl(sub)));
-  assert.ok(mail.message.html.includes(core.tryUrl(day, 'math')));
+  assert.ok(mail.message.html.includes(core.escapeHtml(core.tryUrl(day, 'math', 'P5'))));
 });
 
 test('the Saturday email lists the week\'s questions with answers', () => {
   const sub = { id: 'a'.repeat(24), token: 'b'.repeat(32), email: 'p@example.test', name: 'Mrs Tan', subjects: ['math', 'science'], frequency: 'weekly' };
   const week = [];
-  for (let i = 7; i >= 1; i--) { const d = core.addDays('2026-11-28', -i); week.push({ day: d, pair: core.publicPair(d, core.defaultPick(d), true) }); }
+  for (let i = 7; i >= 1; i--) { const d = core.addDays('2026-11-28', -i); week.push({ day: d, pair: core.publicPair(d, core.defaultPick(d), true, 'P6') }); }
   const mail = core.weeklyMail(sub, '2026-11-28', week);
   assert.match(mail.message.subject, /This week's 14 questions/);
   assert.equal((mail.message.text.match(/Answer: [ABCD]\./g) || []).length, 14);

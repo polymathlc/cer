@@ -4,6 +4,7 @@ const { getFirestore, Timestamp } = require('firebase-admin/firestore');
 const { getAuth } = require('firebase-admin/auth');
 const { getStorage } = require('firebase-admin/storage');
 const { onRequest } = require('firebase-functions/v2/https');
+const { defineSecret } = require('firebase-functions/params');
 const logger = require('firebase-functions/logger');
 const { createService, createHttp, hash } = require('./service');
 const { createBookingService, BOOKING_SOURCE } = require('./booking');
@@ -21,6 +22,10 @@ const { createNotebookStore } = require('./notebook-store');
 const { createSchoolResultsService, createSchoolResultsStore } = require('./school-results');
 const { createDailyQuestionService } = require('./daily-question');
 const { createDailyQuestionStore } = require('./daily-question-store');
+const { createChungGpt } = require('./daily-question-ai');
+// The centre's OpenAI key, the existing Firebase secret the homework helper and the
+// visualiser use. Only dailyQuestion is given it (Chung GPT marks typed answers).
+const openaiKey = defineSecret('OPENAI_API_KEY');
 initializeApp();
 // Both keys arrive as environment variables written at deploy time from the GitHub
 // repository secrets STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET (see
@@ -65,7 +70,8 @@ const schoolResults = createSchoolResultsService({ store: createSchoolResultsSto
 // GitHub Actions (tools/daily-question-send.mjs).
 const dailyQuestions = createDailyQuestionService({
   store: createDailyQuestionStore(getFirestore(), Timestamp), http: createHttp(report), hashIp: hash,
-  verifyIdToken: token => getAuth().verifyIdToken(token), report
+  verifyIdToken: token => getAuth().verifyIdToken(token), report,
+  ai: createChungGpt({ apiKey: () => openaiKey.value() })
 });
 const service = createService({
   repository, stripe,
@@ -92,4 +98,4 @@ exports.revisionPackAdmin = onRequest(web, revision.revisionPackAdmin);
 exports.mapsLibrary = onRequest(web, maps.mapsLibrary);
 exports.mistakeNotebook = onRequest(Object.assign({}, web, { timeoutSeconds: 60, memory: '512MiB' }), notebook.mistakeNotebook);
 exports.schoolResults = onRequest(web, schoolResults.schoolResults);
-exports.dailyQuestion = onRequest(web, dailyQuestions.dailyQuestion);
+exports.dailyQuestion = onRequest(Object.assign({}, web, { timeoutSeconds: 60, memory: '512MiB', secrets: [openaiKey] }), dailyQuestions.dailyQuestion);
