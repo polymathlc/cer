@@ -98,6 +98,18 @@ try {
   await dp.goto(BASE + '/__out/sample-email.html');
   await dp.waitForTimeout(300);
   await dp.screenshot({ path: join(OUT, 'email-desktop.png'), fullPage: true });
+  // 🙋 The same family when Ethan missed Wednesday's P5 Maths lesson: said plainly, never a zero.
+  const absentData = F.data({ tags, attendance: W.attendanceDocs([{ id: 'attend-2026-11-18', kind: 'attendance-day', marks: { 'WED-2__famA_kid1': { s: 'absent', by: 'office' } } }]) });
+  const tanAbsent = buildReports(absentData, weekly, win, NOW, F.clock).find(r => r.familyId === 'famA');
+  const absentEmail = W.weeklyEmail(tanAbsent, {}, weekly, win);
+  assert.match(absentEmail.html, /Absent: Wed 18 Nov \(P5 Maths\)/);
+  writeFileSync(join(OUT, 'sample-email-absent.html'), '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>absent</title><body style="margin:0">' + absentEmail.html + '</body>');
+  await pp.goto(BASE + '/__out/sample-email-absent.html');
+  await pp.waitForTimeout(300);
+  await pp.screenshot({ path: join(OUT, 'email-absent-phone.png'), fullPage: true });
+  await dp.goto(BASE + '/__out/sample-email-absent.html');
+  await dp.waitForTimeout(300);
+  await dp.screenshot({ path: join(OUT, 'email-absent-desktop.png'), fullPage: true });
   const text = await dp.locator('body').innerText();
   for (const want of ['Ethan Tan', 'Chloe Tan', 'In class this week', 'Plant Transport', 'Next: Human Circulatory System', 'Live lessons', 'Practice at home', 'Doing well', 'Needs more work', 'What to practise this week', 'No lessons from 14 Dec']) {
     assert.ok(text.toLowerCase().includes(want.toLowerCase()), 'the email shows "' + want + '"');

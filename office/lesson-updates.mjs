@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   💬 POLYMATH OFFICE — the Lesson updates tab (lesson-updates.mjs v1.0.0)
+   💬 POLYMATH OFFICE — the Lesson updates tab (lesson-updates.mjs v1.1.0)
 
    polymathlc.com.sg/office/#lessons. After each lesson, a WhatsApp to every
    parent of the class with what was covered, how their child did and the
@@ -26,15 +26,23 @@
    Reports tab. Its controls carry data-lu and are wired here. The rules —
    what the message says — are in lesson-updates-core.mjs.
 
+   🙋 v1.1.0 — attendance. Each child shows whether they were in the lesson
+   (from the Ans Key live class: officeSettings/attend-<day>, see
+   attendance-core.mjs), with ✓ Here / ✗ Absent buttons to correct it by hand.
+   An absent child's message says so and how to catch up. During a lesson a
+   child who has not joined gets a one-tap "💬 Not joined yet" WhatsApp.
+
    Reads: onlineCourses (the classes' worksheet lists), pdfAnnotator (the
    worksheets' names only), every teacher's liveClassProgress book (how each
-   child did in the Ans Key live lesson). Writes: officeSettings/lessonUpdates
-   and officeSettings/lessonupd-<day> only.
+   child did in the Ans Key live lesson), officeSettings/attend-<day>.
+   Writes: officeSettings/lessonUpdates, officeSettings/lessonupd-<day> and
+   the hand marks and "not joined" taps in officeSettings/attend-<day>.
    ═══════════════════════════════════════════════════════════════════════════ */
-import * as L from './lesson-updates-core.mjs?v=1.0.0';
-import * as W from './weekly-report-core.mjs?v=1.0.0';
+import * as L from './lesson-updates-core.mjs?v=1.1.0';
+import * as W from './weekly-report-core.mjs?v=1.1.0';
+import * as A from './attendance-core.mjs?v=1.0.0';
 
-const LU_UI_VERSION = '1.0.0';
+const LU_UI_VERSION = '1.1.0';
 const O = window.PolymathOffice;
 const C = O.C;
 const db = firebase.firestore();
@@ -50,6 +58,7 @@ const R = {
   day: L.sgToday(),
   lu: L.normalizeLu({}), luLoaded: false,
   dayDoc: L.normalizeDay({}), dayLoaded: false, dayError: '',
+  att: A.normalizeAttendDay({}), attLoaded: false, attError: '', attUnsub: null,
   courses: [], coursesLoaded: false, coursesError: '',
   docNames: {}, namesAsked: {},
   live: null, liveAt: 0, liveError: '', liveLoading: false,
@@ -75,8 +84,18 @@ function toast(msg, kind) {
 }
 function settingsRef() { return db.collection(COL).doc(L.LU_SETTINGS_DOC); }
 function dayRef(day) { return db.collection(COL).doc(L.dayDocId(day || R.day)); }
+function attRef(day) { return db.collection(COL).doc(A.attendDocId(day || R.day)); }
 
 function listenDay() {
+  if (R.attUnsub) { try { R.attUnsub(); } catch (e) { /* gone */ } }
+  R.attLoaded = false; R.attError = ''; R.att = A.normalizeAttendDay({});
+  const aday = R.day;
+  R.attUnsub = attRef(aday).onSnapshot(d => {
+    if (aday !== R.day) return;
+    R.att = A.normalizeAttendDay(d.exists ? Object.assign({}, d.data(), { day: aday }) : { day: aday });
+    R.attLoaded = true; R.attError = '';
+    rerender();
+  }, err => { R.attError = (err && err.message) || 'could not be read'; R.attLoaded = true; rerender(); });
   if (R.dayUnsub) { try { R.dayUnsub(); } catch (e) { /* gone */ } }
   R.dayLoaded = false; R.dayError = ''; R.dayDoc = L.normalizeDay({});
   const day = R.day;
@@ -108,6 +127,7 @@ function start() {
 function stop() {
   while (R.unsubs.length) { try { R.unsubs.pop()(); } catch (e) { /* gone */ } }
   if (R.dayUnsub) { try { R.dayUnsub(); } catch (e) { /* gone */ } R.dayUnsub = null; }
+  if (R.attUnsub) { try { R.attUnsub(); } catch (e) { /* gone */ } R.attUnsub = null; }
   clearInterval(R.timer); R.started = false;
 }
 /* Every teacher's live-class progress book → { rosterId: rows }. The book may
@@ -163,7 +183,7 @@ function classes() {
   if (!CLOCK) return [];
   const list = L.dayClasses({
     day: R.day, now: Date.now(), schedule: O.S.schedule || { slots: {} }, roster: roster(), families: O.S.families || [],
-    courses: R.courses, docNames: R.docNames, live: R.live, clock: CLOCK, lu: R.lu, dayDoc: R.dayDoc
+    courses: R.courses, docNames: R.docNames, live: R.live, clock: CLOCK, lu: R.lu, dayDoc: R.dayDoc, att: R.att
   });
   askNames(list.flatMap(cl => [cl.ws.covered && cl.ws.covered.id, cl.ws.next && cl.ws.next.id]).filter(Boolean));
   return list;
@@ -186,12 +206,36 @@ function sentText(s) {
   const by = s.by ? s.by.split('@')[0] : '';
   return '✓ Sent ' + W.clockText(s.at) + (L.sgToday(s.at) !== R.day ? ' (' + W.dayShort(s.at) + ')' : '') + (by ? ' · ' + by : '');
 }
-function childSummary(ch) {
-  if (!ch.row) return esc(ch.first) + ' <span class="muted">· no live-lesson record</span>';
+// 🙋 One child's attendance: a pill, and (in the class card) the buttons to correct it.
+function attPill(ch) {
+  const a = ch.attendance;
+  if (!a || a.s === 'unknown' || a.s === 'upcoming') return '';
+  const meta = A.STATUS_META[a.s] || A.STATUS_META.unknown;
+  return ' <span class="pill ' + meta.pill + ' lu-att" style="padding:1px 7px;">' + meta.icon + ' ' + esc(A.statusWords(a, W.clockText)) + '</span>';
+}
+function attButtons(cl, ch) {
+  const a = ch.attendance;
+  if (!a || cl.state === 'upcoming') return '';
+  const b = (v, label, on) => '<button class="btn ghost small lu-attbtn' + (on ? ' on' : '') + '" data-lu="attMark" data-s="' + esc(cl.slotId) + '" data-r="' + esc(ch.rosterId) + '" data-v="' + v + '"'
+    + ' title="' + (v === 'here' ? 'Mark ' + esc(ch.first) + ' as in the lesson (e.g. on Zoom)' : v === 'absent' ? 'Mark ' + esc(ch.first) + ' as absent' : 'Use what the live class saw') + '">' + label + '</button>';
+  return ' <span class="lu-attbtns">' + b('here', '✓ Here', a.how === 'mark' && a.s === 'here') + b('absent', '✗ Absent', a.how === 'mark' && a.s === 'absent')
+    + (a.how === 'mark' ? b('', '↺ Auto', false) : '') + '</span>';
+}
+function childSummary(ch, cl) {
+  const att = attPill(ch) + (cl ? attButtons(cl, ch) : '');
+  if (ch.absent) return esc(ch.first) + att;
+  if (!ch.row) return esc(ch.first) + ' <span class="muted">· no live-lesson record</span>' + att;
   const sc = W.liveScore(ch.row);
   const col = sc == null ? '' : sc >= L.STRONG_PCT ? 'green' : sc >= L.WEAK_PCT ? 'amber' : 'red';
   return esc(ch.first) + ' · ' + (ch.row.q > 0 ? ch.row.a + '/' + ch.row.q + ' answered' : 'in the lesson')
-    + (sc != null ? ' <span class="pill ' + col + '" style="padding:1px 7px;">' + sc + '%</span>' : '');
+    + (sc != null ? ' <span class="pill ' + col + '" style="padding:1px 7px;">' + sc + '%</span>' : '') + att;
+}
+// 💬 "Not joined yet": the one-tap WhatsApp during the lesson.
+function notJoinedButton(cl, f) {
+  if (!f.notJoined || !f.phone || f.optedOut) return '';
+  const tapped = f.children.filter(ch => ch.attendance && ch.attendance.wa).length;
+  return '<a class="btn small lu-nj" href="' + esc(L.chatLink(f.phone, f.notJoined, !TOUCH)) + '" target="polymath_whatsapp" rel="noopener" data-lu="notJoined" data-s="' + esc(cl.slotId) + '" data-k="' + esc(f.key) + '"'
+    + ' title="WhatsApp the parent that their child has not joined yet">⏰ ' + (tapped ? 'Not joined (sent)' : 'Not joined yet') + '</a>';
 }
 function sendButton(cl, f, big) {
   if (!f.phone) return '';
@@ -207,8 +251,8 @@ function familyRow(cl, f) {
   let h = '<div class="lu-fam' + (f.sent ? ' sent' : '') + (f.optedOut ? ' off' : '') + '">'
     + '<div class="lu-fam-main">'
     + '<div class="lu-who"><b>' + esc(f.parentName) + '</b>' + (f.phone ? ' <span class="small muted nowrap">' + esc(C.displayPhone(f.phone)) + '</span>' : '')
-    + '<div class="small">' + f.children.map(childSummary).join('<br>') + '</div></div>'
-    + '<div class="lu-acts">' + status
+    + '<div class="small">' + f.children.map(ch => childSummary(ch, cl)).join('<br>') + '</div></div>'
+    + '<div class="lu-acts">' + status + notJoinedButton(cl, f)
     + (!f.optedOut && !f.phone ? '<button class="btn ghost small" data-act="openFamily" data-id="' + esc(f.familyId) + '">Add number</button>' : '')
     + '<button class="btn ghost small" data-lu="toggle" data-k="' + esc(f.key) + '">' + (open ? 'Hide' : '👁 Message') + '</button>'
     + (!f.optedOut ? sendButton(cl, f, false) : '')
@@ -227,6 +271,7 @@ function familyRow(cl, f) {
         + (f.sent ? '<button class="btn ghost small" data-lu="unsend" data-k="' + esc(f.key) + '">Mark as not sent</button>' : (f.phone && !f.optedOut ? '<button class="btn ghost small" data-lu="markSent" data-k="' + esc(f.key) + '">Mark as sent</button>' : ''))
         + '</div>'
         + (f.edited ? '<div class="small muted" style="margin-top:4px;">You edited this message, so it no longer follows the class\'s homework line or new live results.</div>' : '')
+        + (f.absent ? '<div class="small muted" style="margin-top:4px;">🙋 ' + esc(C.listJoin(f.children.filter(c => c.absent).map(c => c.first))) + (f.absent > 1 ? ' were' : ' was') + ' absent, so the message says so and how to catch up. If that is wrong, press ✓ Here beside the name.</div>' : '')
         + (!f.hasLive ? '<div class="small muted" style="margin-top:4px;">No live-lesson record for ' + esc(C.listJoin(f.children.map(c => c.first))) + ' in this lesson, so the message has no "How they did" line. Edit it to add one.</div>' : '');
     }
     h += '<label class="check" style="margin-top:8px;"><input type="checkbox" data-lu="optOut" data-f="' + esc(f.familyId) + '" ' + (f.optedOut ? 'checked' : '') + '> Don\'t send lesson updates to ' + esc(f.parentName) + '</label>';
@@ -252,6 +297,7 @@ function classCard(cl) {
     + (c.ready ? '<button class="btn wa" data-lu="queue" data-s="' + esc(cl.slotId) + '">▶ Send to ' + C.plural(c.ready, 'parent') + '</button>' : (c.sent && !c.ready ? '<span class="pill green">✓ All sent</span>' : ''))
     + '</div>'
     + '<div class="lu-ws small">' + ws + '</div>'
+    + attLine(cl)
     + (cl.state === 'upcoming' ? '<div class="small muted" style="margin:6px 0 0;">This lesson has not started yet. You can still send, but "How they did" fills in only once the teacher marks answers in the live lesson.</div>' : '')
     + (cl.state === 'live' ? '<div class="small muted" style="margin:6px 0 0;">The lesson is on now: "How they did" keeps filling in as the teacher marks answers. Best sent when the lesson ends.</div>' : '')
     + '<div class="lu-fields">'
@@ -265,6 +311,14 @@ function classCard(cl) {
     + '</div></div>'
     + '<div class="lu-fams">' + cl.families.map(f => familyRow(cl, f)).join('') + '</div>'
     + '</div>';
+}
+// 🙋 The class's attendance at a glance.
+function attLine(cl) {
+  const a = cl.attendance;
+  if (!a || cl.state === 'upcoming') return '';
+  if (!a.live && !a.taken) return '<div class="small muted lu-attline">🙋 Attendance was not taken by the live class for this lesson. Mark anyone absent by hand with ✗ Absent: their message then says so.</div>';
+  const bits = [a.here + ' here', a.absent ? a.absent + ' absent' : '', a.missing ? a.missing + ' not joined yet' : ''].filter(Boolean).join(' · ');
+  return '<div class="small lu-attline">🙋 <b>Attendance:</b> ' + esc(bits) + ' <span class="muted">(of ' + a.total + ', from the live class; ✓ Here / ✗ Absent to correct)</span></div>';
 }
 function dayBar(list) {
   const t = L.dayTotals(list);
@@ -315,7 +369,7 @@ function queueOverlay(list) {
         + '<div style="padding:14px 18px;overflow:auto;flex:1;">'
         + '<div class="small muted">' + esc(cl.title) + ' · ' + esc(cl.when) + '</div>'
         + '<h3 style="font-size:18px;margin:2px 0;">' + esc(f.parentName) + '</h3>'
-        + '<div class="muted small" style="margin-bottom:10px;">💬 ' + esc(C.displayPhone(f.phone)) + ' · ' + f.children.map(childSummary).join(' · ') + '</div>'
+        + '<div class="muted small" style="margin-bottom:10px;">💬 ' + esc(C.displayPhone(f.phone)) + ' · ' + f.children.map(ch => childSummary(ch, null)).join(' · ') + '</div>'
         + '<pre class="lu-pre">' + esc(f.text) + '</pre>'
         + (was ? '<div class="banner green" style="margin:12px 0 0;"><div class="big">✅</div><div><b>WhatsApp opened with the message typed in.</b>Press send in WhatsApp, then come back and press Next.</div></div>' : '')
         + '</div>'
@@ -337,6 +391,7 @@ function view() {
   updateCount(list);
   let h = head + dayBar(list) + liveBanner();
   if (R.dayError) h += '<div class="banner amber"><div class="big">⚠️</div><div><b>This day\'s record could not be read.</b>' + esc(R.dayError) + '. What was sent may not show.</div></div>';
+  if (R.attError) h += '<div class="banner amber"><div class="big">⚠️</div><div><b>Attendance could not be read.</b>' + esc(R.attError) + '. Nobody is shown as absent until it loads.</div></div>';
   if (R.coursesError) h += '<div class="banner amber"><div class="big">⚠️</div><div><b>Polymath Online could not be read.</b>The messages have no worksheet line (' + esc(R.coursesError) + ').</div></div>';
   if (!list.length) {
     const wd = L.weekdayName(R.day);
@@ -368,8 +423,39 @@ function markSent(key, phone) {
   writeDay({ sent: { [key]: { at: Date.now(), by: who(), phone: phone || '' } } });
 }
 
+// 🙋 A hand mark (here / absent), or back to what the live class saw ('').
+async function writeMark(slotId, rosterId, v, cl) {
+  const key = A.attendKey(slotId, rosterId);
+  const lesson = cl && cl.lesson;
+  if (v) R.att.marks[key] = { s: v, by: who(), at: Date.now(), start: lesson ? lesson.start : 0, label: cl ? cl.title : '' };
+  else delete R.att.marks[key];
+  rerender();
+  try {
+    await attRef().set({ kind: A.ATTEND_KIND, day: R.day, marks: { [key]: v ? { s: v, by: who(), at: Date.now(), start: lesson ? lesson.start : 0, label: cl ? cl.title + ' · ' + cl.shortWhen : '' } : FV.delete() },
+      updatedAt: FV.serverTimestamp(), updatedBy: who() }, { merge: true });
+    toast(v === 'here' ? 'Marked here.' : v === 'absent' ? 'Marked absent: their message and weekly report say so.' : 'Back to what the live class saw.', 'ok');
+  } catch (e) { console.error(e); toast('Could not save: ' + ((e && e.message) || e), 'err'); }
+}
+
 /* ─── Actions ─── */
 const ACT = {
+  attMark(el) {
+    const cl = classes().find(c => c.slotId === el.dataset.s);
+    return writeMark(el.dataset.s, el.dataset.r, el.dataset.v || '', cl);
+  },
+  notJoined(el) {
+    const { f } = findFamily(classes(), el.dataset.s, el.dataset.k);
+    if (!f) return;
+    const wa = {};
+    f.children.filter(ch => ch.attendance && ch.attendance.s === 'missing').forEach(ch => {
+      const key = A.attendKey(el.dataset.s, ch.rosterId);
+      wa[key] = { at: Date.now(), by: who() };
+      R.att.wa[key] = wa[key];
+    });
+    attRef().set({ kind: A.ATTEND_KIND, day: R.day, wa, updatedAt: FV.serverTimestamp(), updatedBy: who() }, { merge: true }).catch(e => console.warn('not joined', e));
+    toast('WhatsApp opened — press send there.', 'ok');
+    rerender();
+  },
   dayPrev() { setDay(L.addDays(R.day, -1)); },
   dayNext() { setDay(L.addDays(R.day, 1)); },
   dayToday() { setDay(L.sgToday()); },

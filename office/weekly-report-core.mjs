@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   📈 WEEKLY PARENT PROGRESS REPORTS — the rules (weekly-report-core.mjs v1.0.0)
+   📈 WEEKLY PARENT PROGRESS REPORTS — the rules (weekly-report-core.mjs v1.1.0)
 
    Zhi Kai, 19 Nov 2026: build the weekly parent progress report, so the centre
    can say "Know exactly how your child is doing, every week".
@@ -23,6 +23,11 @@
                                slips (Study Buddy's concept tags, with their
                                trend: improving / still there / getting worse)
      • WHAT TO PRACTISE NEXT   at most three concrete things to do this week
+     • 🙋 ATTENDANCE (v1.1.0)  lessons attended and MISSED this week: a missed
+                               lesson is said in words ("Absent"), its
+                               worksheet is marked missed (never ✓), and
+                               catching up on it comes first in the next steps.
+                               From officeSettings/attend-<day> (attendance-core.mjs).
 
    Nothing here is guessed. Every number comes from something the child did:
    a live lesson the teacher marked, a worksheet Study Buddy marked, or the
@@ -51,8 +56,9 @@ import {
   emailShell, officeMail, scheduleSlot, slotParts, slotShortLabel, levelLabel,
   subjectKey, firstName, listJoin, plural, nameTokens, cleanEmail, isEmail
 } from './office-core.mjs?v=1.16.0';
+import { childAttendance, normalizeAttendDay, ATTEND_KIND, ATTEND_PREFIX } from './attendance-core.mjs?v=1.0.0';
 
-export const WEEKLY_VERSION = '1.0.0';
+export const WEEKLY_VERSION = '1.1.0';
 export const WEEKLY_DOC = 'weeklyReports';              // officeSettings/weeklyReports
 export const WEEKLY_LOG_KIND = 'weekly-report';          // officeSettings/weekly-<weekKey>  (the week's log)
 export const WEEKLY_FAMILY_KIND = 'weekly-family';       // officeSettings/weekly-<weekKey>-<familyId> (one report, for the preview)
@@ -247,7 +253,7 @@ export function classCoverage(course, win, clock, docNames) {
   for (let i = 0; i < k; i++) {
     const idx = at - k + i;
     const lesson = lessons[lessons.length - k + i];
-    taught.push({ id: ids[idx], n: idx + 1, name: nameOf(idx), date: lesson ? lesson.start : 0 });
+    taught.push({ id: ids[idx], n: idx + 1, name: nameOf(idx), date: lesson ? lesson.start : 0, lesson: lesson || null });
   }
   let next = null;
   if (at < ids.length) {
@@ -394,9 +400,49 @@ export function matchChild(kids, names, level) {
   return byLevel.length === 1 ? byLevel[0] : null;
 }
 
+/* ─────────────────────────── 6b. Attendance (v1.1.0) ─────────────────────────── */
+// The child's live-lesson row of a lesson, if any (the lesson's window, an hour each side).
+function rowOfLesson(rows, lesson) {
+  if (!lesson || !Array.isArray(rows)) return null;
+  return rows.find(r => r && r.d >= lesson.start - HOUR_MS && r.d < lesson.release + HOUR_MS) || null;
+}
+/* Every lesson of the child's classes released in the window, with their
+   attendance: [{ slotId, title, lesson, date, a: childAttendance(...), absent }].
+   attendance: { 'YYYY-MM-DD': normalizeAttendDay(...) }. */
+export function weekAttendance(classes, rosterId, liveRows, attendance, clock, win) {
+  const out = [];
+  if (!clock || typeof clock.lessonsBetween !== 'function') return out;
+  (classes || []).forEach(cl => {
+    const key = slotCourseKey(cl.slotId);
+    if (!key) return;
+    (clock.lessonsBetween(key.day, key.slot, win.start, win.end) || []).forEach(lesson => {
+      const day = lesson.day || sgDay(lesson.start);
+      const a = childAttendance({ att: (attendance && attendance[day]) || null, slotId: cl.slotId, rosterId, lesson, row: rowOfLesson(liveRows, lesson), now: win.end });
+      out.push({ slotId: cl.slotId, title: cl.title, lesson, date: lesson.start, a, absent: a.s === 'absent' || a.s === 'missing' });
+    });
+  });
+  return out.sort((x, y) => x.date - y.date);
+}
+// { day: normalized } from officeSettings documents ({ id, ...data }).
+export function attendanceDocs(docs) {
+  const out = {};
+  (Array.isArray(docs) ? docs : []).forEach(d => {
+    if (!d || !String(d.id || '').startsWith(ATTEND_PREFIX) || (d.kind && d.kind !== ATTEND_KIND)) return;
+    const day = String(d.id).slice(ATTEND_PREFIX.length);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(day)) out[day] = normalizeAttendDay(Object.assign({}, d, { day }));
+  });
+  return out;
+}
+// The attendance document ids of a week (the days whose lessons release inside it).
+export function weekAttendanceIds(win) {
+  const ids = [];
+  for (let t = win.start - DAY_MS; t <= win.end + DAY_MS; t += DAY_MS) ids.push(ATTEND_PREFIX + sgDay(t));
+  return [...new Set(ids)];
+}
+
 /* ─────────────────────────── 7. One child's week ─────────────────────────── */
 /* ctx: { schedule, courses, docNames, live: {rosterId: rows}, practice: {rosterId: sheets},
-          tags, clock, win: {start, end}, now } */
+          tags, clock, win: {start, end}, now, attendance: { day: normalizeAttendDay } } */
 export function childReport(family, student, ctx) {
   const c = ctx || {};
   const win = c.win;
@@ -420,6 +466,17 @@ export function childReport(family, student, ctx) {
     });
   });
 
+  // 🙋 Attendance: every lesson of the week, and the ones the child missed.
+  // A worksheet taught at a missed lesson is marked missed, never ✓.
+  const lessonsAtt = weekAttendance(classes, rosterId, (c.live && c.live[rosterId]) || [], c.attendance || {}, c.clock, win);
+  const missed = lessonsAtt.filter(x => x.absent);
+  classes.forEach(cl => cl.taught.forEach(t => {
+    const hit = missed.find(m => m.slotId === cl.slotId && t.date && sgDay(m.date) === sgDay(t.date));
+    if (hit) { t.missed = true; hit.worksheet = t.name; }
+  }));
+  const taken = lessonsAtt.filter(x => x.a.taken);
+  const attended = taken.filter(x => x.a.s === 'here').length;
+
   // Live lessons this week.
   const live = (c.live && c.live[rosterId] || []).filter(r => inWin(r.d || 0)).map(r => {
     const topic = classes.reduce((found, cl) => found || (cl.taught.find(t => t.date && sgDay(t.date) === sgDay(r.d)) || null), null);
@@ -439,13 +496,14 @@ export function childReport(family, student, ctx) {
   const focusRows = live.filter(r => r.f >= 0);
   const pracQ = practice.reduce((t, s) => t + s.n, 0);
   const pracRight = practice.reduce((t, s) => t + Math.max(0, s.n - s.w), 0);
-  const taughtCount = classes.reduce((t, cl) => t + cl.taught.length, 0);
+  const taughtCount = classes.reduce((t, cl) => t + cl.taught.filter(w => !w.missed).length, 0);
   const totals = {
     lessons: Math.max(live.length, 0), classWorksheets: taughtCount,
     asked, answered, answeredPct: pct(answered, asked),
     marked, correctPct: marked > 0 ? Math.round(right / marked * 100) : null,
     focusPct: focusRows.length ? Math.round(focusRows.reduce((t, r) => t + r.f, 0) / focusRows.length) : null,
-    practiceSheets: practice.length, practiceQuestions: pracQ, practicePct: pct(pracRight, pracQ)
+    practiceSheets: practice.length, practiceQuestions: pracQ, practicePct: pct(pracRight, pracQ),
+    lessonsTaken: taken.length, attended, missed: missed.length
   };
 
   // Doing well / needs work.
@@ -469,8 +527,10 @@ export function childReport(family, student, ctx) {
   strong.sort((a, b) => b.score - a.score);
   weak.sort((a, b) => a.score - b.score);
 
-  // What to practise next: at most three, most useful first.
+  // What to practise next: at most three, most useful first. A missed lesson comes first.
   const next = [];
+  missed.slice(0, 2).forEach(m => next.push('Catch up on the ' + m.title + ' lesson ' + (m.worksheet ? '(“' + m.worksheet + '”) ' : '') + 'missed on ' + dayShort(m.date)
+    + ': work through the worksheet, then check it with the answer key and lesson video on Polymath Online.'));
   gaps.filter(g => g.trend !== 'improving' && g.fix).slice(0, 2).forEach(g => next.push(g.fix + (g.topics && g.topics.length ? ' (seen in ' + listJoin(g.topics) + ')' : '')));
   const weakSheet = practice.filter(s => s.score != null && s.score < WEAK_PCT).sort((a, b) => a.score - b.score)[0];
   if (weakSheet && next.length < 3) next.push('Redo the questions marked wrong in “' + weakSheet.ws + '” from Study Buddy\'s mistake book, without looking at the answers first.');
@@ -482,10 +542,12 @@ export function childReport(family, student, ctx) {
   const missedTime = live.filter(r => r.f >= 0 && r.f < 75).length;
   if (missedTime && next.length < 3) next.push('Keep the class screen open for the whole live lesson — focus was lower than usual this week.');
 
-  const active = !!(live.length || practice.length || taughtCount);
+  const active = !!(live.length || practice.length || taughtCount || missed.length);
   return {
     rosterId, name: student.name, first: firstName(student.name) || student.name, level: student.level,
-    classes, live, practice, gaps, totals, strong: strong.slice(0, 4), weak: weak.slice(0, 4), next: next.slice(0, 3), active
+    classes, live, practice, gaps, totals, strong: strong.slice(0, 4), weak: weak.slice(0, 4), next: next.slice(0, 3), active,
+    missed: missed.map(m => ({ slotId: m.slotId, title: m.title, date: m.date, worksheet: m.worksheet || '', how: m.a.how })),
+    attendance: { lessons: lessonsAtt.length, taken: taken.length, attended, missed: missed.length }
   };
 }
 
@@ -539,13 +601,17 @@ export function childSectionHtml(ch) {
     tileHtml('Practice', String(t.practiceSheets), t.practicePct == null ? 'at home' : 'at home · ' + t.practicePct + '%', t.practicePct == null ? '' : scoreColour(t.practicePct))
   ];
   h += '<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;table-layout:fixed;margin:10px 0 0;"><tr>' + tiles.join('') + '</tr></table>';
+  // 🙋 Attendance: said plainly, before anything else about the week.
+  h += attendanceHtml(ch);
   // In class.
   const withWork = ch.classes.filter(cl => cl.taught.length || cl.next);
   if (withWork.length) {
     h += h3('In class this week');
     withWork.forEach(cl => {
       h += '<div style="font-size:14px;line-height:1.55;margin:4px 0 8px;"><b>' + E(cl.title) + '</b> <span style="color:#6b7f85;">· ' + E(cl.when) + '</span>';
-      if (cl.taught.length) h += '<br>' + cl.taught.map(w => '✓ ' + E(w.name) + (w.date ? ' <span style="color:#6b7f85;">(' + E(dayShort(w.date)) + ')</span>' : '')).join('<br>');
+      if (cl.taught.length) h += '<br>' + cl.taught.map(w => (w.missed
+        ? '<span style="color:#b3261e;font-weight:700;">✗ ' + E(w.name) + '</span> <span style="color:#b3261e;">(' + E(w.date ? dayShort(w.date) + ' · ' : '') + 'absent — catch up on Polymath Online)</span>'
+        : '✓ ' + E(w.name) + (w.date ? ' <span style="color:#6b7f85;">(' + E(dayShort(w.date)) + ')</span>' : ''))).join('<br>');
       if (cl.next) h += '<br><span style="color:#056c76;">→ Next: ' + E(cl.next.name) + (cl.next.date ? ' (' + E(dayShort(cl.next.date)) + ')' : '') + '</span>';
       h += '</div>';
     });
@@ -586,10 +652,32 @@ export function childSectionHtml(ch) {
   h += '</div>';
   return h;
 }
+// 🙋 "Attendance: 2 of 3 lessons · Absent: Thu 20 Nov (P5 Science)".
+export function attendanceWords(ch) {
+  const a = ch && ch.attendance;
+  if (!a || (!a.taken && !a.missed)) return '';
+  // Only a full week is counted out loud; otherwise only the absences are said.
+  if (!a.missed && a.lessons && a.taken < a.lessons) return '';
+  const missed = (ch.missed || []).map(m => dayShort(m.date) + ' (' + m.title + ')');
+  const base = a.taken ? 'Attended ' + a.attended + ' of ' + plural(a.taken, 'lesson') + ' this week' : '';
+  return [base, missed.length ? 'Absent: ' + missed.join(', ') : ''].filter(Boolean).join(' · ');
+}
+function attendanceHtml(ch) {
+  const words = attendanceWords(ch);
+  if (!words) return '';
+  const bad = ch.missed && ch.missed.length;
+  return '<div style="margin:10px 0 0;padding:9px 12px;border-radius:10px;font-size:14px;line-height:1.5;'
+    + (bad ? 'background:#fdecea;border:1px solid #f3b8b2;color:#7a1c14;' : 'background:#e9f7ef;border:1px solid #b7e2c8;color:#0b5a3a;') + '">'
+    + (bad ? '❌ ' : '✅ ') + '<b>Attendance:</b> ' + escapeHtml(words)
+    + (bad ? '<br><span style="font-size:13px;">The worksheet, answer key and lesson video of a missed lesson are on <a href="' + ONLINE_URL + '" style="color:#7a1c14;">Polymath Online</a>.</span>' : '')
+    + '</div>';
+}
 export function childSectionText(ch) {
   const t = ch.totals;
   const L = [];
   L.push('━━ ' + ch.name + (ch.level ? ' (' + levelLabel(ch.level) + ')' : '') + ' ━━');
+  const aw = attendanceWords(ch);
+  if (aw) L.push('Attendance: ' + aw);
   L.push('Worksheets in class: ' + t.classWorksheets + (t.lessons ? ' · Live lessons: ' + t.lessons : '')
     + (t.asked ? ' · Answered in class: ' + t.answered + '/' + t.asked : '')
     + (t.correctPct != null ? ' · Correct: ' + t.correctPct + '%' : '')
@@ -599,7 +687,7 @@ export function childSectionText(ch) {
     L.push('', 'In class this week:');
     withWork.forEach(cl => {
       L.push('  ' + cl.title + ' (' + cl.when + ')');
-      cl.taught.forEach(w => L.push('    ✓ ' + w.name + (w.date ? ' (' + dayShort(w.date) + ')' : '')));
+      cl.taught.forEach(w => L.push(w.missed ? '    ✗ ' + w.name + ' (' + (w.date ? dayShort(w.date) + ', ' : '') + 'absent — catch up on Polymath Online)' : '    ✓ ' + w.name + (w.date ? ' (' + dayShort(w.date) + ')' : '')));
       if (cl.next) L.push('    → Next: ' + cl.next.name + (cl.next.date ? ' (' + dayShort(cl.next.date) + ')' : ''));
     });
   }
@@ -617,7 +705,7 @@ export function childSectionText(ch) {
   if (ch.next.length) { L.push('', 'What to practise this week:'); ch.next.forEach(x => L.push('  → ' + x)); }
   return L.join('\n');
 }
-const HOW_WE_MEASURE = 'How we measure: "Correct" counts only answers your child\'s teacher marked in the live lesson. '
+const HOW_WE_MEASURE = 'How we measure: "Attendance" is who joined the live class (or was marked by the teacher). "Correct" counts only answers your child\'s teacher marked in the live lesson. '
   + '"Practice" is the worksheets Study Buddy marked at home this week. "In class" follows your child\'s class on Polymath Online. '
   + '"Focus" is how much of the live lesson the class screen stayed open in front of your child.';
 
@@ -712,7 +800,7 @@ export function reportSummary(r) {
     familyId: r.familyId, parentName: str(r.parentName, 120), to: r.to.slice(0, 2), reason: r.reason || '', empty: !!r.empty,
     children: (r.children || []).map(c => ({
       name: str(c.name, 80), level: c.level || '', worksheets: c.totals.classWorksheets, lessons: c.totals.lessons,
-      correctPct: c.totals.correctPct, practice: c.totals.practiceSheets, practicePct: c.totals.practicePct,
+      correctPct: c.totals.correctPct, practice: c.totals.practiceSheets, practicePct: c.totals.practicePct, missed: c.totals.missed || 0,
       strong: c.strong.length, weak: c.weak.length
     }))
   };

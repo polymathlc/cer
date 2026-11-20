@@ -744,6 +744,13 @@
   .lu-qtop { padding:12px 16px 10px; border-bottom:1px solid var(--line-2); display:flex; gap:10px; align-items:center; margin-bottom:10px; }
   .lu-qfoot { padding:12px 16px; border-top:1px solid var(--line-2); display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
   .lu-qfoot .btn.wa { text-decoration:none; }
+  /* 🙋 attendance (lesson-updates.mjs v1.1.0) */
+  .lu-attline { margin:6px 0 0; padding:7px 10px; border-radius:10px; background:#f7f9fa; border:1px solid var(--line-2); line-height:1.5; }
+  .lu-att { white-space:normal; }
+  .lu-attbtns { display:inline-flex; gap:4px; margin-left:4px; vertical-align:middle; flex-wrap:wrap; }
+  .lu-attbtn { padding:2px 8px !important; font-size:12px !important; min-height:0 !important; }
+  .lu-attbtn.on { background:var(--deep); color:#fff; border-color:var(--deep); }
+  .btn.lu-nj, .btn.lu-nj:hover, .btn.lu-nj:focus, .btn.lu-nj:visited { background:#fff3e0; color:#8a4b00; border:1px solid #f0b76a; text-decoration:none; }
   @media (max-width:640px) {
     .lu-fields { grid-template-columns:minmax(0,1fr); }
     .lu-fam-main { flex-direction:column; align-items:stretch; }
@@ -874,9 +881,9 @@
 <script src="../online/lesson-clock.js?v=1.15.0"></script>
 <script type="module" src="office-app.mjs?v=1.18.0"></script>
 <!-- 📈 Weekly parent progress reports: the Reports tab (v1.16.0) -->
-<script type="module" src="weekly-reports.mjs?v=1.0.0"></script>
+<script type="module" src="weekly-reports.mjs?v=1.1.0"></script>
 <!-- 💬 Parent WhatsApp lesson updates: the Lessons tab (v1.18.0) -->
-<script type="module" src="lesson-updates.mjs?v=1.0.0"></script>
+<script type="module" src="lesson-updates.mjs?v=1.1.0"></script>
 <!-- 📊 School results before and after joining: the Results tab -->
 <script type="module" src="school-results.mjs?v=1.0.0"></script>
 </body>

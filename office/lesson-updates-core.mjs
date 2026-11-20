@@ -18,6 +18,10 @@
      • how the child did    the Ans Key live class's own progress book: the
                             questions answered and how many the teacher marked
                             right, and focus (left out when there is no record)
+     • 🙋 v1.1.0: a child who was ABSENT (the live class took attendance, or
+                            the office marked them by hand) is never given a
+                            "how they did" line: the message says they were
+                            absent, and how to catch up (attendance-core.mjs)
      • homework             what the office typed for the class that day, or
                             the default line from the settings
      • next lesson          the date and the next worksheet
@@ -42,9 +46,10 @@ import {
   SITE, CENTRE_NAME, scheduleSlot, slotHasClass, slotParts, slotTitle, slotShortLabel, levelLabel,
   subjectKey, firstName, listJoin, plural, normalizeWhatsapp, displayPhone, whatsappLink, isMaster
 } from './office-core.mjs?v=1.16.0';
-import { courseForSlot, slotCourseKey, cleanLiveRow, liveScore, dayShort, clockText, sgDay } from './weekly-report-core.mjs?v=1.0.0';
+import { courseForSlot, slotCourseKey, cleanLiveRow, liveScore, dayShort, clockText, sgDay } from './weekly-report-core.mjs?v=1.1.0';
+import { childAttendance, isAbsent, absentLine, catchUpLine, notJoinedMessage, normalizeAttendDay } from './attendance-core.mjs?v=1.0.0';
 
-export const LU_VERSION = '1.0.0';
+export const LU_VERSION = '1.1.0';
 export const LU_SETTINGS_DOC = 'lessonUpdates';          // officeSettings/lessonUpdates
 export const LU_DAY_KIND = 'lesson-updates-day';         // officeSettings/lessonupd-<day>
 export const ONLINE_URL = SITE + '/online/';
@@ -288,23 +293,30 @@ export function greetingName(parentName) {
 export function lessonMessage(m) {
   const kids = (m.children || []).filter(Boolean);
   const names = listJoin(kids.map(c => c.first));
+  const away = kids.filter(c => c.absent);
+  const allAway = away.length > 0 && away.length === kids.length;
   const L = [];
   L.push('Hi ' + greetingName(m.parentName) + ', here is ' + (names ? names + (/s$/i.test(names) ? '\'' : '\'s') : 'your child\'s') + ' lesson update from ' + CENTRE_NAME + ' 😊');
   L.push('');
   L.push('📚 *' + oneLine(m.classTitle, 80) + '* · ' + oneLine(m.when, 60));
-  if (m.covered) L.push('✏️ Today: ' + m.covered.name);
-  const perf = kids.filter(c => c.perf);
-  if (perf.length === 1 && kids.length === 1) L.push('⭐ How ' + perf[0].first + ' did: ' + perf[0].perf);
-  else if (perf.length) {
+  if (allAway) L.push('⚠️ ' + absentLine(listJoin(away.map(c => c.first)), away.length > 1));
+  if (m.covered) L.push((allAway ? '✏️ The class covered: ' : '✏️ Today: ') + m.covered.name);
+  const perf = kids.filter(c => c.perf && !c.absent);
+  if (!away.length && perf.length === 1 && kids.length === 1) L.push('⭐ How ' + perf[0].first + ' did: ' + perf[0].perf);
+  else if (!allAway && (perf.length || away.length)) {
     L.push('⭐ How they did:');
-    perf.forEach(c => L.push('• ' + c.first + ' ' + c.perf));
+    kids.forEach(c => {
+      if (c.absent) L.push('• ' + c.first + ' was absent today');
+      else if (c.perf) L.push('• ' + c.first + ' ' + c.perf);
+    });
   }
   const hw = str(m.homework, HOMEWORK_MAX);
   if (hw) L.push('📝 Homework: ' + hw);
   if (m.showNext !== false && (m.next || m.nextDate)) {
     L.push('⏭ Next lesson' + (m.nextDate ? ' (' + m.nextDate + ')' : '') + (m.next ? ': ' + m.next.name : ''));
   }
-  if (m.showLink !== false && m.online) {
+  if (away.length && m.online) L.push(catchUpLine(m.covered ? m.covered.name : '', m.releaseText));
+  else if (m.showLink !== false && m.online) {
     L.push('🔑 The answer key and lesson video are on Polymath Online' + (m.releaseText ? ' from ' + m.releaseText : '') + ': ' + ONLINE_URL);
   }
   const note = str(m.note, NOTE_MAX);
@@ -317,7 +329,8 @@ export function lessonMessage(m) {
 /* ─────────────────────────── 8. A whole day ───────────────────────────
    ctx: { day, now, schedule, roster (Map), families, courses, docNames,
           live: { rosterId: rows } | null (null = the progress book could not be read),
-          clock, lu: normalizeLu(...), dayDoc: normalizeDay(...) }
+          clock, lu: normalizeLu(...), dayDoc: normalizeDay(...),
+          att: normalizeAttendDay(...) of officeSettings/attend-<day> | null }
    → [{ slotId, title, subject, level, when, timeText, lesson, state, online,
         course, ws: {covered, next}, homework, homeworkIsDefault, note,
         families: [{ key, familyId, parentName, phone, children:[{…, row, perf}],
@@ -350,7 +363,9 @@ export function dayClasses(ctx) {
       const children = g.children.map(ch => {
         const rosterId = g.familyId + '_' + ch.studentId;
         const row = c.live ? liveRowFor(c.live[rosterId] || [], lesson) : null;
-        return Object.assign({}, ch, { rosterId, row, perf: lu.showScore ? performanceText(row, { focus: lu.showFocus }) : '' });
+        const attendance = childAttendance({ att: c.att || null, slotId, rosterId, lesson, row, now });
+        const absent = isAbsent(attendance);
+        return Object.assign({}, ch, { rosterId, row, attendance, absent, perf: absent ? '' : lu.showScore ? performanceText(row, { focus: lu.showFocus }) : '' });
       });
       const auto = lessonMessage({
         parentName: g.parentName, children, classTitle: title, when, covered: ws.covered, next: ws.next, nextDate,
@@ -358,11 +373,16 @@ export function dayClasses(ctx) {
         showNext: lu.showNext, showLink: lu.showLink, signoff: lu.signoff
       });
       const edited = dd.edits[key] || '';
+      // 🙋 During the lesson: the children past the check who have not joined,
+      // and the one-tap "not joined yet" WhatsApp for their parent.
+      const missing = children.filter(ch => ch.attendance.s === 'missing');
+      const notJoined = missing.length ? notJoinedMessage({ parentName: g.parentName, children: missing.map(ch => ch.first), classTitle: title, startText }) : '';
       return {
         key, familyId: g.familyId, parentName: g.parentName, phone: g.phone, children,
         text: edited || auto, autoText: auto, edited: !!edited,
         sent: dd.sent[key] || null, optedOut: familyOptedOut(lu, g.familyId),
-        hasLive: children.some(ch => !!ch.row)
+        hasLive: children.some(ch => !!ch.row || ch.absent),
+        absent: children.filter(ch => ch.absent).length, missing: missing.length, notJoined
       };
     });
     const counts = {
@@ -373,8 +393,18 @@ export function dayClasses(ctx) {
       optedOut: fams.filter(f => f.optedOut).length,
       noLive: fams.filter(f => !f.hasLive && !f.optedOut).length
     };
+    // 🙋 The class's attendance at a glance.
+    const kidsAll = fams.reduce((t, f) => t.concat(f.children), []);
+    const attendance = {
+      taken: kidsAll.some(ch => ch.attendance.taken),
+      live: !!(c.att && c.att.live && c.att.live[slotId]),
+      here: kidsAll.filter(ch => ch.attendance.s === 'here').length,
+      absent: kidsAll.filter(ch => ch.attendance.s === 'absent').length,
+      missing: kidsAll.filter(ch => ch.attendance.s === 'missing' || ch.attendance.s === 'waiting').length,
+      total: kidsAll.length
+    };
     return { slotId, title, subject: subjectKey(slot.subject), level, when, timeText, shortWhen: slotShortLabel(slotId), lesson, state, online: !!course, course: course ? { id: course.id } : null,
-      ws, homework, homeworkIsDefault, note: n.note, nextDate, families: fams, counts };
+      ws, homework, homeworkIsDefault, note: n.note, nextDate, families: fams, counts, attendance };
   });
 }
 // The families still to send in a class (or the whole day), in the order the
@@ -394,4 +424,4 @@ export function dayTotals(classes) {
 }
 // The chat link: WhatsApp Web on a computer, the WhatsApp app on a phone.
 export function chatLink(phone, text, web) { return whatsappLink(phone, text, web); }
-export { displayPhone };
+export { displayPhone, normalizeAttendDay };

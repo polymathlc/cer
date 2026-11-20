@@ -11,7 +11,8 @@
 //   (every message follows) → 💬 Send opens WhatsApp Web with the text typed in and
 //   marks the family sent → undo → an edited message → ▶ Send to everyone (the
 //   queue) → a family taken off the list → the settings (focus on) → another day →
-//   the tab on a phone (the WhatsApp app link, wa.me).
+//   the tab on a phone (the WhatsApp app link, wa.me) → 🙋 attendance: an absent
+//   child's message, "not joined yet" during a lesson, and hand corrections.
 // Screenshots go to OFFICE_SHOTS (default artifacts/office-lessons).
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, mkdirSync } from 'node:fs';
@@ -339,6 +340,101 @@ try {
   await shot(pp, '10-phone-queue', { fullPage: false });
   await phone.close();
   ok('the Lessons tab works on a phone and opens the WhatsApp app');
+
+  /* 11. 🙋 Attendance: the live class's record, an absent child's message, "not joined yet", a hand mark. */
+  const ATT = 'officeSettings/attend-2026-11-21';
+  const bookNoRyan = JSON.parse(JSON.stringify(BOOK));
+  delete bookNoRyan.students['r:lim_k3'];
+  const attSeed = Object.assign({}, SEED, {
+    'users/teacherUid/liveClassProgress/main': { json: JSON.stringify(bookNoRyan) },
+    [ATT]: { kind: 'attendance-day', day: '2026-11-21',
+      live: {
+        'SAT-1': { epoch: 1800, slot: 'SAT-1', label: 'Sat 9:00am · P5 Science', start: sg(2026, 11, 21, 9), end: sg(2026, 11, 21, 10, 45), release: sg(2026, 11, 21, 11),
+          startedAt: sg(2026, 11, 21, 8, 50), dueAt: sg(2026, 11, 21, 9, 10), checkedAt: sg(2026, 11, 21, 10, 46), closedAt: sg(2026, 11, 21, 10, 46), final: true,
+          expected: { tan_k1: 'Ethan Tan', tan_k2: 'Chloe Tan', lim_k3: 'Ryan Lim', goh_k4: 'Zoe Goh', raj_k5: 'Arjun Kumar' },
+          joined: { tan_k1: sg(2026, 11, 21, 8, 58), tan_k2: sg(2026, 11, 21, 9, 3), goh_k4: sg(2026, 11, 21, 9, 1), raj_k5: sg(2026, 11, 21, 9, 4) } },
+        'SAT-2': { epoch: 1900, slot: 'SAT-2', label: 'Sat 11:00am · P6 Maths', start: sg(2026, 11, 21, 11), end: sg(2026, 11, 21, 12, 45), release: sg(2026, 11, 21, 13),
+          startedAt: sg(2026, 11, 21, 10, 55), dueAt: sg(2026, 11, 21, 11, 10), checkedAt: sg(2026, 11, 21, 11, 29), final: false,
+          expected: { raj_k6: 'Priya Kumar', ong_k7: 'Ivan Ong' }, joined: { ong_k7: sg(2026, 11, 21, 11, 2) } }
+      },
+      alerts: {
+        'SAT-1__lim_k3': { late: { at: sg(2026, 11, 21, 9, 11), to: [], id: 'x' }, catchup: { at: sg(2026, 11, 21, 10, 46), to: [], id: 'y' } },
+        'SAT-2__raj_k6': { late: { at: sg(2026, 11, 21, 11, 11), to: ['raj@example.com'], id: 'z' } }
+      } }
+  });
+  const actx = await browser.newContext({ viewport: { width: 1360, height: 900 }, deviceScaleFactor: 2, locale: 'en-SG', timezoneId: 'Asia/Singapore' });
+  await routeOutside(actx);
+  const ap = await actx.newPage();
+  watch(ap, 'attendance');
+  await ap.clock.setFixedTime(NOW);
+  await ap.addInitScript(seed => { window.__fakeSeed = { docs: seed }; }, attSeed);
+  await ap.goto(BASE + '/office/#lessons');
+  await ap.waitForSelector('.lu-class');
+  await ap.waitForFunction(() => /Plant Transport System/.test(document.getElementById('view').textContent) && /Attendance:/.test(document.getElementById('view').textContent));
+  const asci = card(ap, 'P5 Science');
+  assert.match(await asci.locator('.lu-attline').innerText(), /Attendance: 4 here · 1 absent/);
+  assert.match(await fam(ap, 'Mr Lim').innerText(), /Ryan\s*❌ Absent · catch-up emailed 10:46am/);
+  assert.match(await fam(ap, 'Mrs Tan').innerText(), /Ethan · 10\/10 answered\s*90%\s*✅ Joined 8:58am/);
+  await fam(ap, 'Mr Lim').locator('[data-lu="toggle"]').click();
+  let at = await fam(ap, 'Mr Lim').locator('pre').innerText();
+  assert.match(at, /⚠️ Ryan was absent from today's lesson\./);
+  assert.match(at, /✏️ The class covered: Plant Transport System/);
+  assert.match(at, /📚 To catch up: work through "Plant Transport System" and check it with the answer key and lesson video on Polymath Online: https:\/\/polymathlc\.com\.sg\/online\//);
+  assert.doesNotMatch(at, /How Ryan did/);
+  await shot(ap, '11-attendance-absent');
+  // The P6 Maths lesson is on: Priya has not joined, her parent was emailed at 11:11, and the office can WhatsApp too.
+  const amaths = card(ap, 'P6 Maths');
+  assert.match(await amaths.locator('.lu-attline').innerText(), /Attendance: 1 here · 1 not joined yet/);
+  const raj = amaths.locator('.lu-fam', { hasText: 'Mr Rajesh Kumar' });
+  assert.match(await raj.innerText(), /Priya\s*⏳ Not joined yet · parent emailed 11:11am/);
+  const nj = raj.locator('[data-lu="notJoined"]');
+  const njHref = await nj.getAttribute('href');
+  assert.match(decodeURIComponent(njHref), /Hi Mr Rajesh Kumar, Priya has not joined today's P6 Maths lesson yet \(it started at 11:00am\)/);
+  const [njChat] = await Promise.all([actx.waitForEvent('page'), nj.click()]);
+  await njChat.waitForLoadState();
+  await njChat.close();
+  await ap.bringToFront();
+  await until(raj, /Not joined \(sent\)/);
+  let astore = await store(ap);
+  assert.ok(astore[ATT].wa['SAT-2__raj_k6'].at > 0, 'the tap is remembered');
+  await ap.evaluate(() => { const el = document.querySelector('.lu-class:nth-of-type(2)') || [...document.querySelectorAll('.lu-class')][1]; if (el) window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 70); });
+  await shot(ap, '12-attendance-not-joined', { fullPage: false });
+  // Ryan was really on Zoom: ✓ Here puts it right, and his message is the usual one again.
+  await fam(ap, 'Mr Lim').locator('[data-lu="attMark"][data-v="here"]').click();
+  await until(fam(ap, 'Mr Lim'), /Here \(marked by hand\)/);
+  at = await fam(ap, 'Mr Lim').locator('pre').innerText();
+  assert.doesNotMatch(at, /absent/);
+  astore = await store(ap);
+  assert.equal(astore[ATT].marks['SAT-1__lim_k3'].s, 'here');
+  assert.equal(astore[ATT].marks['SAT-1__lim_k3'].by, 'chungzhikai@gmail.com');
+  assert.equal(astore[ATT].live['SAT-1'].final, true, 'the live class\'s record is left alone');
+  // ✗ Absent by hand, then ↺ Auto back to what the live class saw.
+  await fam(ap, 'Mrs Tan').locator('[data-lu="attMark"][data-r="tan_k2"][data-v="absent"]').click();
+  await until(fam(ap, 'Mrs Tan'), /Absent \(marked by hand\)/);
+  await fam(ap, 'Mrs Tan').locator('[data-lu="toggle"]').click();
+  at = await fam(ap, 'Mrs Tan').locator('pre').innerText();
+  assert.match(at, /⭐ How they did:\n• Ethan answered 10 of 10[^\n]*\n• Chloe was absent today/);
+  await fam(ap, 'Mrs Tan').locator('[data-lu="attMark"][data-r="tan_k2"][data-v=""]').click();
+  await until(fam(ap, 'Mrs Tan'), /Absent \(marked by hand\)/, true);
+  astore = await store(ap);
+  assert.equal((astore[ATT].marks || {})['SAT-1__tan_k2'], undefined, '↺ Auto removes the hand mark');
+  await actx.close();
+  // On a phone.
+  const aphone = await browser.newContext(Object.assign({}, devices['iPhone 13'], { locale: 'en-SG', timezoneId: 'Asia/Singapore' }));
+  await routeOutside(aphone);
+  const app2 = await aphone.newPage();
+  watch(app2, 'attendance phone');
+  await app2.clock.setFixedTime(NOW);
+  await app2.addInitScript(seed => { window.__fakeSeed = { docs: seed }; }, attSeed);
+  await app2.goto(BASE + '/office/#lessons');
+  await app2.waitForFunction(() => /Attendance:/.test((document.getElementById('view') || {}).textContent || ''));
+  const w2 = await app2.evaluate(() => document.documentElement.scrollWidth);
+  assert.ok(w2 <= 390 + 1, 'nothing runs off the side of a phone (' + w2 + 'px)');
+  await app2.locator('.lu-fam', { hasText: 'Mr Lim' }).locator('[data-lu="toggle"]').click();
+  await app2.evaluate(() => { const el = [...document.querySelectorAll('.lu-fam')].find(x => /Mr Lim/.test(x.textContent)); window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 70); });
+  await shot(app2, '13-attendance-phone', { fullPage: false });
+  await aphone.close();
+  ok('🙋 attendance: absent children are said to be absent with a catch-up, "not joined yet" is one tap, and the office can correct it');
 
   assert.deepEqual(errors, [], 'no page errors');
 } finally {

@@ -22,7 +22,7 @@
    settings and the "now" requests; the sender writes the log and each built
    report (officeSettings/weekly-*, weeklyfam-*), which the tab reads back.
    ═══════════════════════════════════════════════════════════════════════════ */
-import * as W from './weekly-report-core.mjs?v=1.0.0';
+import * as W from './weekly-report-core.mjs?v=1.1.0';
 
 const WEEKLY_UI_VERSION = '1.0.0';
 const O = window.PolymathOffice;
