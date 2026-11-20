@@ -213,7 +213,7 @@ test('the publisher reads, tests or publishes — and only publishes when asked'
 
 test('the gate, the dashboard and the rules name the same three admins and the same email', () => {
   const gate = loadGate();
-  assert.equal(gate.version, '1.1.0');
+  assert.equal(gate.version, '1.2.0');
   assert.deepEqual([...gate.core.ACCESS_ADMINS], ACCESS_ADMINS);
   assert.deepEqual(JSON.parse(JSON.stringify(gate.core.ACCESS_MAIL)), ACCESS_MAIL);
   assert.equal(gate.core.MAX_CHILDREN, MAX_CHILDREN);
@@ -373,7 +373,7 @@ test('/student signs in, shows the admin dashboard and loads the very same gate 
   assert.ok(DASHBOARD.includes('<div class="account-card" id="accountCard" hidden aria-live="polite"></div>'));
   assert.ok(DASHBOARD.includes('<section class="admin-view" id="adminView" hidden aria-labelledby="adminTitle"></section>'));
   assert.ok(DASHBOARD.includes('<script src="student-account.js?v=1.11.0"></script>'));
-  assert.ok(DASHBOARD.includes('<script defer src="access-gate.js?v=1.1.0" data-app="student"></script>'));
+  assert.ok(DASHBOARD.includes('<script defer src="access-gate.js?v=1.2.0" data-app="student"></script>'));
   const at = text => DASHBOARD.indexOf(text);
   assert.ok(at('<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js">') < at('<script src="student-account.js'), 'the SDK first');
   assert.ok(at('<script src="student-account.js') < at('<script defer src="access-gate.js'));
@@ -384,17 +384,17 @@ test('/student signs in, shows the admin dashboard and loads the very same gate 
 // english and chinese load the same file from https://polymathlc.github.io/cer/student/
 // — each of those repositories checks its own pages.)
 const SCIENCE_PAGES = {
-  'index.html': ['student/access-gate.js?v=1.1.0', 'science', 'science'],
-  'math.html': ['student/access-gate.js?v=1.1.0', 'science-math', 'math'],
-  'mistakes.html': ['student/access-gate.js?v=1.1.0', 'science-mistakes', ''],
-  'polymath.html': ['student/access-gate.js?v=1.1.0', 'science-polymath', ''],
-  'fps.html': ['student/access-gate.js?v=1.1.0', 'science-strike', 'science'],
-  'bar-model.html': ['student/access-gate.js?v=1.1.0', 'bar-model', 'math'],
-  'video-review.html': ['student/access-gate.js?v=1.1.0', 'lesson-replay', ''],
-  'online/index.html': ['../student/access-gate.js?v=1.1.0', 'online', ''],
-  'mindmap/index.html': ['../student/access-gate.js?v=1.1.0', 'mindmap', ''],
-  'homework/index.html': ['../student/access-gate.js?v=1.1.0', 'homework', ''],
-  'notebook/index.html': ['../student/access-gate.js?v=1.1.0', 'notebook', '']
+  'index.html': ['student/access-gate.js?v=1.2.0', 'science', 'science'],
+  'math.html': ['student/access-gate.js?v=1.2.0', 'science-math', 'math'],
+  'mistakes.html': ['student/access-gate.js?v=1.2.0', 'science-mistakes', ''],
+  'polymath.html': ['student/access-gate.js?v=1.2.0', 'science-polymath', ''],
+  'fps.html': ['student/access-gate.js?v=1.2.0', 'science-strike', 'science'],
+  'bar-model.html': ['student/access-gate.js?v=1.2.0', 'bar-model', 'math'],
+  'video-review.html': ['student/access-gate.js?v=1.2.0', 'lesson-replay', ''],
+  'online/index.html': ['../student/access-gate.js?v=1.2.0', 'online', ''],
+  'mindmap/index.html': ['../student/access-gate.js?v=1.2.0', 'mindmap', ''],
+  'homework/index.html': ['../student/access-gate.js?v=1.2.0', 'homework', ''],
+  'notebook/index.html': ['../student/access-gate.js?v=1.2.0', 'notebook', '']
 };
 
 test('every student page here loads the gate, once, at the end of the page, with its subject', () => {
@@ -474,7 +474,7 @@ test('the remembered answer keeps the subjects, and an old remembered answer (no
   assert.equal(core.cleanSubjectList(undefined), null);
   assert.equal(core.cleanSubjectList('math'), null);
   assert.ok(/subjects: cleanSubjectList\(parsed\.subjects\)/.test(GATE_SOURCE));
-  assert.ok(GATE_SOURCE.includes("var BLOCKING = { checking: true, form: true, pending: true, revoked: true, error: true, subject: true };"));
+  assert.ok(GATE_SOURCE.includes("var BLOCKING = { checking: true, form: true, pending: true, revoked: true, error: true, subject: true, verify: true };"));
 });
 
 test('the "not in your subjects" screen names both subjects, links back to My Polymath and escapes nothing unsafe', () => {

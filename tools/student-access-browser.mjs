@@ -183,7 +183,7 @@ export function signOut(auth) { return auth.signOut(); }`;
 function standInApp(name, kind) {
   // The Math app and the Science app (cer) belong to one subject each; the rest to none.
   const subject = name === 'math' ? 'math' : name === 'cer' ? 'science' : '';
-  const gate = `<script defer src="${APPS}/cer/student/access-gate.js?v=1.1.0" data-app="${name}"${subject ? ` data-subject="${subject}"` : ''}></script>`;
+  const gate = `<script defer src="${APPS}/cer/student/access-gate.js?v=1.2.0" data-app="${name}"${subject ? ` data-subject="${subject}"` : ''}></script>`;
   const signIn = kind === 'compat'
     ? `<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
        <script>firebase.initializeApp({ projectId: 'mathgen--app' }); firebase.auth().onAuthStateChanged(function (u) { document.getElementById('who').textContent = u ? u.email : 'signed out'; });</script>`

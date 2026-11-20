@@ -328,7 +328,7 @@ test('the function never adds a scheduled job (the deploy account cannot create 
 test('the page loads the access gate and stays out of search results', () => {
   const html = read('homework/index.html');
   assert.match(html, /<meta name="robots" content="noindex">/);
-  assert.ok(html.includes('<script defer src="../student/access-gate.js?v=1.1.0" data-app="homework"></script>'));
+  assert.ok(html.includes('<script defer src="../student/access-gate.js?v=1.2.0" data-app="homework"></script>'));
 });
 
 test('the website sync leaves the function code behind', () => {

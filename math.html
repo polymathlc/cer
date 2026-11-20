@@ -18,6 +18,8 @@
   })();
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<!-- ✉️ This page has its own email sign-in and sign-up form, so the shared "Sign in with email" button (polymathlc/cer student/email-sign-in.js, loaded by the access gate) is switched off here. "Forgot your password?" opens its reset dialog, and the access gate still asks new email accounts to confirm their address. -->
+<meta name="polymath-email-sign-in" content="off">
 <title>Math Practice — Polymath Learning Centre</title>
 <link rel="preconnect" href="https://dl.dropboxusercontent.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700&family=Space+Mono:wght@400;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -326,6 +328,7 @@ a { color: var(--primary); }
     </div>
     <button class="btn btn-primary btn-block" id="authSubmit">Sign in</button>
     <div class="auth-toggle" id="authToggle">New here? <a id="toggleLink">Create an account</a></div>
+    <div class="auth-toggle" id="authForgot" style="margin-top:8px"><a id="forgotLink" href="#" onclick="event.preventDefault();var e=document.getElementById('authEmail');if(window.PolymathEmailSignIn)PolymathEmailSignIn.open('reset',{email:e?e.value:''});else alert('Please try again in a moment.');">Forgot your password?</a></div>
   </div>
 </div>
 
@@ -1248,6 +1251,6 @@ refreshAiStatus(); setTimeout(refreshAiStatus, 1500);
 </script>
 <!-- 🔐 Polymath student access (v1.0.0): the enrolment pop-up every Polymath app shares. A signed-in student is
      blocked here until an admin approves them at polymathlc.com.sg/student/#admin. Source: polymathlc/cer student/access-gate.js -->
-<script defer src="student/access-gate.js?v=1.1.0" data-app="science-math" data-subject="math"></script>
+<script defer src="student/access-gate.js?v=1.2.0" data-app="science-math" data-subject="math"></script>
 </body>
 </html>
