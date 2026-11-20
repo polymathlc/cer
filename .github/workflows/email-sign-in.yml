@@ -83,7 +83,7 @@ jobs:
         run: |
           set -uo pipefail
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.apply }}" != "true" ]; then flag=""; else flag="--apply"; fi
-          out=$(node tools/email-sign-in-config.mjs $flag); code=$?
+          code=0; out=$(node tools/email-sign-in-config.mjs $flag) || code=$?
           echo "$out"
           { echo "### Firebase email sign-in settings"; tail -n +2 <<<"$out" | sed 's/^/- /'; } >> "$GITHUB_STEP_SUMMARY"
           exit $code
