@@ -81,6 +81,8 @@ const BOOKING_ACCESS_DAYS_AFTER = 7;
 const LIMITS = Object.freeze({
   bookPerIpHour: 10, bookGlobalDay: 200,
   wrongPasswordPerIpHour: 25,
+  // 🔑 Wrong admin passwords: a few per connection an hour, and a cap for everyone a day.
+  adminPasswordPerIpHour: 5, adminPasswordGlobalDay: 30,
   linkOpenPerIpHour: 30,
   materialPerIpHour: 120
 });
@@ -312,6 +314,79 @@ function newPasswordFields(password, by, now, random = randomBytes) {
   if (clean === DEFAULT_PASSWORD) return { passwordHash: '', passwordSalt: '', passwordSetAt: now, passwordSetBy: by };
   const salt = random(16).toString('hex');
   return { passwordHash: hashPassword(clean, salt), passwordSalt: salt, passwordSetAt: now, passwordSetBy: by };
+}
+
+// ─── 🔑 Admin password (Zhi Kai, 20 Nov 2026) ───
+// "An admin login at the bottom that logs in with a password if the email is not
+// an admin email." Anyone (signed in with any Google account, or not signed in at
+// all) can open /trial/#admin with this password. It is checked ONLY here, never
+// in the page: the page sends what was typed to trialAdmin { action: 'adminLogin' }
+// and gets back a session token that lasts ADMIN_SESSION_HOURS. Every admin call
+// after that sends the token instead of a Google ID token, and is checked again
+// here against the server's own signing key (trialSettings/main adminSessionKey,
+// readable by no browser), so the token cannot be made up or stretched.
+//
+// This repository is public, so the password itself is NOT in it: only a salted
+// scrypt hash of the starting password (the one Zhi Kai chose). A Google admin can
+// change it on the Password tab, which stores a new salted hash in
+// trialSettings/main and signs every password session out.
+//
+// Unlike the parents' shared password, this one IS case-sensitive (spaces around
+// it are ignored), and wrong guesses are limited per connection and per day for
+// everyone (LIMITS.adminPasswordPerIpHour, adminPasswordGlobalDay); once a limit
+// is full even the right password waits, so the limit cannot be guessed past.
+const ADMIN_PASSWORD_SCRYPT = Object.freeze({ N: 32768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
+const DEFAULT_ADMIN_PASSWORD = Object.freeze({
+  salt: '006c19e2cb0bb2ced1b92af6bb181d41',
+  hash: '5006275ee0a2af0b3f054c14cb73df172e5689fb319b24dbe49b2f622470434c'
+});
+const ADMIN_SESSION_HOURS = 12;
+const ADMIN_SESSION_PREFIX = 'trialpw.';
+const ADMIN_SESSION_PATTERN = /^trialpw\.(\d{13})\.([A-Za-z2-9]{16,40})\.([A-Za-z0-9_-]{43})$/;
+// Who did it, in the admin lists (createdBy, statusSetBy, …) for a password session.
+const ADMIN_PASSWORD_LABEL = 'Admin password';
+const ADMIN_PASSWORD_MIN = 8, ADMIN_PASSWORD_MAX = 64;
+
+const cleanAdminPassword = value => (typeof value === 'string' ? value.trim() : '');
+function hashAdminPassword(password, salt) {
+  return scryptSync(cleanAdminPassword(password), salt, 32, ADMIN_PASSWORD_SCRYPT).toString('hex');
+}
+// The hash and salt in use: an admin's own (Password tab) or the starting one.
+function adminPasswordRecord(settings) {
+  const d = settings && typeof settings === 'object' ? settings : {};
+  const own = typeof d.adminPasswordHash === 'string' && /^[0-9a-f]{64}$/.test(d.adminPasswordHash)
+    && typeof d.adminPasswordSalt === 'string' && /^[0-9a-f]{32}$/.test(d.adminPasswordSalt);
+  return own ? { salt: d.adminPasswordSalt, hash: d.adminPasswordHash, isDefault: false } : { ...DEFAULT_ADMIN_PASSWORD, isDefault: true };
+}
+function adminPasswordMatches(settings, password) {
+  const clean = cleanAdminPassword(password);
+  if (!clean || clean.length > 100) return false;
+  const record = adminPasswordRecord(settings);
+  return samePassword(hashAdminPassword(clean, record.salt), record.hash);
+}
+function newAdminPasswordFields(password, by, now, random = randomBytes) {
+  const clean = cleanAdminPassword(password);
+  if (clean.length < ADMIN_PASSWORD_MIN || clean.length > ADMIN_PASSWORD_MAX || /[\u0000-\u001f\u007f]/.test(clean))
+    throw new ShopError(400, 'weak-admin-password');
+  const salt = random(16).toString('hex');
+  return { adminPasswordHash: hashAdminPassword(clean, salt), adminPasswordSalt: salt, adminPasswordSetAt: now, adminPasswordSetBy: by,
+    // A new signing key: every password session made with the old password ends now.
+    adminSessionKey: random(32).toString('hex') };
+}
+function adminSessionMac(key, body) { return createHmac('sha256', String(key)).update(body).digest('base64url'); }
+function adminSessionToken(key, expiresAtMs, nonce) {
+  const body = ADMIN_SESSION_PREFIX + expiresAtMs + '.' + nonce;
+  return body + '.' + adminSessionMac(key, body);
+}
+// Whether a password session token is ours, unaltered and not yet over.
+function adminSessionValid(token, key, now) {
+  if (typeof key !== 'string' || key.length < 32) return false;
+  const match = ADMIN_SESSION_PATTERN.exec(String(token || ''));
+  if (!match) return false;
+  const expiresAtMs = Number(match[1]);
+  if (!(expiresAtMs > now) || expiresAtMs > now + ADMIN_SESSION_HOURS * HOUR + 60000) return false;
+  const body = ADMIN_SESSION_PREFIX + match[1] + '.' + match[2];
+  return samePassword(adminSessionMac(key, body), match[3]);
 }
 
 // ─── One-time access codes ───
@@ -859,6 +934,36 @@ function createTrialService({ store, http, hashIp, verifyIdToken = async () => {
     throw new ShopError(403, 'wrong-code');
   }
 
+  // 🔑 Who is calling trialAdmin: a Google admin (their email) or someone holding
+  // a live admin-password session (ADMIN_PASSWORD_LABEL).
+  async function adminFrom(req, at) {
+    const header = String(req.get('authorization') || '');
+    const match = /^Bearer\s+(\S{20,4096})$/.exec(header);
+    if (match && match[1].startsWith(ADMIN_SESSION_PREFIX)) {
+      const settings = await store.loadSettings();
+      if (adminSessionValid(match[1], settings.adminSessionKey, at)) return ADMIN_PASSWORD_LABEL;
+      throw new ShopError(401, 'admin-session-ended');
+    }
+    return trialAdminFrom(req, verifyIdToken);
+  }
+  const adminPasswordQuotas = (req, at) => [hourQuota('adminpw', req, at, LIMITS.adminPasswordPerIpHour),
+    { id: 'trial-adminpw-day-' + sgDayKey(at), maximum: LIMITS.adminPasswordGlobalDay, expiresAt: at + 2 * DAY }];
+  // { action: 'adminLogin', password } → { token, expiresAtMs }. Needs no sign-in.
+  async function adminLogin(req, res, body, at) {
+    checkKeys(body, ['action', 'password']);
+    const quotas = adminPasswordQuotas(req, at);
+    await store.checkAttempts(quotas, 'too-many-attempts');
+    const settings = await store.loadSettings();
+    if (typeof body.password !== 'string' || !adminPasswordMatches(settings, body.password)) {
+      await store.countAttempts(quotas, 'too-many-attempts');
+      throw new ShopError(403, 'wrong-admin-password');
+    }
+    const key = await store.ensureAdminSessionKey(() => randomBytesImpl(32).toString('hex'));
+    const expiresAtMs = at + ADMIN_SESSION_HOURS * HOUR;
+    return res.status(200).json({ ok: true, admin: ADMIN_PASSWORD_LABEL, expiresAtMs,
+      token: adminSessionToken(key, expiresAtMs, randomToken(24, randomBytesImpl)) });
+  }
+
   async function bookingAccess(access, at) {
     const parsed = parseAccess(access);
     if (!parsed) throw new ShopError(404, 'booking-not-found');
@@ -1034,13 +1139,16 @@ function createTrialService({ store, http, hashIp, verifyIdToken = async () => {
     }
   }
 
-  // POST /trialAdmin (signed-in admins only)  { action, … }
+  // POST /trialAdmin (signed-in admins, or an admin-password session)  { action, … }
+  // { action: 'adminLogin', password } is the one call that needs neither.
   async function trialAdmin(req, res) {
     if (!http.cors(req, res)) return;
     try {
       const at = now();
-      const email = await trialAdminFrom(req, verifyIdToken);
       const body = req.body;
+      if (body && typeof body === 'object' && !Array.isArray(body) && body.action === 'adminLogin') return await adminLogin(req, res, body, at);
+      const email = await adminFrom(req, at);
+      const byPassword = email === ADMIN_PASSWORD_LABEL;
       const action = body && typeof body === 'object' ? body.action : '';
       if (action === 'load') {
         checkKeys(body, ['action']);
@@ -1053,9 +1161,12 @@ function createTrialService({ store, http, hashIp, verifyIdToken = async () => {
           if (current) wanted.add(current); if (next) wanted.add(next);
         });
         const sheets = await store.loadSheets([...wanted]);
-        return res.status(200).json({ ok: true, admin: email, now: at,
+        const adminPassword = adminPasswordRecord(settings);
+        return res.status(200).json({ ok: true, admin: email, byPassword, now: at,
           settings: { zoomDefault: s.zoomDefault, zoomDefaultNote: s.zoomDefaultNote, passwordIsDefault: !s.passwordHash,
-            passwordSetAt: s.passwordSetAt, passwordSetBy: s.passwordSetBy, passwordEnabled: s.passwordEnabled },
+            passwordSetAt: s.passwordSetAt, passwordSetBy: s.passwordSetBy, passwordEnabled: s.passwordEnabled,
+            adminPasswordIsDefault: adminPassword.isDefault, adminPasswordSetAt: num(settings && settings.adminPasswordSetAt, 0),
+            adminPasswordSetBy: settings && typeof settings.adminPasswordSetBy === 'string' ? settings.adminPasswordSetBy : '' },
           codes: codes.map(c => publicAccessCode(c, at)).sort((a, b) => b.createdAtMs - a.createdAtMs || a.code.localeCompare(b.code)),
           slots: adminSlotRows(config, settings, courses, sheets),
           courses: courses.map(c => ({ id: c.id, title: courseTitle(c), level: c.level || '', subject: c.subject || '', day: c.day || '',
@@ -1107,6 +1218,14 @@ function createTrialService({ store, http, hashIp, verifyIdToken = async () => {
         }
         if (!Object.keys(patch).length) fail();
         await store.saveSettings(patch);
+        return res.status(200).json({ ok: true });
+      }
+      // 🔑 Change the admin password (and sign out every password session). Only a
+      // Google admin may, so someone holding the password cannot lock the admins out.
+      if (action === 'setAdminPassword') {
+        checkKeys(body, ['action', 'password']);
+        if (byPassword) throw new ShopError(403, 'google-admin-only');
+        await store.saveSettings(newAdminPasswordFields(body.password, email, at, randomBytesImpl));
         return res.status(200).json({ ok: true });
       }
       if (action === 'createCodes') {
@@ -1198,7 +1317,9 @@ module.exports = {
   sgDayKey, validDayKey, addDays, fmtDayKey, fmtMoment, slotTime, slotStart, sessionLabel, bookingWindow, trialSlot, trialSlotIds, trialSessions,
   lessonStart, ansKeyAt, currentAndNext, courseForSlot, courseTitle, materialsFor, readSettings, zoomFor,
   LIVE_PAGE_URL, ANSKEY_LIVE_URL, LIVE_EARLY_MS, LIVE_LATE_MS, trialLiveMac, trialLiveCode, parseLive, liveLessonUrl, anskeyTrialUrl, liveWindow, liveFirstLine,
-  normalPassword, hashPassword, passwordMatches, newPasswordFields, randomToken, accessFor, parseAccess, materialUrl, bookingPageUrl, linkPageUrl,
+  normalPassword, hashPassword, passwordMatches, newPasswordFields,
+  DEFAULT_ADMIN_PASSWORD, ADMIN_SESSION_HOURS, ADMIN_SESSION_PREFIX, ADMIN_PASSWORD_LABEL, adminPasswordRecord, adminPasswordMatches,
+  newAdminPasswordFields, adminSessionToken, adminSessionValid, randomToken, accessFor, parseAccess, materialUrl, bookingPageUrl, linkPageUrl,
   validateBook, validateLinkOpen, checkSession, cleanWhatsapp, bookingRecord, linkVisitRecord, accessOpen, linkState, publicBooking,
   parentConfirmationMail, reminderMail, adminBookingMail, materialsMail, emailSheetLinks, materialSignature, MAIL_LINK_DAYS, dueReminders, mailIdFor, adminSlotRows, publicLink, adminBooking, trialAdminFrom,
   createTrialService

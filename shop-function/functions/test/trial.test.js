@@ -660,3 +660,117 @@ test('🎟 a booking carries its live link to the page, the emails and the admin
   assert.equal(gone.body.live.state, 'cancelled');
   assert.equal(gone.body.live.joinUrl, '');
 });
+
+// ─── 🔑 Admin password login (20 Nov 2026) ───
+// The real password is never written in this public repository, not even in a test:
+// these tests give trialSettings/main their own admin password first.
+const TEST_ADMIN_PASSWORD = 'Test-admin-pass-1';
+function passwordHarness() {
+  const rows = seed();
+  Object.assign(rows['trialSettings/main'], T.newAdminPasswordFields(TEST_ADMIN_PASSWORD, 'setup@test', NOW - DAY));
+  delete rows['trialSettings/main'].adminSessionKey;   // made at the first login
+  return harness(rows);
+}
+async function login(h, password, ip = '192.0.2.77') {
+  const all = { origin: ORIGIN, 'content-type': 'application/json' };
+  const res = { headers: {}, statusCode: 200, set(k, v) { this.headers[k.toLowerCase()] = v; return this; },
+    status(c) { this.statusCode = c; return this; }, json(v) { this.body = v; return this; }, send(v) { this.body = v; return this; }, end() { return this; } };
+  await h.service.trialAdmin({ method: 'POST', body: { action: 'adminLogin', password }, ip, get: n => all[n.toLowerCase()] }, res);
+  return res;
+}
+
+test('the starting admin password is kept only as a salted scrypt hash', () => {
+  assert.match(T.DEFAULT_ADMIN_PASSWORD.salt, /^[0-9a-f]{32}$/);
+  assert.match(T.DEFAULT_ADMIN_PASSWORD.hash, /^[0-9a-f]{64}$/);
+  assert.equal(T.adminPasswordRecord({}).isDefault, true);
+  assert.equal(T.adminPasswordMatches({}, ''), false);
+  assert.equal(T.adminPasswordMatches({}, 'plctrial'), false);
+  const own = T.newAdminPasswordFields(TEST_ADMIN_PASSWORD, 'x', NOW);
+  assert.equal(T.adminPasswordMatches(own, TEST_ADMIN_PASSWORD), true);
+  assert.equal(T.adminPasswordMatches(own, '  ' + TEST_ADMIN_PASSWORD + ' '), true, 'spaces around it are ignored');
+  assert.equal(T.adminPasswordMatches(own, TEST_ADMIN_PASSWORD.toLowerCase()), false, 'it is case-sensitive');
+  assert.ok(!JSON.stringify(own).includes(TEST_ADMIN_PASSWORD));
+});
+
+test('the admin password opens the admin panel for 12 hours, with a token the server signed', async () => {
+  const h = passwordHarness();
+  const wrong = await login(h, 'nope-nope');
+  assert.equal(wrong.statusCode, 403);
+  assert.equal(wrong.body.error, 'wrong-admin-password');
+  const ok = await login(h, TEST_ADMIN_PASSWORD);
+  assert.equal(ok.statusCode, 200);
+  assert.ok(ok.body.token.startsWith('trialpw.'));
+  assert.equal(ok.body.expiresAtMs, NOW + 12 * 3600000);
+  const key = h.db.rows.get('trialSettings/main').adminSessionKey;
+  assert.match(key, /^[0-9a-f]{64}$/);
+  assert.equal(h.db.rows.get('trialSettings/main').zoomDefault, 'https://us02web.zoom.us/j/1111111111', 'other settings are kept');
+
+  const load = await h.admin({ action: 'load' }, ok.body.token);
+  assert.equal(load.statusCode, 200);
+  assert.equal(load.body.admin, 'Admin password');
+  assert.equal(load.body.byPassword, true);
+  assert.equal(load.body.settings.adminPasswordIsDefault, false);
+  assert.ok(!JSON.stringify(load.body).includes(key), 'the signing key never leaves the server');
+  const link = await h.admin({ action: 'createLink', slot: 'MON-3', label: 'Mrs Lim' }, ok.body.token);
+  assert.equal(link.statusCode, 201);
+  assert.equal(link.body.link.createdBy, 'Admin password');
+
+  // A second login reuses the same key; both sessions work.
+  const again = await login(h, TEST_ADMIN_PASSWORD);
+  assert.equal(h.db.rows.get('trialSettings/main').adminSessionKey, key);
+  assert.equal((await h.admin({ action: 'load' }, again.body.token)).statusCode, 200);
+
+  // A changed, made-up or stretched token is refused.
+  const [prefix, exp, nonce, mac] = ok.body.token.split('.');
+  const flip = mac[0] === 'A' ? 'B' : 'A';
+  for (const bad of [prefix + '.' + exp + '.' + nonce + '.' + flip + mac.slice(1),
+    prefix + '.' + (Number(exp) + 3600000 * 24 * 30) + '.' + nonce + '.' + mac,
+    T.adminSessionToken('f'.repeat(64), Number(exp), nonce)]) {
+    const r = await h.admin({ action: 'load' }, bad);
+    assert.equal(r.statusCode, 401, bad);
+    assert.equal(r.body.error, 'admin-session-ended');
+  }
+  // After 12 hours the session is over.
+  h.advance(12 * 3600000 + 1);
+  assert.equal((await h.admin({ action: 'load' }, ok.body.token)).body.error, 'admin-session-ended');
+});
+
+test('wrong admin passwords are limited, and once limited even the right one waits', async () => {
+  const h = passwordHarness();
+  for (let i = 0; i < 5; i++) assert.equal((await login(h, 'guess-' + i)).statusCode, 403);
+  const blocked = await login(h, TEST_ADMIN_PASSWORD);
+  assert.equal(blocked.statusCode, 429);
+  assert.equal(blocked.body.error, 'too-many-attempts');
+  // Another connection still gets in, and the right password does not count against anyone.
+  assert.equal((await login(h, TEST_ADMIN_PASSWORD, '192.0.2.88')).statusCode, 200);
+  // The daily cap for everyone.
+  for (let i = 0; i < 25; i++) await login(h, 'guess-' + i, '198.51.100.' + i);
+  assert.equal((await login(h, TEST_ADMIN_PASSWORD, '203.0.113.9')).statusCode, 429);
+  h.advance(86400000);
+  assert.equal((await login(h, TEST_ADMIN_PASSWORD, '203.0.113.9')).statusCode, 200, 'the next day it opens again');
+});
+
+test('only a Google admin can change the admin password, and that signs password sessions out', async () => {
+  const h = passwordHarness();
+  const session = (await login(h, TEST_ADMIN_PASSWORD)).body.token;
+  const tried = await h.admin({ action: 'setAdminPassword', password: 'Another-pass-1' }, session);
+  assert.equal(tried.statusCode, 403);
+  assert.equal(tried.body.error, 'google-admin-only');
+  assert.equal((await h.admin({ action: 'setAdminPassword', password: 'short' })).body.error, 'weak-admin-password');
+  assert.equal((await h.admin({ action: 'setAdminPassword', password: 'Another-pass-1' })).statusCode, 200);
+  const settings = h.db.rows.get('trialSettings/main');
+  assert.equal(settings.adminPasswordSetBy, 'admin@polymathlc.com.sg');
+  assert.ok(!JSON.stringify(settings).includes('Another-pass-1'));
+  assert.equal((await h.admin({ action: 'load' }, session)).body.error, 'admin-session-ended', 'old sessions end');
+  assert.equal((await login(h, TEST_ADMIN_PASSWORD)).statusCode, 403, 'the old password stops working');
+  const fresh = await login(h, 'Another-pass-1');
+  assert.equal(fresh.statusCode, 200);
+  const load = (await h.admin({ action: 'load' }, fresh.body.token)).body;
+  assert.equal(load.settings.adminPasswordSetBy, 'admin@polymathlc.com.sg');
+});
+
+test('a Google account that is not an admin still cannot use the panel without the password', async () => {
+  const h = passwordHarness();
+  assert.equal((await h.admin({ action: 'load' }, STRANGER_TOKEN)).statusCode, 403);
+  assert.equal((await h.admin({ action: 'adminLogin', password: TEST_ADMIN_PASSWORD, extra: 1 })).statusCode, 400);
+});
