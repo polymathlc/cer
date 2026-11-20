@@ -1,0 +1,38 @@
+name: Mistake notebook
+
+# polymathlc.com.sg/notebook (notebook/) and its server (shop-function/functions/notebook*.js,
+# deployed by "Deploy shop card payments"). The page's pure helpers, the server's rules, and
+# the whole page in a real browser against the real server code with sample mistakes
+# (no account, no network).
+on:
+  push:
+    branches: [main]
+    paths: ['notebook/**', 'shop-function/functions/notebook*', 'shop-function/functions/test/notebook*', 'tools/notebook-*', 'student/index.html', 'student/access-gate.js', '.github/workflows/notebook.yml']
+  pull_request:
+    paths: ['notebook/**', 'shop-function/functions/notebook*', 'shop-function/functions/test/notebook*', 'tools/notebook-*', 'student/index.html', 'student/access-gate.js', '.github/workflows/notebook.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  notebook:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Server rules and page helpers
+        run: |
+          npm ci --prefix shop-function/functions --no-audit --no-fund
+          node --test shop-function/functions/test/notebook.test.js
+          node --check notebook/notebook-app.js
+          node --test tools/notebook-page-tests.mjs
+      - run: npm install --no-save --package-lock=false playwright@1.62.1
+      - run: npx playwright install --with-deps chromium
+      - name: The notebook in a real browser
+        run: node tools/notebook-browser.mjs
