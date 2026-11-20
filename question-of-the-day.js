@@ -17,7 +17,7 @@
 (function () {
   'use strict';
   var API = 'https://us-central1-mathgen--app.cloudfunctions.net/dailyQuestion';
-  var PAGE_VERSION = 'home-v2.0.0';
+  var PAGE_VERSION = 'home-v2.1.0';
   var LETTERS = ['A', 'B', 'C', 'D'];
   var LEVELS = ['P3', 'P4', 'P5', 'P6'];
   var EMAIL_PATTERN = /^[^\s@<>(),;:\\"]+@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/i;
@@ -89,9 +89,18 @@
     if (q) html += '<div class="qd-day">' + esc(q.dayShort) + '</div>';
     return html;
   }
+  function figHtml(q) {
+    if (!q.images || !q.images.length) return '';
+    // The home box shows the first picture; the others are on /question.
+    var img = q.images[0];
+    var html = '<div class="qd-fig"><img src="' + esc(img.url) + '" alt="' + esc(img.alt || 'The picture for this question') + '" width="' + Math.round(img.w / 2)
+      + '" height="' + Math.round(img.h / 2) + '" loading="lazy" decoding="async"></div>';
+    if (q.images.length > 1) html += '<p class="qd-more-figs"><a href="question/">See all ' + q.images.length + ' pictures on the question page →</a></p>';
+    return html;
+  }
   function mcqHtml(q) {
     var pick = getPick(q);
-    var html = '<div class="qd-opts">';
+    var html = figHtml(q) + '<div class="qd-opts">';
     q.options.forEach(function (o, i) {
       html += '<button type="button" class="qd-opt' + (i === pick ? ' picked' : '') + '"' + (pick !== null ? ' disabled' : '') + ' data-i="' + i + '">'
         + '<span class="qd-letter">' + LETTERS[i] + '</span><span>' + mathText(o) + '</span></button>';
@@ -111,14 +120,7 @@
   }
   function openHtml(q) {
     var saved = getAnswer(q) || {};
-    var html = '';
-    if (q.images && q.images.length) {
-      // The home box shows the first picture; the others are on /question.
-      var img = q.images[0];
-      html += '<div class="qd-fig"><img src="' + esc(img.url) + '" alt="' + esc(img.alt || 'The picture for this question') + '" width="' + Math.round(img.w / 2)
-        + '" height="' + Math.round(img.h / 2) + '" loading="lazy" decoding="async"></div>';
-      if (q.images.length > 1) html += '<p class="qd-more-figs"><a href="question/">See all ' + q.images.length + ' pictures on the question page →</a></p>';
-    }
+    var html = figHtml(q);
     html += '<label class="qd-sr" for="qd-answer">Your answer</label>'
       + '<textarea id="qd-answer" class="qd-answer" maxlength="600" rows="2" placeholder="' + (q.answerType === 'explain' ? 'Type your answer in a sentence or two…' : 'Type your answer…') + '">'
       + esc(saved.answer || '') + '</textarea>';

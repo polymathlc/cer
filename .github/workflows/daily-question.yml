@@ -45,11 +45,11 @@ on:
       pages:
         description: 'prepare: worksheet pages to read (1-30)'
         type: string
-        default: '6'
+        default: '12'
       cer:
         description: 'prepare: CER Science questions to read (0-30)'
         type: string
-        default: '6'
+        default: '16'
       preview_key:
         description: 'prepare: RSA public key for an encrypted preview (optional)'
         type: string
@@ -187,12 +187,12 @@ jobs:
         env:
           PREPARE_DEPS: ${{ github.workspace }}/rapid-import/functions
           WHAT: ${{ github.event_name == 'workflow_dispatch' && inputs.what || 'prepare' }}
-          PAGES: ${{ github.event_name == 'workflow_dispatch' && inputs.pages || '6' }}
-          CER: ${{ github.event_name == 'workflow_dispatch' && inputs.cer || '6' }}
+          PAGES: ${{ github.event_name == 'workflow_dispatch' && inputs.pages || '12' }}
+          CER: ${{ github.event_name == 'workflow_dispatch' && inputs.cer || '16' }}
           PREVIEW_KEY: ${{ github.event_name == 'workflow_dispatch' && inputs.preview_key || '' }}
         run: |
-          case "$PAGES" in ''|*[!0-9]*) PAGES=6 ;; esac
-          case "$CER" in ''|*[!0-9]*) CER=6 ;; esac
+          case "$PAGES" in ''|*[!0-9]*) PAGES=12 ;; esac
+          case "$CER" in ''|*[!0-9]*) CER=16 ;; esac
           set -- --pages "$PAGES" --cer "$CER"
           if [ -n "$PREVIEW_KEY" ]; then set -- "$@" --preview "$PREVIEW_KEY"; fi
           case "$WHAT" in

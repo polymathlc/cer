@@ -46,6 +46,7 @@
 // create Cloud Scheduler jobs.
 const core = require('./daily-question-core');
 const pool = require('./daily-question-pool');
+const { chooseFromLine } = require('./daily-question-store');
 
 const {
   QotdError, LIMITS, QOTD_ADMINS, START_DAY, SUBJECTS, CONSENT_TEXT, GMAIL_LIMITS, DEFAULT_DAILY_CAP, MAX_DAILY_CAP, PAGE_URL,
@@ -260,23 +261,25 @@ function createDailyQuestionService({ store, http, hashIp, verifyIdToken = async
     // The days ahead: each slot takes the next question waiting in its queue, the
     // way the pinning will; with none waiting, the bank's question for that level.
     const waiting = [];
-    for (const s of core.SUBJECTS) for (const l of LEVELS) waiting.push(...queue[s][l].slice(0, 6));
+    for (const s of core.SUBJECTS) for (const l of LEVELS) waiting.push(...queue[s][l].slice(0, 16));
     waiting.push(...Object.keys(todayPick.items || {}));
     const items = await store.getPoolItems(waiting);
-    const upcoming = [{ day, today: true, slots: annotate(publicAll(day, todayPick, true), todayPick, items) }];
-    const cursor = {};
+    const upcoming = [{ day, today: true, mcqDay: pool.isMcqDay(day), slots: annotate(publicAll(day, todayPick, true), todayPick, items) }];
+    // The pinning's own rule (chooseFromLine): a multiple-choice question every third
+    // day, open questions on the others, each taking the other kind when its own runs out.
+    const lines = {};
+    for (const s of core.SUBJECTS) for (const l of LEVELS) lines[s + l] = queue[s][l].slice();
     for (let i = 1; i < 7; i++) {
       const d = addDays(day, i);
       const pick = core.defaultPick(d);
       for (const s of core.SUBJECTS) for (const l of LEVELS) {
-        const key = s + l;
-        const line = queue[s][l];
-        let k = cursor[key] || 0;
-        while (k < line.length && !(items[line[k]] && items[line[k]].status === 'ready')) k++;
-        if (k < line.length) { pick.picks[s][l] = line[k]; pick.items[line[k]] = items[line[k]]; k++; }
-        cursor[key] = k;
+        const line = lines[s + l];
+        const found = new Map(line.map(id => [s + '|' + l + '|' + id, { exists: !!items[id], data: () => items[id] }]));
+        const result = chooseFromLine(d, s, l, line, found);
+        if (result.chosen) { pick.picks[s][l] = result.chosen.id; pick.items[result.chosen.id] = items[result.chosen.id]; }
+        lines[s + l] = result.keep;
       }
-      upcoming.push({ day: d, slots: annotate(publicAll(d, pick, true), pick, items) });
+      upcoming.push({ day: d, mcqDay: pool.isMcqDay(d), slots: annotate(publicAll(d, pick, true), pick, items) });
     }
     const list = subscribers.map(adminSubscriber).sort((a, b) => (b.confirmedAt || b.createdAt) - (a.confirmedAt || a.createdAt));
     return {
@@ -304,7 +307,7 @@ function createDailyQuestionService({ store, http, hashIp, verifyIdToken = async
       const q = slots[s][l];
       if (!q) continue;
       const full = items[q.id] || (pick.items && pick.items[q.id]);
-      if (full && q.kind === 'open') {
+      if (full && (q.kind === 'open' || q.source !== 'bank')) {
         q.images = (full.images || []).map(img => ({ id: img.id, w: img.w, h: img.h, alt: img.alt }));
         q.check = full.check ? { score: Number(full.check.score) || 0, solvedAnswer: String(full.check.solvedAnswer || '') } : null;
         q.from = full.origin ? { label: String(full.origin.label || ''), page: Number(full.origin.page) || 0, number: String(full.origin.number || '') } : null;
@@ -401,7 +404,8 @@ function createDailyQuestionService({ store, http, hashIp, verifyIdToken = async
     const pick = day === current ? await store.ensureDay(day, at) : (await store.getDays([day]))[day];
     const id = slotFor(pick, body.subject, body.level);
     const item = id && pick.items ? pick.items[id] : null;
-    if (!item) fail('not-open', 409);
+    // Only typed (open) questions are marked; a multiple-choice pick is checked on the page.
+    if (!item || item.kind === 'mcq') fail('not-open', 409);
     const ip = String(req.ip || (req.socket && req.socket.remoteAddress) || 'unknown');
     const who = hashIp(ip).slice(0, 32);
     const hour = Math.floor(at / HOUR), dayN = Math.floor(at / DAY_MS);
