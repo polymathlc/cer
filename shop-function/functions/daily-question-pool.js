@@ -463,6 +463,7 @@ const CER_EXTRACT_SYSTEM = 'You are Chung GPT, Mr Chung\'s question editor at Po
   + 'and the teacher\'s own model answers (claim, evidence, reasoning or a written answer), which are AUTHORITATIVE. '
   + 'You turn it into polished free Questions of the Day that parents and children across Singapore will see. It must be perfect. '
   + EDITOR_RULES + ' '
+  + 'A part marked "[a multiple-choice part: leave it out]" is never made into an item, and no item may depend on its options. '
   + 'PICTURES. For each item, "figures" lists the numbers of the attached images the child needs for THAT item (for example [1]); [] when none is needed. '
   + 'Never use a picture that shows the answer. '
   + 'Reply with STRICT JSON only: {"items":[{"number":"b","q":"…","figures":[1],"answerType":"number|short|explain","answer":"…","accepted":["…"],'
@@ -494,10 +495,20 @@ function verifyPrompt(item) {
 // A CER bank question (users/{adminUid}/questions/{id}) as the editor reads it:
 // the wording in order with its part labels, the pictures in order, and the model
 // answers. Returns null for a question this can never use.
+// A cer table's rows: newer tables keep { rows: [{ c: [...] }] }, older ones a
+// grid in `data` (an array of arrays, or objects keyed by row and column number).
+function cerTableRows(b) {
+  if (Array.isArray(b.rows)) return b.rows.map(r => (r && Array.isArray(r.c) ? r.c : Array.isArray(r) ? r : []));
+  const data = b.data;
+  const byNumber = o => Object.keys(o || {}).filter(k => /^\d+$/.test(k)).sort((x, y) => x - y).map(k => o[k]);
+  if (Array.isArray(data)) return data.map(r => (Array.isArray(r) ? r : byNumber(r)));
+  if (data && typeof data === 'object') return byNumber(data).map(r => (Array.isArray(r) ? r : byNumber(r)));
+  return [];
+}
 function cerSource(q) {
   if (!q || !Array.isArray(q.blocks) || !q.blocks.length) return null;
   const lines = [], images = [], answers = [];
-  let part = '';
+  let part = '', mcq = 0;
   const label = b => {
     const L = /^\(?([a-h])\)?$/i.exec(String(b.part || (b.type === 'part' ? b.label : '') || '').trim());
     const S = /^\(?(i{1,3}|iv|v|vi{0,3})\)?$/i.exec(String(b.subPart || '').trim());
@@ -519,11 +530,13 @@ function cerSource(q) {
         break;
       }
       case 'table': {
-        const rows = Array.isArray(b.data) ? b.data : [];
+        const rows = cerTableRows(b);
         if (rows.length) lines.push(head + '[table: ' + rows.map(r => (Array.isArray(r) ? r : []).map(c => oneLineText(c && typeof c === 'object' ? c.text || c.v : c, 60)).join(' | ')).join(' / ').slice(0, 1500) + ']');
         break;
       }
-      case 'mcq': return null;   // a multiple-choice question needs its options
+      // A multiple-choice part is left out (the day's question is typed, not picked);
+      // the other parts of the question can still be used.
+      case 'mcq': mcq++; lines.push(head + '[a multiple-choice part: leave it out]'); break;
       case 'fillblank': {
         const t = plain(String(b.text || '').replace(/\[\[([\s\S]+?)\]\]/g, (m, a) => { answers.push((lab || 'blank') + ': ' + oneLineText(a, 80)); return '____'; }), 1200);
         if (t) lines.push(head + t);
@@ -534,8 +547,8 @@ function cerSource(q) {
         if (parts.length) answers.push((lab || 'answer') + ' (' + (b.marks || '?') + ' marks) ' + parts.join(' '));
         break;
       }
-      case 'plainanswer': case 'answerLine': {
-        const a = oneLineText(b.type === 'plainanswer' ? b.content : (b.answer || b.content || ''), 600);
+      case 'plainanswer': case 'answerLine': case 'workingSpace': case 'openLines': {
+        const a = oneLineText(b.type === 'answerLine' ? (b.answer || b.content || '') : b.content, 600);
         if (a) answers.push((lab || 'answer') + ': ' + a);
         break;
       }
@@ -549,6 +562,7 @@ function cerSource(q) {
   }
   if (!lines.length || !answers.length) return null;
   if (images.length > 6) return null;
+  if (mcq && !answers.length) return null;
   return { text: lines.join('\n'), images, answers, level: normaliseLevel(q.level), topic: oneLineText(q.topic, 60) };
 }
 
