@@ -187,10 +187,22 @@ test('a CER bank question is read with its parts, pictures and the teacher\'s an
   assert.match(src.text, /\[picture 1\]/);
   assert.equal(src.images.length, 1);
   assert.match(src.answers[0], /Claim: The spoon became warmer/);
-  assert.equal(pool.cerSource({ level: 'P5', blocks: [{ type: 'mcq', options: [] }, { type: 'answer', claim: 'x' }] }), null);
+  assert.equal(pool.cerSource({ level: 'P5', blocks: [{ type: 'text', content: 'Which is a magnet?' }, { type: 'mcq', options: [], correctId: 'a' }] }), null, 'multiple choice only: never used');
+  const mixed = pool.cerSource({ level: 'P5', blocks: [{ type: 'text', content: '(a) Pick one.' }, { type: 'mcq', options: [] },
+    { type: 'text', content: '(b) Explain why the ice melted.' }, { type: 'answer', claim: 'It gained heat from the warmer air.', marks: 2 }] });
+  assert.ok(mixed, 'a question with an open part beside a multiple-choice part is still used');
+  assert.match(mixed.text, /\[a multiple-choice part: leave it out\]/);
+  const table = pool.cerSource({ level: 'P4', blocks: [{ type: 'text', content: 'The table shows the results.' },
+    { type: 'table', rows: [{ c: ['Material', 'Floats?'] }, { c: ['<b>Cork</b>', 'Yes'] }] }, { type: 'plainanswer', content: 'Cork' }] });
+  assert.match(table.text, /\[table: Material \| Floats\? \/ Cork \| Yes\]/, 'newer cer tables (rows of c) are read, HTML stripped');
+  const grid = pool.cerSource({ level: 'P4', blocks: [{ type: 'table', data: { 0: { 0: 'A', 1: 'B' }, 1: { 0: '1', 1: '2' } } }, { type: 'plainanswer', content: 'x' }] });
+  assert.match(grid.text, /A \| B \/ 1 \| 2/, 'older grids keyed by number are read');
   assert.equal(pool.cerSource({ level: 'P5', blocks: [{ type: 'text', content: 'No answer here' }] }), null, 'no model answer: never used');
   const need = { math: {}, science: { P3: 0, P4: 0, P5: 2, P6: 0 } };
   assert.equal(planCer([q, Object.assign({}, q, { id: 'c2', level: 'P6' })], { need, max: 5, seed: 's' }).length, 1);
+  const stats = {};
+  planCer([Object.assign({}, q, { id: 'c3', level: '' }), Object.assign({}, q, { id: 'c4', blocks: [] })], { need, max: 5, seed: 's', stats });
+  assert.deepEqual(stats, { 'no P3-P6 level': 1, 'multiple choice only, no answer, or too many pictures': 1 }, 'why questions were passed over, as counts');
 });
 
 /* ═════════ A whole run ═════════ */

@@ -201,6 +201,14 @@ jobs:
             *) node tools/daily-question-prepare.mjs "$@" ;;
           esac
 
+      # The preview as text too (still encrypted: only the private key's holder can read
+      # it), for a reader that cannot download artifacts.
+      - name: Encrypted preview (text)
+        if: always()
+        run: |
+          F="$RUNNER_TEMP/qotd-preview/preview.bin"
+          if [ -f "$F" ]; then echo "QOTD-PREVIEW-BEGIN"; base64 -w 100 "$F"; echo "QOTD-PREVIEW-END"; fi
+
       - name: Encrypted preview
         if: always()
         uses: actions/upload-artifact@v4

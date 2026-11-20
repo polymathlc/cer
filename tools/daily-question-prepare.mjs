@@ -145,15 +145,18 @@ export function planPages(eligible, { need, seen = {}, max, seed }) {
   }
   return plan;
 }
-export function planCer(questions, { need, seen = {}, max, seed }) {
+export function planCer(questions, { need, seen = {}, max, seed, stats = null }) {
   const want = {};
   for (const l of LEVELS) want[l] = need.science[l];
   const out = [];
+  const count = key => { if (stats) stats[key] = (stats[key] || 0) + 1; };
   for (const q of shuffle(questions, seed)) {
     if (out.length >= max) break;
-    if (seen[q.id]) continue;
+    if (seen[q.id]) { count('already read'); continue; }
     const src = cerSource(q);
-    if (!src || !LEVELS.includes(src.level) || !(want[src.level] > 0)) continue;
+    if (!src) { count('multiple choice only, no answer, or too many pictures'); continue; }
+    if (!LEVELS.includes(src.level)) { count('no P3-P6 level'); continue; }
+    if (!(want[src.level] > 0)) { count('level already full'); continue; }
     out.push({ q, src });
     want[src.level] -= 2;
   }
@@ -344,8 +347,11 @@ export async function prepareRun(ctx) {
     let picks = [];
     try {
       const questions = await src.listCerQuestions();
-      picks = planCer(questions, { need, seen: seenCer, max: maxCer, seed });
+      const skipped = {};
+      picks = planCer(questions, { need, seen: seenCer, max: maxCer, seed, stats: skipped });
       log(`CER bank: ${questions.length} question(s); reading ${picks.length}.`);
+      const why = Object.entries(skipped).map(([k, n]) => n + '× ' + k).join('; ');
+      if (why) log('CER questions passed over: ' + why + '.');
     } catch (error) {
       summary.error = summary.error || 'cer-list-failed';
       log('::warning::Could not list the CER bank (' + String(error && error.code || 'error').slice(0, 40) + ').');
@@ -489,6 +495,7 @@ async function openAll() {
   const pdfjs = await import(pathToFileURL(join(deps, 'node_modules/pdfjs-dist/legacy/build/pdf.mjs')).href);
   const crop = await import(pathToFileURL(new URL('../rapid-import/functions/crop.js', import.meta.url).pathname).href);
   const STANDARD_FONTS = join(deps, 'node_modules/pdfjs-dist/standard_fonts/');
+  const CMAPS = join(deps, 'node_modules/pdfjs-dist/cmaps/');
   class CanvasFactory {
     create(width, height) { const canvas = canvasMod.createCanvas(width, height); return { canvas, context: canvas.getContext('2d') }; }
     reset(target, width, height) { target.canvas.width = width; target.canvas.height = height; }
@@ -525,7 +532,7 @@ async function openAll() {
       const [bytes] = await bucket.file(ws.storagePath).download();
       // The 14 standard fonts (Helvetica, Times…) are not inside many worksheet PDFs: without
       // pdf.js's own copies their words would not be drawn at all.
-      return pdfjs.getDocument({ data: new Uint8Array(bytes), isEvalSupported: false, CanvasFactory, standardFontDataUrl: STANDARD_FONTS }).promise;
+      return pdfjs.getDocument({ data: new Uint8Array(bytes), isEvalSupported: false, CanvasFactory, standardFontDataUrl: STANDARD_FONTS, cMapUrl: CMAPS, cMapPacked: true }).promise;
     },
     async liveKey(ws) {
       const snap = await db.collection('users').doc(ws.ownerUid).collection('liveKeys').doc(ws.id).get();
@@ -533,10 +540,27 @@ async function openAll() {
       try { return JSON.parse(snap.data().json || 'null'); } catch { return null; }
     },
     async listCerQuestions() {
+      // The cer rule for a question's level: the highest level of the topics it is
+      // filed under (the teacher's own topic list laid over the default), and only
+      // questions a student may be shown (released, in syllabus, not held back).
+      const core = await import(pathToFileURL(new URL('../mindmap/mindmap-core.mjs', import.meta.url).pathname).href);
       const out = [], seen = new Set();
       for (const uid of adminUids) {
+        let topicLevels = Object.assign({}, core.TOPIC_LEVELS);
+        try {
+          const t = await db.collection('users').doc(uid).collection('settings').doc('topics').get();
+          const data = t.exists ? t.data() || {} : {};
+          if (data.custom && typeof data.custom === 'object') Object.assign(topicLevels, data.custom);
+          for (const removed of Array.isArray(data.removed) ? data.removed : []) delete topicLevels[removed];
+        } catch { /* the default topic list */ }
         const snap = await db.collection('users').doc(uid).collection('questions').get();
-        snap.forEach(d => { if (seen.has(d.id)) return; seen.add(d.id); out.push(Object.assign({ id: d.id }, d.data() || {})); });
+        snap.forEach(d => {
+          if (seen.has(d.id)) return;
+          seen.add(d.id);
+          const q = Object.assign({ id: d.id }, d.data() || {});
+          if (!core.questionServable(q, { topicLevels })) return;
+          out.push(Object.assign(q, { level: core.questionLevel(q, topicLevels) }));
+        });
       }
       return out;
     },
