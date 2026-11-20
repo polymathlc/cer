@@ -7,7 +7,7 @@
 <script>/* HTTPS UPGRADE — a page opened over plain http:// on the custom domain moves to https://, but only after a probe proves the secure address answers. If https is broken the page stays put. */(function(){var l=location;if(l.protocol!=='http:'||!/(^|\.)polymathlc\.com\.sg$/i.test(l.hostname))return;try{fetch('https://'+l.host+'/?https-check='+Date.now(),{mode:'no-cors',cache:'no-store'}).then(function(){l.replace('https://'+l.host+l.pathname+l.search+l.hash)},function(){})}catch(e){}})();</script>
 <title>Online Trial Lesson | Polymath Learning Centre</title>
 <!-- 🎥 Online trial lessons (Nov 2026). Not linked from the site and kept out of search:
-     the page opens with a one-time access code an admin made, or with a one-week class
+     the page opens with a one-time access code an admin made, or with a two-month class
      link. Parents pick a level, date and time from the /schedule timetable; the page then
      shows the class's Zoom link and its Current and Next worksheets, live from Polymath
      Online / Ans Key. Admins: /trial/#admin. Server: shop-function/functions/trial.js. -->
@@ -379,7 +379,7 @@
 
     <div class="card admin-pane hidden" id="pane-codes">
       <h2>One-time access codes</h2>
-      <p class="lead">Give each parent their own code. A code opens the booking page and is used up by the one booking made with it. Unused codes stop working after 60 days.</p>
+      <p class="lead">Give each parent their own code. A code opens the booking page and is used up by the one booking made with it. Unused codes stop working after 2 months.</p>
       <div class="admin-tools">
         <label class="muted" for="code-count">Make</label>
         <select id="code-count"><option>1</option><option>3</option><option>5</option><option>10</option><option>20</option><option>30</option></select>
@@ -398,8 +398,8 @@
     </div>
 
     <div class="card admin-pane" id="pane-links">
-      <h2>Class links (one week)</h2>
-      <p class="lead">A link for one class opens its Zoom link and its Current and Next worksheets straight away, after asking for an email and WhatsApp number. Each link stops working 7 days after you make it.</p>
+      <h2>Class links (two months)</h2>
+      <p class="lead">A link for one class opens its Zoom link and its Current and Next worksheets straight away, after asking for an email and WhatsApp number. Each link stops working 2 months after you make it, so you can send it early to parents who arrange a trial well ahead.</p>
       <!-- v1.4.0 (Zhi Kai 17 Nov 2026): who the link is for is required, the new link is sent from the
            "Ready to send" box below, and links already made stay folded away so nobody copies the wrong row. -->
       <form class="link-make" id="link-make" onsubmit="createLink(); return false;">
@@ -488,14 +488,14 @@
         <li><b>Check the class in the pink box</b> is the one you meant. If not, press <i>Done, close this</i> and make a new one.</li>
         <li>Type the parent's WhatsApp number and press <b>Open WhatsApp</b> (the message is written for you), or press <b>Copy message</b> and paste it into your chat.</li>
       </ol>
-      <p>The link works for <b>7 days</b>. The parent types their email and WhatsApp, then sees the Zoom link and the class's worksheets straight away. They are also emailed the same.</p>
+      <p>The link works for <b>2 months</b>. The parent types their email and WhatsApp, then sees the Zoom link and the class's worksheets straight away. They are also emailed the same.</p>
       <p>To send a link again, open <b>Links already made</b> at the bottom of the tab, search the name and press <b>Send again</b>.</p>
 
       <h3 id="tut-links">2. What each link is for</h3>
       <table class="tut-links">
         <thead><tr><th>Link or code</th><th>What it does</th><th>When you use it</th></tr></thead>
         <tbody>
-          <tr><td>Class link</td><td>Opens one class's Zoom link and Current/Next worksheets after the parent types an email and WhatsApp. Stops after 7 days.</td><td>Most trials. You chose the class for the parent.</td></tr>
+          <tr><td>Class link</td><td>Opens one class's Zoom link and Current/Next worksheets after the parent types an email and WhatsApp. Stops after 2 months.</td><td>Most trials. You chose the class for the parent.</td></tr>
           <tr><td>Access code</td><td>A one-time code like ABCD-2345. The parent types it on this page, then picks a date and time themselves. One code = one booking.</td><td>When the parent wants to choose the date themselves.</td></tr>
           <tr><td>Page link</td><td>The parent's own page for a booking: their lesson, Zoom and worksheets. It is in their emails.</td><td>A parent lost the email. Copy it from <b>Bookings &amp; visits</b>.</td></tr>
           <tr><td>Live link</td><td>The child's way into the live lesson. Works only on the lesson day, opens 15 minutes before the start. <b>Use this first.</b></td><td>On the lesson day, if the parent cannot find it. Copy it from <b>Bookings &amp; visits</b>.</td></tr>
@@ -510,7 +510,7 @@
         <li>Press <b>Make codes</b> and send the code to the parent with this page's address: <b>polymathlc.com.sg/trial</b>.</li>
         <li>The parent types the code, picks level, date and time, and fills in their details. They get a confirmation email, and a reminder the afternoon before.</li>
       </ol>
-      <p>Each code works once. Unused codes stop after 60 days. Press <b>Revoke</b> to stop a code you sent by mistake.</p>
+      <p>Each code works once. Unused codes stop after 2 months, and parents can book up to 2 months ahead. Press <b>Revoke</b> to stop a code you sent by mistake.</p>
 
       <h3 id="tut-bookings">4. Bookings &amp; visits: who is coming</h3>
       <p>Everyone who booked with a code and everyone who opened a class link is listed here. Use <b>Upcoming</b>, <b>Past</b>, the month and the search box to find a family. On each row you can:</p>
@@ -537,7 +537,7 @@
         <dt>I made a link for the wrong class.</dt>
         <dd>Open <b>Links already made</b>, find it and press <b>Stop</b>, then make a new one for the right class.</dd>
         <dt>The parent says the link has ended.</dt>
-        <dd>Class links last 7 days. Make a new one for them.</dd>
+        <dd>Class links last 2 months. Make a new one for them.</dd>
         <dt>The class I need is not in the list.</dt>
         <dd>Only open classes that run online (Online or Both on the schedule) can be chosen. Ask Zhi Kai.</dd>
         <dt>The page says my admin login has ended.</dt>
@@ -676,7 +676,7 @@
 //                admins switched it on) → pick level, date and time → book. The
 //                trialBooking function checks the code, uses it up, writes the
 //                booking and emails the centre and the parent.
-//   #l=<link>  → an admin's one-week class link: email + WhatsApp, then the
+//   #l=<link>  → an admin's two-month class link: email + WhatsApp, then the
 //                class's Zoom link and worksheets straight away.
 //   #b=<key>   → a booked lesson's own page (from the emails), live.
 //   #admin     → the admins' panel (Google sign-in, or the admin password via "Admin login"
@@ -689,7 +689,7 @@
 
 // Shown to the signed-in admin in the footer, so a deploy can be checked.
 // Bump it on every change to this page.
-const TRIAL_PAGE_VERSION = 'v1.7.0';
+const TRIAL_PAGE_VERSION = 'v1.8.0';
 // 🎥 The Join Zoom button at the top (v1.2.0). A lesson with its own Zoom link (admin, Classes & Zoom)
 // uses that one; otherwise this, the centre's class Zoom. Keep equal to CLASS_ZOOM_URL in
 // student/student-account.js (a test checks).
@@ -705,7 +705,8 @@ const LEVELS = ['P3', 'P4', 'P5', 'P6'];
 
 // BEGIN TRIAL DATES — pure date maths, a copy of shop-function/functions/trial.js,
 // cut out and checked against it by tools/trial-tests.mjs
-const TRIAL_HORIZON_DAYS = 56;
+// Two months ahead (v1.8.0, Zhi Kai 20 Nov 2026). Keep equal to trial.js (a test checks).
+const TRIAL_HORIZON_DAYS = 62;
 const SG_PUBLIC_HOLIDAYS = {
   2026: ['2026-01-01', '2026-02-17', '2026-02-18', '2026-03-21', '2026-04-03', '2026-05-01', '2026-05-27',
          '2026-05-31', '2026-06-01', '2026-08-09', '2026-08-10', '2026-11-08', '2026-11-09', '2026-12-25'],
@@ -857,7 +858,7 @@ const ERRORS = {
   'invalid-email': 'Please enter a valid email.',
   'invalid-whatsapp': 'Please enter a valid WhatsApp number (8 digits for Singapore, or + and your country code).',
   'too-many-bookings': 'Too many bookings from this connection. Please try again later, or WhatsApp us.',
-  'link-expired': 'This class link has expired. Links last one week. Please ask us for a new one.',
+  'link-expired': 'This class link has expired. Links last two months. Please ask us for a new one.',
   'link-revoked': 'This class link is no longer active. Please ask us for a new one.',
   'link-unknown': 'This class link is not valid. Please check you copied all of it.',
   'booking-not-found': 'We could not find that booking. Please use the link in your email.',
@@ -1329,11 +1330,11 @@ const TOUR_STEPS = [
   { tab: 'links', title: 'Welcome! Here is what this page is for',
     body: '<p>This page gives parents a <b>free online trial lesson</b> on Zoom. Your main job is to send each parent the <b>right link for the right class</b>.</p><p>This walkthrough takes about a minute. You can open it again any time with <b>How to use</b> at the top, and read everything in the <b>🎓 Tutorial</b> tab.</p>' },
   { tab: 'links', spot: '#link-make', title: 'Class links: the job you will do most',
-    body: '<ol><li>Choose the <b>class</b> the child will join.</li><li>Type <b>who it is for</b>, e.g. Mrs Tan (Ethan).</li><li>Press <b>Make link</b>.</li><li><b>Check the class</b> in the pink Ready to send box, then press <b>Open WhatsApp</b> or <b>Copy message</b>.</li></ol><p>The link works for <b>7 days</b>. The parent types an email and WhatsApp, then sees the Zoom link and worksheets.</p>' },
+    body: '<ol><li>Choose the <b>class</b> the child will join.</li><li>Type <b>who it is for</b>, e.g. Mrs Tan (Ethan).</li><li>Press <b>Make link</b>.</li><li><b>Check the class</b> in the pink Ready to send box, then press <b>Open WhatsApp</b> or <b>Copy message</b>.</li></ol><p>The link works for <b>2 months</b>. The parent types an email and WhatsApp, then sees the Zoom link and worksheets.</p>' },
   { tab: 'links', spot: '#link-old', title: 'Sending a link again',
     body: '<p>Open <b>Links already made</b>, search the name and press <b>Send again</b>.</p><p>Made one for the wrong class? Press <b>Stop</b> on it and make a new one.</p>' },
   { tab: 'codes', spot: '#pane-codes', title: 'Access codes: when the parent picks the date',
-    body: '<p>A code like <b>ABCD-2345</b> lets a parent choose their own date and time on <b>polymathlc.com.sg/trial</b>.</p><p>Make one, send it to the parent with the page address. <b>One code = one booking.</b> Unused codes stop after 60 days.</p>' },
+    body: '<p>A code like <b>ABCD-2345</b> lets a parent choose their own date and time on <b>polymathlc.com.sg/trial</b>.</p><p>Make one, send it to the parent with the page address. <b>One code = one booking.</b> Unused codes stop after 2 months.</p>' },
   { tab: 'bookings', spot: '#pane-bookings', title: 'Bookings & visits: who is coming',
     body: '<p>Everyone who booked or opened a class link is here. On each row you can copy their <b>Page link</b> or <b>Live link</b>, <b>email the Zoom link and worksheets</b> again, or <b>send a reminder</b>.</p><p>After the lesson, mark it <b>Attended</b> or <b>No-show</b>.</p>' },
   { tab: 'bookings', title: 'Live link first, Zoom as backup',
@@ -1694,7 +1695,7 @@ function showReady(link) {
   $('ready-when').textContent = link.slotLabel || '';
   $('ready-for').textContent = link.label || '';
   $('ready-url').textContent = link.url;
-  $('ready-until').textContent = 'Works for 7 days, until ' + fmtMs(link.expiresAtMs, true) + '.';
+  $('ready-until').textContent = 'Works for 2 months, until ' + fmtMs(link.expiresAtMs, true) + '.';
   $('ready-whatsapp').value = '';
   $('link-ready').classList.remove('hidden');
   $('link-ready').scrollIntoView({ behavior: 'smooth', block: 'center' });

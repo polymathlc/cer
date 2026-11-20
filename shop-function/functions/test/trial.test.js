@@ -122,9 +122,10 @@ test('only open classes that run online can be booked, never Master Classes, clo
   assert.equal(T.trialSlot(CONFIG, 'SUN-1'), null);
 });
 
-test('lessons run from tomorrow for eight weeks, on the slot weekday, skipping public holidays', () => {
+test('lessons run from tomorrow for two months, on the slot weekday, skipping public holidays', () => {
   const w = T.bookingWindow(NOW);
-  assert.deepEqual(w, { today: '2026-11-15', first: '2026-11-16', last: '2027-01-10' });
+  assert.equal(T.TRIAL_HORIZON_DAYS, 62, 'two months ahead (Zhi Kai, 20 Nov 2026)');
+  assert.deepEqual(w, { today: '2026-11-15', first: '2026-11-16', last: '2027-01-16' });
   const sessions = T.trialSessions(CONFIG, w.first, w.last);
   assert.ok(sessions.length > 40);
   assert.deepEqual(sessions.slice(0, 2).map(s => s.slot + ' ' + s.date), ['MON-2 2026-11-16', 'MON-3 2026-11-16']);
@@ -135,11 +136,12 @@ test('lessons run from tomorrow for eight weeks, on the slot weekday, skipping p
   assert.equal(T.lessonStart('2026-11-21', 'SAT-1'), Date.UTC(2026, 10, 21, 1));
 });
 
-test('booking checks: tomorrow at the earliest, eight weeks at the latest, right weekday, no holidays', () => {
+test('booking checks: tomorrow at the earliest, two months at the latest, right weekday, no holidays', () => {
   const check = (slot, date) => { try { T.checkSession({ slot, date }, CONFIG, NOW); return 'ok'; } catch (e) { return e.code; } };
   assert.equal(check('MON-3', '2026-11-16'), 'ok');
   assert.equal(check('MON-3', '2026-11-09'), 'too-soon');
   assert.equal(check('SAT-1', '2026-11-14'), 'too-soon');
+  assert.equal(check('MON-3', '2027-01-11'), 'ok', 'eight weeks ahead is fine now');
   assert.equal(check('MON-3', '2027-01-18'), 'too-far');
   assert.equal(check('MON-3', '2026-11-17'), 'session-unavailable');
   assert.equal(check('TUE-1', '2026-11-17'), 'session-unavailable');
@@ -387,18 +389,19 @@ test('a class with no /online class or Zoom link still books, and the centre is 
 
 /* ─── Class links ─── */
 
-test('a class link asks for email and WhatsApp, then opens the class straight away, for one week only', async () => {
+test('a class link asks for email and WhatsApp, then opens the class straight away, for two months only', async () => {
   const h = harness();
   const made = await h.admin({ action: 'createLink', slot: 'MON-3', label: 'Facebook group' });
   assert.equal(made.statusCode, 201);
   const link = made.body.link;
   assert.match(link.url, /^https:\/\/polymathlc\.com\.sg\/trial\/#l=[A-Za-z2-9]{24}$/);
-  assert.equal(link.expiresAtMs, NOW + 7 * DAY);
+  assert.equal(T.LINK_DAYS, 62, 'two months (Zhi Kai, 20 Nov 2026: some parents arrange a trial really early)');
+  assert.equal(link.expiresAtMs, NOW + 62 * DAY);
   assert.equal(link.state, 'active');
 
   const info = await h.call({ action: 'linkInfo', link: link.token });
   assert.deepEqual(info.body.link, { slot: 'MON-3', slotLabel: 'Monday 7:00pm – 8:45pm', level: 'P6', subject: 'Science',
-    className: 'Primary 6 Science', expiresAtMs: NOW + 7 * DAY });
+    className: 'Primary 6 Science', expiresAtMs: NOW + 62 * DAY });
   assert.equal((await h.call({ action: 'linkOpen', link: link.token, email: 'kid@example.test', whatsapp: '' })).body.error, 'invalid-whatsapp');
   assert.equal((await h.call({ action: 'linkOpen', link: link.token, email: '', whatsapp: '91234567' })).statusCode, 400);
 
@@ -407,7 +410,7 @@ test('a class link asks for email and WhatsApp, then opens the class straight aw
   assert.equal(open.body.booking.kind, 'link');
   assert.equal(open.body.booking.zoomUrl, 'https://us02web.zoom.us/j/3333333333');
   assert.equal(open.body.booking.materials.current.name, 'P6 Science WS 2 Energy');
-  assert.equal(open.body.booking.accessUntil, NOW + 7 * DAY);
+  assert.equal(open.body.booking.accessUntil, NOW + 62 * DAY);
   const visits = rowsUnder(h.db, 'trialBookings').map(([, v]) => v);
   assert.equal(visits.length, 1);
   assert.equal(visits[0].whatsapp, '91234567');
@@ -438,12 +441,21 @@ test('a class link asks for email and WhatsApp, then opens the class straight aw
   assert.equal((await h.material(again.body.booking.materials.current.url)).statusCode, 200, 'fresh page link');
   assert.equal((await h.material(mailedUrl)).statusCode, 200, 'the emailed link still works');
 
-  // After a week the link, its page and its worksheets stop.
+  // After a week the emailed worksheet links end (the page and the reminder make fresh ones),
+  // but the class link and its page keep working.
   h.advance(6 * DAY);
+  assert.equal((await h.material(mailedUrl)).statusCode, 410, 'emailed worksheet links last one week');
+  assert.equal((await h.call({ action: 'linkInfo', link: link.token })).statusCode, 200, 'the class link still works after a week');
+  assert.equal((await h.call({ action: 'view', access: open.body.booking.access })).statusCode, 200);
+  // Seven weeks later (an early trial) it still opens for a new parent.
+  h.advance(48 * DAY);
+  assert.equal((await h.call({ action: 'linkOpen', link: link.token, email: 'early@example.test', whatsapp: '81234500' })).statusCode, 201);
+  // After two months the link and its page stop.
+  h.advance(7 * DAY);
   assert.equal((await h.call({ action: 'linkInfo', link: link.token })).body.error, 'link-expired');
   assert.equal((await h.call({ action: 'linkOpen', link: link.token, email: 'new@example.test', whatsapp: '81234567' })).body.error, 'link-expired');
   assert.equal((await h.call({ action: 'view', access: open.body.booking.access })).body.error, 'link-expired');
-  assert.equal((await h.material(mailedUrl)).statusCode, 410, 'the emailed link stops with the class link');
+  assert.equal((await h.material(mailedUrl)).statusCode, 410);
 });
 
 test('a revoked or unknown link opens nothing', async () => {
@@ -489,7 +501,7 @@ test('admins make codes in batches, and see every booking with the code it used'
   const made = await h.admin({ action: 'createCodes', count: 5, label: 'Open house' });
   assert.equal(made.statusCode, 201);
   assert.equal(made.body.codes.length, 5);
-  assert.ok(made.body.codes.every(c => c.state === 'active' && c.label === 'Open house' && c.expiresAtMs === NOW + 60 * DAY));
+  assert.ok(made.body.codes.every(c => c.state === 'active' && c.label === 'Open house' && c.expiresAtMs === NOW + 62 * DAY));
   assert.equal(new Set(made.body.codes.map(c => c.code)).size, 5);
   assert.equal((await h.admin({ action: 'createCodes', count: 0, label: '' })).body.error, 'invalid-count');
   assert.equal((await h.admin({ action: 'createCodes', count: 31, label: '' })).body.error, 'invalid-count');
