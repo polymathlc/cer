@@ -13,12 +13,25 @@ name: Question of the Day emails
 # scheduler jobs, so the schedule lives here. Pause the emails, or change the
 # daily cap, at polymathlc.com.sg/question/#admin.
 #
+# Every evening at about 10:07 p.m. Singapore time the "prepare" job tops up the
+# question pool (tools/daily-question-prepare.mjs): Chung GPT reads pages of Mr
+# Chung's past Ans Key worksheets and questions from the CER Science bank, splits a
+# question with parts into stand-alone questions, crops the pictures each one needs,
+# and an independent second Chung GPT call must solve and approve every question
+# before it can be shown. Anything that fails is kept out, never published.
+#
 # Run workflow by hand: "dry-run" builds every email from the real data and sends
-# nothing; "check" only counts; "send" sends now (it still never sends twice).
+# nothing; "check" only counts; "send" sends now (it still never sends twice);
+# "prepare" tops up the pool now; "prepare-dry-run" reads and checks without saving;
+# "check-marking" tries Chung GPT's marking on waiting questions with made-up answers.
+# A "preview_key" (an RSA public key, PEM or base64 PEM) makes the prepare run save
+# an encrypted preview of the questions as a short-lived artifact that only the
+# holder of the private key can read.
 # This repository is public: the log shows counts only.
 
 on:
   schedule:
+    - cron: '7 14 * * *'
     - cron: '7 22 * * *'
     - cron: '37 23 * * *'
     - cron: '7 1 * * *'
@@ -28,10 +41,22 @@ on:
         description: 'What to do'
         type: choice
         default: dry-run
-        options: [dry-run, check, send]
+        options: [dry-run, check, send, prepare, prepare-dry-run, check-marking]
+      pages:
+        description: 'prepare: worksheet pages to read (1-30)'
+        type: string
+        default: '6'
+      cer:
+        description: 'prepare: CER Science questions to read (0-30)'
+        type: string
+        default: '6'
+      preview_key:
+        description: 'prepare: RSA public key for an encrypted preview (optional)'
+        type: string
+        default: ''
   push:
     branches: [main]
-    paths: ['shop-function/functions/daily-question*', 'tools/daily-question*', 'question/**', '.github/workflows/daily-question.yml']
+    paths: ['shop-function/functions/daily-question*', 'tools/daily-question*', 'question/**', 'question-of-the-day.js', '.github/workflows/daily-question.yml']
   pull_request:
     paths: ['shop-function/functions/daily-question*', 'tools/daily-question*', 'question/**', 'question-of-the-day.js', '.github/workflows/daily-question.yml']
 
@@ -59,11 +84,21 @@ jobs:
           node --check tools/daily-question-send.mjs
           node --check question-of-the-day.js
           node --check question/question-app.js
+          node --check tools/daily-question-prepare.mjs
           node --test tools/daily-question-tests.mjs
           node --test shop-function/functions/test/daily-question.test.js
+      - name: Install the worksheet reader (pdf.js and canvas)
+        run: npm ci --prefix rapid-import/functions --no-audit --no-fund
+      - name: Prepare-run tests
+        env:
+          PREPARE_DEPS: ${{ github.workspace }}/rapid-import/functions
+        run: node --test tools/daily-question-prepare-tests.mjs
 
   send:
-    if: github.repository == 'polymathlc/cer' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    if: >-
+      github.repository == 'polymathlc/cer' &&
+      ((github.event_name == 'schedule' && github.event.schedule != '7 14 * * *') ||
+       (github.event_name == 'workflow_dispatch' && contains(fromJSON('["dry-run","check","send"]'), inputs.what)))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -99,5 +134,82 @@ jobs:
           esac
 
       - name: Remove the key from the runner
+        if: always()
+        run: rm -f "$RUNNER_TEMP/firebase-sa.json"
+
+  prepare:
+    if: >-
+      github.repository == 'polymathlc/cer' &&
+      ((github.event_name == 'schedule' && github.event.schedule == '7 14 * * *') ||
+       (github.event_name == 'workflow_dispatch' && contains(fromJSON('["prepare","prepare-dry-run","check-marking"]'), inputs.what)))
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install the worksheet reader (pdf.js, canvas, Admin SDK)
+        run: npm ci --prefix rapid-import/functions --no-audit --no-fund
+
+      - name: Check the prepare run first
+        env:
+          PREPARE_DEPS: ${{ github.workspace }}/rapid-import/functions
+        run: |
+          node --test tools/daily-question-prepare-tests.mjs
+          node --test tools/daily-question-tests.mjs
+
+      - name: Prepare the service-account key
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node tools/office-rules.mjs --setup
+
+      # Chung GPT's key: the OPENAI_API_KEY secret the functions already use, read from
+      # Secret Manager when the service account may; otherwise the script falls back to
+      # the admin's own key saved in Ans Key. Masked before anything could print it.
+      - name: Chung GPT key
+        run: |
+          gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS" --quiet >/dev/null 2>&1 || true
+          KEY="$(gcloud secrets versions access latest --secret=OPENAI_API_KEY --project=mathgen--app 2>/dev/null || true)"
+          if [ -n "$KEY" ]; then
+            echo "::add-mask::$KEY"
+            { echo "OPENAI_API_KEY<<__QOTD_KEY__"; echo "$KEY"; echo "__QOTD_KEY__"; } >> "$GITHUB_ENV"
+            echo "Using the functions' OpenAI key."
+          else
+            echo "Secret Manager not readable here; the run uses the admin's saved Chung GPT key."
+          fi
+
+      - name: Question of the Day prepare
+        env:
+          PREPARE_DEPS: ${{ github.workspace }}/rapid-import/functions
+          WHAT: ${{ github.event_name == 'workflow_dispatch' && inputs.what || 'prepare' }}
+          PAGES: ${{ github.event_name == 'workflow_dispatch' && inputs.pages || '6' }}
+          CER: ${{ github.event_name == 'workflow_dispatch' && inputs.cer || '6' }}
+          PREVIEW_KEY: ${{ github.event_name == 'workflow_dispatch' && inputs.preview_key || '' }}
+        run: |
+          case "$PAGES" in ''|*[!0-9]*) PAGES=6 ;; esac
+          case "$CER" in ''|*[!0-9]*) CER=6 ;; esac
+          set -- --pages "$PAGES" --cer "$CER"
+          if [ -n "$PREVIEW_KEY" ]; then set -- "$@" --preview "$PREVIEW_KEY"; fi
+          case "$WHAT" in
+            prepare-dry-run) node tools/daily-question-prepare.mjs --dry-run "$@" ;;
+            check-marking) node tools/daily-question-prepare.mjs --check-marking ;;
+            *) node tools/daily-question-prepare.mjs "$@" ;;
+          esac
+
+      - name: Encrypted preview
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qotd-preview
+          path: ${{ runner.temp }}/qotd-preview/preview.bin
+          retention-days: 1
+          if-no-files-found: ignore
+
+      - name: Remove the keys from the runner
         if: always()
         run: rm -f "$RUNNER_TEMP/firebase-sa.json"

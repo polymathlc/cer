@@ -1,7 +1,9 @@
-// The Free Question of the Day in a real browser: /question (today, yesterday, the
-// past week, sign-up, the confirm / unsubscribe / manage links, the admin list), the
-// home page box and the emails, against the REAL dailyQuestion service running in
-// this process on an in-memory Firestore. Nothing touches the live project.
+// The Free Question of the Day in a real browser: /question (today at a chosen level,
+// a typed answer marked by a stand-in for Chung GPT, yesterday, the past week, sign-up,
+// the confirm / unsubscribe / manage links, the admin list and its 7-day preview with
+// Skip and Restore), the home page box and the emails, against the REAL dailyQuestion
+// service running in this process on an in-memory Firestore, with a question pool
+// seeded the way the prepare run fills it. Nothing touches the live project.
 //
 //   node tools/daily-question-browser.mjs                 checks only
 //   SHOTS=<dir> node tools/daily-question-browser.mjs     checks, and saves screenshots
@@ -38,9 +40,12 @@ function database() {
     set: async (d, o) => { rows.set(path, clone(o && o.merge ? merge(rows.get(path), d) : d)); },
     create: async d => { if (rows.has(path)) { const e = new Error('exists'); e.code = 6; throw e; } rows.set(path, clone(d)); },
     update: async d => { rows.set(path, clone(merge(rows.get(path), d))); }, delete: async () => { rows.delete(path); } });
-  const col = (path, order = null, max = Infinity) => ({ doc: id => doc(path + '/' + id), orderBy: (f, dir) => col(path, { f, dir }, max), limit: n => col(path, order, n),
+  const col = (path, order = null, max = Infinity, filters = []) => ({ doc: id => doc(path + '/' + id),
+    orderBy: (f, dir) => col(path, { f, dir }, max, filters), limit: n => col(path, order, n, filters),
+    where: (f, op, v) => col(path, order, max, filters.concat([[f, op, v]])),
     get: async () => {
       let docs = kids(path).map(p => snap(doc(p)));
+      docs = docs.filter(d => filters.every(([f, op, v]) => op === '==' ? d.data()[f] === v : op === 'in' ? v.includes(d.data()[f]) : true));
       if (order) docs.sort((a, b) => (a.data()[order.f] < b.data()[order.f] ? -1 : 1) * (order.dir === 'desc' ? -1 : 1));
       docs = docs.slice(0, max);
       return { docs, empty: !docs.length };
@@ -63,10 +68,29 @@ function database() {
 
 const db = database();
 const store = createDailyQuestionStore(db, null);
+// A stand-in for Chung GPT's marking: right when the answer has the key number,
+// nearly there when it has a number, else not yet. Never gives the answer away.
+const aiCalls = [];
+const ai = {
+  async ask(prompt, options) {
+    aiCalls.push(options && options.system ? 'mark' : 'other');
+    const typed = (/The child's answer: (.*)$/m.exec(prompt) || [, ''])[1];
+    if (/\b26\b/.test(typed)) return { verdict: 'correct', feedback: 'Well done! You added all four sides and kept the units.' };
+    if (/\d/.test(typed)) return { verdict: 'partial', feedback: 'Good start. Check that you added every side of the rectangle, not just two of them.' };
+    return { verdict: 'wrong', feedback: 'Have another look at what the question asks for. Which sides make up the distance all the way round?' };
+  }
+};
 const service = createDailyQuestionService({
-  store, http: createHttp(() => {}), hashIp: hash, now: () => clock,
+  store, http: createHttp(() => {}), hashIp: hash, now: () => clock, ai,
   verifyIdToken: async token => { if (token === ADMIN_TOKEN) return { email: 'admin@polymathlc.com.sg', email_verified: true }; throw new Error('bad'); }
 });
+async function callPicture(query) {
+  const req = { method: 'GET', body: null, ip: '192.0.2.9', query, get: () => undefined };
+  const res = { status_: 200, headers: {}, contentType: 'text/plain', set(k, v) { this.headers[k] = v; return this; }, status(c) { this.status_ = c; return this; },
+    json(v) { this.body = v; return this; }, send(v) { this.body = v; return this; }, type(t) { this.contentType = t; return this; }, redirect() { return this; } };
+  await service.dailyQuestion(req, res);
+  return res;
+}
 async function callService(body, headers = {}) {
   const h = Object.assign({ origin: 'https://polymathlc.com.sg', 'content-type': 'application/json' }, headers);
   const req = { method: 'POST', body, ip: '192.0.2.9', query: {}, get: name => h[name.toLowerCase()] };
@@ -89,6 +113,57 @@ async function seedSubscribers() {
     await callService({ action: 'subscribe', email, name, level, subjects, frequency, consent: true, source: 'home-page' }, { });
   }
   for (const m of mails().filter(m => m.polymathQotd.kind === 'confirm').slice(0, 4)) await callService({ action: 'confirm', key: keyIn(m.message.text, 'c') });
+}
+
+/* ─── A question pool, as the prepare run leaves it ─── */
+// The picture is drawn here (a rectangle with its labels), the way a cropped worksheet
+// figure looks: white, the figure only, no question text.
+const canvasRequire = createRequire(join(ROOT, 'rapid-import/functions/noop.js'));
+const { createCanvas } = canvasRequire('@napi-rs/canvas');
+function rectanglePicture() {
+  const c = createCanvas(720, 420), g = c.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, 720, 420);
+  g.strokeStyle = '#111'; g.lineWidth = 4; g.strokeRect(110, 70, 500, 280);
+  g.fillStyle = '#111'; g.font = 'bold 30px sans-serif';
+  g.fillText('A', 78, 66); g.fillText('B', 620, 66); g.fillText('C', 620, 382); g.fillText('D', 78, 382);
+  g.font = '28px sans-serif'; g.fillText('8 cm', 325, 52); g.fillText('5 cm', 625, 220);
+  return { data: c.toBuffer('image/jpeg', 90).toString('base64'), w: 720, h: 420 };
+}
+async function seedPool() {
+  const pic = rectanglePicture();
+  const items = [
+    { source: 'anskey', subject: 'math', level: 'P5', topic: 'Perimeter', group: 'g1',
+      q: 'The figure shows a rectangle ABCD. AB is 8 cm and BC is 5 cm.\nWhat is the perimeter of the rectangle ABCD?',
+      answerType: 'number', answer: '26 cm', accepted: ['26'], model: '26 cm',
+      steps: ['A rectangle has two lengths of 8 cm and two breadths of 5 cm.', 'Perimeter = 8 + 5 + 8 + 5 = 26 cm'], idea: 'The perimeter is the distance all the way round a figure.',
+      images: [{ alt: 'Rectangle ABCD with AB = 8 cm and BC = 5 cm' }], origin: { label: 'P5 Maths worksheet 12', page: 2, number: '4(a)' } },
+    { source: 'anskey', subject: 'math', level: 'P5', topic: 'Area', group: 'g1',
+      q: 'The figure shows a rectangle ABCD. AB is 8 cm and BC is 5 cm.\nWhat is the area of the rectangle ABCD?',
+      answerType: 'number', answer: '40 cm²', accepted: ['40', '40 cm2'], model: '40 cm²',
+      steps: ['Area of a rectangle = length × breadth', '= 8 × 5 = 40 cm²'], idea: 'Area is length times breadth, in square units.',
+      images: [{ alt: 'Rectangle ABCD with AB = 8 cm and BC = 5 cm' }], origin: { label: 'P5 Maths worksheet 12', page: 2, number: '4(b)' } },
+    { source: 'cer', subject: 'science', level: 'P5', topic: 'Water cycle',
+      q: 'Ali left a glass of ice water on the table. After a few minutes, water droplets formed on the outside of the glass.\nExplain how the water droplets formed.',
+      answerType: 'explain', answer: 'Warm water vapour in the air touched the cold glass, lost heat and condensed into water droplets.',
+      model: 'Water vapour in the surrounding air came into contact with the cold outer surface of the glass. It lost heat to the glass and condensed into water droplets.',
+      keywords: ['water vapour', 'lost heat', 'condensed'], steps: ['The ice water makes the outer surface of the glass cold.', 'Water vapour in the warmer air touches it and loses heat.', 'It condenses into tiny water droplets.'],
+      idea: 'Condensation: water vapour loses heat and changes into liquid water.', images: [], origin: { label: 'CER Science bank', page: 0, number: '' } },
+    { source: 'anskey', subject: 'science', level: 'P4', topic: 'Magnets',
+      q: 'Mei Ling placed a magnet near a steel paper clip, a copper coin and a plastic ruler.\nWhich object was attracted to the magnet? Give a reason.',
+      answerType: 'explain', answer: 'The steel paper clip, because steel is a magnetic material.', model: 'The steel paper clip. Steel is a magnetic material, so it is attracted to a magnet.',
+      keywords: ['steel', 'magnetic material'], steps: ['Only magnetic materials are attracted to magnets.', 'Steel is magnetic; copper and plastic are not.'],
+      idea: 'Iron, steel, nickel and cobalt are magnetic materials.', images: [], origin: { label: 'P4 Science worksheet 7', page: 3, number: '2' } }
+  ];
+  const queue = core.pool.emptyQueue();
+  for (const [n, raw] of items.entries()) {
+    const id = core.pool.itemId(raw.source, 'browser-' + n);
+    const pictures = raw.images.map((img, k) => Object.assign({ id: core.pool.imageId(id, k), mime: 'image/jpeg' }, pic));
+    const item = Object.assign(core.pool.cleanItem(Object.assign({}, raw, { id, images: raw.images.map((img, k) => ({ id: pictures[k].id, w: pic.w, h: pic.h, alt: img.alt })) })),
+      { status: 'ready', group: raw.group || id, origin: raw.origin, check: { score: 5, solvedAnswer: raw.answer }, createdAt: clock });
+    await store.savePoolItem(item, pictures);
+    queue[item.subject][item.level].push(id);
+  }
+  await store.saveQueue(queue, clock);
 }
 
 /* ─── A static server for the site, with the function answered in-process ─── */
@@ -124,8 +199,13 @@ async function newPage(viewport, isMobile = false) {
   const page = await context.newPage();
   // The home page's own Firebase modules are stubbed out here, so their import errors are expected.
   page.on('pageerror', error => { if (!/gstatic\.com\/firebasejs/.test(error.message)) problems.push('page error: ' + error.message); });
-  await page.route('https://us-central1-mathgen--app.cloudfunctions.net/dailyQuestion', async route => {
+  await page.route(/^https:\/\/us-central1-mathgen--app\.cloudfunctions\.net\/dailyQuestion(\?.*)?$/, async route => {
     const request = route.request();
+    if (request.method() === 'GET') {
+      const query = Object.fromEntries(new URL(request.url()).searchParams);
+      const result = await callPicture(query);
+      return route.fulfill({ status: result.status_, contentType: result.contentType, body: result.body });
+    }
     if (request.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' } });
     const result = await callService(JSON.parse(request.postData() || '{}'), request.headers().authorization ? { authorization: request.headers().authorization } : {});
     await route.fulfill({ status: result.status_, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(result.body) });
@@ -149,28 +229,52 @@ const DESKTOP = { width: 1280, height: 900 }, PHONE = { width: 390, height: 844 
 clock -= 2 * 86400000; await callService({ action: 'today' });
 clock += 86400000; await callService({ action: 'today' });
 clock += 86400000;
+await seedPool();
 await seedSubscribers();
 
 /* 1. The page, desktop: today's question, then pick an answer. */
 {
   const page = await newPage(DESKTOP);
   await page.goto(BASE + '/question/');
-  await page.waitForSelector('#today-body .opt');
-  const today = (await callService({ action: 'today' })).body;
+  await page.waitForSelector('#today-body .answer-box textarea');
+  const today = (await callService({ action: 'today', level: 'P5' })).body;
+  assert.equal(today.questions.math.kind, 'open', "today's P5 Maths is the worksheet question");
   assert.equal(await page.textContent('#today-day'), today.questions.math.dayLabel);
-  assert.ok((await page.textContent('#today-body')).includes(today.questions.math.q.split('\n')[0]));
+  assert.ok((await page.textContent('#today-body')).includes('What is the perimeter of the rectangle ABCD?'));
   assert.equal(await page.locator('#today-body .working').count(), 0, 'no answer for today');
+  // The picture loads from the function, for today only.
+  await page.waitForFunction(() => { const img = document.querySelector('#today-body .q-figs img'); return img && img.complete && img.naturalWidth > 0; });
   await shot(page, 'page-desktop-today', { clip: { x: 0, y: 0, width: 1280, height: 900 } });
-  await page.click('#today-body .opt >> nth=1');
-  await page.waitForSelector('#today-body .locked');
-  assert.match(await page.textContent('#today-body .locked'), /Locked in: B/);
+  // A partly right answer: Chung GPT says nearly there, with a hint and no answer.
+  await page.fill('#today-body textarea', '13 cm');
+  await page.click('#today-body [data-check]');
+  await page.waitForSelector('#today-body .mark.partial');
+  assert.doesNotMatch(await page.textContent('#today-body .mark'), /26/);
+  // Then the right answer, typed exactly: checked against the key, no AI call.
+  const callsBefore = aiCalls.length;
+  await page.fill('#today-body textarea', '26 cm');
+  await page.click('#today-body [data-check]');
+  await page.waitForSelector('#today-body .mark.correct');
+  assert.equal(aiCalls.length, callsBefore, 'an exact answer needs no AI');
+  await page.locator('#today').scrollIntoViewIfNeeded();
+  await shot(page, 'page-desktop-marked', { clip: await page.locator('#today').boundingBox() });
+  // A P3 child: there is no P3 Maths question in the pool, and the bank has no P3
+  // Maths, so nothing above P3 is ever shown.
+  await page.click('#level-pick .lvl[data-level=P3]');
+  await page.waitForFunction(() => !document.querySelector('#today-body .spin'));
+  const p3 = (await callService({ action: 'today', level: 'P3' })).body;
+  if (p3.questions.math) assert.ok(['P3'].includes(p3.questions.math.level), 'never above P3');
+  await page.locator('#today').scrollIntoViewIfNeeded();
+  await shot(page, 'page-desktop-p3', { clip: await page.locator('#today').boundingBox() });
+  await page.click('#level-pick .lvl[data-level=P5]');
+  await page.waitForSelector('#today-body .answer-box textarea, #today-body .mark');
   // Yesterday's answer, with the working.
   await page.waitForSelector('#yesterday-body .working');
   await page.locator('#yesterday').scrollIntoViewIfNeeded();
   await shot(page, 'page-desktop-yesterday-answer', { clip: await page.locator('#yesterday').boundingBox() });
   // Science tab.
   await page.click('#today .tab.science');
-  assert.ok((await page.textContent('#today-body')).includes(today.questions.science.q.split('\n')[0]));
+  assert.ok((await page.textContent('#today-body')).includes('water droplets formed'));
   // The past week.
   assert.equal(await page.locator('details.past').count(), 1);
   await page.close();
@@ -180,11 +284,14 @@ await seedSubscribers();
 {
   const page = await newPage(PHONE, true);
   await page.goto(BASE + '/question/');
-  await page.waitForSelector('#today-body .opt');
+  await page.waitForSelector('#today-body .answer-box textarea');
+  await page.waitForFunction(() => { const img = document.querySelector('#today-body .q-figs img'); return img && img.complete && img.naturalWidth > 0; });
   await shot(page, 'page-phone-today');
-  await page.click('#today-body .opt >> nth=2');
+  await page.fill('#today-body textarea', 'I added 8 and 5');
+  await page.click('#today-body [data-check]');
+  await page.waitForSelector('#today-body .mark');
   await page.locator('#today').scrollIntoViewIfNeeded();
-  await shot(page, 'page-phone-locked-in', { clip: await page.locator('#today').boundingBox() });
+  await shot(page, 'page-phone-marked', { clip: await page.locator('#today').boundingBox() });
   await page.locator('#join').scrollIntoViewIfNeeded();
   await page.fill('#j-email', 'new.parent@example.test');
   await page.fill('#j-name', 'Mrs Chua');
@@ -202,6 +309,9 @@ await seedSubscribers();
   const page = await newPage(PHONE, true);
   await page.goto(BASE + '/question/');
   await page.fill('#j-email', 'other.parent@example.test');
+  await page.click('#j-submit');
+  assert.match(await page.textContent('#j-error'), /level/i, 'a level is required');
+  await page.selectOption('#j-level', 'P4');
   await page.click('#j-submit');
   assert.match(await page.textContent('#j-error'), /tick the box/);
   await page.check('#j-consent');
@@ -257,6 +367,28 @@ assert.ok(welcome, 'the welcome email was queued');
   assert.ok(rowsShown >= 4, 'active subscribers are listed');
   await page.locator('#admin-section').scrollIntoViewIfNeeded();
   await shot(page, 'admin-desktop', { clip: await page.locator('#admin-section').boundingBox() });
+  // The 7-day preview at P5: today's worksheet question, then tomorrow's (part b).
+  await page.waitForSelector('.pv-day');
+  assert.equal(await page.locator('.pv-day').count(), 7);
+  assert.match(await page.textContent('.pv-day >> nth=0'), /perimeter/);
+  assert.match(await page.textContent('.pv-day >> nth=1'), /area of the rectangle/);
+  await page.click('.pv-day >> nth=1 >> [data-img]');
+  await page.waitForSelector('.pv-day >> nth=1 >> .pv-q img');
+  const preview = page.locator('.pv-day >> nth=1');
+  await preview.scrollIntoViewIfNeeded();
+  await shot(page, 'admin-preview-day', { clip: await preview.boundingBox() });
+  // Skip tomorrow's: it leaves the preview and the queue, and can be restored.
+  await page.click('.pv-day >> nth=1 >> [data-skip]');
+  await page.click('.pv-day >> nth=1 >> [data-skip]');
+  await page.waitForSelector('[data-restore]');
+  assert.doesNotMatch(await page.textContent('.pv-day >> nth=1'), /area of the rectangle/);
+  await page.locator('[data-restore]').scrollIntoViewIfNeeded();
+  await shot(page, 'admin-skipped', { clip: await page.locator('[data-restore] >> xpath=../..').boundingBox() });
+  await page.click('[data-restore]');
+  await page.waitForFunction(() => !document.querySelector('[data-restore]'));
+  // The P4 tab: the P4 Science magnet question, and the bank for Maths.
+  await page.click('[data-admin-level=P4]');
+  assert.match(await page.textContent('.pv-day >> nth=0'), /magnet/);
   await page.selectOption('#a-filter', 'pending');
   assert.ok(await page.locator('.sub-table tbody tr').count() >= 1);
   await page.close();
@@ -280,17 +412,30 @@ for (const [viewport, name, mobile] of [[DESKTOP, 'home-desktop', false], [PHONE
   });
   await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
   await page.locator('#lp-qotd').scrollIntoViewIfNeeded();
-  await page.waitForSelector('#lp-qotd .qd-opt', { timeout: 15000 });
-  await page.click('#lp-qotd .qd-opt >> nth=0');
-  await page.waitForSelector('#lp-qotd .qd-locked');
+  await page.waitForSelector('#lp-qotd .qd-answer', { timeout: 15000 });
+  await page.waitForFunction(() => { const img = document.querySelector('#lp-qotd .qd-fig img'); return img && img.complete && img.naturalWidth > 0; });
+  await page.fill('#lp-qotd .qd-answer', '26');
+  await page.click('#lp-qotd .qd-check');
+  await page.waitForSelector('#lp-qotd .qd-mark.correct');
   await shot(page, name, { clip: await page.locator('#lp-qotd').boundingBox() });
+  // A P4 visitor gets the P4 Science question, and no Maths above P4.
+  await page.click('#lp-qotd .qd-lvl[data-l=P4]');
+  await page.waitForSelector('#lp-qotd .qd-q');
   if (!mobile) {
+    await page.click('#lp-qotd .qd-tab.science');
+    assert.match(await page.textContent('#lp-qotd .qd-q'), /magnet/);
     await page.fill('#qd-email', 'home.parent@example.test');
+    await page.selectOption('#qd-level', '');
+    await page.click('#lp-qotd button[type=submit]');
+    assert.match(await page.textContent('#lp-qotd [data-qotd-note]'), /level/);
+    await page.selectOption('#qd-level', 'P4');
     await page.check('#lp-qotd [name=consent]');
     await page.click('#lp-qotd button[type=submit]');
     await page.waitForSelector('#lp-qotd .qd-done');
     assert.ok(mails().some(m => m.to[0] === 'home.parent@example.test'));
-    assert.equal(db.rows.get('trialSettings/dailyQuestion/subscribers/' + core.subscriberId('home.parent@example.test')).source, 'home-page');
+    const homeSub = db.rows.get('trialSettings/dailyQuestion/subscribers/' + core.subscriberId('home.parent@example.test'));
+    assert.equal(homeSub.source, 'home-page');
+    assert.equal(homeSub.level, 'P4');
   }
   await page.close();
 }
@@ -298,9 +443,11 @@ for (const [viewport, name, mobile] of [[DESKTOP, 'home-desktop', false], [PHONE
 /* 7. The emails, as a mail app would show them. */
 {
   const day = core.sgDayKey(clock);
-  const sub = { id: 'a'.repeat(24), token: 'b'.repeat(32), email: 'lim.family@example.test', name: 'Mrs Lim', subjects: ['math', 'science'], frequency: 'daily', consent: { at: clock } };
+  const sub = { id: 'a'.repeat(24), token: 'b'.repeat(32), email: 'lim.family@example.test', name: 'Mrs Lim', level: 'P5', subjects: ['math', 'science'], frequency: 'daily', consent: { at: clock } };
   const stored = await store.getDays([day, core.addDays(day, -1), core.addDays(day, -2)]);
-  const daily = core.dailyMail(sub, day, core.publicPair(day, stored[day], false), core.publicPair(core.addDays(day, -1), stored[core.addDays(day, -1)], true));
+  const daily = core.dailyMail(sub, day, core.publicPair(day, stored[day], false, 'P5'), core.publicPair(core.addDays(day, -1), stored[core.addDays(day, -1)], true, 'P5'));
+  assert.match(daily.message.html, /perimeter/, "the morning email has today's worksheet question");
+  assert.doesNotMatch(daily.message.html, /26 cm/, 'and not its answer');
   const pages = { 'email-daily': daily.message.html, 'email-confirm': confirmMail.message.html };
   for (const [name, html] of Object.entries(pages)) {
     for (const [viewport, suffix, mobile] of [[{ width: 760, height: 1000 }, 'desktop', false], [PHONE, 'phone', true]]) {

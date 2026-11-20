@@ -140,11 +140,12 @@ function fakeStore({ subscribers = [], settings = {}, days = {} } = {}) {
     async createMailOnce(id, message) { if (state.mail.has(id)) return false; state.mail.set(id, structuredClone(message)); return true; },
     async patchSubscriber(id, patch) { state.subscribers.set(id, Object.assign({}, state.subscribers.get(id), patch)); },
     async getRun(day) { return state.runs.has(day) ? structuredClone(state.runs.get(day)) : null; },
-    async saveRun(day, data) { state.runs.set(day, Object.assign({ day }, state.runs.get(day) || {}, data)); }
+    async saveRun(day, data) { state.runs.set(day, Object.assign({ day }, state.runs.get(day) || {}, data)); },
+    async listFamilies() { return new Map(Object.entries(state.families || {})); }
   };
 }
 const sub = (id, extra = {}) => Object.assign({ id: id.padEnd(24, '0'), token: 'k'.repeat(32), email: id + '@example.test', name: '',
-  status: 'active', frequency: 'daily', subjects: ['math', 'science'], confirmedAt: 1, consent: { at: 1 } }, extra);
+  status: 'active', frequency: 'daily', subjects: ['math', 'science'], level: 'P5', confirmedAt: 1, consent: { at: 1 } }, extra);
 // Saturday 21 November 2026, 6:07 a.m. Singapore.
 const SATURDAY_MORNING = Date.UTC(2026, 10, 20, 22, 7);
 const quiet = () => {};
@@ -170,14 +171,16 @@ test('the morning run emails daily subscribers once, and weekly ones on Saturday
   assert.equal(run.sent, 2);
   assert.equal(run.daily, 1);
   assert.deepEqual(Object.keys(run.questions), ['math', 'science']);
+  assert.deepEqual(Object.keys(run.questions.math), ['P3', 'P4', 'P5', 'P6']);
 });
 
 test('the daily email holds today\'s question and yesterday\'s answer, for the chosen subjects only', async () => {
   const store = fakeStore({ subscribers: [sub('a', { subjects: ['math'] })] });
   await runSend(opts(store));
   const mail = [...store.state.mail.values()][0];
-  const today = core.publicQuestion(core.pickForDay('2026-11-21', store.state.days['2026-11-21']).math, '2026-11-21', true);
-  const yesterday = core.publicQuestion(core.defaultPick('2026-11-20').math, '2026-11-20', true);
+  const today = core.publicPair('2026-11-21', store.state.days['2026-11-21'], true, 'P5').math;
+  const yesterday = core.publicPair('2026-11-20', core.defaultPick('2026-11-20'), true, 'P5').math;
+  assert.equal(today.level, 'P5');
   assert.ok(mail.message.text.includes(today.q.split('\n')[0]));
   assert.ok(mail.message.text.includes('Answer: ' + yesterday.answerLetter + '. ' + yesterday.options[yesterday.answer]));
   assert.ok(!/Science/.test(mail.message.subject));
@@ -228,8 +231,62 @@ test('new subscribers go to the centre in one note, once', async () => {
 const HOUR_MS = 3600000;
 
 test('buildFor: no weekly email when there is no past week yet', () => {
-  const pairs = { '2026-11-20': core.publicPair('2026-11-20', core.defaultPick('2026-11-20'), false) };
-  assert.equal(buildFor({ sub: sub('a', { frequency: 'weekly' }), kind: 'weekly' }, '2026-11-20', pairs), null);
+  const pairsAt = (d, levels, withAnswer) => core.publicPair(d, core.defaultPick(d), withAnswer, levels);
+  assert.equal(buildFor({ sub: sub('a', { frequency: 'weekly' }), kind: 'weekly' }, '2026-11-20', pairsAt, { math: 'P5', science: 'P5' }), null);
+});
+
+/* ═════════ Never above the child's level ═════════ */
+
+const levelOf = text => (/(P[3-6]) (Maths|Science)/.exec(text) || [])[1];
+test('each parent gets the questions for their child\'s level, never above it', async () => {
+  const store = fakeStore({ subscribers: [sub('p4', { level: 'P4', subjects: ['math'] }), sub('p6', { level: 'P6', subjects: ['science'] }),
+    sub('p3', { level: 'P3', subjects: ['math', 'science'] })] });
+  await runSend(opts(store));
+  const mailTo = id => [...store.state.mail.values()].find(m => m.to[0] === id + '@example.test');
+  const p4 = mailTo('p4');
+  assert.match(p4.message.subject, /P4 Maths/);
+  const p6 = mailTo('p6');
+  assert.match(p6.message.subject, /P6 Science/);
+  // The bank has no P3 Maths: a P3 child gets Science only, never a P4 Maths question.
+  const p3 = mailTo('p3');
+  assert.ok(p3, 'the P3 parent still gets Science');
+  assert.ok(!/Maths/.test(p3.message.text.split('YESTERDAY')[0]), 'no Maths above P3');
+  for (const m of store.state.mail.values()) {
+    for (const found of m.message.text.matchAll(/(P[3-6]) (Maths|Science) ·/g)) {
+      const want = { 'p4@example.test': 'P4', 'p6@example.test': 'P6', 'p3@example.test': 'P3' }[m.to[0]];
+      assert.ok(found[1] <= want, m.to[0] + ' got ' + found[1]);
+    }
+  }
+});
+
+test('a parent with no level, or a P1/P2 child, is held back and never guessed', async () => {
+  const store = fakeStore({ subscribers: [sub('none', { level: '' }), sub('p2', { level: 'P2' }), sub('ok', { level: 'P5' })] });
+  const lines = [];
+  const result = await runSend(opts(store, { log: line => lines.push(line) }));
+  assert.equal(result.noLevel, 2);
+  assert.equal(result.daily, 1);
+  assert.equal(store.state.subscribers.get('none'.padEnd(24, '0')).lastDailyDay, undefined, 'tried again once a level is set');
+  assert.ok(lines.some(l => /no question at or below/.test(l)));
+});
+
+test('an approved /student family\'s level wins over the level typed at sign-up', async () => {
+  const store = fakeStore({ subscribers: [sub('fam', { level: 'P6', subjects: ['math', 'science'] })] });
+  store.state.families = { 'fam@example.test': [{ name: 'Ann', level: 'P4', subjects: 'math' }, { name: 'Ben', level: 'P6', subjects: 'both' }] };
+  const result = await runSend(opts(store));
+  assert.equal(result.fromStudent, 1);
+  const mail = [...store.state.mail.values()][0];
+  const today = mail.message.text.split('YESTERDAY')[0];
+  assert.match(today, /P4 Maths/, 'the youngest child doing Maths');
+  assert.match(today, /P6 Science/, 'the youngest child doing Science');
+  assert.equal(levelOf('P4 Maths ·'), 'P4');
+});
+
+test('familyLevels: youngest child per subject; secondary gets P6; P1/P2 gets nothing', () => {
+  assert.deepEqual(core.pool.familyLevels([{ level: 'P5', subjects: 'science' }, { level: 'P3', subjects: 'math' }]), { math: 'P3', science: 'P5' });
+  assert.deepEqual(core.pool.familyLevels([{ level: 'S2', subjects: 'both' }]), { math: 'P6', science: 'P6' });
+  assert.deepEqual(core.pool.familyLevels([{ level: 'P2', subjects: 'both' }]), { math: '', science: '' });
+  assert.deepEqual(core.pool.familyLevels([{ level: 'P4', subjects: 'science' }]), { math: 'P4', science: 'P4' }, 'a subject nobody takes: the youngest child');
+  assert.equal(core.pool.familyLevels([]), null);
 });
 
 /* ═════════ The workflow ═════════ */
@@ -240,4 +297,28 @@ test('the workflow runs the sender on a schedule with the service account and no
   assert.match(yml, /FIREBASE_SERVICE_ACCOUNT/);
   assert.match(yml, /tools\/daily-question-send\.mjs/);
   assert.doesNotMatch(yml, /onSchedule|pubsub/);
+});
+
+test('the workflow prepares the pool every evening, masks the key and keeps the preview private', () => {
+  const yml = readFileSync(new URL('../.github/workflows/daily-question.yml', import.meta.url), 'utf8');
+  assert.match(yml, /cron: '7 14 \* \* \*'/, 'about 10:07 p.m. Singapore');
+  assert.match(yml, /github\.event\.schedule == '7 14 \* \* \*'/, 'the evening schedule runs the prepare job');
+  assert.match(yml, /github\.event\.schedule != '7 14 \* \* \*'/, 'and never the sender');
+  assert.match(yml, /tools\/daily-question-prepare\.mjs --dry-run/);
+  assert.match(yml, /--check-marking/);
+  assert.match(yml, /::add-mask::\$KEY/, 'the AI key is masked before use');
+  assert.match(yml, /node --test tools\/daily-question-prepare-tests\.mjs/, 'the prepare tests run before the prepare run');
+  assert.match(yml, /retention-days: 1/, 'the encrypted preview is short-lived');
+  assert.match(yml, /case "\$PAGES" in ''\|\*\[!0-9\]\*\) PAGES=6/, 'hand-typed numbers are checked');
+  assert.doesNotMatch(yml, /set -x/);
+});
+
+test('the home box asks for a level, sends it, and marks typed answers', () => {
+  const js = readFileSync(new URL('../question-of-the-day.js', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  assert.match(js, /action: 'subscribe', email: email, level: childLevel/);
+  assert.match(js, /action: 'mark'/);
+  assert.match(js, /action: 'today', level: want/);
+  assert.match(html, /<select id="qd-level" name="level"/);
+  for (const l of ['P3', 'P4', 'P5', 'P6']) assert.match(html, new RegExp('<option value="' + l + '">'));
 });

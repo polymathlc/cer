@@ -5,8 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script>/* HTTPS UPGRADE — a page opened over plain http:// on the custom domain moves to https://, but only after a probe proves the secure address answers. If https is broken the page stays put. */(function(){var l=location;if(l.protocol!=='http:'||!/(^|\.)polymathlc\.com\.sg$/i.test(l.hostname))return;try{fetch('https://'+l.host+'/?https-check='+Date.now(),{mode:'no-cors',cache:'no-store'}).then(function(){l.replace('https://'+l.host+l.pathname+l.search+l.hash)},function(){})}catch(e){}})();</script>
 <title>Free Question of the Day | Primary Maths &amp; Science | Polymath Learning Centre</title>
-<!-- ❓ Free Question of the Day (Nov 2026): one Primary Maths and one Science question a day,
-     with the worked answer the next day, on this page and by email (daily or weekly).
+<!-- ❓ Free Question of the Day (Nov 2026): one Primary Maths and one Science question a day
+     for each level P3–P6 (a child never sees one above their level), made from the centre's own
+     Ans Key worksheets and CER Science bank and checked twice before it is shown. The child types
+     an answer and Chung GPT marks it; the worked answer comes the next day, here and by email.
      Questions, sign-ups and the admin list come from the dailyQuestion function
      (shop-function/functions/daily-question*.js); the emails from tools/daily-question-send.mjs. -->
 <link rel="canonical" href="https://polymathlc.com.sg/question/">
@@ -28,7 +30,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="preconnect" href="https://us-central1-mathgen--app.cloudfunctions.net" crossorigin>
 <!-- Today's questions are asked for at once, before the rest of the page has loaded. -->
-<script>try{if(window.fetch){var __d=(location.search.match(/[?&]d=(\d{4}-\d{2}-\d{2})/)||[])[1];window.__qotdEarly=fetch('https://us-central1-mathgen--app.cloudfunctions.net/dailyQuestion',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(__d?{action:'today',day:__d}:{action:'today'})}).then(function(r){return r.json().then(function(j){return {status:r.status,body:j}})}).catch(function(){return null})}}catch(e){}</script>
+<script>try{if(window.fetch){var __d=(location.search.match(/[?&]d=(\d{4}-\d{2}-\d{2})/)||[])[1],__l=(location.search.match(/[?&]l=(P[3-6])\b/)||[])[1];if(!__l){try{__l=localStorage.getItem('qotd-level')}catch(e){}}if(!/^P[3-6]$/.test(__l||''))__l='P5';window.__qotdEarlyLevel=__l;var __b={action:'today',level:__l};if(__d)__b.day=__d;window.__qotdEarly=fetch('https://us-central1-mathgen--app.cloudfunctions.net/dailyQuestion',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(__b)}).then(function(r){return r.json().then(function(j){return {status:r.status,body:j}})}).catch(function(){return null})}}catch(e){}</script>
 <style>
   *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
   :root {
@@ -143,6 +145,49 @@
   .verdict.yes { background:var(--success-bg); border:1px solid var(--success-border); color:var(--success); }
   .verdict.no { background:var(--danger-bg); border:1px solid var(--danger-border); color:var(--danger); }
   .verdict.none { background:var(--paper); border:1px solid var(--line); color:var(--deep); }
+  /* Level picker */
+  .levels { display:inline-flex; align-items:center; gap:4px; background:var(--paper); border:1px solid var(--line); border-radius:999px; padding:4px; }
+  .levels-label { font-size:12px; font-weight:700; color:var(--deep); padding:0 6px 0 8px; text-transform:uppercase; letter-spacing:.08em; }
+  .lvl { border:0; background:transparent; color:var(--deep); border-radius:999px; padding:7px 12px; font-weight:700; font-size:14px; cursor:pointer; min-width:42px; }
+  .lvl.on { background:var(--deep); color:#fff; }
+  .lvl:focus-visible { outline:2px solid var(--pink); outline-offset:2px; }
+  .hint { display:block; font-size:12.5px; color:var(--gray-500); margin-top:4px; }
+  /* Open questions: pictures, the typed answer and Chung GPT's mark */
+  .q-figs { display:grid; gap:12px; margin:0 0 16px; }
+  .q-figs img { display:block; max-width:100%; height:auto; margin:0 auto; border:1px solid var(--line); border-radius:10px; background:#fff; }
+  .frac { display:inline-flex; flex-direction:column; vertical-align:middle; text-align:center; font-size:.82em; line-height:1.1; margin:0 .1em; }
+  .frac > span:first-child { border-bottom:1.5px solid currentColor; padding:0 .15em; }
+  .answer-box { display:grid; gap:10px; }
+  .answer-box textarea { width:100%; min-height:84px; resize:vertical; border:1.5px solid var(--line); border-radius:12px; padding:12px 14px; font-size:16px; line-height:1.5; background:#fff; color:var(--ink); }
+  .answer-box textarea:focus { outline:none; border-color:var(--deep); box-shadow:0 0 0 3px rgba(5,108,118,.12); }
+  .answer-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .answer-row .fineprint { margin:0; text-align:left; }
+  .mark { margin-top:12px; border-radius:12px; padding:12px 16px; font-size:15px; display:flex; gap:10px; align-items:flex-start; }
+  .mark b { display:block; }
+  .mark .who { font-size:12px; opacity:.8; margin-top:4px; }
+  .mark.correct { background:var(--success-bg); border:1px solid var(--success-border); color:#14532d; }
+  .mark.partial { background:var(--warn-bg); border:1px solid var(--warn-border); color:#78350f; }
+  .mark.wrong { background:var(--danger-bg); border:1px solid var(--danger-border); color:#7f1d1d; }
+  .mark .ico { font-size:22px; line-height:1; }
+  .model { margin:0 0 10px; font-size:15px; }
+  .none-here { border:1.5px dashed var(--line); border-radius:16px; padding:22px; text-align:center; color:var(--gray-600); }
+  /* Admin preview of the days ahead */
+  .lvl-tabs { display:flex; gap:6px; flex-wrap:wrap; margin:8px 0 12px; }
+  .lvl-tabs .lvl { border:1px solid var(--line); background:#fff; }
+  .lvl-tabs .lvl.on { background:var(--deep); border-color:var(--deep); color:#fff; }
+  .warn-text { color:#b45309; }
+  .pv-q details { margin:4px 0; font-size:13px; }
+  .pv-q li.ans { color:var(--sci); font-weight:700; }
+  .pv-day { border:1px solid var(--line); border-radius:12px; padding:12px; margin:0 0 10px; background:#fff; }
+  .pv-day h4 { font-size:14px; color:var(--deep); margin:0 0 8px; }
+  .pv-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:10px; }
+  .pv-q { border:1px solid var(--gray-200); border-radius:10px; padding:10px; font-size:13.5px; }
+  .pv-q .src { font-size:12px; color:var(--gray-500); }
+  .pv-q img { display:block; max-width:100%; margin:6px 0; border:1px solid var(--gray-200); border-radius:6px; }
+  .pv-q .ans { color:var(--sci); font-weight:700; }
+  .pool-row { display:flex; gap:6px; flex-wrap:wrap; font-size:13px; }
+  .pool-row span { background:var(--paper); border:1px solid var(--line); border-radius:999px; padding:3px 10px; }
+  .pool-row span.low { background:var(--warn-bg); border-color:var(--warn-border); color:var(--warn); }
   .working { margin-top:14px; background:var(--paper); border-radius:12px; padding:16px 18px; }
   .working h4 { font-size:14px; color:var(--deep); margin-bottom:8px; text-transform:uppercase; letter-spacing:.08em; }
   .working ol { padding-left:20px; font-size:15px; }
@@ -302,14 +347,21 @@
   <section class="hero" aria-labelledby="hero-title">
     <div class="eyebrow">Free · Primary Maths &amp; Science</div>
     <h1 id="hero-title">Question of the Day.<br><em>One question. One idea. Every day.</em></h1>
-    <p>A new PSLE-style question every day, chosen by Mr Chung for P3 to P6. Let your child try it today, and see the step-by-step worked answer tomorrow, here or in your inbox.</p>
-    <div class="hero-pills"><span class="pill">🔢 Maths P4–P6</span><span class="pill">🔬 Science P3–P6</span><span class="pill">✉️ Daily or weekly email</span></div>
+    <p>A new question every day from Mr Chung's own worksheets, at your child's level from P3 to P6. Your child types an answer and gets instant feedback; the step-by-step worked answer comes tomorrow, here or in your inbox.</p>
+    <div class="hero-pills"><span class="pill">🎯 At your child's level</span><span class="pill">✍️ Typed answers, marked instantly</span><span class="pill">✉️ Daily or weekly email</span></div>
     <a class="cta" href="#join">Get it by email, free</a>
   </section>
 
   <section class="card" id="today" aria-labelledby="today-title">
     <div class="card-head">
       <div><h2 id="today-title">Today's question</h2><div class="day-label" id="today-day">&nbsp;</div></div>
+      <div class="levels" role="radiogroup" aria-label="Your child's level" id="level-pick">
+        <span class="levels-label">Level</span>
+        <button class="lvl" type="button" role="radio" data-level="P3" aria-checked="false">P3</button>
+        <button class="lvl" type="button" role="radio" data-level="P4" aria-checked="false">P4</button>
+        <button class="lvl on" type="button" role="radio" data-level="P5" aria-checked="true">P5</button>
+        <button class="lvl" type="button" role="radio" data-level="P6" aria-checked="false">P6</button>
+      </div>
       <div class="tabs" role="tablist" aria-label="Subject">
         <button class="tab math on" role="tab" aria-selected="true" data-subject="math" type="button">🔢 Maths</button>
         <button class="tab science" role="tab" aria-selected="false" data-subject="science" type="button">🔬 Science</button>
@@ -353,8 +405,9 @@
             </div>
           </div>
         </div>
-        <div class="field"><label for="j-level">Your child's level</label>
-          <select id="j-level"><option value="">Choose (optional)</option><option>P1</option><option>P2</option><option>P3</option><option>P4</option><option>P5</option><option>P6</option><option>Secondary</option><option>Other</option></select>
+        <div class="field"><label for="j-level">Your child's level <span class="req">*</span></label>
+          <select id="j-level" required><option value="">Choose a level</option><option>P3</option><option>P4</option><option>P5</option><option>P6</option></select>
+          <span class="hint">We only ever send questions at or below this level. Questions start at P3.</span>
           <div class="hint">Helps us choose future questions. Every subscriber gets the same daily questions.</div>
         </div>
         <div class="honey" aria-hidden="true"><label for="j-website">Leave this empty</label><input id="j-website" type="text" tabindex="-1" autocomplete="off"></div>
@@ -382,9 +435,9 @@
     <h2 id="how-title">How it works</h2>
     <p class="lead">Five minutes a day builds the habit of thinking a question through.</p>
     <ol class="steps">
-      <li><b>Try today's question</b><span>Your child picks an answer. No sign-in needed.</span></li>
-      <li><b>Come back tomorrow</b><span>See the full working, why the other options are wrong, and the key idea to remember.</span></li>
-      <li><b>Keep the streak going</b><span>A new Maths and Science question every day, from P3 to PSLE.</span></li>
+      <li><b>Try today's question</b><span>Pick your child's level. Your child types an answer and Chung GPT, our marking assistant, says right away if it is right, with a hint if not. No sign-in needed.</span></li>
+      <li><b>Come back tomorrow</b><span>See the model answer, the full working and the key idea to remember.</span></li>
+      <li><b>Keep the streak going</b><span>A new Maths and Science question every day, from P3 to PSLE, never above your child's level.</span></li>
     </ol>
   </section>
 

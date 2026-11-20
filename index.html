@@ -10480,8 +10480,8 @@ html { scroll-behavior:smooth; }
       </div>
     </section>
 
-    <!-- ❓ Free Question of the Day (Nov 2026): today's question from the dailyQuestion function, an answer
-         kept on this device, and a one-field email sign-up. The full page is question/ (question-of-the-day.js). -->
+    <!-- ❓ Free Question of the Day (Nov 2026): today's question at the visitor's level (P3–P6) from the dailyQuestion
+         function, a typed answer marked by Chung GPT (or a multiple choice pick on bank days), and an email + level sign-up. The full page is question/ (question-of-the-day.js). -->
     <section class="lp-section lp-qotd" id="lp-qotd" aria-labelledby="lp-qotd-title">
       <style>
         #landingPage .lp-qotd-grid { display:grid; grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr); gap:44px; align-items:center; }
@@ -10526,6 +10526,31 @@ html { scroll-behavior:smooth; }
         #landingPage .qd-foot, #landingPage .qd-locked { display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-top:14px; font-size:12px; color:var(--lp-muted); }
         #landingPage .qd-locked { display:block; background:#fdf2f8; border:1px solid #fbcfe8; color:var(--lp-plum); border-radius:10px; padding:10px 12px; font-size:13px; }
         #landingPage .qd-foot a, #landingPage .qd-locked a { color:var(--lp-green); font-weight:700; }
+        #landingPage .qd-levels { display:inline-flex; background:var(--lp-paper); border:1px solid var(--lp-line); border-radius:999px; padding:3px; gap:2px; }
+        #landingPage .qd-lvl { border:0; background:transparent; border-radius:999px; padding:6px 10px; font-size:12px; font-weight:700; color:var(--lp-green); cursor:pointer; min-width:36px; }
+        #landingPage .qd-lvl.on { background:var(--lp-green); color:#fff; }
+        #landingPage .qd-day { margin:-6px 0 10px; }
+        #landingPage .qd-lvlnote { font-size:12px; color:var(--lp-muted); margin:-4px 0 8px; }
+        #landingPage .qd-frac { display:inline-flex; flex-direction:column; vertical-align:middle; text-align:center; font-size:.78em; line-height:1.05; margin:0 1px; }
+        #landingPage .qd-frac span:first-child { border-bottom:1.5px solid currentColor; padding:0 2px; }
+        #landingPage .qd-fig { margin:0 0 12px; text-align:center; }
+        #landingPage .qd-fig img { max-width:100%; height:auto; max-height:300px; object-fit:contain; border:1px solid var(--lp-line); border-radius:10px; background:#fff; }
+        #landingPage .qd-more-figs { font-size:12px; margin:-6px 0 10px; }
+        #landingPage .qd-more-figs a { color:var(--lp-green); font-weight:700; }
+        #landingPage .qd-sr { position:absolute; left:-9999px; }
+        #landingPage .qd-answer { width:100%; box-sizing:border-box; min-height:64px; padding:10px 12px; border:1px solid #bdc9cb; border-radius:10px; font:inherit; font-size:15px; resize:vertical; color:var(--lp-ink); background:#fff; }
+        #landingPage .qd-answer:focus { outline:none; border-color:var(--lp-green); box-shadow:0 0 0 3px rgba(13,92,102,.14); }
+        #landingPage .qd-check-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:10px; font-size:12px; color:var(--lp-muted); }
+        #landingPage .qd-check-row .lp-button { min-height:44px; }
+        #landingPage .qd-mark { display:flex; gap:10px; align-items:flex-start; margin-top:12px; border-radius:10px; padding:10px 12px; font-size:13.5px; line-height:1.5; border:1px solid; }
+        #landingPage .qd-mark small { display:block; font-size:11px; color:var(--lp-muted); margin-top:3px; }
+        #landingPage .qd-mark.correct { background:#f0fdf4; border-color:#bbf7d0; color:#14532d; }
+        #landingPage .qd-mark.partial { background:#fffbeb; border-color:#fde68a; color:#78350f; }
+        #landingPage .qd-mark.wrong { background:#fdf2f8; border-color:#fbcfe8; color:var(--lp-plum); }
+        #landingPage .qd-err { color:#c0262d; font-weight:700; font-size:13px; margin:8px 0 0; }
+        #landingPage .qd-none { border:1.5px dashed var(--lp-line); border-radius:12px; padding:18px; text-align:center; font-size:14px; color:var(--lp-muted); }
+        #landingPage .qd-link { border:0; background:none; color:var(--lp-green); font-weight:700; cursor:pointer; font-size:14px; padding:0; }
+        #landingPage .qd-level { min-height:44px; padding:10px 12px; border:1px solid #bdc9cb; border-radius:8px; font-size:15px; background:#fff; color:var(--lp-ink); }
         #landingPage .qd-skel { height:14px; border-radius:6px; background:linear-gradient(90deg,#eef6f7,#f8fcfc,#eef6f7); background-size:200% 100%; animation:qdShimmer 1.2s infinite; margin-bottom:10px; }
         @keyframes qdShimmer { to { background-position:-200% 0; } }
         @media (max-width:860px) {
@@ -10538,9 +10563,10 @@ html { scroll-behavior:smooth; }
         <div class="lp-qotd-copy">
           <div class="lp-eyebrow">Free Question of the Day</div>
           <h2 id="lp-qotd-title">One question a day.<br><em>The answer tomorrow.</em></h2>
-          <p>A new Primary Maths and Science question every day, chosen by Mr Chung for P3 to P6. Try it with your child, then see the step-by-step worked answer the next day.</p>
+          <p>A new Primary Maths and Science question every day, from Mr Chung's own worksheets, for P3 to P6. Your child types an answer and Chung GPT marks it straight away. The step-by-step worked answer comes the next day.</p>
           <ul class="lp-qotd-points">
             <li><svg class="lp-icon" aria-hidden="true"><use href="#lp-check"/></svg><span>PSLE-style questions with full working and the key idea to remember</span></li>
+            <li><svg class="lp-icon" aria-hidden="true"><use href="#lp-check"/></svg><span>Matched to your child's level, never above it</span></li>
             <li><svg class="lp-icon" aria-hidden="true"><use href="#lp-check"/></svg><span>In your inbox every morning, or once a week on Saturday</span></li>
             <li><svg class="lp-icon" aria-hidden="true"><use href="#lp-check"/></svg><span>Free, with one-click unsubscribe</span></li>
           </ul>
@@ -10550,6 +10576,11 @@ html { scroll-behavior:smooth; }
               <input id="qd-email" type="email" name="email" inputmode="email" autocomplete="email" maxlength="120" placeholder="Your email address">
               <button class="lp-button" type="submit">Email me the questions</button>
             </div>
+            <label class="lp-skip-label" for="qd-level" style="position:absolute;left:-9999px">Your child's level</label>
+            <select id="qd-level" name="level" class="qd-level" required>
+              <option value="">Your child's level…</option>
+              <option value="P3">Primary 3</option><option value="P4">Primary 4</option><option value="P5">Primary 5</option><option value="P6">Primary 6</option>
+            </select>
             <div class="qd-honey" aria-hidden="true"><input type="text" name="website" tabindex="-1" autocomplete="off"></div>
             <label class="qd-consent"><input type="checkbox" name="consent"><span>I agree to receive the Free Question of the Day and occasional news about Polymath classes by email. I can unsubscribe at any time.</span></label>
             <div class="qd-note" data-qotd-note aria-live="polite"></div>

@@ -7,7 +7,11 @@
 //   2. pins today's questions (the same ones the website shows);
 //   3. emails every active daily subscriber today's question(s) and yesterday's
 //      worked answer(s), and on Saturdays every weekly subscriber the week's
-//      questions with answers, within the daily cap (Gmail limits; see the core);
+//      questions with answers, within the daily cap (Gmail limits; see the core).
+//      Each parent gets the questions for THEIR child's level, never above it: the
+//      level in the /student enrolment when the family is approved there
+//      (studentAccess), else the level chosen at sign-up. A parent with no level we
+//      can use (none given, P1 or P2) is held back and counted, never guessed;
 //   4. emails the centre one note listing parents who confirmed since the last one;
 //   5. writes what it did to trialSettings/dailyQuestion/runs/{day}.
 //
@@ -31,7 +35,8 @@ const core = localRequire('../shop-function/functions/daily-question-core.js');
 const { createDailyQuestionStore } = localRequire('../shop-function/functions/daily-question-store.js');
 
 const {
-  START_DAY, sgDayKey, sgHour, addDays, publicPair, planRun, readCap, dailyMail, weeklyMail, adminSummaryMail, mailId, stats, millis
+  START_DAY, sgDayKey, sgHour, addDays, publicPair, planRun, readCap, dailyMail, weeklyMail, adminSummaryMail, mailId, stats, millis,
+  subscriberLevels, pool
 } = core;
 
 // The window in which a run may send: a run that GitHub starts very late must not
@@ -41,17 +46,25 @@ export const LAST_HOUR = 21;
 // A short pause between emails, so the mail server is not handed hundreds at once.
 export const GAP_MS = 250;
 
+// The levels a subscriber's questions are at: the approved /student family's
+// (by parent email) when there is one, else the level chosen at sign-up.
+export function levelsFor(sub, families) {
+  const children = families && sub && sub.email ? families.get(String(sub.email).toLowerCase()) : null;
+  return subscriberLevels(sub, children ? pool.familyLevels(children) : null);
+}
+
 // The emails for one subscriber on one day, or null when there is nothing to send.
-export function buildFor(entry, day, pairs) {
+// `pairsAt(day, levels)` gives that day's questions at those levels.
+export function buildFor(entry, day, pairsAt, levels) {
   const { sub, kind } = entry;
   if (kind === 'daily') {
     const yesterday = addDays(day, -1);
-    return dailyMail(sub, day, pairs[day], yesterday >= START_DAY ? pairs[yesterday] : null);
+    return dailyMail(sub, day, pairsAt(day, levels, false), yesterday >= START_DAY ? pairsAt(yesterday, levels, true) : null);
   }
   const week = [];
   for (let i = 7; i >= 1; i--) {
     const d = addDays(day, -i);
-    if (d >= START_DAY && pairs[d]) week.push({ day: d, pair: pairs[d] });
+    if (d >= START_DAY) week.push({ day: d, pair: pairsAt(d, levels, true) });
   }
   if (!week.length) return null;
   return weeklyMail(sub, day, week);
@@ -62,7 +75,7 @@ export function buildFor(entry, day, pairs) {
 export async function runSend({ store, now = Date.now(), dryRun = false, check = false, force = false,
   sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), log = console.log, gapMs = GAP_MS }) {
   const day = sgDayKey(now), hour = sgHour(now);
-  const summary = { day, sent: 0, daily: 0, weekly: 0, already: 0, heldBack: 0, failed: 0, skipped: '', adminNote: 0 };
+  const summary = { day, sent: 0, daily: 0, weekly: 0, already: 0, heldBack: 0, failed: 0, skipped: '', adminNote: 0, noLevel: 0, fromStudent: 0 };
   if (!force && (hour < FIRST_HOUR || hour >= LAST_HOUR)) {
     summary.skipped = 'outside-hours';
     log(`It is ${hour}:00 in Singapore; the questions are only sent between ${FIRST_HOUR}:00 and ${LAST_HOUR}:00. Nothing sent.`);
@@ -80,10 +93,17 @@ export async function runSend({ store, now = Date.now(), dryRun = false, check =
   const earlier = [];
   for (let i = 1; i <= 7; i++) { const d = addDays(day, -i); if (d >= START_DAY) earlier.push(d); }
   const stored = earlier.length ? await store.getDays(earlier) : {};
-  const pairs = { [day]: publicPair(day, todayPick, false) };
-  for (const d of earlier) pairs[d] = publicPair(d, stored[d], true);
+  const picks = Object.assign({ [day]: todayPick }, stored);
+  // The questions for a day at a set of levels, built once per combination.
+  const built = new Map();
+  const pairsAt = (d, levels, withAnswer) => {
+    const key = d + '|' + levels.math + '|' + levels.science + '|' + withAnswer;
+    if (!built.has(key)) built.set(key, publicPair(d, picks[d], withAnswer && d < day, levels));
+    return built.get(key);
+  };
 
   const subscribers = await store.listSubscribers();
+  const families = store.listFamilies ? await store.listFamilies() : new Map();
   const cap = readCap(settings);
   const plan = planRun(subscribers, day, cap);
   summary.heldBack = plan.heldBack.length;
@@ -94,8 +114,12 @@ export async function runSend({ store, now = Date.now(), dryRun = false, check =
 
   const startedAt = now;
   for (const entry of plan.send) {
-    const message = buildFor(entry, day, pairs);
-    if (!message) continue;
+    const levels = levelsFor(entry.sub, families);
+    if (families.has(String(entry.sub.email || '').toLowerCase())) summary.fromStudent++;
+    // No level we may use: hold the email (and say so) rather than risk one above the child.
+    if (!levels.math && !levels.science) { summary.noLevel++; continue; }
+    const message = buildFor(entry, day, pairsAt, levels);
+    if (!message) { summary.noLevel++; continue; }
     if (dryRun) { summary[entry.kind]++; summary.sent++; continue; }
     const field = entry.kind === 'weekly' ? 'lastWeeklyDay' : 'lastDailyDay';
     try {
@@ -131,11 +155,13 @@ export async function runSend({ store, now = Date.now(), dryRun = false, check =
       sent: (Number(previous.sent) || 0) + summary.sent, daily: (Number(previous.daily) || 0) + summary.daily,
       weekly: (Number(previous.weekly) || 0) + summary.weekly, heldBack: summary.heldBack, failed: (Number(previous.failed) || 0) + summary.failed,
       active: totals.active, cap, paused: false, startedAt: previous.startedAt || startedAt, finishedAt: Date.now(),
-      questions: { math: todayPick.math, science: todayPick.science }
+      noLevel: summary.noLevel, fromStudent: summary.fromStudent, questions: todayPick.picks
     });
   }
   log(`${dryRun ? 'Dry run: would send' : 'Sent'} ${summary.sent} email(s): ${summary.daily} daily, ${summary.weekly} weekly. `
     + `${summary.already} already sent earlier today. ${summary.failed} failed. ${summary.adminNote} new subscriber(s) in the centre's note.`);
+  if (summary.noLevel) log(`${summary.noLevel} subscriber(s) had no question at or below their child's level today (no level set, P1/P2, or none waiting at that level); nothing was sent to them.`);
+  if (summary.fromStudent) log(`${summary.fromStudent} subscriber(s) got questions at the level of their /student enrolment.`);
   if (summary.heldBack) log(`::warning::${summary.heldBack} subscriber(s) did not get today's email because of the daily cap of ${cap}. Raise it on polymathlc.com.sg/question/#admin if the Gmail account allows.`);
   return summary;
 }
