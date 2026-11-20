@@ -31,6 +31,8 @@ export const TRIAL_ADMIN_ENDPOINT = BASE + 'trialAdmin';
 export const TRIAL_MATERIAL_ENDPOINT = BASE + 'trialMaterial';
 // Mr Chung's Maps library on /maps (the monthly subscription), signed in.
 export const MAPS_ENDPOINT = BASE + 'mapsLibrary';
+// The /notebook mistake notebook (signed in).
+export const NOTEBOOK_ENDPOINT = BASE + 'mistakeNotebook';
 export const REFUSED_PROBE = 'https://shop-smoke.invalid';
 export const SMOKE_ATTEMPTS = 6;
 export const SMOKE_WAIT_MS = 10000;
@@ -44,14 +46,14 @@ async function preflight(endpoint, origin, fetchImpl) {
 
 export async function smokeProblems({ webhookExpected = true, fetchImpl = globalThis.fetch } = {}) {
   const problems = [];
-  for (const endpoint of [CHECKOUT_ENDPOINT, STATUS_ENDPOINT, RECEIPT_ENDPOINT, SCHEDULE_CHECKOUT_ENDPOINT, SCHEDULE_STATUS_ENDPOINT, DIAGNOSTIC_ENDPOINT, DIAGNOSTIC_REPORT_ENDPOINT, TRIAL_ENDPOINT, TRIAL_ADMIN_ENDPOINT, MAPS_ENDPOINT]) {
+  for (const endpoint of [CHECKOUT_ENDPOINT, STATUS_ENDPOINT, RECEIPT_ENDPOINT, SCHEDULE_CHECKOUT_ENDPOINT, SCHEDULE_STATUS_ENDPOINT, DIAGNOSTIC_ENDPOINT, DIAGNOSTIC_REPORT_ENDPOINT, TRIAL_ENDPOINT, TRIAL_ADMIN_ENDPOINT, MAPS_ENDPOINT, NOTEBOOK_ENDPOINT]) {
     const name = endpoint.slice(BASE.length);
     for (const origin of ORIGINS) {
       try {
         const seen = await preflight(endpoint, origin, fetchImpl);
         if (seen.status !== 204) problems.push(`${name} from ${origin}: expected 204 to the preflight, got ${seen.status}.`);
         if (seen.allowOrigin !== origin) problems.push(`${name} from ${origin}: no matching Access-Control-Allow-Origin, so the page could not reach it.`);
-        else if ((endpoint === RECEIPT_ENDPOINT || endpoint === TRIAL_ADMIN_ENDPOINT || endpoint === MAPS_ENDPOINT) && !seen.allowHeaders.includes('authorization'))
+        else if ((endpoint === RECEIPT_ENDPOINT || endpoint === TRIAL_ADMIN_ENDPOINT || endpoint === MAPS_ENDPOINT || endpoint === NOTEBOOK_ENDPOINT) && !seen.allowHeaders.includes('authorization'))
           problems.push(`${name} from ${origin}: the admin's sign-in header is not allowed, so the admin page could not use it.`);
       } catch (error) { problems.push(`${name} from ${origin}: the preflight did not complete (${error?.message || error}).`); }
     }
