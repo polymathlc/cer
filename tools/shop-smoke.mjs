@@ -33,6 +33,8 @@ export const TRIAL_MATERIAL_ENDPOINT = BASE + 'trialMaterial';
 export const MAPS_ENDPOINT = BASE + 'mapsLibrary';
 // The /notebook mistake notebook (signed in).
 export const NOTEBOOK_ENDPOINT = BASE + 'mistakeNotebook';
+// The /results school results page (a parent's family link).
+export const RESULTS_ENDPOINT = BASE + 'schoolResults';
 export const REFUSED_PROBE = 'https://shop-smoke.invalid';
 export const SMOKE_ATTEMPTS = 6;
 export const SMOKE_WAIT_MS = 10000;
@@ -46,7 +48,7 @@ async function preflight(endpoint, origin, fetchImpl) {
 
 export async function smokeProblems({ webhookExpected = true, fetchImpl = globalThis.fetch } = {}) {
   const problems = [];
-  for (const endpoint of [CHECKOUT_ENDPOINT, STATUS_ENDPOINT, RECEIPT_ENDPOINT, SCHEDULE_CHECKOUT_ENDPOINT, SCHEDULE_STATUS_ENDPOINT, DIAGNOSTIC_ENDPOINT, DIAGNOSTIC_REPORT_ENDPOINT, TRIAL_ENDPOINT, TRIAL_ADMIN_ENDPOINT, MAPS_ENDPOINT, NOTEBOOK_ENDPOINT]) {
+  for (const endpoint of [CHECKOUT_ENDPOINT, STATUS_ENDPOINT, RECEIPT_ENDPOINT, SCHEDULE_CHECKOUT_ENDPOINT, SCHEDULE_STATUS_ENDPOINT, DIAGNOSTIC_ENDPOINT, DIAGNOSTIC_REPORT_ENDPOINT, TRIAL_ENDPOINT, TRIAL_ADMIN_ENDPOINT, MAPS_ENDPOINT, NOTEBOOK_ENDPOINT, RESULTS_ENDPOINT]) {
     const name = endpoint.slice(BASE.length);
     for (const origin of ORIGINS) {
       try {

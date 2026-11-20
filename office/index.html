@@ -651,6 +651,74 @@
   .meter { height:8px; border-radius:999px; background:var(--grey-bg); overflow:hidden; }
   .meter span { display:block; height:100%; background:var(--deep); transition:width .3s; }
 
+  /* ─── 📊 School results (school-results.mjs) ─── */
+  .sr-top { display:grid; grid-template-columns:minmax(0,2fr) minmax(0,1fr); gap:18px; align-items:start; }
+  .sr-top > .card + .card { margin-top:0; }
+  .sr-card-top { display:flex; gap:12px; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; }
+  .sr-card-top .actions select, .sr-filters select { border:1px solid var(--line); border-radius:9px; padding:8px 10px; background:var(--white); font-size:13.5px; }
+  .sr-filters { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:0 0 14px; }
+  .sr-seg { display:inline-flex; border:1px solid var(--line); border-radius:10px; overflow:hidden; background:var(--white); }
+  .sr-seg button { border:none; background:none; padding:8px 12px; font-weight:700; font-size:13px; color:var(--ink-2); }
+  .sr-seg button + button { border-left:1px solid var(--line); }
+  .sr-seg button.on { background:var(--deep); color:#fff; }
+  .sr-check { display:inline-flex; gap:6px; align-items:center; font-size:13px; color:var(--ink-2); }
+  .sr-tiles { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+  .sr-tile { border:1px solid var(--line); border-radius:14px; padding:14px; background:#fbfdfd; }
+  .sr-tile .l { font-size:11.5px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.07em; }
+  .sr-tile .v { font-family:var(--head); font-size:26px; font-weight:800; margin-top:4px; font-variant-numeric:tabular-nums; }
+  .sr-tile .h { font-size:12.5px; color:var(--muted); margin-top:2px; }
+  .sr-tile.good .v { color:var(--green); }
+  .sr-sentences { display:flex; flex-direction:column; gap:8px; margin-top:14px; }
+  .sr-sentence { display:flex; gap:12px; align-items:center; justify-content:space-between; padding:12px 14px; border-radius:12px; background:#f3fbf7; border:1px solid var(--green-line); }
+  .sr-sentence .t { font-weight:700; font-size:15px; }
+  .sr-sentence .b { font-size:12.5px; color:var(--muted); margin-top:2px; }
+  .sr-mini { display:flex; flex-direction:column; gap:4px; font-size:14px; }
+  .sr-mini b { font-size:18px; }
+  .sr-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px; margin-top:6px; }
+  .sr-kid { border:1px solid var(--line); border-radius:14px; padding:14px; background:var(--white); display:flex; flex-direction:column; gap:6px; }
+  .sr-kid.left { opacity:.7; }
+  .sr-kid-top { display:flex; gap:10px; align-items:flex-start; justify-content:space-between; }
+  .sr-who { flex:1; min-width:0; }
+  .sr-who b { font-size:15.5px; }
+  .sr-who .small { margin-top:2px; }
+  .sr-card-top .actions input.search { width:240px; max-width:100%; }
+  .lv { background:var(--paper); border:1px solid var(--line); border-radius:999px; padding:0 8px; font-weight:700; font-size:11.5px; color:var(--deep); }
+  .sr-kid .warn { color:var(--amber); font-weight:700; }
+  .sr-chart-box { border:1px solid var(--line-2); border-radius:12px; overflow:hidden; background:#fff; }
+  .sr-chart-box svg { display:block; width:100%; height:auto; }
+  .sr-line { display:flex; gap:8px; align-items:baseline; font-size:13px; line-height:1.45; }
+  .sr-line .txt { min-width:0; }
+  .sr-line .why { color:var(--muted); font-size:12px; }
+  .sr-line.up .d { color:var(--green); }
+  .sr-line.down .d { color:var(--amber); }
+  .sr-line.same .d { color:var(--ink-2); }
+  .sr-foot { margin-top:auto; }
+  .sr-btns { display:inline-flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+  table.sr-wait td, table.sr-results td { vertical-align:middle; }
+  .sr-overlay { position:fixed; inset:0; background:rgba(10,30,36,.55); z-index:80; display:flex; align-items:center; justify-content:center; padding:12px; }
+  .sr-dialog { background:#fff; border-radius:16px; max-width:820px; width:100%; max-height:94vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,.3); }
+  .sr-dialog-head { padding:14px 18px; border-bottom:1px solid var(--line); display:flex; gap:10px; align-items:center; }
+  .sr-dialog-body { padding:16px 18px 20px; overflow:auto; }
+  .sr-form { background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:14px; margin:12px 0; }
+  .sr-form h3 { font-size:15px; margin:0 0 10px; }
+  .sr-form-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+  .sr-form-grid label { display:flex; flex-direction:column; gap:4px; font-size:12.5px; font-weight:700; color:var(--ink-2); }
+  .sr-form-grid input, .sr-form-grid select { border:1px solid var(--line); border-radius:9px; padding:9px 10px; font-size:14px; background:#fff; font-weight:500; color:var(--ink); min-width:0; }
+  .sr-marks { display:flex; gap:6px; align-items:center; font-weight:600; color:var(--muted); }
+  .sr-marks input { width:100%; }
+  .sr-err { margin-top:10px; background:var(--red-bg); color:var(--red); border-radius:9px; padding:8px 12px; font-weight:600; font-size:13.5px; }
+  .sr-linkbox { margin-top:16px; border-top:1px solid var(--line); padding-top:14px; }
+  @media (max-width:1000px) { .sr-top { grid-template-columns:minmax(0,1fr); } .sr-tiles { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+  @media (max-width:640px) {
+    .sr-form-grid { grid-template-columns:minmax(0,1fr); }
+    .sr-sentence { flex-direction:column; align-items:stretch; }
+    .sr-grid { grid-template-columns:minmax(0,1fr); }
+    .sr-tile .v { font-size:22px; }
+    .sr-dialog { max-height:100vh; border-radius:12px; }
+    .sr-overlay { padding:0; }
+    table.sr-results th:nth-child(5), table.sr-results td:nth-child(5) { display:none; }
+  }
+
   /* ─── 💬 Lesson updates (lesson-updates.mjs) ─── */
   .lu-daybar { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin:0 0 10px; }
   .lu-daybar input[type=date] { padding:8px 10px; border:1px solid var(--line); border-radius:10px; background:var(--white); font-size:14px; }
@@ -783,6 +851,7 @@
         <button class="tab" data-view="announce" type="button"><span class="ico">📣</span><span class="lbl">Announce</span></button>
         <button class="tab" data-view="reports" type="button"><span class="ico">📈</span><span class="lbl">Reports</span></button>
         <button class="tab" data-view="lessons" type="button"><span class="ico">💬</span><span class="lbl">Lessons</span><span class="count hidden" data-count="lessons"></span></button>
+        <button class="tab" data-view="results" type="button"><span class="ico">📊</span><span class="lbl">Results</span><span class="count hidden" data-count="results"></span></button>
         <button class="tab" data-view="referrals" type="button"><span class="ico">🎁</span><span class="lbl">Referrals</span><span class="count hidden" data-count="referrals"></span></button>
         <button class="tab" data-view="settings" type="button"><span class="ico">⚙️</span><span class="lbl">Settings</span></button>
       </nav>
@@ -808,5 +877,7 @@
 <script type="module" src="weekly-reports.mjs?v=1.0.0"></script>
 <!-- 💬 Parent WhatsApp lesson updates: the Lessons tab (v1.18.0) -->
 <script type="module" src="lesson-updates.mjs?v=1.0.0"></script>
+<!-- 📊 School results before and after joining: the Results tab -->
+<script type="module" src="school-results.mjs?v=1.0.0"></script>
 </body>
 </html>

@@ -1,0 +1,55 @@
+name: Polymath school results
+
+# 📊 School results (polymathlc.com.sg/office/#results and /results/?f=…&k=…):
+# the rules (office/school-results-core.mjs), the parent's schoolResults function
+# (shop-function/functions/school-results.js, deployed by deploy-shop.yml), and
+# both pages driven in Chromium: the Office on tools/office-fake-firebase.js and
+# the parent's page on the real function in memory (tools/school-results-browser.mjs).
+# Nothing is sent anywhere.
+
+on:
+  pull_request:
+    paths: ['office/school-results*', 'office/index.html', 'results/**', 'shop-function/functions/school-results.js', 'shop-function/functions/test/school-results.test.js', 'tools/school-results*', 'tools/office-fake-firebase.js', '.github/workflows/school-results.yml']
+  push:
+    branches: [main]
+    paths: ['office/school-results*', 'office/index.html', 'results/**', 'shop-function/functions/school-results.js', 'shop-function/functions/test/school-results.test.js', 'tools/school-results*', 'tools/office-fake-firebase.js', '.github/workflows/school-results.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  results:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Rules and server tests
+        run: |
+          node --check office/school-results.mjs
+          node --test tools/school-results-tests.mjs
+          node --test shop-function/functions/test/school-results.test.js
+
+      - name: Install Chromium
+        run: |
+          npm install --prefix "$RUNNER_TEMP/results-libs" --no-save --no-audit --no-fund playwright@1.62.1
+          "$RUNNER_TEMP/results-libs/node_modules/.bin/playwright" install --with-deps chromium
+
+      - name: The Office and a parent, in a browser
+        env:
+          PW: ${{ runner.temp }}/results-libs/node_modules/playwright/index.mjs
+          RESULTS_SHOTS: artifacts/school-results
+        run: node tools/school-results-browser.mjs
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: school-results-screens
+          path: artifacts/school-results
+          if-no-files-found: ignore
