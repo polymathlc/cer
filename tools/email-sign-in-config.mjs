@@ -7,10 +7,12 @@
 //       • the Email/Password sign-in method (Authentication → Sign-in method)
 //       • polymathlc.com.sg and polymathlc.github.io as authorised domains, so the
 //         emails' "Continue" button can bring people back to the page they came from
-//       • the verification and password-reset emails: sender name "Polymath Learning
+//       • tries the verification and password-reset emails: sender name "Polymath Learning
 //         Centre", Polymath subjects and wording, replies to admin@polymathlc.com.sg
 //         (sent by Firebase itself from noreply@mathgen--app.firebaseapp.com, so they
-//         do NOT use the Gmail quota of the other Polymath emails)
+//         do NOT use the Gmail quota of the other Polymath emails). Firebase refuses
+//         this through the API (EMAIL_TEMPLATE_UPDATE_NOT_ALLOWED, seen 2026-11-20):
+//         the wording is changed only in the console, so that is reported, not failed.
 //
 // Needs GOOGLE_APPLICATION_CREDENTIALS (a service-account JSON key file); in GitHub
 // Actions the "--setup" step of tools/student-access-rules.mjs writes it. Prints one
@@ -136,7 +138,7 @@ export async function run({ apply = false, keyFile = process.env.GOOGLE_APPLICAT
   let config = await api(token, 'GET', '/config');
   const before = summary(config);
   const steps = plan(config);
-  const done = [], failed = [];
+  const done = [], failed = [], consoleOnly = [];
   if (apply) {
     for (const step of steps) {
       try {
@@ -148,13 +150,18 @@ export async function run({ apply = false, keyFile = process.env.GOOGLE_APPLICAT
             config = await api(token, 'PATCH', '/config?updateMask=' + encodeURIComponent(step.fallback.mask.join(',')), step.fallback.body);
             done.push(step.what + ' (names and subject only: ' + error.message.slice(0, 120) + ')');
             continue;
-          } catch (second) { failed.push(step.what + ': ' + second.message); continue; }
+          } catch (second) {
+            // Firebase lets only the console change these two emails (checked 2026-11-20):
+            // a known limit, reported in the summary rather than failing the run.
+            if (/EMAIL_TEMPLATE_UPDATE_NOT_ALLOWED/.test(second.message)) { consoleOnly.push(step.what.replace('template:', '')); continue; }
+            failed.push(step.what + ': ' + second.message); continue;
+          }
         }
         failed.push(step.what + ': ' + error.message);
       }
     }
   }
-  return { mode: apply ? 'apply' : 'read', before, after: summary(config), needed: steps.map(s => s.what), done, failed };
+  return { mode: apply ? 'apply' : 'read', before, after: summary(config), needed: steps.map(s => s.what), done, failed, consoleOnly };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -169,6 +176,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     console.log(`Password reset email: ${a.resetPassword}`);
     console.log(`Email enumeration protection: ${a.emailEnumerationProtection}`);
     if (result.done.length) console.log('Changed: ' + result.done.join('; '));
+    if (result.consoleOnly.length) console.log('Email wording is changed only in the Firebase console (Authentication → Templates): ' + result.consoleOnly.join(', ') + '. The emails work as they are.');
     if (result.failed.length) { console.log('Could not change: ' + result.failed.join('; ')); process.exitCode = 2; }
     if (!apply && result.needed.length) console.log('Would change: ' + result.needed.join(', '));
   } catch (error) {
