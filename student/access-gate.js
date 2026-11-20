@@ -1,5 +1,5 @@
 /*
-  POLYMATH STUDENT ACCESS GATE  (v1.1.0, November 2026)
+  POLYMATH STUDENT ACCESS GATE  (v1.2.0, November 2026)
   ======================================================
   One script, loaded by every student app — Science (/cer), Math, Answer Keys,
   Study Buddy, Rewards, English, Chinese, Worksheets (/online) and the My
@@ -39,6 +39,16 @@
     child's subjects at polymathlc.com.sg/student/#admin and the app follows:
     the screen checks again whenever the student comes back to the tab.
   • The admins approve, revoke and edit at polymathlc.com.sg/student/#admin.
+  • EMAIL ACCOUNTS (v1.2.0). The gate also loads email-sign-in.js (this folder),
+    which puts "✉️ Sign in with email" next to the app's Google button: create
+    an account with any email and a password, sign in, or reset a forgotten
+    password by email. A new email-and-password account must open the
+    verification link Firebase emails it before the enrolment form appears
+    ("Confirm your email address", which carries on by itself once the link is
+    opened), so the centre never approves a mistyped or made-up address.
+    Never asked to verify: Google accounts (Google verified them), centre
+    usernames (no inbox), and any account that already has a record (approved,
+    waiting or paused) — nobody who could get in before loses access.
 
   WHY IT IS SAFE TO SHIP BEFORE THE RULES
   The record is protected by the Firestore rules block "polymath-student-access-v1"
@@ -56,7 +66,16 @@
   var root = typeof window !== 'undefined' ? window : this;
   if (root.PolymathAccess && root.PolymathAccess.version) return;   // loaded twice: the first one wins
 
-  var VERSION = '1.1.0';
+  var VERSION = '1.2.0';
+  var EMAIL_SIGN_IN = 'email-sign-in.js?v=1.0.0';
+  var EMAIL_SIGN_IN_FALLBACK = 'https://polymathlc.github.io/cer/student/' + EMAIL_SIGN_IN;
+  // Centre usernames are stored as username@this-domain (no inbox to verify).
+  var USERNAME_DOMAINS = ['students.sciencequest.app'];
+  var VERIFY_SENT_PREFIX = 'polymath-verify-sent-v1:';   // shared with email-sign-in.js
+  var VERIFY_RESEND_MS = 60 * 1000;
+  var VERIFY_POLL_MS = 5000;
+  // Where the verification link may send people back to (an authorised domain in Firebase).
+  var RETURN_HOSTS = ['polymathlc.com.sg', 'www.polymathlc.com.sg', 'polymathlc.github.io', 'mathgen--app.web.app', 'mathgen--app.firebaseapp.com'];
   var PROJECT = 'mathgen--app';
   var API_KEY = 'AIzaSyAUSI3Uh28IeqASEp0JhH4QPaVt-O3meBo';
   var DOCS = 'https://firestore.googleapis.com/v1/projects/' + PROJECT + '/databases/(default)/documents';
@@ -131,6 +150,42 @@
     if (user.isAnonymous) return false;
     if (isStaff(user.email, user.emailVerified)) return false;
     return true;
+  }
+
+  function isUsernameEmail(email) {
+    var text = lower(email);
+    for (var i = 0; i < USERNAME_DOMAINS.length; i++) {
+      if (text.slice(-(USERNAME_DOMAINS[i].length + 1)) === '@' + USERNAME_DOMAINS[i]) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Must this account confirm its email before it may ask for access? Only an
+   * email-and-password account whose address is not confirmed yet. Never a
+   * guest, a Google account, a centre username, or an account of unknown kind.
+   * (Keep equal to needsVerification in email-sign-in.js — a test checks.)
+   */
+  function needsVerification(user) {
+    if (!user || !user.uid || user.isAnonymous) return false;
+    if (user.emailVerified === true) return false;
+    if (!user.email || isUsernameEmail(user.email)) return false;
+    var data = Array.isArray(user.providerData) ? user.providerData : [];
+    var providers = [];
+    for (var i = 0; i < data.length; i++) if (data[i] && data[i].providerId) providers.push(data[i].providerId);
+    if (!providers.length) return false;
+    return providers.indexOf('password') >= 0;
+  }
+
+  /** The verify screen shows only to a NEW account (no record yet) that needs it. */
+  function mustVerifyFirst(user, record) {
+    return !record && needsVerification(user);
+  }
+
+  function verifyReturnUrl(location) {
+    if (!location || location.protocol !== 'https:') return null;
+    if (RETURN_HOSTS.indexOf(lower(location.hostname)) < 0) return null;
+    return 'https://' + location.hostname + (location.pathname || '/');
   }
 
   function statusOf(record) {
@@ -362,7 +417,9 @@
     subjectsOfChoice: subjectsOfChoice, approvedSubjects: approvedSubjects, approvedLevels: approvedLevels,
     approvedPairs: approvedPairs, subjectAllowed: subjectAllowed, cleanSubjectList: cleanSubjectList,
     encodeValue: encodeValue, encodeFields: encodeFields, decodeValue: decodeValue, decodeFields: decodeFields,
-    escapeHtml: escapeHtml
+    escapeHtml: escapeHtml,
+    USERNAME_DOMAINS: USERNAME_DOMAINS, isUsernameEmail: isUsernameEmail, needsVerification: needsVerification,
+    mustVerifyFirst: mustVerifyFirst, verifyReturnUrl: verifyReturnUrl
   };
 
   /* ================================================================== */
@@ -520,7 +577,10 @@
     return {
       kind: 'compat',
       listen: function (fn) { return auth.onAuthStateChanged(fn); },
-      signOut: function () { return auth.signOut(); }
+      signOut: function () { return auth.signOut(); },
+      current: function () { return auth.currentUser; },
+      reload: function (user) { return user.reload(); },
+      verify: function (user, settings) { return settings ? user.sendEmailVerification(settings) : user.sendEmailVerification(); }
     };
   }
 
@@ -541,10 +601,14 @@
     if (!app) return null;
     var auth;
     try { auth = modular.auth.getAuth(app); } catch (error) { return null; }
+    var A = modular.auth;
     return {
       kind: 'modular',
-      listen: function (fn) { return modular.auth.onAuthStateChanged(auth, fn); },
-      signOut: function () { return modular.auth.signOut(auth); }
+      listen: function (fn) { return A.onAuthStateChanged(auth, fn); },
+      signOut: function () { return A.signOut(auth); },
+      current: function () { return auth.currentUser; },
+      reload: function (user) { return A.reload(user); },
+      verify: function (user, settings) { return settings ? A.sendEmailVerification(user, settings) : A.sendEmailVerification(user); }
     };
   }
 
@@ -568,6 +632,7 @@
     runToken++;
     var mine = runToken;
     stopRecheck();
+    stopVerify();
     editing = false;
     state.record = null;
     state.error = '';
@@ -599,6 +664,7 @@
           if (!subjectAllowed(record, APP_SUBJECT)) { setPhase('subject'); return scheduleRecheck(); }
           return setPhase('approved');
         }
+        if (status === 'none' && mustVerifyFirst(user, record)) { setPhase('verify'); return startVerify(mine); }
         if (status === 'none') { if (!draft) draft = draftFrom(null, user); return setPhase('form'); }
         if (!editing) draft = draftFrom(record, user);
         setPhase(status);
@@ -625,6 +691,95 @@
     }, RECHECK_PENDING_MS);
   }
   function stopRecheck() { if (recheckTimer) { root.clearTimeout(recheckTimer); recheckTimer = null; } }
+
+  /* ---------------- "Confirm your email address" (v1.2.0) ---------------- */
+  var verifyTimer = null;
+  var verifyNote = null;      // { good, text } under the buttons
+  var verifyBusy = false;
+
+  function verifySentAt(uid) {
+    try { return Number(root.localStorage.getItem(VERIFY_SENT_PREFIX + uid)) || 0; } catch (error) { return 0; }
+  }
+  function rememberVerifySent(uid) {
+    try { root.localStorage.setItem(VERIFY_SENT_PREFIX + uid, String(Date.now())); } catch (error) { /* private mode */ }
+  }
+
+  var verifySending = null;
+  function sendVerify(force) {
+    if (verifySending) return verifySending;   // one email at a time
+    verifySending = sendVerifyNow(force);
+    var clear = function () { verifySending = null; };
+    verifySending.then(clear, clear);
+    return verifySending;
+  }
+  function sendVerifyNow(force) {
+    var user = state.user;
+    if (!user || !adapter || typeof adapter.verify !== 'function') return Promise.reject({ code: 'auth/no-current-user' });
+    if (!force && Date.now() - verifySentAt(user.uid) < VERIFY_RESEND_MS) return Promise.resolve(false);
+    var url = verifyReturnUrl(root.location);
+    var settings = url ? { url: url } : null;
+    return Promise.resolve(adapter.verify(user, settings)).catch(function (error) {
+      // Firebase refused the return address: send the plain email instead.
+      if (settings && /continue-uri|unauthorized-domain|argument-error/.test(String(error && error.code || ''))) return adapter.verify(user, null);
+      throw error;
+    }).then(function () { rememberVerifySent(user.uid); return true; });
+  }
+
+  function verifyErrorText(error) {
+    var code = String(error && error.code || '');
+    if (/too-many-requests/.test(code)) return 'We have just sent you one. Please wait a few minutes before asking for another, and look in Spam or Promotions.';
+    if (/network/.test(code)) return 'We could not reach the internet. Check your connection, then try again.';
+    return 'The email could not be sent just now' + (code ? ' (' + code.replace(/^auth\//, '') + ')' : '') + '. Please try again in a moment, or WhatsApp us on ' + WHATSAPP_NUMBER + '.';
+  }
+
+  function startVerify(mine) {
+    verifyNote = null;
+    // Send the link once (email-sign-in.js has usually just sent it already).
+    sendVerify(false).then(function (sent) {
+      if (mine !== runToken || state.phase !== 'verify') return;
+      if (sent) { verifyNote = { good: true, text: 'Link sent. It can take a minute or two to arrive.' }; render(); }
+    }, function (error) {
+      if (mine !== runToken || state.phase !== 'verify') return;
+      verifyNote = { good: false, text: verifyErrorText(error) };
+      render();
+    });
+    stopVerify();
+    verifyTimer = root.setInterval(function () {
+      if (mine !== runToken || state.phase !== 'verify') return stopVerify();
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      checkVerified(mine, true);
+    }, VERIFY_POLL_MS);
+  }
+  function stopVerify() { if (verifyTimer) { root.clearInterval(verifyTimer); verifyTimer = null; } }
+
+  /** Re-reads the account; once the email is confirmed, carries on to the enrolment form. */
+  function checkVerified(mine, quiet) {
+    var user = state.user;
+    if (!user || !adapter || typeof adapter.reload !== 'function' || verifyBusy) return;
+    if (!quiet) { verifyBusy = true; render(); }
+    Promise.resolve(adapter.reload(user)).then(function () {
+      var fresh = (adapter.current && adapter.current()) || user;
+      verifyBusy = false;
+      if (mine !== runToken) return;
+      if (fresh.emailVerified) {
+        stopVerify();
+        state.user = fresh;
+        var refresh = typeof fresh.getIdToken === 'function' ? Promise.resolve(fresh.getIdToken(true)).catch(function () {}) : Promise.resolve();
+        return refresh.then(function () {
+          if (mine !== runToken) return;
+          if (!draft) draft = draftFrom(null, fresh);
+          setPhase('checking');
+          check(mine, false);
+        });
+      }
+      if (!quiet) { verifyNote = { good: false, text: 'We cannot see the confirmation yet. Open the link in the email first, then press this button again.' }; render(); }
+    }, function (error) {
+      verifyBusy = false;
+      if (mine !== runToken || quiet) return;
+      verifyNote = { good: false, text: verifyErrorText(error) };
+      render();
+    });
+  }
 
   function draftFrom(record, user) {
     var children = record && Array.isArray(record.children) ? record.children.map(function (child) {
@@ -677,7 +832,7 @@
   /*  The pop-up (its own shadow root: no app's CSS can reach it)         */
   /* ================================================================== */
   var host = null, shadow = null, observer = null, madeInert = false, savedOverflow = null;
-  var BLOCKING = { checking: true, form: true, pending: true, revoked: true, error: true, subject: true };
+  var BLOCKING = { checking: true, form: true, pending: true, revoked: true, error: true, subject: true, verify: true };
 
   var STYLE = [
     ':host{all:initial}',
@@ -734,7 +889,9 @@
     '@keyframes spin{to{transform:rotate(360deg)}}',
     '.center{text-align:center}',
     '.help{margin-top:18px;font-size:14px;color:#5C5C5C}',
-    '.help a{color:#0B6B4F}'
+    '.help a{color:#0B6B4F}',
+    '.steps{margin:6px 0 12px;padding-left:20px;color:#3D3D3D}',
+    '.steps li{margin:4px 0}'
   ].join('\n');
 
   function ensureHost() {
@@ -905,6 +1062,21 @@
       '</div>' + helpLine();
   }
 
+  function verifyHtml() {
+    var email = state.user && state.user.email ? state.user.email : 'your email';
+    var note = verifyNote ? '<div class="' + (verifyNote.good ? 'summary' : 'banner') + '" role="' + (verifyNote.good ? 'status' : 'alert') + '">' + escapeHtml(verifyNote.text) + '</div>' : '';
+    return header() +
+      '<h1>Confirm your email address</h1>' +
+      '<p>Welcome to Polymath! We have sent a link to <span class="who">' + escapeHtml(email) + '</span>. Please open it to confirm this is your email address. Then you can tell us about your child.</p>' +
+      '<ol class="steps"><li>Open the email from Polymath (look in Spam or Promotions too).</li><li>Tap the link in it.</li><li>Come back to this page. It carries on by itself.</li></ol>' +
+      note +
+      '<div class="actions">' +
+      '<button type="button" class="primary" data-action="verified"' + (verifyBusy ? ' disabled' : '') + '>' + (verifyBusy ? 'Checking…' : 'I have opened the link') + '</button>' +
+      '<button type="button" class="ghost" data-action="resend">Send the email again</button>' +
+      '<button type="button" class="link" data-action="sign-out">Wrong email? Sign out</button>' +
+      '</div>' + helpLine();
+  }
+
   function checkingHtml() {
     return header() + '<div class="center"><div class="spinner" aria-hidden="true"></div><h1>Checking your access…</h1>' + signedInAs() + '</div>';
   }
@@ -927,6 +1099,7 @@
     else if (state.phase === 'pending') body = pendingHtml();
     else if (state.phase === 'revoked') body = revokedHtml();
     else if (state.phase === 'subject') body = subjectHtml();
+    else if (state.phase === 'verify') body = verifyHtml();
     else body = checkingHtml();
     var focusName = null, active = shadow.activeElement;
     if (active && active.name) focusName = active.name;
@@ -984,6 +1157,19 @@
     else if (action === 'recheck' || action === 'retry') { setPhase('checking'); check(runToken, false); }
     else if (action === 'edit') { editing = true; stopRecheck(); draft = draftFrom(state.record, state.user); draft.enrolled = false; render(); }
     else if (action === 'cancel-edit') { editing = false; render(); if (state.phase === 'pending') scheduleRecheck(); }
+    else if (action === 'verified') { checkVerified(runToken, false); }
+    else if (action === 'resend') {
+      var mine = runToken;
+      sendVerify(true).then(function () {
+        if (mine !== runToken) return;
+        verifyNote = { good: true, text: 'Sent again. It can take a minute or two to arrive. Look in Spam or Promotions too.' };
+        render();
+      }, function (error) {
+        if (mine !== runToken) return;
+        verifyNote = { good: false, text: verifyErrorText(error) };
+        render();
+      });
+    }
   }
 
   /* ================================================================== */
@@ -996,15 +1182,35 @@
     APP_SUBJECT = cleanAppSubject(script && script.getAttribute('data-subject'));
     var waiting = function () { return (state.phase === 'pending' || state.phase === 'subject') && !editing; };
     if (typeof document !== 'undefined' && root.addEventListener) {
-      root.addEventListener('focus', function () { if (waiting()) check(runToken, true); });
+      root.addEventListener('focus', function () {
+        if (waiting()) check(runToken, true);
+        if (state.phase === 'verify') checkVerified(runToken, true);
+      });
       document.addEventListener('visibilitychange', function () {
-        if (document.visibilityState === 'visible' && waiting()) check(runToken, true);
+        if (document.visibilityState !== 'visible') return;
+        if (waiting()) check(runToken, true);
+        if (state.phase === 'verify') checkVerified(runToken, true);
       });
     }
+    loadEmailSignIn(script);
     findAuth(function (found) {
       adapter = found;
       try { found.listen(onUser); } catch (error) { /* nothing to listen to: the app has no sign-in here */ }
     });
+  }
+
+  /** Brings in "✉️ Sign in with email" (email-sign-in.js, next to this file). */
+  function loadEmailSignIn(script) {
+    if (typeof document === 'undefined' || root.PolymathEmailSignIn) return;
+    if (script && /^(off|false|no)$/i.test(script.getAttribute('data-email') || '')) return;
+    var src = EMAIL_SIGN_IN_FALLBACK;
+    try { if (script && script.src) src = new URL(EMAIL_SIGN_IN, script.src).href; } catch (error) { /* keep the fallback */ }
+    if (document.querySelector('script[src*="email-sign-in.js"]')) return;
+    var tag = document.createElement('script');
+    tag.src = src;
+    tag.async = true;
+    tag.setAttribute('data-from', 'access-gate');
+    (document.head || document.documentElement).appendChild(tag);
   }
 
   root.PolymathAccess = {

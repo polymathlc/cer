@@ -101,7 +101,7 @@ test('the page talks to the deployed function, and the function lets this page i
 test('the page loads Firebase sign-in, its script, and the access gate last', () => {
   assert.ok(HTML.includes('<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>'));
   assert.ok(HTML.includes('<script src="notebook-app.js?v=' + App.version + '"></script>'));
-  assert.match(HTML, /<script defer src="\.\.\/student\/access-gate\.js\?v=1\.1\.0" data-app="notebook"><\/script>\s*<\/body>/);
+  assert.match(HTML, /<script defer src="\.\.\/student\/access-gate\.js\?v=1\.2\.0" data-app="notebook"><\/script>\s*<\/body>/);
   assert.ok(HTML.includes('<meta name="robots" content="noindex">'));
   assert.ok(HTML.includes('v' + App.version));
 });

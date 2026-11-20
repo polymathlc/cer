@@ -1,0 +1,93 @@
+name: Email sign-in
+
+# "✉️ Sign in with email" in every student app (student/email-sign-in.js, loaded by
+# the access gate student/access-gate.js): create an account with an email and a
+# password, sign in, reset a forgotten password by email, and confirm the email
+# address before the enrolment form.
+#
+#   pull request        logic checks + a real Chromium with the real Firebase SDK
+#                       against a stand-in of Firebase Auth (nothing real is touched)
+#   push to main        the same, then the Firebase Authentication settings email
+#                       sign-in needs are checked and put right on mathgen--app:
+#                       Email/Password switched on, the Polymath domains authorised,
+#                       and the verification / reset emails branded "Polymath Learning
+#                       Centre" (tools/email-sign-in-config.mjs --apply)
+#   Run workflow        the same; untick "apply" to only report the settings
+#
+# Needs the FIREBASE_SERVICE_ACCOUNT repository secret.
+
+on:
+  pull_request:
+    paths: ['student/email-sign-in.js', 'student/access-gate.js', 'tools/email-sign-in*', '.github/workflows/email-sign-in.yml']
+  push:
+    branches: [main]
+    paths: ['student/email-sign-in.js', 'student/access-gate.js', 'tools/email-sign-in*', '.github/workflows/email-sign-in.yml']
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: 'Switch on / correct the Firebase email sign-in settings and email wording'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  email-sign-in:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Logic checks
+        run: |
+          node --check student/email-sign-in.js
+          node --check student/access-gate.js
+          node --check tools/email-sign-in-config.mjs
+          node --test tools/email-sign-in-tests.mjs
+
+      - name: Browser walk-through (create account, confirm email, reset password, modular app)
+        run: |
+          mkdir -p "$RUNNER_TEMP/sdk"
+          npm install --prefix "$RUNNER_TEMP/sdk11" --no-save --no-audit --no-fund firebase@11.10.0 >/dev/null
+          npm install --prefix "$RUNNER_TEMP/sdk10" --no-save --no-audit --no-fund firebase@10.12.2 >/dev/null
+          ln -s "$RUNNER_TEMP/sdk11/node_modules/firebase" "$RUNNER_TEMP/sdk/firebase-11.10.0"
+          ln -s "$RUNNER_TEMP/sdk10/node_modules/firebase" "$RUNNER_TEMP/sdk/firebase-10.12.2"
+          npm install --no-save --package-lock=false playwright@1.62.1
+          npx playwright install --with-deps chromium
+          FIREBASE_SDK_DIR="$RUNNER_TEMP/sdk" node tools/email-sign-in-browser.mjs
+        env:
+          EMAIL_SCREENSHOTS: artifacts/email-sign-in
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: email-sign-in-previews
+          path: artifacts/email-sign-in
+          if-no-files-found: ignore
+
+      - name: Prepare the service-account key
+        if: github.repository == 'polymathlc/cer' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node tools/student-access-rules.mjs --setup
+
+      - name: Firebase email sign-in settings
+        if: github.repository == 'polymathlc/cer' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: |
+          set -uo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.apply }}" != "true" ]; then flag=""; else flag="--apply"; fi
+          out=$(node tools/email-sign-in-config.mjs $flag); code=$?
+          echo "$out"
+          { echo "### Firebase email sign-in settings"; tail -n +2 <<<"$out" | sed 's/^/- /'; } >> "$GITHUB_STEP_SUMMARY"
+          exit $code
+
+      - name: Remove the key from the runner
+        if: always()
+        run: rm -f "$RUNNER_TEMP/firebase-sa.json"

@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- ✉️ The Science app has its own email sign-in, sign-up and "Forgot password" form, so student/email-sign-in.js adds no second button here (it still asks new email accounts to confirm their address, through the access gate). -->
+<meta name="polymath-email-sign-in" content="off">
 <script>/* HTTPS UPGRADE — a page opened over plain http:// on the custom domain moves to https://, but only after a probe proves the secure address answers (a failed TLS handshake rejects; any HTTP reply, even a 404, resolves). If https is broken the page stays put rather than locking anybody out. */(function(){var l=location;if(l.protocol!=='http:'||!/(^|\.)polymathlc\.com\.sg$/i.test(l.hostname))return;try{fetch('https://'+l.host+'/?https-check='+Date.now(),{mode:'no-cors',cache:'no-store'}).then(function(){l.replace('https://'+l.host+l.pathname+l.search+l.hash)},function(){})}catch(e){}})();</script>
 <title>Primary Science &amp; Maths Tuition in Clementi | PSLE | Polymath Learning Centre</title>
 <!-- 🔎 Search and link previews (Oct 2026): canonical address, WhatsApp/Facebook previews. -->
@@ -16967,6 +16969,6 @@ body.lore-reading { overflow: hidden; }
   <script type="module" src="app.js?v=1.460.0"></script>
 <!-- 🔐 Polymath student access (v1.0.0): the enrolment pop-up every Polymath app shares. A signed-in student is
      blocked here until an admin approves them at polymathlc.com.sg/student/#admin. Source: polymathlc/cer student/access-gate.js -->
-<script defer src="student/access-gate.js?v=1.1.0" data-app="science" data-subject="science"></script>
+<script defer src="student/access-gate.js?v=1.2.0" data-app="science" data-subject="science"></script>
 </body>
 </html>
