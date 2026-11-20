@@ -651,6 +651,40 @@
   .meter { height:8px; border-radius:999px; background:var(--grey-bg); overflow:hidden; }
   .meter span { display:block; height:100%; background:var(--deep); transition:width .3s; }
 
+  /* ─── 💬 Lesson updates (lesson-updates.mjs) ─── */
+  .lu-daybar { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin:0 0 10px; }
+  .lu-daybar input[type=date] { padding:8px 10px; border:1px solid var(--line); border-radius:10px; background:var(--white); font-size:14px; }
+  .lu-daybar .lu-tot { flex:1 1 200px; color:var(--muted); }
+  .lu-livebar { margin:0 0 14px; }
+  .lu-class .lu-head { display:flex; gap:12px; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; }
+  .lu-class h2 { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .lu-ws { background:#f4fafb; border:1px solid var(--line-2); border-radius:12px; padding:10px 12px; margin:6px 0 0; line-height:1.6; }
+  .lu-fields { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px; margin:12px 0 6px; }
+  .lu-fields textarea, .lu-msg textarea { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px; font:inherit; font-size:14px; resize:vertical; }
+  .lu-fams { border-top:1px solid var(--line-2); margin-top:8px; }
+  .lu-fam { border-bottom:1px solid var(--line-2); padding:10px 0; }
+  .lu-fam.sent .lu-who b { color:var(--green); }
+  .lu-fam.off { opacity:.6; }
+  .lu-fam-main { display:flex; gap:12px; align-items:center; justify-content:space-between; }
+  .lu-who { min-width:0; line-height:1.5; }
+  .lu-acts { display:flex; gap:6px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
+  .lu-acts .btn.wa.small { text-decoration:none; }
+  .lu-msg { margin:8px 0 2px; }
+  .lu-msg pre, .lu-pre { white-space:pre-wrap; word-break:break-word; font-family:inherit; font-size:13.5px; line-height:1.55; background:#e9fbe9; border:1px solid #c8eccb; border-radius:12px; padding:12px 14px; margin:0 0 8px; }
+  .lu-overlay { position:fixed; inset:0; background:rgba(10,30,36,.55); z-index:90; display:flex; align-items:center; justify-content:center; padding:12px; }
+  .lu-qbox { background:#fff; border-radius:16px; max-width:620px; width:100%; max-height:94vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,.3); }
+  .lu-qtop { padding:12px 16px 10px; border-bottom:1px solid var(--line-2); display:flex; gap:10px; align-items:center; margin-bottom:10px; }
+  .lu-qfoot { padding:12px 16px; border-top:1px solid var(--line-2); display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
+  .lu-qfoot .btn.wa { text-decoration:none; }
+  @media (max-width:640px) {
+    .lu-fields { grid-template-columns:minmax(0,1fr); }
+    .lu-fam-main { flex-direction:column; align-items:stretch; }
+    .lu-acts { justify-content:flex-start; }
+    .lu-class .lu-head .btn.wa { width:100%; justify-content:center; }
+    .lu-qfoot .btn.wa { flex:1 1 100%; justify-content:center; order:-1; }
+    .lu-qbox { max-height:100%; }
+  }
+
   /* ─── Toast & version ─── */
   .toast { position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(20px); z-index:120; background:var(--ink); color:#fff; padding:12px 18px; border-radius:12px; font-size:14px; font-weight:600; box-shadow:var(--shadow-lg); opacity:0; pointer-events:none; transition:all .2s ease; max-width:min(560px,92vw); }
   .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
@@ -748,6 +782,7 @@
         <button class="tab" data-view="payments" type="button"><span class="ico">🏦</span><span class="lbl">Payments</span></button>
         <button class="tab" data-view="announce" type="button"><span class="ico">📣</span><span class="lbl">Announce</span></button>
         <button class="tab" data-view="reports" type="button"><span class="ico">📈</span><span class="lbl">Reports</span></button>
+        <button class="tab" data-view="lessons" type="button"><span class="ico">💬</span><span class="lbl">Lessons</span><span class="count hidden" data-count="lessons"></span></button>
         <button class="tab" data-view="referrals" type="button"><span class="ico">🎁</span><span class="lbl">Referrals</span><span class="count hidden" data-count="referrals"></span></button>
         <button class="tab" data-view="settings" type="button"><span class="ico">⚙️</span><span class="lbl">Settings</span></button>
       </nav>
@@ -766,8 +801,12 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="version hidden" id="version"></div>
 
-<script type="module" src="office-app.mjs?v=1.17.0"></script>
+<!-- ⏰ The lesson clock (when a lesson is over), shared with Polymath Online -->
+<script src="../online/lesson-clock.js?v=1.15.0"></script>
+<script type="module" src="office-app.mjs?v=1.18.0"></script>
 <!-- 📈 Weekly parent progress reports: the Reports tab (v1.16.0) -->
 <script type="module" src="weekly-reports.mjs?v=1.0.0"></script>
+<!-- 💬 Parent WhatsApp lesson updates: the Lessons tab (v1.18.0) -->
+<script type="module" src="lesson-updates.mjs?v=1.0.0"></script>
 </body>
 </html>
