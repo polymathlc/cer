@@ -100,10 +100,18 @@
   }
   function mcqHtml(q) {
     var pick = getPick(q);
-    var html = figHtml(q) + '<div class="qd-opts">';
+    // Options printed as a table ("Circle: X; Triangle: Y; …" in every option): a
+    // header row of the printed headings, then each option one tappable row.
+    var T = window.PolymathOptionTable;
+    var table = T ? T.fromOptions(q.options) : null;
+    var html = figHtml(q) + '<div class="qd-opts' + (table ? ' qd-otable' : '') + '"' + (table ? ' style="--cols:' + table.head.length + '"' : '') + '>';
+    if (table) html += '<div class="qd-ot-head" aria-hidden="true"><span></span>' + table.head.map(function (h) { return '<span>' + mathText(h) + '</span>'; }).join('') + '</div>';
     q.options.forEach(function (o, i) {
-      html += '<button type="button" class="qd-opt' + (i === pick ? ' picked' : '') + '"' + (pick !== null ? ' disabled' : '') + ' data-i="' + i + '">'
-        + '<span class="qd-letter">' + LETTERS[i] + '</span><span>' + mathText(o) + '</span></button>';
+      html += '<button type="button" class="qd-opt' + (i === pick ? ' picked' : '') + '"' + (pick !== null ? ' disabled' : '') + ' data-i="' + i + '"'
+        + (table ? ' aria-label="' + esc(LETTERS[i] + '. ' + o) + '"' : '') + '>'
+        + '<span class="qd-letter">' + LETTERS[i] + '</span>'
+        + (table ? table.rows[i].map(function (c) { return '<span class="qd-ot-cell">' + mathText(c) + '</span>'; }).join('') : '<span>' + mathText(o) + '</span>')
+        + '</button>';
     });
     html += '</div>';
     html += pick !== null

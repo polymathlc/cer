@@ -138,6 +138,19 @@
   .opt.right .letter { background:var(--success); border-color:var(--success); color:#fff; }
   .opt.wrong { border-color:var(--danger-border); background:var(--danger-bg); }
   .opt.wrong .letter { background:var(--danger); border-color:var(--danger); color:#fff; }
+  /* Options printed as a table (option-table.js): one header row of the printed
+     headings, then each option a whole row the child taps. */
+  .opts.otable { gap:8px; }
+  .otable .ot-head, .otable .opt { display:grid; grid-template-columns:32px repeat(var(--cols,3), minmax(0,1fr)); gap:10px; align-items:center; }
+  .otable .ot-head { padding:0 15.5px 2px; font-size:13px; font-weight:700; color:var(--deep); text-transform:none; }
+  .otable .ot-head span, .otable .ot-cell { text-align:center; overflow-wrap:anywhere; }
+  .otable .ot-cell { padding:2px 0; border-left:1px solid var(--line); }
+  .otable .opt.right .ot-cell { font-weight:700; color:var(--success); border-left-color:var(--success-border); }
+  .pv-otable { border-collapse:collapse; margin:4px 0 8px; font-size:14px; }
+  .pv-otable th, .pv-otable td { border:1px solid var(--line); padding:4px 10px; text-align:center; }
+  .pv-otable thead th { background:var(--paper); color:var(--deep); }
+  .pv-otable tr.ot-right td, .pv-otable tr.ot-right th { background:var(--success-bg); color:var(--success); font-weight:700; }
+  .ot-sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
   .locked { margin-top:14px; border-radius:12px; padding:14px 16px; background:#fdf2f8; border:1px solid #fbcfe8; color:var(--plum); font-size:14px; }
   .locked b { display:block; font-size:15px; margin-bottom:2px; }
   .locked a { color:var(--plum); font-weight:700; }
@@ -320,6 +333,9 @@
     .q { padding:16px; }
     .q-text { font-size:17px; }
     .opt { font-size:15px; padding:11px 12px; }
+    .otable .ot-head { padding:0 13.5px 2px; }
+    .otable .ot-head, .otable .opt { gap:6px; grid-template-columns:28px repeat(var(--cols,3), minmax(0,1fr)); }
+    .otable .opt .letter { width:28px; height:28px; }
     .card-head { align-items:flex-start; }
     .sub-table .opt-col { display:none; }
   }
@@ -469,6 +485,7 @@
 
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js" defer></script>
+<script src="../option-table.js" defer></script>
 <script src="question-app.js" defer></script>
 </body>
 </html>

@@ -40,7 +40,7 @@ const functions = [
   'syncEditorDomToBlocks', 'previewAsStudent', 'clearStudentPreviewPads', 'renderStudentPreviewBody', 'previewStudentCompleted', 'closeStudentPreview',
   'renderPracticeCard', 'renderPracticeQuestion', 'renderOpenPracticeBody', 'buildOpenBody', '_qpTextHtml',
   '_openSection', '_partActionsHtml', '_adminAnswerToolHtml', '_isAdmin', 'micButtonHtml',
-  'renderImportedBlockStudent', 'markMcqChoice', 'renderTableReadonly', 'ensureTableMigrated', '_tblCellCss',
+  'renderImportedBlockStudent', 'markMcqChoice', '_ot', '_otOptionTexts', 'mcqOptionTable', '_mcqTableStudentHtml', 'renderTableReadonly', 'ensureTableMigrated', '_tblCellCss',
   '_openPhotoKey', 'openPhotoBarHtml', '_imgWaitBarId', 'imgWaitBarHtml',
   '_annotPadId', '_workingPadSvgUrl', 'annotationPadHtml', '_annotLinkifyDiagramRefs',
   'markQuestionPart', '_mcqPaintResult', '_setPartResult', '_partMistakeOf', '_checkAllPartsMarked', '_genAndShowExplanation', 'recordCerPerformance',

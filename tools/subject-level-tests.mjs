@@ -76,6 +76,7 @@ function _genPreamble() { return ''; }
 function _aiTagsPromptLine() { return ''; }
 function _rectangleRules() { return ''; }
 function _partsPromptRules() { return ''; }
+function _optionTableRule() { return ''; }
 const SCAN_READING_NOTE = '';
 `;
 

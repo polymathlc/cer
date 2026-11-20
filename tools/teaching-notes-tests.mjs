@@ -374,6 +374,7 @@ const UNGROUNDED_BY_DESIGN = {
   epReadKey: 'transcribes a marking scheme off a photograph',
   _mpReadScript: 'transcribes a student’s handwriting — it is told never to mark',
   _mpReadKey: 'transcribes a marking scheme off a photograph',
+  otRapidSourceCheck: 'copies a multiple-choice question\'s answer options off the source page to compare, cell by cell, with the options already written — a reader told what they should say would copy that instead of what is printed',
   tblBuildFromShot: 'transcribes a TABLE off a screenshot — a reader told what the table ought to say writes that down instead of what is printed, which is the one failure here that looks exactly like success',
 
   // ---- pictures: no science words come back ----

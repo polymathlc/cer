@@ -34,7 +34,7 @@ const gameListeners=[...source.matchAll(/^window\.addEventListener\(\s*(['"])mes
 assert.equal(gameListeners.length,1,'Exactly one production game-question message listener exists');
 const gameMessages=gameListeners[0];
 const functions=[
-  'buildOpenBody','renderImportedBlockStudent','renderTableReadonly','ensureTableMigrated','_tblCellCss','markMcqChoice',
+  'buildOpenBody','renderImportedBlockStudent','renderTableReadonly','ensureTableMigrated','_tblCellCss','markMcqChoice','_ot','_otOptionTexts','mcqOptionTable','_mcqTableStudentHtml',
   'buildQpQueue','qpHasWritten','qpHasMcq','qpMatchesType','qpFilters','startQuickPractice','loadNextQpQuestion','renderQpQuestion',
   'updateQpProgress','_qpAllPartsMarked','_recordQpResult','renderQpSummary','renderPracticeReport','_reportColor','_fmtScore',
   'qLevelNum','qWithinStudentLevel','qInLevelBand','levelBandMin','studentCapLevel','studentCapNum',

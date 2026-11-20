@@ -88,6 +88,7 @@ function qEnsurePartExplanations() { return []; }
 function currentTopics() { return ['Heat', 'Light']; }
 function currentTopicsByLevel() { return { P5: ['Heat'] }; }
 function _partsPromptRules() { return '- PARTS RULES\\n'; }
+function _optionTableRule() { return '- OPTIONS TABLE RULE\\n'; }
 function aiGrounding() { return 'GROUNDED\\n'; }
 function _serializeQuestionForRegen(q) { return 'SERIALISED ' + (q.title || ''); }
 function _rapidApplyLevel(q, level) { HOOK.levels.push(level); }
