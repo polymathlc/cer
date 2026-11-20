@@ -322,3 +322,13 @@ test('the home box asks for a level, sends it, and marks typed answers', () => {
   assert.match(html, /<select id="qd-level" name="level"/);
   for (const l of ['P3', 'P4', 'P5', 'P6']) assert.match(html, new RegExp('<option value="' + l + '">'));
 });
+
+test('the sign-up box on /question and on the home page says exactly what is recorded, marketing included', () => {
+  const page = readFileSync(new URL('../question/index.html', import.meta.url), 'utf8');
+  const home = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const shown = html => html.replace(/&#39;/g, "'");
+  assert.ok(shown(page).includes('<span id="j-consent-text">' + core.CONSENT_TEXT + '</span>'));
+  assert.ok(shown(home).includes('<span>' + core.CONSENT_TEXT + '</span>'));
+  assert.match(core.CONSENT_TEXT, /marketing emails/);
+  assert.match(core.CONSENT_TEXT, /unsubscribe at any time/);
+});

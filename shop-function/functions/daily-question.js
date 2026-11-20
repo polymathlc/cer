@@ -79,7 +79,10 @@ function adminSubscriber(sub) {
     unsubscribedAt: millis(sub.unsubscribedAt), sentCount: Number(sub.sentCount) || 0,
     lastSentDay: [sub.lastDailyDay, sub.lastWeeklyDay].filter(Boolean).sort().pop() || '', mailCount: Number(sub.mailCount) || 0,
     // '' = no question may be sent (no level, or P1/P2): the emails wait until a level is set.
-    questionLevel: questionLevelFor(sub.level)
+    questionLevel: questionLevelFor(sub.level),
+    // Agreed to Polymath's marketing emails (the sign-up box since consent v2; the
+    // earlier box said "occasional news about Polymath classes").
+    marketing: sub.marketing === true ? 'yes' : sub.consent && sub.consent.at ? 'news' : 'no'
   };
 }
 
