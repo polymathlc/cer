@@ -22,7 +22,7 @@
 // visualiseAi uses); it never leaves the server. Usage counters live in the
 // server-only collection polymathEnquiryLimits (see core.js USAGE_COLLECTION).
 import { onRequest } from 'firebase-functions/v2/https';
-import { defineSecret, defineString } from 'firebase-functions/params';
+import { defineSecret } from 'firebase-functions/params';
 import { logger } from 'firebase-functions';
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
@@ -38,7 +38,6 @@ initializeApp();
 const db = getFirestore();
 
 const openaiKey = defineSecret('OPENAI_API_KEY');
-const openaiModel = defineString('HOMEWORK_OPENAI_MODEL', { default: DEFAULT_MODEL });
 
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 const START_TIMEOUT_MS = 150000;
@@ -189,7 +188,8 @@ export const homeworkHelper = onRequest(
         return;
       }
 
-      const model = openaiModel.value() || DEFAULT_MODEL;
+      // A fixed model: a defineString param would need a .env value for a non-interactive deploy.
+      const model = DEFAULT_MODEL;
 
       if (request.mode === 'start') {
         const child = access.children[request.childIndex] || access.children[0] || null;
