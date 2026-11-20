@@ -418,7 +418,8 @@ test('a class link asks for email and WhatsApp, then opens the class straight aw
   assert.deepEqual(mails[0].to, ['kid@example.test']);
   assert.equal(mails[0].from, 'Polymath Learning Centre <admin@polymathlc.com.sg>');
   assert.match(mails[0].message.subject, /^Zoom link and worksheets: Polymath Primary 6 Science class$/);
-  assert.match(mails[0].message.text, /Join on Zoom: https:\/\/us02web\.zoom\.us\/j\/3333333333 \(Passcode 2027\)/);
+  assert.match(mails[0].message.text, /join with the live lesson link first, a few minutes early: https:\/\/polymathlc\.com\.sg\/live\/\?trial=[A-Z2-9]{6}\.[A-Za-z0-9_-]{16} /);
+  assert.match(mails[0].message.text, /join on Zoom instead \(the backup\): https:\/\/us02web\.zoom\.us\/j\/3333333333 \(Passcode 2027\)/);
   assert.match(mails[0].message.text, /Current worksheet: P6 Science WS 2 Energy \(12 pages\)\nDownload \(link works until/);
   assert.equal(visits[0].materialsSentTo, 'kid@example.test');
   const mailedUrl = mails[0].message.text.match(/Download \(link works until [^)]*\): (\S+)/)[1];
@@ -549,7 +550,10 @@ test('reminders go to tomorrow\'s lessons only, once, with the Zoom link and wor
   const mail = h.db.rows.get('mail/polymath-trial-' + b.code + '-reminder-1');
   assert.equal(mail.from, 'Polymath Learning Centre <admin@polymathlc.com.sg>');
   assert.equal(mail.message.subject, 'Reminder: trial lesson tomorrow at 7:00pm (Monday 23 November 2026)');
-  assert.match(mail.message.text, /Join on Zoom a few minutes early: https:\/\/us02web\.zoom\.us\/j\/3333333333 \(Passcode 2027\)/);
+  assert.match(mail.message.text, /Please join with the live lesson link first, a few minutes early: https:\/\/polymathlc\.com\.sg\/live\/\?trial=/);
+  assert.match(mail.message.text, /join on Zoom instead \(the backup\): https:\/\/us02web\.zoom\.us\/j\/3333333333 \(Passcode 2027\)/);
+  assert.match(mail.message.text, /Live lesson link \(use this first\): https:\/\/polymathlc\.com\.sg\/live\/\?trial=/);
+  assert.match(mail.message.text, /Zoom link \(backup\): https:\/\/us02web\.zoom\.us/);
   assert.match(mail.message.text, /Current worksheet: P6 Science WS 2 Energy \(12 pages\)/);
   assert.match(mail.message.html, /Open your trial page and worksheets/);
 });
@@ -581,4 +585,78 @@ test('an admin can email the Zoom link and worksheets again, with fresh one-week
   assert.equal(new URL(url).searchParams.get('x'), String(NOW + 10 * DAY));
   assert.equal(h.db.rows.get('trialBookings/' + b.code).materialsCount, 1);
   assert.equal((await h.admin({ action: 'emailMaterials', code: 'ZZZZZZ' })).statusCode, 404);
+});
+
+// ─── 🎟 The trial's own live-lesson link (page v1.5.0) ───
+// polymathlc/anskey functions/test/live-class.test.js holds the same fixed
+// example: both servers must make the same mac, or the link stops working.
+test('🎟 the live link mac is the one Ans Key checks (fixed example)', () => {
+  assert.equal(T.trialLiveMac({ linkKey: 'TrialLinkKeyForTheFixedExample0123' }, 'ABC234'), 'CnXQrsTQ2yQ7Xyyk');
+  assert.equal(T.trialLiveMac({ viewToken: 'ViewTokenOfAnOldBooking01' }, 'XYZ789'), 'Hs9xkdP-G0yl3xd2', 'an old booking with no linkKey');
+  assert.equal(T.liveLessonUrl({ code: 'ABC234', linkKey: 'TrialLinkKeyForTheFixedExample0123' }), 'https://polymathlc.com.sg/live/?trial=ABC234.CnXQrsTQ2yQ7Xyyk');
+  assert.equal(T.anskeyTrialUrl('ABC234.CnXQrsTQ2yQ7Xyyk'), 'https://polymathlc.github.io/anskey/?live&trial=ABC234.CnXQrsTQ2yQ7Xyyk');
+  assert.equal(T.liveLessonUrl({ code: 'bad', linkKey: 'x' }), '');
+  assert.deepEqual(T.parseLive('ABC234.CnXQrsTQ2yQ7Xyyk'), { code: 'ABC234', mac: 'CnXQrsTQ2yQ7Xyyk' });
+  assert.equal(T.parseLive('ABC234-Abcdefghjkmnpqrstuvw'), null, 'a page access key is not a live link');
+});
+
+test('🎟 the live window: early, open from 15 minutes before, over 3 hours after the start', () => {
+  const b = { kind: 'booking', slot: 'MON-3', lessonDate: '2026-11-23', lessonStartMs: T.lessonStart('2026-11-23', 'MON-3'), status: 'booked' };
+  const start = b.lessonStartMs;
+  assert.equal(start, Date.UTC(2026, 10, 23, 11), '7pm Singapore');
+  assert.equal(T.liveWindow(b, null, start - 16 * 60000).state, 'early');
+  assert.equal(T.liveWindow(b, null, start - 15 * 60000).state, 'open');
+  assert.equal(T.liveWindow(b, null, start + 3 * 3600000).state, 'open');
+  assert.equal(T.liveWindow(b, null, start + 3 * 3600000 + 1).state, 'ended');
+  assert.equal(T.liveWindow(b, null, start).opensAtMs, start - 15 * 60000);
+  assert.equal(T.liveWindow({ ...b, status: 'cancelled' }, null, start).state, 'cancelled');
+  // A class-link visit: the next lesson of its class before the link ends.
+  const visit = { kind: 'link', slot: 'MON-3', accessUntilMs: NOW + 7 * DAY, status: 'booked' };
+  const w = T.liveWindow(visit, { expiresAtMs: NOW + 7 * DAY }, NOW);
+  assert.equal(w.state, 'early');
+  assert.equal(w.startsAtMs, Date.UTC(2026, 10, 16, 11), 'Monday 16 Nov, 7pm');
+  assert.equal(w.sessionLabel, 'Monday 16 November 2026, 7:00pm – 8:45pm');
+  assert.equal(T.liveWindow(visit, { expiresAtMs: NOW + 7 * DAY }, Date.UTC(2026, 10, 16, 13, 30)).startsAtMs, Date.UTC(2026, 10, 16, 11), 'still that lesson at 9:30pm');
+  assert.equal(T.liveWindow(visit, { expiresAtMs: NOW + 7 * DAY }, Date.UTC(2026, 10, 17, 1)).state, 'ended', 'the next Monday is after the link ends');
+  assert.equal(T.liveWindow(visit, { expiresAtMs: NOW + 7 * DAY, revoked: true }, NOW).state, 'ended');
+});
+
+test('🎟 a booking carries its live link to the page, the emails and the admins, and /live reads it', async () => {
+  const h = harness();
+  const res = await h.call(book());
+  const b = res.body.booking;
+  assert.match(b.liveUrl, /^https:\/\/polymathlc\.com\.sg\/live\/\?trial=[A-Z2-9]{6}\.[A-Za-z0-9_-]{16}$/);
+  const live = b.liveUrl.split('=')[1];
+  assert.equal(live.split('.')[0], b.code);
+  const [parent] = rowsUnder(h.db, 'mail').map(([, m]) => m).filter(m => m.to[0] === 'parent@example.test');
+  assert.ok(parent.message.text.includes('Please join with the live lesson link first, a few minutes early: ' + b.liveUrl));
+  assert.ok(parent.message.text.includes('Live lesson link (use this first): ' + b.liveUrl));
+  assert.match(parent.message.text, /Zoom link \(backup\): https:\/\/us02web\.zoom\.us\/j\/3333333333/);
+  assert.ok(parent.message.html.includes('href="' + b.liveUrl + '"'));
+  assert.ok(parent.message.text.indexOf(b.liveUrl) < parent.message.text.indexOf('us02web.zoom.us'), 'the live link comes before Zoom');
+  const loaded = await h.admin({ action: 'load' });
+  assert.equal(loaded.body.bookings.find(x => x.code === b.code).liveUrl, b.liveUrl);
+  // The /live page: who it is for and when, with no email and no page key.
+  const info = await h.call({ action: 'live', live });
+  assert.equal(info.statusCode, 200, JSON.stringify(info.body));
+  const l = info.body.live;
+  assert.equal(l.studentName, 'Ava Tan');
+  assert.equal(l.className, 'Primary 6 Science');
+  assert.equal(l.sessionLabel, 'Monday 23 November 2026, 7:00pm – 8:45pm');
+  assert.equal(l.state, 'early');
+  assert.equal(l.startsAtMs, Date.UTC(2026, 10, 23, 11));
+  assert.equal(l.joinUrl, 'https://polymathlc.github.io/anskey/?live&trial=' + live);
+  assert.equal(l.zoomUrl, 'https://us02web.zoom.us/j/3333333333');
+  assert.equal(JSON.stringify(info.body).includes('example.test'), false, 'never the email');
+  assert.equal(JSON.stringify(info.body).includes(b.access), false, 'never the page access key');
+  assert.equal((await h.call({ action: 'live', live: b.code + '.' + 'A'.repeat(16) })).statusCode, 404);
+  assert.equal((await h.call({ action: 'live', live: 'ZZZ999.' + live.split('.')[1] })).statusCode, 404);
+  assert.equal((await h.call({ action: 'live', live: b.access })).statusCode, 404, 'the page key does not work as a live link');
+  assert.equal((await h.call({ action: 'live', live, extra: 1 })).statusCode, 400);
+  h.advance(Date.UTC(2026, 10, 23, 10, 50) - NOW);
+  assert.equal((await h.call({ action: 'live', live })).body.live.state, 'open');
+  await h.admin({ action: 'setStatus', code: b.code, status: 'cancelled' });
+  const gone = await h.call({ action: 'live', live });
+  assert.equal(gone.body.live.state, 'cancelled');
+  assert.equal(gone.body.live.joinUrl, '');
 });
