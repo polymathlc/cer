@@ -17,7 +17,7 @@
   'use strict';
 
   var API = 'https://us-central1-mathgen--app.cloudfunctions.net/dailyQuestion';
-  var PAGE_VERSION = 'v2.1.0';
+  var PAGE_VERSION = 'v2.1.1';
   var LEVELS = ['P3', 'P4', 'P5', 'P6'];
   // Keep equal to QOTD_ADMINS in shop-function/functions/daily-question-core.js.
   var ADMINS = ['chungzhikai@gmail.com', 'admin@polymathlc.com.sg', 'support@polymathlc.com.sg'];
@@ -672,7 +672,7 @@
       if (!img.id) return;
       var cached = state.adminImages[img.id];
       html += cached ? '<img src="' + cached + '" alt="' + esc(img.alt || '') + '">'
-        : '<button type="button" class="btn small ghost" data-img="' + esc(img.id) + '">Show picture</button> ';
+        : '<div class="pv-img-wait" data-img="' + esc(img.id) + '" data-alt="' + esc(img.alt || '') + '"><span class="spin"></span>Loading the picture…</div>';
     });
     if (q.kind === 'mcq') {
       html += '<ol type="A" style="margin:0 0 6px;padding-left:22px">' + q.options.map(function (o, i) {
@@ -851,16 +851,7 @@
     $('admin-body').querySelectorAll('[data-admin-level]').forEach(function (b) {
       b.onclick = function () { state.adminLevel = b.getAttribute('data-admin-level'); renderAdmin(); };
     });
-    $('admin-body').querySelectorAll('[data-img]').forEach(function (b) {
-      b.onclick = function () {
-        var id = b.getAttribute('data-img');
-        b.disabled = true; b.innerHTML = '<span class="spin"></span>Loading…';
-        adminCall({ action: 'adminImage', id: id }).then(function (r) {
-          if (r.status === 200 && r.body.ok && r.body.dataUrl) { state.adminImages[id] = r.body.dataUrl; renderAdmin(); }
-          else { b.disabled = false; b.textContent = 'Show picture'; toast(errorText(r.body, 'Could not load the picture.'), true); }
-        });
-      };
-    });
+    loadAdminPictures();
     $('admin-body').querySelectorAll('[data-skip]').forEach(function (b) {
       b.onclick = function () {
         if (b.getAttribute('data-sure') !== 'yes') { b.setAttribute('data-sure', 'yes'); b.textContent = 'Tap again to skip it'; return; }
@@ -878,6 +869,38 @@
         });
       };
     });
+  }
+  // The preview's pictures load by themselves, a few at a time, and each one is put
+  // in place as it arrives (kept for the rest of the visit).
+  var picturesLoading = {};
+  function loadAdminPictures() {
+    var waiting = [].slice.call($('admin-body').querySelectorAll('[data-img]'));
+    var queue = waiting.map(function (el) { return el.getAttribute('data-img'); }).filter(function (id, i, all) { return all.indexOf(id) === i && !picturesLoading[id]; });
+    var put = function (id) {
+      $('admin-body').querySelectorAll('[data-img="' + id + '"]').forEach(function (el) {
+        var img = document.createElement('img');
+        img.src = state.adminImages[id];
+        img.alt = el.getAttribute('data-alt') || '';
+        el.replaceWith(img);
+      });
+    };
+    var failed = function (id) {
+      $('admin-body').querySelectorAll('[data-img="' + id + '"]').forEach(function (el) {
+        el.innerHTML = 'The picture could not be loaded. <button type="button" class="btn small ghost">Try again</button>';
+        el.querySelector('button').onclick = function () { el.innerHTML = '<span class="spin"></span>Loading the picture…'; loadAdminPictures(); };
+      });
+    };
+    var next = function () {
+      var id = queue.shift();
+      if (!id) return;
+      picturesLoading[id] = true;
+      adminCall({ action: 'adminImage', id: id }).then(function (r) {
+        delete picturesLoading[id];
+        if (r.status === 200 && r.body.ok && r.body.dataUrl) { state.adminImages[id] = r.body.dataUrl; put(id); } else failed(id);
+        next();
+      });
+    };
+    for (var k = 0; k < 4; k++) next();
   }
   function maybeAdminFromHash() {
     if (location.hash !== '#admin') return;
