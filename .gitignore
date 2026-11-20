@@ -17,6 +17,12 @@ package-lock.json
 
 !shop-function/functions/package.json
 !shop-function/functions/package-lock.json
+
+!homework-function/functions/package.json
+!homework-function/functions/package-lock.json
+homework-function/.firebase/
+homework-function/functions/.env*
+homework-function/functions/.secret*
 enquiry-function/.firebase/
 enquiry-function/firebase-debug.log
 enquiry-function/functions/.env*

@@ -38,6 +38,8 @@ const EXPECTED = [
   { app: 'math', name: 'Math', href: APP_ORIGIN + '/math/', repo: 'math', address: SITE + '/math', section: 'portals' },
   { app: 'english', name: 'English', href: APP_ORIGIN + '/english/', repo: 'english', address: SITE + '/english', section: 'portals' },
   { app: 'chinese', name: 'Chinese', href: APP_ORIGIN + '/chinese/', repo: 'chinese', address: SITE + '/chinese', section: 'portals' },
+  // Homework Helper (Nov 2026): published on the website itself from homework/, like Mind Map.
+  { app: 'homework', name: 'Homework Helper', href: 'https://' + SITE + '/homework/', repo: null, address: SITE + '/homework', section: 'self' },
   { app: 'tutor', name: 'Study Buddy', href: APP_ORIGIN + '/tutor/', repo: 'tutor', address: SITE + '/tutor', section: 'self' },
   { app: 'anskey', name: 'Answer Keys', href: APP_ORIGIN + '/anskey/', repo: 'anskey', address: SITE + '/anskey', section: 'self' },
   { app: 'mindmap', name: 'Mind Map', href: 'https://' + SITE + '/mindmap/', repo: null, address: SITE + '/mindmap', section: 'self' },

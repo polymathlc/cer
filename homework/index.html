@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="robots" content="noindex">  <!-- 🔎 app/tool page: kept out of search results -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Homework Helper | Polymath Learning Centre</title>
+<meta name="description" content="Stuck on a homework question? Snap a photo and the Polymath Homework Helper gives you hints, one step at a time, so you solve it yourself.">
+<meta name="theme-color" content="#FFFFFF">
+<link rel="icon" type="image/png" sizes="32x32" href="../student/assets/app-icons/favicon-32.png">
+<!--
+  POLYMATH HOMEWORK HELPER — polymathlc.com.sg/homework  (v1.0.0, November 2026)
+  ------------------------------------------------------------------------------
+  "Stuck on a question?" for enrolled students, opened from the Homework Helper
+  tile on My Polymath (/student). The student snaps a photo of ONE question;
+  the helper reads it and coaches them step by step with hints — it never
+  gives the final answer. They can type their working or their answer at any
+  time and the helper checks it ("on the right track", "look again at step 2",
+  "you got it!").
+
+  WHO MAY USE IT. Enrolled students only: the same approval as every Polymath
+  app (student/access-gate.js shows the enrolment / waiting pop-up here), and
+  the server refuses anybody whose studentAccess record is not approved. Staff
+  (the access admins and teachers) may use it to try it out.
+
+  THE SERVER is the homeworkHelper function in homework-function/ (its own
+  Firebase Functions codebase, deployed by .github/workflows/deploy-homework.yml).
+  It holds the AI key, counts a daily allowance per account (15 photo questions
+  and 60 replies a day for a student), and keeps the answer sealed so it never
+  reaches this page. homework-core.mjs holds this page's pure helpers;
+  homework-services.js the sign-in and the calls; homework-app.js the screen.
+
+  Tests: tools/homework-tests.mjs (server logic + page helpers) and
+  tools/homework-browser.mjs (this page in a real browser with fixtures).
+  It is published by the website sync from homework/ in polymathlc/cer.
+-->
+<style>
+:root {
+  --font: 'Century Gothic', CenturyGothic, AppleGothic, 'Segoe UI', sans-serif;
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F7F7F5;
+  --bg-tint: #F1F8F7;
+  --text-primary: #1A1A1A;
+  --text-secondary: #555555;
+  --text-tertiary: #8A8A8A;
+  --border-subtle: #ECECEC;
+  --accent: #B2DFDB;
+  --accent-strong: #80CBC4;
+  --accent-ink: #00695C;
+  --hint: #FFF3CD;
+  --hint-ink: #8A5A00;
+  --good: #2E7D32;
+  --good-wash: #E8F5E9;
+  --warn: #B26A00;
+  --warn-wash: #FFF4E5;
+  --bad: #C62828;
+  --bad-wash: #FDECEA;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.05), 0 2px 8px rgba(0,0,0,0.08);
+  --shadow-md: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.06);
+  --shadow-lg: 0 4px 6px rgba(0,0,0,0.05), 0 10px 30px rgba(0,0,0,0.1);
+  --shadow-hover: 0 2px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.12);
+  --radius: 18px;
+  --space-xs: 4px; --space-sm: 8px; --space-md: 16px; --space-lg: 24px; --space-xl: 36px; --space-2xl: 56px;
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; font-family: var(--font); color: var(--text-primary); background: var(--bg-secondary); line-height: 1.55; font-size: 1rem; }
+[hidden] { display: none !important; }
+button, input, textarea, select { font: inherit; color: inherit; }
+img { max-width: 100%; display: block; }
+a { color: var(--accent-ink); }
+
+@keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: none; } }
+@keyframes pulseDot { 0%, 80%, 100% { opacity: 0.25; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1); } }
+@keyframes shake { 0%, 100% { transform: none; } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+@keyframes drawCheck { to { stroke-dashoffset: 0; } }
+@keyframes confettiFall { 0% { opacity: 1; transform: translate(0, 0) rotate(0); } 100% { opacity: 0; transform: translate(var(--dx), 160px) rotate(var(--rot)); } }
+.reveal { animation: fadeUp 0.5s ease both; }
+
+/* ───────── buttons ───────── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 46px; padding: 10px 20px; border-radius: 14px; border: 1px solid var(--border-subtle);
+  background: var(--bg-primary); box-shadow: var(--shadow-sm); cursor: pointer; font-weight: 700; font-size: 0.98rem;
+  transition: box-shadow 0.25s ease, transform 0.25s ease, background 0.2s ease; text-decoration: none; color: var(--text-primary);
+}
+.btn:hover { box-shadow: var(--shadow-hover); transform: translateY(-1px); }
+.btn:active { transform: translateY(0.5px); box-shadow: var(--shadow-sm); }
+.btn:focus-visible { outline: 3px solid var(--accent-ink); outline-offset: 2px; }
+.btn[disabled] { opacity: 0.55; cursor: not-allowed; transform: none; box-shadow: none; }
+.btn-primary { background: var(--accent); border-color: var(--accent-strong); color: #00352E; }
+.btn-primary:hover { background: var(--accent-strong); }
+.btn-big { min-height: 64px; font-size: 1.1rem; padding: 14px 24px; border-radius: 18px; }
+.btn-quiet { background: transparent; box-shadow: none; border-color: transparent; color: var(--text-secondary); font-weight: 600; }
+.btn-quiet:hover { background: var(--bg-primary); box-shadow: var(--shadow-sm); }
+.btn-hint { background: var(--hint); border-color: #FFE08A; color: var(--hint-ink); }
+.btn-hint:hover { background: #FFE9A8; }
+.btn-small { min-height: 38px; padding: 6px 14px; font-size: 0.9rem; border-radius: 12px; }
+.btn.is-busy { pointer-events: none; }
+.btn.is-busy .btn-label { opacity: 0.5; }
+
+.dots { display: inline-flex; gap: 4px; }
+.dots i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: pulseDot 1.2s infinite ease-in-out; }
+.dots i:nth-child(2) { animation-delay: 0.15s; }
+.dots i:nth-child(3) { animation-delay: 0.3s; }
+
+/* ───────── header ───────── */
+.hw-header {
+  position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: var(--space-md);
+  padding: 10px max(16px, env(safe-area-inset-left)); background: rgba(255,255,255,0.94); backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.hw-header .polymath-logo { height: 46px; width: auto; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+.hw-header .app-name { font-weight: 700; font-size: 1.05rem; letter-spacing: 0.01em; }
+.hw-header .app-name small { display: block; font-weight: 400; font-size: 0.78rem; color: var(--text-tertiary); letter-spacing: 0; }
+.hw-header .spacer { flex: 1; }
+.user-chip { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--text-secondary); }
+.user-chip .who { max-width: 22ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.icon-btn { width: 42px; height: 42px; border-radius: 12px; border: 1px solid var(--border-subtle); background: var(--bg-primary); box-shadow: var(--shadow-sm); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-size: 1.1rem; transition: box-shadow 0.25s ease, transform 0.25s ease; }
+.icon-btn:hover { box-shadow: var(--shadow-hover); transform: translateY(-1px); }
+
+/* ───────── sign in ───────── */
+.signin { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: var(--space-lg) 16px; }
+.signin-card { width: min(500px, 100%); background: var(--bg-primary); border-radius: 24px; box-shadow: var(--shadow-lg); padding: var(--space-xl); animation: scaleIn 0.4s ease both; }
+.signin-card .polymath-logo { height: 60px; width: auto; margin: 0 auto var(--space-md); }
+.signin-card h1 { text-align: center; font-size: 1.9rem; margin: 0; letter-spacing: 0.01em; line-height: 1.2; }
+.signin-card .lede { text-align: center; color: var(--text-secondary); margin: var(--space-sm) 0 var(--space-lg); }
+.google-btn { width: 100%; }
+.google-btn svg { width: 20px; height: 20px; }
+.or-line { display: flex; align-items: center; gap: 10px; color: var(--text-tertiary); font-size: 0.82rem; margin: var(--space-md) 0; }
+.or-line::before, .or-line::after { content: ''; flex: 1; height: 1px; background: var(--border-subtle); }
+.signin-form { display: grid; gap: 10px; }
+.field { display: grid; gap: 4px; font-size: 0.85rem; color: var(--text-secondary); font-weight: 600; }
+.input, .textarea, .select { width: 100%; border: 1px solid #DDDDDD; border-radius: 12px; padding: 11px 13px; background: var(--bg-primary); font-size: 1rem; transition: border-color 0.2s ease, box-shadow 0.2s ease; }
+.input:focus, .textarea:focus, .select:focus { outline: none; border-color: var(--accent-ink); box-shadow: 0 0 0 3px rgba(0,105,92,0.12); }
+.textarea { resize: vertical; min-height: 54px; line-height: 1.45; }
+.signin-error { color: var(--bad); font-size: 0.88rem; min-height: 1.2em; text-align: center; margin: 6px 0 0; }
+.signin-foot { text-align: center; color: var(--text-tertiary); font-size: 0.8rem; margin: var(--space-md) 0 0; }
+
+/* ───────── layout ───────── */
+main.hw-main { width: min(760px, 100%); margin: 0 auto; padding: var(--space-lg) 16px var(--space-2xl); }
+.card { background: var(--bg-primary); border-radius: var(--radius); box-shadow: var(--shadow-md); padding: var(--space-lg); border: 1px solid var(--border-subtle); }
+.card + .card, .card + .stack, .stack + .card { margin-top: var(--space-lg); }
+.stack > * + * { margin-top: var(--space-md); }
+.eyebrow { text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.72rem; font-weight: 700; color: var(--accent-ink); margin: 0 0 4px; }
+h1.hero-title { font-size: clamp(1.8rem, 6vw, 2.4rem); margin: 0; letter-spacing: 0.01em; line-height: 1.15; }
+.hero-lede { color: var(--text-secondary); font-size: 1.05rem; margin: var(--space-sm) 0 0; max-width: 56ch; }
+.promise { display: flex; gap: 10px; align-items: flex-start; background: var(--bg-tint); border-radius: 14px; padding: 12px 14px; margin-top: var(--space-md); font-size: 0.92rem; color: #24534D; }
+.promise b { color: var(--accent-ink); }
+
+/* the photo picker */
+.snap-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: var(--space-lg); }
+.snap-row .btn { width: 100%; }
+.file-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.drop-zone { margin-top: 12px; border: 2px dashed #D6E9E6; border-radius: 16px; padding: 14px; text-align: center; color: var(--text-tertiary); font-size: 0.85rem; transition: background 0.2s ease, border-color 0.2s ease; }
+.drop-zone.is-over { background: var(--bg-tint); border-color: var(--accent-strong); color: var(--accent-ink); }
+.preview { margin-top: var(--space-lg); display: grid; grid-template-columns: 180px 1fr; gap: var(--space-lg); align-items: start; animation: scaleIn 0.35s ease both; }
+.preview-photo { position: relative; border-radius: 14px; overflow: hidden; border: 1px solid var(--border-subtle); background: #FAFAFA; box-shadow: var(--shadow-sm); }
+.preview-photo img { width: 100%; max-height: 260px; object-fit: contain; }
+.preview-photo .retake { position: absolute; right: 8px; bottom: 8px; }
+.preview-form { display: grid; gap: 12px; }
+.child-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { border: 1px solid var(--border-subtle); background: var(--bg-primary); border-radius: 999px; padding: 6px 14px; cursor: pointer; font-size: 0.9rem; font-weight: 600; box-shadow: var(--shadow-sm); transition: background 0.2s ease, transform 0.2s ease; }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent-strong); color: #00352E; }
+.chip:hover { transform: translateY(-1px); }
+.allowance { font-size: 0.85rem; color: var(--text-tertiary); margin: 0; }
+.allowance.is-empty { color: var(--warn); font-weight: 600; }
+
+.how { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: var(--space-lg); }
+.how-item { background: var(--bg-primary); border: 1px solid var(--border-subtle); border-radius: 16px; padding: 14px; box-shadow: var(--shadow-md); }
+.how-item .n { font-size: 1.5rem; }
+.how-item b { display: block; margin-top: 4px; }
+.how-item span { font-size: 0.86rem; color: var(--text-secondary); }
+
+.recent h2 { font-size: 1.05rem; margin: 0 0 10px; }
+.recent-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.recent-item { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; border: 1px solid var(--border-subtle); background: var(--bg-primary); border-radius: 14px; padding: 10px 12px; cursor: pointer; transition: box-shadow 0.25s ease, transform 0.25s ease; }
+.recent-item:hover { box-shadow: var(--shadow-hover); transform: translateY(-1px); }
+.recent-item img { width: 48px; height: 48px; object-fit: cover; border-radius: 10px; flex: none; background: #F2F2F2; }
+.recent-item .words { flex: 1; min-width: 0; }
+.recent-item .q { display: block; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent-item .meta { font-size: 0.78rem; color: var(--text-tertiary); }
+
+/* the thinking card */
+.thinking { text-align: center; padding: var(--space-xl) var(--space-lg); }
+.thinking .big { font-size: 2.6rem; }
+.thinking h2 { margin: 8px 0 4px; font-size: 1.3rem; }
+.thinking p { color: var(--text-secondary); margin: 0 auto; max-width: 42ch; }
+.thinking .dots { color: var(--accent-ink); margin-top: 14px; }
+.thinking .tip { margin-top: var(--space-md); font-size: 0.88rem; color: var(--text-tertiary); min-height: 2.6em; transition: opacity 0.3s ease; }
+
+/* the coaching view */
+.coach-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.coach-top .spacer { flex: 1; }
+.topic-chip { background: var(--bg-tint); color: var(--accent-ink); border-radius: 999px; padding: 4px 12px; font-size: 0.82rem; font-weight: 700; }
+.subject-chip { background: #EEF2FF; color: #3949AB; border-radius: 999px; padding: 4px 12px; font-size: 0.82rem; font-weight: 700; }
+.question-card { display: grid; grid-template-columns: 120px 1fr; gap: var(--space-md); align-items: start; }
+.question-card img { width: 120px; max-height: 160px; object-fit: contain; border-radius: 12px; border: 1px solid var(--border-subtle); background: #FAFAFA; cursor: zoom-in; }
+.question-text { white-space: pre-wrap; margin: 4px 0 0; font-size: 1.02rem; }
+.question-card .small { font-size: 0.8rem; color: var(--text-tertiary); margin: 8px 0 0; }
+.encourage { display: flex; gap: 12px; align-items: flex-start; }
+.encourage .face { font-size: 1.8rem; line-height: 1; }
+.encourage p { margin: 0; font-size: 1.02rem; }
+
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.step { background: var(--bg-primary); border: 1px solid var(--border-subtle); border-radius: var(--radius); box-shadow: var(--shadow-md); padding: 18px 18px 16px; transition: opacity 0.3s ease, border-color 0.3s ease; animation: fadeUp 0.45s ease both; }
+.step.is-current { border-color: var(--accent-strong); box-shadow: 0 0 0 3px rgba(128,203,196,0.25), var(--shadow-md); }
+.step.is-locked { opacity: 0.55; }
+.step.is-done { background: #FBFEFD; }
+.step-head { display: flex; align-items: flex-start; gap: 12px; }
+.step-num { flex: none; width: 34px; height: 34px; border-radius: 50%; background: var(--bg-tint); color: var(--accent-ink); font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.step.is-done .step-num { background: var(--good-wash); color: var(--good); }
+.step-goal { margin: 4px 0 0; font-weight: 700; }
+.step-goal.is-hidden-goal { color: var(--text-tertiary); font-weight: 600; }
+.hints { list-style: none; margin: 12px 0 0 46px; padding: 0; display: grid; gap: 8px; }
+.hint { background: var(--hint); border-radius: 12px; padding: 10px 12px; color: #4A3700; animation: fadeUp 0.35s ease both; display: flex; gap: 8px; }
+.hint .bulb { flex: none; }
+.step-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 0 46px; }
+.hint-count { font-size: 0.8rem; color: var(--text-tertiary); align-self: center; }
+
+/* the chat */
+.chat h2 { font-size: 1.1rem; margin: 0; }
+.chat .sub { margin: 4px 0 0; color: var(--text-secondary); font-size: 0.9rem; }
+.turns { list-style: none; margin: var(--space-md) 0 0; padding: 0; display: grid; gap: 10px; }
+.turn { max-width: 88%; padding: 10px 14px; border-radius: 16px; animation: fadeUp 0.35s ease both; white-space: pre-wrap; }
+.turn.student { justify-self: end; background: var(--accent); color: #00352E; border-bottom-right-radius: 6px; }
+.turn.coach { justify-self: start; background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-bottom-left-radius: 6px; }
+.turn .verdict { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 0.85rem; margin-bottom: 4px; }
+.turn.coach.v-correct { background: var(--good-wash); border-color: #C8E6C9; }
+.turn.coach.v-correct .verdict { color: var(--good); }
+.turn.coach.v-not-yet { background: var(--warn-wash); border-color: #FFE0B2; animation: fadeUp 0.35s ease both, shake 0.35s ease 0.35s; }
+.turn.coach.v-not-yet .verdict { color: var(--warn); }
+.turn.coach.v-on-track .verdict { color: var(--accent-ink); }
+.turn.coach.is-thinking { color: var(--text-tertiary); }
+.composer { display: grid; grid-template-columns: 1fr auto; gap: 10px; margin-top: var(--space-md); align-items: end; }
+.composer .textarea { min-height: 52px; }
+.quick { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+
+.solved { text-align: center; position: relative; overflow: hidden; background: linear-gradient(0deg, #FFFFFF, #FFFFFF); }
+.solved svg.check { width: 64px; height: 64px; }
+.solved svg.check circle { fill: var(--good-wash); }
+.solved svg.check path { fill: none; stroke: var(--good); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 60; stroke-dashoffset: 60; animation: drawCheck 0.5s ease 0.2s forwards; }
+.solved h2 { margin: 8px 0 4px; }
+.solved p { margin: 0 auto; color: var(--text-secondary); max-width: 46ch; }
+.confetti { position: absolute; width: 8px; height: 12px; top: 20px; border-radius: 2px; animation: confettiFall 1.4s ease-out forwards; pointer-events: none; }
+
+.notice { border-radius: 14px; padding: 14px 16px; display: flex; gap: 12px; align-items: flex-start; }
+.notice.warn { background: var(--warn-wash); color: #5D3A00; }
+.notice.bad { background: var(--bad-wash); color: #7F1D1D; }
+.notice.info { background: var(--bg-tint); color: #24534D; }
+.notice p { margin: 0; }
+.notice .actions { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+
+.photo-view { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; padding: 16px; cursor: zoom-out; }
+.photo-view img { max-width: 100%; max-height: 100%; border-radius: 8px; }
+
+.footnote { text-align: center; color: var(--text-tertiary); font-size: 0.8rem; margin-top: var(--space-xl); }
+.footnote a { color: var(--text-secondary); }
+
+@media (max-width: 600px) {
+  .hw-header { gap: 10px; }
+  .hw-header .polymath-logo { height: 36px; }
+  .hw-header .app-name small, .user-chip .who { display: none; }
+  main.hw-main { padding-top: var(--space-md); }
+  .card { padding: 18px 16px; }
+  .snap-row { grid-template-columns: 1fr; }
+  .preview { grid-template-columns: 1fr; }
+  .preview-photo img { max-height: 220px; }
+  .how { grid-template-columns: 1fr; }
+  .how-item { display: flex; gap: 12px; align-items: center; }
+  .how-item b { margin-top: 0; }
+  .question-card { grid-template-columns: 64px 1fr; gap: 12px; }
+  .question-card img { width: 64px; max-height: 88px; }
+  .question-text { font-size: 0.98rem; }
+  .print-btn { display: none; }
+  .hints, .step-actions { margin-left: 0; }
+  .composer { grid-template-columns: 1fr; }
+  .composer .btn { width: 100%; }
+  .turn { max-width: 94%; }
+  .signin-card { padding: var(--space-lg) 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}
+@page { size: A4; margin: 15mm 20mm; }
+@media print {
+  body { background: #FFFFFF; }
+  .hw-header .user-chip, .icon-btn, .btn, .composer, .quick, .snap-row, .drop-zone, #askView, .recent, .how { display: none !important; }
+  .card, .step { box-shadow: none !important; border: 1px solid #DDDDDD; page-break-inside: avoid; }
+  .hint { background: #FFFFFF; border: 1px dashed #CCCCCC; }
+}
+</style>
+</head>
+<body>
+
+<!-- ============================================================ signed out -->
+<section class="signin" id="signinScreen" hidden>
+  <div class="signin-card">
+    <img class="polymath-logo" src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Polymath Learning Centre">
+    <h1>Homework Helper</h1>
+    <p class="lede">Stuck on a question? Snap a photo and get hints, one step at a time, so you can solve it yourself. Any time, any day.</p>
+    <button class="btn btn-primary google-btn" id="googleSignIn" type="button">
+      <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
+      Sign in with Google
+    </button>
+    <div class="or-line">or with your centre username</div>
+    <form class="signin-form" id="usernameForm" autocomplete="on">
+      <label class="field">Username or email<input class="input" name="loginId" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
+      <label class="field">Password<input class="input" name="password" type="password" autocomplete="current-password" required></label>
+      <button class="btn" type="submit" id="usernameSubmit">Sign in</button>
+    </form>
+    <p class="signin-error" id="signinError" role="alert"></p>
+    <p class="signin-foot">Use the same account as your other Polymath apps. For enrolled Polymath students. New here? Ask for access at <a href="../student/">My Polymath</a>.</p>
+  </div>
+</section>
+
+<!-- ============================================================ the app -->
+<div id="app" hidden>
+  <header class="hw-header">
+    <a href="../student/" aria-label="Back to My Polymath"><img class="polymath-logo" src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Polymath Learning Centre"></a>
+    <div class="app-name">Homework Helper<small>Hints, not answers</small></div>
+    <span class="spacer"></span>
+    <div class="user-chip"><span class="who" id="whoAmI"></span><button class="btn btn-small" id="signOutButton" type="button">Sign out</button></div>
+    <button class="icon-btn print-btn" type="button" onclick="window.print()" title="Print" aria-label="Print">🖨</button>
+  </header>
+
+  <main class="hw-main">
+    <!-- a refusal (not approved / paused) or a problem reaching the helper -->
+    <div class="notice bad reveal" id="accessNotice" role="alert" hidden><span aria-hidden="true">🔒</span><div><p id="accessNoticeText"></p><div class="actions"><a class="btn btn-small" href="../student/">Go to My Polymath</a></div></div></div>
+
+    <!-- ============ 1. ask ============ -->
+    <section id="askView">
+      <div class="card reveal">
+        <p class="eyebrow">Polymath Homework Helper</p>
+        <h1 class="hero-title">Stuck on a question?</h1>
+        <p class="hero-lede">Snap a photo of <b>one</b> question. I will give you hints, one step at a time, so you can solve it yourself.</p>
+        <div class="promise"><span aria-hidden="true">🤝</span><span>I will <b>not</b> tell you the answer. I will help you <b>find</b> it. When you think you have it, type it in and I will check it.</span></div>
+
+        <div class="snap-row" id="snapRow">
+          <button class="btn btn-primary btn-big" type="button" id="takePhotoButton"><span aria-hidden="true">📷</span><span>Take a photo</span></button>
+          <button class="btn btn-big" type="button" id="choosePhotoButton"><span aria-hidden="true">🖼️</span><span>Choose a photo</span></button>
+        </div>
+        <input class="file-input" type="file" accept="image/*" capture="environment" id="cameraInput" tabindex="-1" aria-hidden="true">
+        <input class="file-input" type="file" accept="image/*" id="fileInput" tabindex="-1" aria-hidden="true">
+        <div class="drop-zone" id="dropZone">On a computer, you can also drop a picture or screenshot here, or paste one (Ctrl+V).</div>
+
+        <div class="preview" id="preview" hidden>
+          <div class="preview-photo">
+            <img id="previewImage" alt="Your photo of the question">
+            <button class="btn btn-small retake" type="button" id="retakeButton">↺ Retake</button>
+          </div>
+          <form class="preview-form" id="askForm">
+            <div class="field" id="childField" hidden>Who is asking?
+              <div class="child-chips" id="childChips" role="group" aria-label="Who is asking"></div>
+            </div>
+            <label class="field" id="levelField" hidden>Level (staff: pick one to try)
+              <select class="select" id="levelSelect">
+                <option>P1</option><option>P2</option><option>P3</option><option>P4</option><option selected>P5</option><option>P6</option>
+                <option>S1</option><option>S2</option><option>S3</option><option>S4</option><option>S5</option>
+              </select>
+            </label>
+            <label class="field">Which question, and what have you tried? <span style="font-weight:400;color:var(--text-tertiary)">(optional)</span>
+              <textarea class="textarea" id="noteInput" maxlength="600" rows="2" placeholder="e.g. Question 5. I drew a bar model but got stuck."></textarea>
+            </label>
+            <button class="btn btn-primary btn-big" type="submit" id="getHintsButton"><span aria-hidden="true">💡</span><span class="btn-label">Get my first hint</span></button>
+            <p class="allowance" id="allowanceLine"></p>
+          </form>
+        </div>
+      </div>
+
+      <div class="how reveal" style="animation-delay:0.1s">
+        <div class="how-item"><span class="n" aria-hidden="true">📷</span><div><b>Snap it</b><span>One question, clear and flat, in good light.</span></div></div>
+        <div class="how-item"><span class="n" aria-hidden="true">💡</span><div><b>Hints, step by step</b><span>Open one hint at a time, only when you need it.</span></div></div>
+        <div class="how-item"><span class="n" aria-hidden="true">✅</span><div><b>Check your answer</b><span>Type your working or answer and I will tell you if you are on track.</span></div></div>
+      </div>
+
+      <div class="card recent reveal" id="recentCard" style="animation-delay:0.2s" hidden>
+        <h2>Your recent questions</h2>
+        <ul class="recent-list" id="recentList"></ul>
+      </div>
+    </section>
+
+    <!-- ============ 2. thinking ============ -->
+    <section class="card thinking" id="thinkingView" hidden aria-live="polite">
+      <div class="big" aria-hidden="true">🧐</div>
+      <h2>Reading your question</h2>
+      <p>I am working out the steps, so I can give you good hints. This takes about half a minute.</p>
+      <div class="dots" aria-hidden="true"><i></i><i></i><i></i></div>
+      <p class="tip" id="thinkingTip"></p>
+    </section>
+
+    <!-- ============ 3. coach ============ -->
+    <section id="coachView" class="stack" hidden>
+      <div class="coach-top">
+        <span class="subject-chip" id="subjectChip"></span>
+        <span class="topic-chip" id="topicChip"></span>
+        <span class="spacer"></span>
+        <button class="btn btn-small" type="button" id="newQuestionButton">📷 New question</button>
+      </div>
+
+      <div class="card" id="needsCard" hidden>
+        <div class="notice warn"><span aria-hidden="true">📸</span><div><p id="needsText"></p><div class="actions"><button class="btn btn-small btn-primary" type="button" id="needsRetry">Try again</button></div></div></div>
+      </div>
+
+      <div class="card question-card" id="questionCard">
+        <img id="questionPhoto" alt="Your photo" title="Tap to see it bigger">
+        <div>
+          <p class="eyebrow">The question I read</p>
+          <p class="question-text" id="questionText"></p>
+          <p class="small">Not the right question? Tap <b>New question</b> and take the photo again.</p>
+        </div>
+      </div>
+
+      <div class="card encourage" id="encourageCard"><span class="face" aria-hidden="true">🦉</span><p id="encourageText"></p></div>
+
+      <ol class="steps" id="stepsList"></ol>
+
+      <div class="card solved" id="solvedCard" hidden>
+        <svg class="check" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="30"/><path d="M19 33 l9 9 l17 -19"/></svg>
+        <h2>You solved it yourself!</h2>
+        <p>That is the best way to learn. Try the next one on your own, and come back if you get stuck.</p>
+        <div class="actions" style="margin-top:14px"><button class="btn btn-primary" type="button" id="solvedNext">📷 Ask about another question</button></div>
+      </div>
+
+      <div class="card chat" id="chatCard">
+        <h2>Check my work</h2>
+        <p class="sub">Type your working, your answer, or what you do not understand.</p>
+        <ul class="turns" id="turnsList" aria-live="polite"></ul>
+        <form class="composer" id="replyForm">
+          <textarea class="textarea" id="replyInput" rows="2" maxlength="1200" placeholder="e.g. I got 4 × 3 = 12, so the answer is $12" aria-label="Your working or answer"></textarea>
+          <button class="btn btn-primary" type="submit" id="replyButton"><span class="btn-label">Check</span></button>
+        </form>
+        <div class="quick" id="quickReplies">
+          <button class="btn btn-small btn-quiet" type="button" data-quick="I don't understand what the question is asking.">🤔 I don't get the question</button>
+          <button class="btn btn-small btn-quiet" type="button" data-quick="Can you explain the hint in a simpler way?">🙋 Explain the hint simpler</button>
+        </div>
+        <p class="allowance" id="replyAllowance"></p>
+      </div>
+    </section>
+
+    <p class="footnote">The Homework Helper is for enrolled Polymath students and is included in your fees. It can make mistakes, so if something looks wrong, ask your teacher at your next lesson. <a href="../student/">Back to My Polymath</a></p>
+  </main>
+</div>
+
+<div class="photo-view" id="photoView" hidden><img id="photoViewImage" alt="Your photo of the question"></div>
+
+<script type="module" src="homework-app.js?v=1.0.0"></script>
+<!-- 🔐 Student access approval: the same pop-up as every Polymath app — an account is enrolled and approved
+     before using this app. Source: polymathlc/cer student/access-gate.js -->
+<script defer src="../student/access-gate.js?v=1.1.0" data-app="homework"></script>
+</body>
+</html>

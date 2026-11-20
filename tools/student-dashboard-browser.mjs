@@ -142,13 +142,13 @@ const same = (actual, expected, message) => { assert.equal(actual, expected, mes
     href: link.getAttribute('href'),
     locked: link.classList.contains('is-locked')
   })));
-  same(tiles.length, 10, 'ten tiles (Mind Map joined in v1.6.0)');
+  same(tiles.length, 11, 'eleven tiles (Mind Map joined in v1.6.0, Homework Helper in November 2026)');
   // v1.7.0: three groups — Worksheets on top, then the learning portals, then the self learning apps.
   const sections = await page.$$eval('[data-section]', lists => lists.map(list => [list.dataset.section, [...list.querySelectorAll('.app-tile')].map(a => a.dataset.app)]));
   same(JSON.stringify(sections), JSON.stringify([
     ['worksheets', ['online']],
     ['portals', ['science', 'psle', 'math', 'english', 'chinese']],
-    ['self', ['tutor', 'anskey', 'mindmap', 'rewards']]
+    ['self', ['homework', 'tutor', 'anskey', 'mindmap', 'rewards']]
   ]), 'the three groups, in order');
   const top = await page.$eval('.app-tile[data-app="online"]', el => el.getBoundingClientRect().top);
   const firstPortal = await page.$eval('.app-tile[data-app="science"]', el => el.getBoundingClientRect().top);
@@ -163,7 +163,7 @@ const same = (actual, expected, message) => { assert.equal(actual, expected, mes
     if (new URL(tile.href).origin === SITE) {
       // Published on the website itself (Mind Map): the real page from this repo answers, not a stand-in.
       ok(fs.existsSync(path.join(repoRoot, expectedRepo, 'index.html')), tile.name + ': ' + expectedRepo + '/index.html is in this repo');
-      ok(new RegExp(tile.app === 'online' ? 'Polymath Online|Worksheets' : 'Mind Map').test(await page.title()), tile.name + ' tile opens its own page, not GitHub\'s 404');
+      ok(new RegExp(tile.app === 'online' ? 'Polymath Online|Worksheets' : tile.app === 'homework' ? 'Homework Helper' : 'Mind Map').test(await page.title()), tile.name + ' tile opens its own page, not GitHub\'s 404');
     } else {
       same(await page.getAttribute('body', 'data-app-repo'), expectedRepo, tile.name + ' tile opens the ' + APP_REPOS[expectedRepo] + ' app, not GitHub\'s 404');
     }
