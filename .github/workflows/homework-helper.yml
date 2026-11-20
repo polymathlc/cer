@@ -1,0 +1,48 @@
+name: Homework helper checks
+
+# polymathlc.com.sg/homework and its server (homework-function/): the server's pure logic
+# (who may use it, the daily allowance, the prompts, the answer guard, the sealed session),
+# the page's helpers, and a real-browser run of the page with the Firebase / AI services
+# replaced by fixtures (tools/homework-fixtures/), so it needs no account and no network.
+on:
+  pull_request:
+    paths: ['homework/**', 'homework-function/**', 'student/access-gate.js', 'tools/homework-*', 'tools/homework-fixtures/**', '.github/workflows/homework-helper.yml']
+  push:
+    branches: [main]
+    paths: ['homework/**', 'homework-function/**', 'student/access-gate.js', 'tools/homework-*', 'tools/homework-fixtures/**', '.github/workflows/homework-helper.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  homework:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax
+        run: |
+          node --check homework/homework-app.js
+          node --check homework/homework-services.js
+          node --check homework/homework-core.mjs
+          node --check homework-function/functions/core.js
+          node --check homework-function/functions/index.js
+          node --check tools/homework-selftest.mjs
+      - name: Server logic and page helpers
+        run: node --test tools/homework-tests.mjs
+      - run: npm install --no-save --package-lock=false playwright@1.62.1
+      - run: npx playwright install --with-deps chromium
+      - name: The page in a real browser (desktop, phone, refused, staff, signed out)
+        run: node tools/homework-browser.mjs
+        env:
+          HOMEWORK_SCREENSHOTS: artifacts/homework
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: homework-previews
+          path: artifacts/homework
+          if-no-files-found: ignore

@@ -5,7 +5,7 @@
 <meta name="robots" content="noindex">  <!-- 🔎 app/tool page: kept out of search results (Oct 2026) -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>My Polymath — Student Dashboard | Polymath Learning Centre</title>
-<meta name="description" content="Every Polymath Learning Centre app in one place: Science, Science PSLE, Math, Answer Keys, Study Buddy, Rewards, Worksheets, Chinese, English and Mind Map.">
+<meta name="description" content="Every Polymath Learning Centre app in one place: Science, Science PSLE, Math, Answer Keys, Study Buddy, Rewards, Worksheets, Chinese, English, Mind Map and the Homework Helper.">
 <!--
   MY POLYMATH — the student dashboard at polymathlc.com.sg/student  (v1.11.0)
   ------------------------------------------------------------------------
@@ -794,6 +794,21 @@
       <h2 class="section-title" id="sectionSelf">Self learning apps</h2>
       <p class="section-hint">Help, answers and tools to learn on your own.</p>
       <ul class="tile-grid" data-section="self">
+      <li style="--order:6">
+        <!-- 📷 Homework Helper (Nov 2026): polymathlc.com.sg/homework, published by the website sync from homework/ in
+             this repo. "Stuck on a question?" — snap a photo, get hints step by step, never the answer. Same access
+             gate with no data-subject (every approved account); the server (homework-function/) refuses others. -->
+        <a class="app-tile" data-app="homework" href="https://polymathlc.com.sg/homework/" style="--tile-wash:#B2DFDB;--tile-ink:#00695C">
+          <img class="tile-icon" src="assets/apps/homework.png" alt="" width="84" height="84">
+          <span class="tile-badge" hidden>Last opened</span>
+          <span class="tile-go" aria-hidden="true">→</span>
+          <span class="tile-words">
+            <span class="tile-name">Homework Helper</span>
+            <span class="tile-blurb">Stuck on a question? Snap it for hints</span>
+            <span class="print-address">polymathlc.com.sg/homework</span>
+          </span>
+        </a>
+      </li>
       <li style="--order:6">
         <a class="app-tile" data-app="tutor" href="https://polymathlc.github.io/tutor/" style="--tile-wash:#D1C4E9;--tile-ink:#5E35B1">
           <img class="tile-icon" src="assets/apps/tutor.png" alt="" width="84" height="84">

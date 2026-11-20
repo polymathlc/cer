@@ -1,0 +1,100 @@
+name: Deploy homework helper
+
+# Publishes ONLY the isolated "homework" Functions codebase (homeworkHelper,
+# the server behind polymathlc.com.sg/homework) to mathgen--app, then runs a
+# LIVE check (tools/homework-selftest.mjs): it refuses a signed-out caller,
+# the usage counters are server-only, and a real photo question gets hints
+# without its answer, refuses "just tell me", rejects a wrong answer and
+# accepts the right one.
+#
+# The OpenAI key is the existing Firebase secret OPENAI_API_KEY (the one
+# visualiseAi uses); this workflow never reads or writes it.
+# Needs the repository secret FIREBASE_SERVICE_ACCOUNT. No scheduled
+# functions: the deploy account cannot create Cloud Scheduler jobs.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'homework-function/**'
+      - 'tools/homework-selftest.mjs'
+      - '.github/workflows/deploy-homework.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-homework
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Only reviewed code on main is ever deployed, and never from a fork.
+    if: github.repository == 'polymathlc/cer' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      FIREBASE_PROJECT: mathgen--app
+      FUNCTION_URL: https://us-central1-mathgen--app.cloudfunctions.net/homeworkHelper
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: homework-function/functions/package-lock.json
+
+      - name: Install and check the function
+        run: |
+          npm ci --prefix homework-function/functions --no-audit --no-fund
+          node --check homework-function/functions/index.js
+          node --check homework-function/functions/core.js
+          node --test tools/homework-tests.mjs
+
+      - name: Prepare credentials
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::The FIREBASE_SERVICE_ACCOUNT secret is missing."
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/firebase-sa.json"
+          node -e 'const k=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); if(k.type!=="service_account"||!k.private_key) {console.error("FIREBASE_SERVICE_ACCOUNT is not a service-account JSON key."); process.exit(1);}' "$RUNNER_TEMP/firebase-sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/firebase-sa.json" >> "$GITHUB_ENV"
+
+      - name: Install the Firebase CLI
+        run: npm install -g firebase-tools --no-audit --no-fund
+
+      - name: Deploy the homework codebase
+        run: firebase deploy --project "$FIREBASE_PROJECT" --config homework-function/firebase.json --only functions:homework --non-interactive --force
+
+      - name: Wait for the live endpoint
+        run: |
+          for i in $(seq 1 18); do
+            headers=$(curl -si -X OPTIONS "$FUNCTION_URL" \
+              -H 'Origin: https://polymathlc.com.sg' \
+              -H 'Access-Control-Request-Method: POST' \
+              -H 'Access-Control-Request-Headers: content-type,authorization' --max-time 20 || true)
+            if printf '%s' "$headers" | grep -qi '^access-control-allow-origin: https://polymathlc.com.sg'; then
+              echo "homeworkHelper answers CORS preflight from polymathlc.com.sg (attempt $i)."
+              exit 0
+            fi
+            echo "Attempt $i: not ready yet; retrying in 10s."
+            printf '%s\n' "$headers" | head -1
+            sleep 10
+          done
+          echo "::error::$FUNCTION_URL did not allow https://polymathlc.com.sg."
+          exit 1
+
+      - name: Live check with a real question
+        run: HOMEWORK_DEPS=homework-function/functions node tools/homework-selftest.mjs
+
+      - name: Remove the key file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/firebase-sa.json"
