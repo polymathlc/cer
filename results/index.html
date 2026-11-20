@@ -115,7 +115,8 @@
     .kid { padding:16px 14px 14px; border-radius:18px; }
     .grid { grid-template-columns:1fr; }
     .row { flex-wrap:wrap; }
-    .row .what { flex-basis:calc(100% - 90px); }
+    .row .what { flex:1 1 0; }
+    .row .acts { margin-top:-4px; }
     .row .acts { width:100%; justify-content:flex-end; }
   }
 </style>
@@ -208,7 +209,7 @@ function examOptions(sel) {
 }
 function gradeOptions(level, sel) {
   const scale = S.scaleFor(level);
-  return '<option value="">' + (scale === 'AL' ? 'Not given (worked out from the marks)' : 'Not given') + '</option>'
+  return '<option value="">' + 'Not given' + '</option>'
     + S.GRADES[scale].map(g => '<option value="' + g + '"' + (g === sel ? ' selected' : '') + '>' + g + '</option>').join('');
 }
 function formHtml(kid) {
