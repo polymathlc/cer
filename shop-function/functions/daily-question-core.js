@@ -75,8 +75,11 @@ const MAX_DAILY_CAP = 1800;
 const GMAIL_LIMITS = Object.freeze({ gmail: 500, workspace: 2000 });
 // Sign-up limits: per IP an hour, all sign-up emails a day, and per address.
 const LIMITS = Object.freeze({ perIpHour: 8, globalDay: 300, addressGapMs: 3 * 60000, addressMails: 6, adminTestGapMs: 30000 });
-const CONSENT_TEXT = 'I agree to receive the Free Question of the Day and occasional news about Polymath classes by email from Polymath Learning Centre. I can unsubscribe at any time.';
-const CONSENT_VERSION = 'qotd-consent-v1';
+// The box every parent ticks (the same words on /question and the home page). Since
+// v2 it is also their agreement to Polymath's marketing emails: that is what the free
+// questions are in return for. Each subscriber keeps the words, version and time.
+const CONSENT_TEXT = 'Yes, send me the Free Question of the Day and Polymath Learning Centre\'s marketing emails (news, classes, events and offers) at this email address. I understand the questions are free in return for receiving these emails, and I can unsubscribe at any time.';
+const CONSENT_VERSION = 'qotd-consent-v2-marketing';
 
 const HOUR = 3600000, DAY_MS = 86400000, SG_OFFSET = 8 * HOUR;
 const DAY_KEY = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -353,7 +356,8 @@ function planSubscribe(request, existing, at, makeToken) {
   const record = {
     email: request.email, name: request.name, level: request.level, subjects: request.subjects, frequency: request.frequency,
     status: 'pending', token, source: request.source, pageVersion: request.pageVersion,
-    consent: { text: CONSENT_TEXT, version: CONSENT_VERSION, at },
+    consent: { text: CONSENT_TEXT, version: CONSENT_VERSION, at, marketing: true },
+    marketing: true, marketingAt: at,
     createdAt: existing && existing.createdAt ? existing.createdAt : at,
     lastSignupAt: at, lastMailAt: at,
     // The daily count of confirmation emails starts again after a quiet day.

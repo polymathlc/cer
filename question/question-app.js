@@ -17,7 +17,7 @@
   'use strict';
 
   var API = 'https://us-central1-mathgen--app.cloudfunctions.net/dailyQuestion';
-  var PAGE_VERSION = 'v2.1.1';
+  var PAGE_VERSION = 'v2.2.0';
   var LEVELS = ['P3', 'P4', 'P5', 'P6'];
   // Keep equal to QOTD_ADMINS in shop-function/functions/daily-question-core.js.
   var ADMINS = ['chungzhikai@gmail.com', 'admin@polymathlc.com.sg', 'support@polymathlc.com.sg'];
@@ -646,10 +646,10 @@
       if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
       return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
     };
-    var rows = [['Email', 'Name', 'Child level', 'Subjects', 'How often', 'Status', 'Signed up', 'Confirmed', 'Unsubscribed', 'Emails sent', 'Signed up on']];
+    var rows = [['Email', 'Name', 'Child level', 'Subjects', 'How often', 'Status', 'Marketing emails', 'Signed up', 'Confirmed', 'Unsubscribed', 'Emails sent', 'Signed up on']];
     list.forEach(function (s) {
       rows.push([s.email, s.name, s.level, s.subjects.map(function (x) { return SUBJECT_LABEL[x] || x; }).join(' + '), s.frequency === 'weekly' ? 'Weekly' : 'Daily',
-        s.status, fmtTime(s.createdAt), fmtTime(s.confirmedAt), fmtTime(s.unsubscribedAt), s.sentCount, s.source === 'home-page' ? 'Home page' : 'Question page']);
+        s.status, s.status === 'unsubscribed' ? 'No (unsubscribed)' : s.marketing === 'yes' ? 'Yes' : s.marketing === 'news' ? 'Class news only (older box)' : 'No', fmtTime(s.createdAt), fmtTime(s.confirmedAt), fmtTime(s.unsubscribedAt), s.sentCount, s.source === 'home-page' ? 'Home page' : 'Question page']);
     });
     return rows.map(function (r) { return r.map(cell).join(','); }).join('\n') + '\n';
   }
@@ -780,7 +780,8 @@
             + '<td>' + esc(s.level || '—') + (s.status === 'active' && !s.questionLevel ? '<br><small class="warn-text">No questions until a level P3–P6 is set</small>' : s.questionLevel && s.questionLevel !== s.level ? '<br><small>Gets ' + esc(s.questionLevel) + ' questions</small>' : '') + '</td>'
             + '<td>' + s.subjects.map(function (x) { return SUBJECT_ICON[x] + ' ' + SUBJECT_LABEL[x]; }).join('<br>') + '<br><small>' + (s.frequency === 'weekly' ? 'Saturdays' : 'Every morning') + '</small></td>'
             + '<td><span class="badge ' + s.status + '">' + (s.status === 'pending' ? 'Waiting' : s.status === 'active' ? 'Active' : 'Unsubscribed') + '</span>'
-            + (s.source === 'home-page' ? '<br><small>Home page</small>' : '') + '</td>'
+            + (s.source === 'home-page' ? '<br><small>Home page</small>' : '')
+            + (s.status === 'active' && s.marketing === 'yes' ? '<br><small>✉️ Marketing OK</small>' : '') + '</td>'
             + '<td class="opt-col">' + esc(fmtDate(s.confirmedAt || s.createdAt)) + '</td>'
             + '<td class="opt-col">' + s.sentCount + '</td>'
             + '<td style="white-space:nowrap">' + (s.status === 'pending' ? '<button class="btn small ghost" type="button" data-resend="' + s.id + '">Resend</button> ' : '')

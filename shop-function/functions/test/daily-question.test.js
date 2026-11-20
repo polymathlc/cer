@@ -229,6 +229,9 @@ test('sign-up sends one confirmation email and nothing else until it is clicked'
   assert.equal(sub.status, 'pending');
   assert.equal(sub.email, 'parent@example.test', 'stored in lower case');
   assert.equal(sub.consent.text, core.CONSENT_TEXT);
+  assert.equal(sub.marketing, true, 'the box is also the agreement to marketing emails');
+  assert.equal(sub.consent.version, 'qotd-consent-v2-marketing');
+  assert.match(core.CONSENT_TEXT, /marketing emails/);
   assert.deepEqual(sub.subjects, ['math', 'science']);
   const sent = h.mails();
   assert.equal(sent.length, 1);
