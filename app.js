@@ -1,6 +1,6 @@
 import './worksheet-art.js?v=1';
-import { createGameInsightsController } from './game-insights.js?v=1.462.0';
-import { createGameUsageRecorder, createGameUsageWriter } from './game-usage.js?v=1.462.0';
+import { createGameInsightsController } from './game-insights.js?v=1.463.0';
+import { createGameUsageRecorder, createGameUsageWriter } from './game-usage.js?v=1.463.0';
 import './worksheet-art-editor.js?v=1';
 import './vendor/qrcode-generator.js';
 import './question-apps.js?v=1';
@@ -4590,7 +4590,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.462.0';
+const APP_VERSION = 'v1.463.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -7308,26 +7308,26 @@ function navigateTo(page) {
   }
   if (page === 'defenders') {
     const f = document.getElementById('defendersFrame');
-    if (f && !f.getAttribute('src')) f.setAttribute('src', 'science-defenders.html?v=1.462.0');
+    if (f && !f.getAttribute('src')) f.setAttribute('src', 'science-defenders.html?v=1.463.0');
   }
   if (page === 'raiders') {
     const f = document.getElementById('raidersFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-raiders.html?v=1.462.0'); f.addEventListener('load', pushRaidersAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-raiders.html?v=1.463.0'); f.addEventListener('load', pushRaidersAssets); }
     else pushRaidersAssets();
   }
   if (page === 'spire') {
     const f = document.getElementById('spireFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-spire.html?v=1.462.0'); f.addEventListener('load', pushSpireAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-spire.html?v=1.463.0'); f.addEventListener('load', pushSpireAssets); }
     else pushSpireAssets();
   }
   if (page === 'legends') {
     const f = document.getElementById('legendsFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-legends.html?v=1.462.0'); f.addEventListener('load', pushLegendsAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-legends.html?v=1.463.0'); f.addEventListener('load', pushLegendsAssets); }
     else pushLegendsAssets();
   }
   if (page === 'slayers') {
     const f = document.getElementById('slayersFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-slayers.html?v=1.462.0'); f.addEventListener('load', pushLegendsAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-slayers.html?v=1.463.0'); f.addEventListener('load', pushLegendsAssets); }
     else pushLegendsAssets();
   }
   if (page === 'hades') _hadesInit();
@@ -19704,7 +19704,10 @@ async function _fillBlocksFromAiBoxes(imgBlocks, boxes, mimeType, b64, onStatus,
   // Reserve the same first eligible figures in source order before workers run.
   // A quicker upload must never take another picture's enhancement budget.
   let enhanced = 0;
-  const enhanceThese = crops.map(c => !!c && imageAiReady() && enhanced < maxEnhance ? (++enhanced, true) : false);
+  // 🖼 opts.keepOriginals (⚡ Rapid add, a CLEAN source — `_rapidSourceIsClean`):
+  // no crop is redrawn; each keeps its own pixels and says why in figureKept.
+  const keepOriginals = !!(opts && opts.keepOriginals);
+  const enhanceThese = crops.map(c => !keepOriginals && !!c && imageAiReady() && enhanced < maxEnhance ? (++enhanced, true) : false);
   const filled = await _rapidFigureMap(imgBlocks, 'write', async (blk, i) => {
     if (!crops[i]) { // this rectangle failed — backup: the whole screenshot, crop by hand
       blk.url = fullUrl;
@@ -19718,7 +19721,14 @@ async function _fillBlocksFromAiBoxes(imgBlocks, boxes, mimeType, b64, onStatus,
       if (onStatus) onStatus(`Enhancing picture ${i + 1} (black & white)…`);
       try { dataUrl = await generateCleanEnhancedImage(_BW_ENHANCE_PROMPT, [{ mimeType: 'image/png', data: crops[i].split(',')[1] || '' }]); }
       catch (e) { console.warn('crop enhance failed — keeping the sharp crop', e); dataUrl = crops[i]; }
-    }
+      // 🖼 opts.checkRedraw: a redraw that changed the picture's shape or moved
+      // its ink is not the figure any more — the crop is kept instead.
+      if (opts && opts.checkRedraw && dataUrl !== crops[i] && typeof _rapidRedrawFaithful === 'function') {
+        let faithful = true;
+        try { faithful = await _rapidRedrawFaithful(crops[i], dataUrl); } catch (e) { faithful = true; }
+        if (!faithful) { console.warn('redraw does not match the crop — keeping the original'); dataUrl = crops[i]; blk.figureKept = 'redraw-unfaithful'; }
+      }
+    } else if (keepOriginals) blk.figureKept = 'clean-source';
     try {
       blk.url = await uploadImageDataUrl(dataUrl);
       _rememberCropSource(blk, fullUrl, boxes[i], opts && opts.page);
@@ -20574,6 +20584,124 @@ const RAPID_PHOTO_MAX_SIDE = 2600;
 const RAPID_SHRINK_OVER = 4 * 1024 * 1024;   // a pasted screenshot never reaches this
 const RAPID_MAX_BYTES = 18 * 1024 * 1024;
 
+// =====================================================================
+// 🖼 A CLEAN SOURCE KEEPS ITS ORIGINAL PIXELS (v1.463.0)
+// =====================================================================
+// Every Rapid-add figure used to be redrawn by the image model in black and
+// white — one image call per picture — even when it was cut from a crisp
+// screenshot or a rendered PDF page, where the redraw can only lose detail (and
+// can re-letter a label). Now only a POOR source (a phone photo, a grey or
+// skewed scan) is redrawn. The decision is made from cheap MEASURED facts, no
+// AI call, and is conservative: anything unsure is redrawn exactly as before.
+// Flip this one switch to go back to redrawing everything.
+const RAPID_KEEP_CLEAN_ORIGINALS = true;
+const RAPID_CLEAN_SAMPLE = 256;   // the side the page is measured at
+
+// Pure histogram over RGBA pixels. white = near-white share (luma ≥ 245);
+// mid = share of LOW-CHROMA greys (luma 100–225) — the paper and shadow of a
+// photograph, not a coloured fill; paperChroma = mean max−min channel spread
+// over the bright pixels, i.e. a yellow/blue cast on the "white".
+function _rapidPixelStats(data, w, h) {
+  const n = Math.max(0, Math.min((data && data.length) / 4 | 0, (w | 0) * (h | 0)));
+  if (!n) return null;
+  let white = 0, mid = 0, bright = 0, chromaSum = 0;
+  for (let p = 0; p < n * 4; p += 4) {
+    const r = data[p], g = data[p + 1], b = data[p + 2];
+    const y = 0.299 * r + 0.587 * g + 0.114 * b;
+    const chroma = Math.max(r, g, b) - Math.min(r, g, b);
+    if (y >= 245) white++;
+    if (y >= 100 && y <= 225 && chroma < 24) mid++;
+    if (y >= 200) { bright++; chromaSum += chroma; }
+  }
+  return { n, white: white / n, mid: mid / n, paperChroma: bright ? chromaSum / bright : 0 };
+}
+
+// Pure decision: is this source clean enough to keep its original pixels?
+// facts = { isPdfPage, photo, mime, width, height, pixelStats }.
+function _rapidSourceIsClean(facts) {
+  const f = facts || {};
+  if (f.photo) return false;                        // came through the phone-photo shrink
+  const s = f.pixelStats;
+  if (f.isPdfPage) {
+    // A digital PDF renders onto pure white. A SCANNED PDF is a photograph in
+    // a PDF wrapper: grey paper, so the same bar a screenshot faces, looser.
+    if (!s) return true;
+    return s.white >= 0.35 && s.mid <= 0.15 && s.paperChroma <= 14;
+  }
+  const mime = String(f.mime || '').toLowerCase();
+  if (!/^image\/(png|webp|gif|bmp)$/.test(mime)) return false;   // a JPEG is what a camera writes
+  if (!s || !(s.n > 0)) return false;
+  if ((f.width && f.width < 48) || (f.height && f.height < 48)) return false;
+  return s.white >= 0.55 && s.mid <= 0.08 && s.paperChroma <= 10;
+}
+
+// Measure a data URL on a small canvas. null when it cannot be measured.
+async function _rapidMeasurePixels(dataUrl) {
+  try {
+    const img = await _loadImageEl(dataUrl);
+    const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+    if (!w || !h) return null;
+    const s = Math.min(1, RAPID_CLEAN_SAMPLE / Math.max(w, h));
+    const cw = Math.max(1, Math.round(w * s)), ch = Math.max(1, Math.round(h * s));
+    const c = document.createElement('canvas'); c.width = cw; c.height = ch;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0, cw, ch);
+    const px = ctx.getImageData(0, 0, cw, ch).data;
+    return { width: w, height: h, cw, ch, px, stats: _rapidPixelStats(px, cw, ch) };
+  } catch (e) { return null; }
+}
+
+// processRapidJob's one call: true → keep the original crops, no redraw.
+async function _rapidKeepOriginals(file, b64, opts) {
+  if (!RAPID_KEEP_CLEAN_ORIGINALS) return false;
+  const o = opts || {};
+  try {
+    const m = await _rapidMeasurePixels('data:' + file.type + ';base64,' + b64);
+    return _rapidSourceIsClean({
+      isPdfPage: !!o.pdfPage, photo: !!(o.photoShrunk || (file && file.rapidPhotoShrunk)), mime: file.type,
+      width: m && m.width, height: m && m.height, pixelStats: m && m.stats
+    });
+  } catch (e) { return false; }
+}
+
+// Pure faithfulness test for a redraw: the same shape, and its ink in roughly
+// the same places as the crop's. a/b = { w, h, ink: [0/1 × G×G] }.
+function _rapidRedrawLooksFaithful(a, b) {
+  if (!a || !b || !a.w || !a.h || !b.w || !b.h) return true;       // nothing to judge on
+  const ra = a.w / a.h, rb = b.w / b.h;
+  if (Math.max(ra, rb) / Math.min(ra, rb) > 1.25) return false;    // reshaped: a different picture
+  const n = Math.min(a.ink.length, b.ink.length);
+  let both = 0, either = 0;
+  for (let i = 0; i < n; i++) { if (a.ink[i] || b.ink[i]) either++; if (a.ink[i] && b.ink[i]) both++; }
+  if (either < 4) return true;                                     // a near-blank figure: nothing to compare
+  return both / either >= 0.3;
+}
+
+// Ink grid of a picture: G×G cells, a cell is ink if it is clearly darker than
+// the picture's own paper.
+const RAPID_FAITH_GRID = 16;
+function _rapidInkGrid(px, cw, ch) {
+  const G = RAPID_FAITH_GRID, sums = new Array(G * G).fill(0), cnt = new Array(G * G).fill(0);
+  let maxY = 0;
+  const ys = new Float32Array(cw * ch);
+  for (let i = 0; i < cw * ch; i++) { const y = 0.299 * px[i * 4] + 0.587 * px[i * 4 + 1] + 0.114 * px[i * 4 + 2]; ys[i] = y; if (y > maxY) maxY = y; }
+  const line = maxY * 0.75;
+  for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) {
+    const k = Math.min(G - 1, (y * G / ch) | 0) * G + Math.min(G - 1, (x * G / cw) | 0);
+    cnt[k]++; if (ys[y * cw + x] < line) sums[k]++;
+  }
+  return sums.map((s, k) => cnt[k] && s / cnt[k] >= 0.02 ? 1 : 0);
+}
+
+// Is the redraw faithful to the crop? Unmeasurable → true (today's behaviour).
+async function _rapidRedrawFaithful(cropDataUrl, redrawDataUrl) {
+  const [a, b] = await Promise.all([_rapidMeasurePixels(cropDataUrl), _rapidMeasurePixels(redrawDataUrl)]);
+  if (!a || !b) return true;
+  return _rapidRedrawLooksFaithful(
+    { w: a.width, h: a.height, ink: _rapidInkGrid(a.px, a.cw, a.ch) },
+    { w: b.width, h: b.height, ink: _rapidInkGrid(b.px, b.cw, b.ch) });
+}
+
 async function _rapidPrepFile(file) {
   try {
     if (!file || !file.type || !file.type.startsWith('image/')) return file;   // a PDF goes through untouched
@@ -20596,8 +20724,13 @@ async function _rapidPrepFile(file) {
     // went in, which is the opposite of the point.
     const blob = _dataUrlToBlob(c.toDataURL('image/jpeg', 0.9));
     if (!blob || blob.size >= file.size) return file;   // never hand back something worse
-    try { return new File([blob], (file.name || 'photo') + '.jpg', { type: 'image/jpeg' }); }
-    catch (e) { return blob; }                          // a Blob carries .size and .type, which is all the job reads
+    // 🖼 The shrunk file says it was a camera photo, so `_rapidKeepOriginals`
+    // never takes it for a clean source.
+    let out;
+    try { out = new File([blob], (file.name || 'photo') + '.jpg', { type: 'image/jpeg' }); }
+    catch (e) { out = blob; }                           // a Blob carries .size and .type, which is all the job reads
+    try { out.rapidPhotoShrunk = true; } catch (e) {}
+    return out;
   } catch (e) {
     console.warn('rapid photo prep failed; sending the original', e);
     return file;
@@ -20967,6 +21100,9 @@ async function _rapidExpandPdf(file, level, release, key) {
           key,
           source: name + ' — page ' + p + ' of ' + take,
           blankOk: true,
+          // 🖼 Rendered by `_pdfRenderPage`, not photographed — said here, never
+          // guessed from the page's name, so its figures can keep their pixels.
+          pdfPage: true,
           // Page 1 has nothing before it, so it is never asked whether it
           // continues something — a model asked an impossible question
           // answers it anyway.
@@ -21695,6 +21831,11 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
     // marked on its own. `_aiQuestionPayloads` is the ONE place that decision
     // is read out of the reply.
     const b64 = await _fileToBase64(file);
+    // 🖼 Is this a CLEAN source (a crisp screenshot, a rendered PDF page)? Then
+    // its figures keep their own pixels instead of an image-model redraw. Measured
+    // on a small canvas while the read runs; any failure means "redraw, as before".
+    const keepCleanP = (isImg && typeof _rapidKeepOriginals === 'function')
+      ? _rapidKeepOriginals(file, b64, o).catch(() => false) : Promise.resolve(false);
     // The budget scales with what a page can hold. One question fits 4096; a
     // whole sheet of them does not — and running out does not fail, it
     // TRUNCATES, and _repairAIJson then hands back a valid-looking reply
@@ -21726,6 +21867,7 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
       throw new Error('the AI returned nothing readable');
     }
     const many = payloads.length > 1;
+    const keepClean = await keepCleanP;
 
     // THE WHOLE PAGE, PREPARED ONCE. Every question whose own rectangles came
     // back unusable falls back to this, and on a page of five that must not be
@@ -21749,7 +21891,7 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
       if (_pageBackup !== undefined) return _pageBackup;
       const original = 'data:' + file.type + ';base64,' + b64;
       let dataUrl = original;
-      if (!many && imageAiReady()) {
+      if (!many && imageAiReady() && !keepClean) {
         _setRapidJobState(jobId, { sub: 'Enhancing the whole image (black & white)…' });
         renderVettingList();
         try { dataUrl = await generateCleanEnhancedImage(_BW_ENHANCE_PROMPT, [{ mimeType: file.type, data: b64 }]); }
@@ -21757,7 +21899,7 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
       }
       try {
         const originalUrl = await sourcePageUrl();
-        _pageBackup = { url: dataUrl === original ? originalUrl : await uploadImageDataUrl(dataUrl), dataUrl, originalUrl, originalDataUrl: original };
+        _pageBackup = { url: dataUrl === original ? originalUrl : await uploadImageDataUrl(dataUrl), dataUrl, originalUrl, originalDataUrl: original, kept: !many && keepClean };
       }
       catch (e) { console.warn('whole-page backup upload failed', e); _pageBackup = null; }
       return _pageBackup;
@@ -21812,7 +21954,7 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
             .map(b => (b && (b.box_2d || b.box)) || null);
           let filled = 0;
           try {
-            filled = await _fillBlocksFromAiBoxes(imgBlocks, boxes, file.type, b64, m => { _setRapidJobState(jobId, { sub: m }); renderVettingList(); }, { decisions: decisionsRun, getSourcePageUrl: sourcePageUrl, wording: _cropWordingOf((payload && payload.blocks) || q.blocks) });
+            filled = await _fillBlocksFromAiBoxes(imgBlocks, boxes, file.type, b64, m => { _setRapidJobState(jobId, { sub: m }); renderVettingList(); }, { decisions: decisionsRun, getSourcePageUrl: sourcePageUrl, keepOriginals: keepClean, checkRedraw: true, wording: _cropWordingOf((payload && payload.blocks) || q.blocks) });
           } catch (e) { console.warn('rapid AI rectangle flow failed', e); }
           if (!filled) {
             // BACKUP — the WHOLE PAGE, prepared once above. An EMPTY picture
@@ -21831,6 +21973,7 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
                 // question is opened in the editor (mirrors Build-from-screenshot).
                 _rememberCropSource(b, page.originalUrl);
                 _imgEnhanceState[b.id] = { originalDataUrl: page.originalDataUrl, originalUrl: page.originalUrl, currentDataUrl: page.dataUrl };
+                if (page.kept) b.figureKept = 'clean-source';
               });
               // A whole page in a picture slot looks exactly like a figure
               // somebody has already cropped, which on a vetting card reads as
@@ -64266,7 +64409,7 @@ function loadLegendsThumbs(){
       f = document.createElement('iframe');
       f.id = 'legendsThumbFrame';
       f.style.cssText = 'position:absolute;width:2px;height:2px;opacity:0;pointer-events:none;left:-9999px;top:-9999px;';
-      f.src = 'science-legends.html?v=1.462.0';
+      f.src = 'science-legends.html?v=1.463.0';
       document.body.appendChild(f);
     }
     let tries = 0;
@@ -65623,7 +65766,7 @@ function openFpsGame() {
     showToast(`🎮 No game credits left today — answer ${need} more question${need === 1 ? '' : 's'} in practice to earn one`, 'error');
     return;
   }
-  window.location.href = 'fps.html?v=1.462.0';
+  window.location.href = 'fps.html?v=1.463.0';
 }
 // ---- Release announcement banner (top of screen, dismissible per device) ----
 const FPS_ANNOUNCE_KEY = 'fpsAnnounceDismissed_v1';
