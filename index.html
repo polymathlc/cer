@@ -299,9 +299,9 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-  <link rel="modulepreload" href="app.js?v=1.461.0">
+  <link rel="modulepreload" href="app.js?v=1.462.0">
 <!-- 🙋 Consults (v1.446.0): the archive window shared with Study Buddy, Ans Key and the Maths portal. -->
-<link rel="stylesheet" href="consult-answer.css?v=1.461.0">
+<link rel="stylesheet" href="consult-answer.css?v=1.462.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- The "Your next lightbulb moment" card (practice-preview.js) asks the sample service for its
@@ -324,7 +324,7 @@
      preview copy these links with media="all"). quest-frames.css is loaded the
      same non-blocking way. -->
 <link rel="stylesheet" media="print" href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Pixelify+Sans:wght@400..700&display=swap">
-<link rel="stylesheet" media="print" onload="this.media='all'" href="quest-frames.css?v=1.461.0">
+<link rel="stylesheet" media="print" onload="this.media='all'" href="quest-frames.css?v=1.462.0">
 
 <!-- Tailwind, prebuilt. This used to be <script src="cdn.tailwindcss.com">:
      the Play CDN, which ships a full CSS compiler to the browser, scans the
@@ -1221,6 +1221,14 @@ option {
    questions invisible to the whole school, so it says so in its own colour
    rather than borrowing the level picker's. */
 .rapid-level.rapid-release.on { border-color: #6366f1; background: #eef2ff; }
+/* 🔑 Rapid add's optional answer key (v1.462.0): a small drop zone of its own. */
+.rapid-level.rapid-key.on { border-color: #059669; background: #ecfdf5; }
+.rapid-key-zone {
+  border: 2px dashed var(--border); border-radius: 10px; padding: 14px 12px;
+  text-align: center; font-size: 0.8rem; color: var(--text-muted); cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.rapid-key-zone:focus, .rapid-key-zone.dragover { outline: none; border-color: #059669; background: #f0fdf4; }
 .rapid-duplicates { margin-top: 18px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; text-align: left; }
 .rapid-duplicates[hidden], .rapid-duplicates [hidden] { display: none !important; }
 .rapid-duplicates h4 { margin: 0 0 8px; font-size: 0.94rem; }
@@ -13381,7 +13389,7 @@ html { scroll-behavior:smooth; }
           </div>
           <div class="subtitle">Tower Defense MCQ — answer 3 science questions before each round. Every question also pays 🪙 points into your wallet for booster packs.</div>
         </div>
-        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;"><div class="game-pts" title="Points the questions in this game have paid you this run. Spend them on Realm of Embers booster packs, Spire packs and the shop."><span class="ico">🪙</span><b data-game-pts>0</b><span class="lbl">points this run</span></div><a class="btn btn-outline" href="science-defenders.html?v=1.461.0" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a></div>
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;"><div class="game-pts" title="Points the questions in this game have paid you this run. Spend them on Realm of Embers booster packs, Spire packs and the shop."><span class="ico">🪙</span><b data-game-pts>0</b><span class="lbl">points this run</span></div><a class="btn btn-outline" href="science-defenders.html?v=1.462.0" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a></div>
       </div>
       <iframe id="defendersFrame" class="embed-frame" title="Science Defenders — Tower Defense MCQ"></iframe>
     </div>
@@ -13395,7 +13403,7 @@ html { scroll-behavior:smooth; }
           </div>
           <div class="subtitle">Roguelite top-down shooter — clear rooms, answer science questions to pick power-ups. Every question also pays 🪙 points into your wallet for booster packs.</div>
         </div>
-        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;"><div class="game-pts" title="Points the questions in this game have paid you this run. Spend them on Realm of Embers booster packs, Spire packs and the shop."><span class="ico">🪙</span><b data-game-pts>0</b><span class="lbl">points this run</span></div><a class="btn btn-outline" href="science-raiders.html?v=1.461.0" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a></div>
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;"><div class="game-pts" title="Points the questions in this game have paid you this run. Spend them on Realm of Embers booster packs, Spire packs and the shop."><span class="ico">🪙</span><b data-game-pts>0</b><span class="lbl">points this run</span></div><a class="btn btn-outline" href="science-raiders.html?v=1.462.0" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a></div>
       </div>
       <iframe id="raidersFrame" class="embed-frame" title="Science Raiders — Roguelite Shooter MCQ"></iframe>
     </div>
@@ -13411,7 +13419,7 @@ html { scroll-behavior:smooth; }
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <div class="game-pts" title="Points the questions in this game have paid you this run. Spend them on Realm of Embers booster packs, Spire packs and the shop."><span class="ico">🪙</span><b data-game-pts>0</b><span class="lbl">points this run</span></div><button class="btn btn-primary" id="spireBookBtn" type="button" style="font-size:0.82rem;">🃏 Spellbook &amp; Packs</button>
-          <a class="btn btn-outline" href="science-spire.html?v=1.461.0" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a>
+          <a class="btn btn-outline" href="science-spire.html?v=1.462.0" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a>
         </div>
       </div>
       <iframe id="spireFrame" class="embed-frame" title="Science Spire — Deck-building MCQ Roguelike"></iframe>
@@ -13426,7 +13434,7 @@ html { scroll-behavior:smooth; }
           </div>
           <div class="subtitle">Top-down action RPG — pick a class, grow a Diablo-style skill tree, and answer a science question every 20 seconds. Beta: no game leaderboard yet, but questions still count.</div>
         </div>
-        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;"><div class="game-pts" title="Points the questions in this game have paid you this run. Spend them on Realm of Embers booster packs, Spire packs and the shop."><span class="ico">🪙</span><b data-game-pts>0</b><span class="lbl">points this run</span></div><a class="btn btn-outline admin-only" href="science-legends.html?v=1.461.0" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a></div>
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;"><div class="game-pts" title="Points the questions in this game have paid you this run. Spend them on Realm of Embers booster packs, Spire packs and the shop."><span class="ico">🪙</span><b data-game-pts>0</b><span class="lbl">points this run</span></div><a class="btn btn-outline admin-only" href="science-legends.html?v=1.462.0" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a></div>
       </div>
       <iframe id="legendsFrame" class="embed-frame" title="Science Legends — Top-Down Action RPG MCQ (BETA)"></iframe>
     </div>
@@ -13440,7 +13448,7 @@ html { scroll-behavior:smooth; }
           </div>
           <div class="subtitle">Dungeon crawler — procedural floors, idle monster packs, boss loot, and questions powered by action points: answer wrong and you fight the next turn on ⅓ actions.</div>
         </div>
-        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;"><div class="game-pts" title="Points the questions in this game have paid you this run. Spend them on Realm of Embers booster packs, Spire packs and the shop."><span class="ico">🪙</span><b data-game-pts>0</b><span class="lbl">points this run</span></div><a class="btn btn-outline admin-only" href="science-slayers.html?v=1.461.0" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a></div>
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;"><div class="game-pts" title="Points the questions in this game have paid you this run. Spend them on Realm of Embers booster packs, Spire packs and the shop."><span class="ico">🪙</span><b data-game-pts>0</b><span class="lbl">points this run</span></div><a class="btn btn-outline admin-only" href="science-slayers.html?v=1.462.0" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a></div>
       </div>
       <iframe id="slayersFrame" class="embed-frame" title="Science Slayers — Dungeon Crawler MCQ (BETA)"></iframe>
     </div>
@@ -14227,6 +14235,30 @@ html { scroll-behavior:smooth; }
           <span>🧭 OpenAI Decisions reviews crops, wording and structure as a second opinion while visual AI checks every question and fixes any findings</span>
         </label>
       </div>
+    </div>
+    <!-- 🔑 The paper's own answer key (v1.462.0). OPTIONAL. Like the level it
+         applies to what is queued AFTER it, so it sits above the pad. It has
+         its OWN paste/drop zone and its own file input — a key screenshot pasted
+         into the question pad would be read as a question. -->
+    <div class="rapid-level rapid-key" id="rapidKeyWrap">
+      <label for="rapidKeyFile">
+        <b>🔑 Answer key for this batch <span style="font-weight:400;">(optional)</span></b>
+        <span id="rapidKeyNote">Optional. Add the paper’s marking scheme and every question added after it takes its answer from the key, matched by question number.</span>
+      </label>
+      <div class="rapid-key-zone" id="rapidKeyZone" tabindex="0"
+           onclick="rapidKeyZoneClick()"
+           onpaste="rapidKeyPaste(event)"
+           ondragover="event.preventDefault(); event.stopPropagation(); this.classList.add('dragover')"
+           ondragleave="this.classList.remove('dragover')"
+           ondrop="rapidKeyDrop(event)">
+        <span class="rapid-desk">📋 Paste or drop the marking scheme here — screenshots or a PDF</span>
+        <span class="rapid-touch">📷 Tap to add the marking scheme — photos or a PDF</span>
+      </div>
+      <div class="rapid-release-row">
+        <button type="button" class="btn btn-outline" onclick="document.getElementById('rapidKeyFile').click()">📄 Choose key files</button>
+        <button type="button" class="btn btn-outline" id="rapidKeyClear" style="display:none;" onclick="rapidKeyClear()">✕ Clear key</button>
+      </div>
+      <input type="file" accept="image/*,application/pdf" multiple hidden id="rapidKeyFile" onchange="rapidKeyPick(this)">
     </div>
     <div class="image-paste-zone" id="rapidPasteZone" tabindex="0" style="padding:40px 16px;"
          onclick="rapidZoneClick()"
@@ -16961,19 +16993,19 @@ body.lore-reading { overflow: hidden; }
      before the page can paint, and the browser fetches and compiles it in
      parallel with the markup instead of afterwards. -->
 <script defer src="landing-motion.js"></script>
-<link rel="stylesheet" href="game-insights.css?v=1.461.0">
+<link rel="stylesheet" href="game-insights.css?v=1.462.0">
 <script defer src="rpg-svg-art.js"></script>
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
 <script defer src="shape-snap.js"></script>
-<script defer src="pwa-install.js?v=1.461.0"></script>
-  <script src="worksheet-cover.js?v=1.461.0"></script>
-  <script src="quest-frames.js?v=1.461.0"></script>
-  <script defer src="consult-answer.js?v=1.461.0"></script>
-  <script defer src="consult-bridge.js?v=1.461.0"></script>
-  <script src="game-question-pressure.js?v=1.461.0"></script>
-  <script src="game-question-flag.js?v=1.461.0"></script>
-  <script type="module" src="app.js?v=1.461.0"></script>
+<script defer src="pwa-install.js?v=1.462.0"></script>
+  <script src="worksheet-cover.js?v=1.462.0"></script>
+  <script src="quest-frames.js?v=1.462.0"></script>
+  <script defer src="consult-answer.js?v=1.462.0"></script>
+  <script defer src="consult-bridge.js?v=1.462.0"></script>
+  <script src="game-question-pressure.js?v=1.462.0"></script>
+  <script src="game-question-flag.js?v=1.462.0"></script>
+  <script type="module" src="app.js?v=1.462.0"></script>
 <!-- 🔐 Polymath student access (v1.0.0): the enrolment pop-up every Polymath app shares. A signed-in student is
      blocked here until an admin approves them at polymathlc.com.sg/student/#admin. Source: polymathlc/cer student/access-gate.js -->
 <script defer src="student/access-gate.js?v=1.2.0" data-app="science" data-subject="science"></script>

@@ -178,7 +178,7 @@ ok('it never throws on a missing question', api._rapidApplyRelease(null, '2030-0
 const door = cut('function rapidAddFiles(files, how) {', 'function _rapidQueuePdf(', 'rapidAddFiles');
 ok('the ONE DOOR reads the release date synchronously', /const release = rapidRelease\(\);/.test(door));
 ok('…and hands it to every job it starts',
-   (door.match(/startRapidJob\(file, level, \{ release \}\)/g) || []).length === 2,
+   (door.match(/startRapidJob\(file, level, \{ release(?:, key)? \}\)/g) || []).length === 2,
    'a route that does not pass it re-reads the pad minutes later');
 ok('the queue tells the author a date is on the batch', /Released|released/.test(door));
 
@@ -190,15 +190,15 @@ ok('the job card carries it', /release: rel,/.test(startJob));
 ok('it is handed ON to the job rather than re-read there',
    /processRapidJob\(jobId, f, lv, Object\.assign\(\{\}, o, \{ release: rel \}\)\)/.test(startJob));
 ok('a PDF carries the date into the PDF queue',
-   /_rapidQueuePdf\(file,[\s\S]{0,200}o\.release === undefined \|\| o\.release === null \? rapidRelease\(\) : o\.release\)/.test(startJob));
+   /_rapidQueuePdf\(file,[\s\S]{0,200}o\.release === undefined \|\| o\.release === null \? rapidRelease\(\) : o\.release(?:,\s*o\.key)?\)/.test(startJob));
 
-const expand = cut('async function _rapidExpandPdf(file, level, release) {', 'function startRapidJob(', '_rapidExpandPdf');
+const expand = cut('async function _rapidExpandPdf(file, level, release, key) {', 'function startRapidJob(', '_rapidExpandPdf');
 ok('every page of a PDF is queued with the batch date', /^\s*release,$/m.test(expand),
    'a forty-page paper takes minutes, and the picker is live the whole time');
 
 const queue = cut('function _rapidQueuePdf(', 'async function _rapidExpandPdf', '_rapidQueuePdf');
-ok('the PDF queue stores the date', /_rapidPdfQueue\.push\(\{ file, level, release \}\)/.test(queue));
-ok('…and the pump forwards it', /_rapidExpandPdf\(next\.file, next\.level, next\.release\)/.test(queue));
+ok('the PDF queue stores the date', /_rapidPdfQueue\.push\(\{ file, level, release(?:, key)? \}\)/.test(queue));
+ok('…and the pump forwards it', /_rapidExpandPdf\(next\.file, next\.level, next\.release(?:, next\.key)?\)/.test(queue));
 
 const job = cut('async function processRapidJob(jobId, file, batchLevel, opts) {', 'function _failRapidJob(', 'processRapidJob');
 ok('EVERY question the page held is stamped', /_rapidApplyRelease\(q, o\.release\);/.test(job),

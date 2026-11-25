@@ -2,6 +2,29 @@
 
 Guidance for Claude when working in this repo.
 
+## 🔑 Rapid add: the paper's own answer key (v1.462.0)
+
+Step 2 of 3. The ⚡ pad has an OPTIONAL 🔑 answer-key zone (`#rapidKeyWrap`, own paste/drop zone `#rapidKeyZone` and own
+file input `#rapidKeyFile`, so a key screenshot is never read as a question; works on a phone via `_rapidTouch`).
+- **Read once, in the background** (`rapidKeyAddFiles` → `_rapidKeyReadFiles`). PDFs are exploded with `_pdfRenderPage`;
+  pages go `RAPID_KEY_BATCH` (3) to a vision call with the exam builder's own `_epKeyPrompt(i, total, { count, paperName: '' })`
+  (the new `opts` never borrows `_epPaperName`). Rows live on the in-memory key object (`_rapidKey`); later reads of a
+  number win (`_rapidKeyMerge`), and a bare "(a)" line takes the last full number, across pages (`_rapidKeyRowsFrom`).
+  More files dropped later join the same key, read in order on its `tail` (which never rejects).
+- **Captured at QUEUE time like the level**: `rapidAddFiles` passes `key` in the job opts, through `_rapidQueuePdf` /
+  `_rapidPdfPump` / `_rapidExpandPdf` to every page. A file queued before the key, or after ✕ Clear key, gets AI answers.
+  Clearing also drops the key from queued jobs not yet matched (`key.cleared`). Online (closed-tab) PDFs ignore it (toast).
+- **In `processRapidJob`**: the printed number is read BEFORE `_epStripNumbering` (`_rapidKeyNumberOf`: the build prompt's
+  new `"number"` field, else a leading "12." in the wording); after figures + per-part explanations and BEFORE the
+  auto-check, `_rapidKeyAwait` (bounded by `RAPID_KEY_WAIT_MS`, 3 min) then `_rapidKeyApply` → `_rapidKeyMatch` (the
+  `_epAnswerFor` / `_epAnswerForPart` rules over passed-in rows, `_epMergeAnswers` for roman sub-parts) → `_epApplyAnswer`
+  per part, else one whole-question line. Every new call there is `typeof`-guarded (the performance test cuts the function).
+- `q.answerSource` = `'key'` / `'ai'` on every question of a keyed batch (saved); `_epAns` / `_epAnsBy` are deleted. The
+  vetting card shows "🔑 from the marking scheme"; both batch toasts add `_rapidKeyBatchNote` ("12 answers from the marking
+  scheme, 2 written by the AI"). A failed key read = AI answers + a toast.
+- Tests: `tools/rapid-answer-key-tests.mjs` (cuts the shipped pure parts + the ep slotting machinery). `_rapidKeyReadFiles`
+  is on `AUTHORING_FUNCTIONS` in `tools/ai-routes-tests.mjs`.
+
 ## ⚡ Rapid add: a smarter first read (v1.461.0)
 
 Owner asked (2026-11-25) for Rapid add to use the newer models better. Step 1 of 3:

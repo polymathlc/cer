@@ -546,6 +546,7 @@ const AUTHORING_FUNCTIONS = [
                               // screenshot-run reader both pages call, so the
                               // flag is checked once for both of them
   'epReadKey',                // 📄 Exam Paper — the marking scheme
+  '_rapidKeyReadFiles',       // ⚡ Rapid add — the paper's own marking scheme (v1.462.0)
   'qcmdBuildVariant',         // 🔄 Regenerate / 🪄 the command box
   'aiGenerateBlockAnswer',    // 🤖 AI answer
   'aiGenerateBlockExplanation', // 📝 AI explanation

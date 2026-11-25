@@ -1,6 +1,6 @@
 import './worksheet-art.js?v=1';
-import { createGameInsightsController } from './game-insights.js?v=1.461.0';
-import { createGameUsageRecorder, createGameUsageWriter } from './game-usage.js?v=1.461.0';
+import { createGameInsightsController } from './game-insights.js?v=1.462.0';
+import { createGameUsageRecorder, createGameUsageWriter } from './game-usage.js?v=1.462.0';
 import './worksheet-art-editor.js?v=1';
 import './vendor/qrcode-generator.js';
 import './question-apps.js?v=1';
@@ -4590,7 +4590,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.461.0';
+const APP_VERSION = 'v1.462.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -7308,26 +7308,26 @@ function navigateTo(page) {
   }
   if (page === 'defenders') {
     const f = document.getElementById('defendersFrame');
-    if (f && !f.getAttribute('src')) f.setAttribute('src', 'science-defenders.html?v=1.461.0');
+    if (f && !f.getAttribute('src')) f.setAttribute('src', 'science-defenders.html?v=1.462.0');
   }
   if (page === 'raiders') {
     const f = document.getElementById('raidersFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-raiders.html?v=1.461.0'); f.addEventListener('load', pushRaidersAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-raiders.html?v=1.462.0'); f.addEventListener('load', pushRaidersAssets); }
     else pushRaidersAssets();
   }
   if (page === 'spire') {
     const f = document.getElementById('spireFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-spire.html?v=1.461.0'); f.addEventListener('load', pushSpireAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-spire.html?v=1.462.0'); f.addEventListener('load', pushSpireAssets); }
     else pushSpireAssets();
   }
   if (page === 'legends') {
     const f = document.getElementById('legendsFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-legends.html?v=1.461.0'); f.addEventListener('load', pushLegendsAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-legends.html?v=1.462.0'); f.addEventListener('load', pushLegendsAssets); }
     else pushLegendsAssets();
   }
   if (page === 'slayers') {
     const f = document.getElementById('slayersFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-slayers.html?v=1.461.0'); f.addEventListener('load', pushLegendsAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-slayers.html?v=1.462.0'); f.addEventListener('load', pushLegendsAssets); }
     else pushLegendsAssets();
   }
   if (page === 'hades') _hadesInit();
@@ -17709,8 +17709,9 @@ function _aiBuildQuestionPrompt(isPdf, imageCount, levelHint, opts) {
     (multi
       ? `{"title":"short title","topic":"<closest topic>","category":"<closest category>","tags":["..."],"questionType":"mcq or open","blocks":[ ...ordered blocks... ]}\n`
       : `{"questions":[ ...one entry per question you found, in the order they appear... ]}\n` +
-        `Each entry is: {${wantCont ? '"continuation":false,' : ''}"title":"short title","topic":"<closest topic>","category":"<closest category>","tags":["..."],"questionType":"mcq or open","blocks":[ ...ordered blocks... ]}\n` +
+        `Each entry is: {${wantCont ? '"continuation":false,' : ''}"number":"<the question number exactly as printed, e.g. 12 or 44(a); empty string if none>","title":"short title","topic":"<closest topic>","category":"<closest category>","tags":["..."],"questionType":"mcq or open","blocks":[ ...ordered blocks... ]}\n` +
         `A source holding ONE question returns an array of ONE entry. Give EVERY entry its own title, topic, category and tags — never leave them off the later entries.\n` +
+        `- "number" is how this question is matched to its line on the paper's marking scheme, so copy it as printed (one question holding several numbers takes the FIRST). It is a field of its own: the title and the wording follow the rules below exactly as before.\n` +
         (wantCont
           ? `- CONTINUATION — THIS PAGE IS ONE PAGE OF A LONGER PAPER. A question does not stop at the bottom of a page: the stem and its diagram are printed on one page and parts (b) and (c) carry on over the leaf. If the TOP of this page carries on a question that began BEFORE it — it opens part-way through, before any new question number, with no stem and no figure of its own — return that leftover as the FIRST entry with "continuation":true and put ONLY the leftover wording, answers and explanations in its "blocks". Every other entry on the page has "continuation":false.\n` +
             `  The test: does the first thing on this page make complete sense to a student who has not seen the previous page? If it does, it is a NEW question and "continuation" is false. A repeated question number with “continued”, a diagram belonging to an existing question, or later lettered parts can be a continuation. A genuinely new question number with an independent stem starts a new question. Do not restart or renumber the parts of a continuation.\n` +
@@ -20036,6 +20037,7 @@ function openRapidAdd() {
   _autoChkSetup();
   _rapidCloudRefresh();
   _rapidDuplicatesReset();
+  _rapidKeyPaint();
   _updateRapidCounts();
   const zone = document.getElementById('rapidPasteZone');
   // On a phone, focusing the pad pops the on-screen keyboard over the very
@@ -20276,6 +20278,291 @@ function rapidDrop(e) {
   if (rapidAddFiles((e.dataTransfer && e.dataTransfer.files) || [], 'drop') && zone) {
     setTimeout(() => zone.focus(), 30);
   }
+}
+
+// =====================================================================
+// 🔑 THE PAPER'S OWN ANSWER KEY (v1.462.0)
+// =====================================================================
+// An OPTIONAL marking scheme dropped on the pad. While one is loaded, every
+// question the pad reads takes its answer from the key instead of the AI's own,
+// matched by QUESTION NUMBER — the Exam Paper builder's machinery, not a fork
+// of it: `_epKeyPrompt` reads the key, `_epNumKey` / `_epNumParts` link the
+// numbers, `_epMergeAnswers` folds roman sub-parts, `_epPartLetters` reads the
+// parts and `_epApplyAnswer` slots the answer into the right part.
+//  • THE KEY IS READ ONCE, in the background, and its rows live in memory on
+//    the key object. A job captures the key AT QUEUE TIME (like the batch
+//    level), so a file added before the key, or after ✕ Clear key, is answered
+//    by the AI as before. A job that is ready before the key is waits for it —
+//    but never longer than RAPID_KEY_WAIT_MS, so a stuck read cannot stall the
+//    pad. A failed read = the AI's answers + a toast.
+//  • A PDF key is exploded into pages with `_pdfRenderPage`, and pages are read
+//    RAPID_KEY_BATCH to a vision call, as a run, so "(a)" lines carry the
+//    number printed above them across a page (`_rapidKeyRowsFrom`).
+//  • A question with no line on the key keeps the AI's answer and says so:
+//    `q.answerSource` is 'key' or 'ai' on every question of a keyed batch, and
+//    the batch toast counts both (`_rapidKeyBatchNote`).
+//  • Online (closed-tab) PDF processing does not see the key.
+// The pure parts — _rapidKeyNumberOf, _rapidKeyRowsFrom, _rapidKeyMerge,
+// _rapidKeyMatch, _rapidKeyApply, _rapidKeyBatchNote — are cut out and tested
+// by tools/rapid-answer-key-tests.mjs.
+const RAPID_KEY_BATCH = 3;             // key pages per vision call
+const RAPID_KEY_MAX_PAGES = 24;
+const RAPID_KEY_WAIT_MS = 180000;      // the longest a question waits for the key
+let _rapidKey = null;
+let _rapidKeySeq = 0;
+
+// The number the paper printed on this question, taken BEFORE the numbering is
+// stripped: the reader's own "number" field, else a "12." / "Q12)" opening the
+// wording.
+function _rapidKeyNumberOf(payload, q) {
+  const n = String((payload && payload.number) == null ? '' : payload.number).trim();
+  if (n) return n.slice(0, 24);
+  const t = ((q && q.blocks) || []).find(b => b && b.type === 'text');
+  const plain = String((t && t.content) || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim();
+  const m = plain.match(/^(?:Q(?:uestion)?\s*)?\(?\s*(\d{1,3})\s*[).:]\s*(?!\d)/i);
+  return m ? m[1] : '';
+}
+
+// One reply's rows, cleaned the way epReadKey cleans them. `state.base` carries
+// the last full number over a bare "(a)" line — across replies too, since one
+// key is read in order — so "44" then "(a)", "(b)" becomes 44(a), 44(b).
+function _rapidKeyRowsFrom(parsed, state) {
+  const st = state || {};
+  const list = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.answers) ? parsed.answers : []);
+  const f = (r, k) => String((r && r[k]) == null ? '' : r[k]).trim();
+  const out = [];
+  list.forEach(r => {
+    let num = f(r, 'number');
+    if (!num) return;
+    const bare = num.match(/^\(?\s*([a-hA-H])\s*\)?$/);
+    if (bare) {
+      if (!st.base) return;            // a part of no question links to nothing
+      num = st.base + '(' + bare[1].toLowerCase() + ')';
+    } else {
+      const base = _epBaseKey(num);
+      if (base) st.base = base;
+    }
+    out.push({
+      number: num, option: f(r, 'option'), answer: f(r, 'answer'), claim: f(r, 'claim'),
+      evidence: f(r, 'evidence'), reasoning: f(r, 'reasoning'), explanation: f(r, 'explanation'),
+    });
+  });
+  return out;
+}
+
+// Several readings into one key. A later reading of the same number wins, as
+// `_epRebuildAnswers` does.
+function _rapidKeyMerge(lists) {
+  const by = new Map();
+  (lists || []).forEach(rows => (rows || []).forEach(a => {
+    const k = _epNumKey(a && a.number);
+    if (k) by.set(k, a);
+  }));
+  return Array.from(by.values());
+}
+
+// The key's lines for one question: the whole-question line, and one line per
+// part (exact 44(b) first, else its roman sub-parts folded together) — the
+// rules of `_epAnswerFor` / `_epAnswerForPart`, over rows passed in rather than
+// the exam builder's own `_epAnswers`.
+function _rapidKeyMatch(rows, num, letters) {
+  const list = (Array.isArray(rows) ? rows : []).filter(a => a && a.number);
+  const out = { whole: null, by: {} };
+  const k = _epNumKey(num);
+  if (!k) return out;
+  out.whole = list.find(a => _epNumKey(a.number) === k) || null;
+  const base = _epBaseKey(num);
+  (letters || []).forEach(l => {
+    const p = qPartNormalize(l);
+    if (!base || !p) return;
+    const want = base + p;
+    const exact = list.find(a => _epNumKey(a.number) === want);
+    if (exact) { out.by[p] = exact; return; }
+    const subs = list.filter(a => {
+      const kk = _epNumKey(a.number);
+      return kk.length > want.length && kk.indexOf(want) === 0;
+    });
+    if (subs.length) out.by[p] = subs.length === 1 ? subs[0] : _epMergeAnswers(subs, want);
+  });
+  return out;
+}
+
+// Slot the key's answer into the question, part by part, exactly as `_epSlot`
+// does; a question with parts that the key answers on one line takes that.
+// Returns how many lines were applied, and marks q.answerSource.
+function _rapidKeyApply(q, rows, num) {
+  if (!q || !Array.isArray(q.blocks)) return 0;
+  const letters = _epPartLetters(q);
+  const m = _rapidKeyMatch(rows, num, letters);
+  let n = 0;
+  letters.forEach(p => { if (m.by[p] && _epApplyAnswer(q, m.by[p], p)) n++; });
+  if (!n && m.whole && _epApplyAnswer(q, m.whole, '')) n = 1;
+  // The exam builder's match bookkeeping is not part of a question.
+  delete q._epAns; delete q._epAnsBy;
+  q.answerSource = n ? 'key' : 'ai';
+  return n;
+}
+
+// " · 🔑 12 answers from the marking scheme, 2 written by the AI" — empty when
+// no question in the batch had a key.
+function _rapidKeyBatchNote(qs) {
+  const list = (qs || []).filter(q => q && (q.answerSource === 'key' || q.answerSource === 'ai'));
+  if (!list.length) return '';
+  const k = list.filter(q => q.answerSource === 'key').length, a = list.length - k;
+  return ' · 🔑 ' + k + ' answer' + (k === 1 ? '' : 's') + ' from the marking scheme' +
+    (a ? ', ' + a + ' written by the AI' : '');
+}
+
+function _rapidKeyIsFile(f) {
+  const type = (f && f.type) || '';
+  return type.startsWith('image/') || type === 'application/pdf' || /\.pdf$/i.test((f && f.name) || '');
+}
+
+// Every page of the key as an image, PDFs exploded the way the pad explodes a
+// paper.
+async function _rapidKeyImages(files) {
+  const imgs = [];
+  for (const file of files) {
+    if (imgs.length >= RAPID_KEY_MAX_PAGES) break;
+    const type = file.type || '';
+    if (type === 'application/pdf' || /\.pdf$/i.test(file.name || '')) {
+      const pdfjs = await _loadPdfJs();
+      const doc = await pdfjs.getDocument({ data: await file.arrayBuffer(), isEvalSupported: false }).promise;
+      try {
+        const total = doc.numPages || 0;
+        for (let p = 1; p <= total && imgs.length < RAPID_KEY_MAX_PAGES; p++) {
+          const page = await doc.getPage(p);
+          try { imgs.push(await _pdfRenderPage(page, PDF_PAGE_MAX_SIDE)); }
+          finally { try { page.cleanup(); } catch (_) {} }
+        }
+      } finally { try { doc.destroy(); } catch (_) {} }
+    } else if (type.startsWith('image/')) {
+      const f = await _rapidPrepFile(file);
+      imgs.push({ mimeType: f.type || type, data: await _fileToBase64(f) });
+    }
+  }
+  return imgs;
+}
+
+async function _rapidKeyReadFiles(key, files) {
+  const imgs = await _rapidKeyImages(files);
+  if (!imgs.length) throw new Error('nothing in that key could be opened');
+  const lists = [];
+  let failed = 0;
+  for (let i = 0; i < imgs.length; i += RAPID_KEY_BATCH) {
+    if (key.cleared) break;
+    const batch = imgs.slice(i, i + RAPID_KEY_BATCH);
+    key.note = 'Reading the marking scheme — page ' + (i + 1) + (batch.length > 1 ? '–' + (i + batch.length) : '') + ' of ' + imgs.length + '…';
+    _rapidKeyPaint();
+    try {
+      const raw = await askGeminiVision(_epKeyPrompt(i + 1, imgs.length, { count: batch.length, paperName: '' }),
+        batch, { maxOutputTokens: 12288, json: true, authoring: true });
+      lists.push(_rapidKeyRowsFrom(_parseAIJson(raw), key.carry));
+    } catch (e) {
+      console.warn('rapid answer key: a batch of pages could not be read', e);
+      failed += batch.length;
+    }
+  }
+  return { rows: _rapidKeyMerge(lists), pages: imgs.length, failed };
+}
+
+// Add files to the loaded key (or start one). Reads run one after another on
+// the key's `tail`, so the bare-part carry and "later wins" follow the order
+// the teacher added them in. The tail never rejects.
+function rapidKeyAddFiles(files) {
+  const list = Array.from(files || []).filter(_rapidKeyIsFile);
+  if (!list.length) { showToast('Please use an image or a PDF for the answer key', 'error'); return 0; }
+  if (!_rapidKey) {
+    _rapidKey = { id: 'key_' + (++_rapidKeySeq), lists: [], rows: [], pages: 0, failed: 0, reading: 0,
+      carry: { base: '' }, tail: Promise.resolve(), cleared: false, note: '' };
+  }
+  const key = _rapidKey;
+  const idx = key.lists.length;
+  key.lists.push([]);
+  key.reading++;
+  key.tail = key.tail.then(() => _rapidKeyReadFiles(key, list)).then(r => {
+    key.lists[idx] = r.rows; key.pages += r.pages; key.failed += r.failed;
+    key.rows = _rapidKeyMerge(key.lists);
+    if (key.cleared) return;
+    if (r.rows.length) {
+      showToast('🔑 Read ' + r.rows.length + ' answer' + (r.rows.length === 1 ? '' : 's') + ' from the marking scheme' +
+        (r.failed ? ' · ' + r.failed + ' page' + (r.failed === 1 ? '' : 's') + ' could not be read' : ''), 'success');
+    } else {
+      showToast('No answers could be read from that marking scheme — the AI writes those answers as before', 'error');
+    }
+  }).catch(err => {
+    console.warn('rapid answer key read failed', err);
+    key.failed++;
+    if (!key.cleared) showToast('Could not read the answer key (' + ((err && err.message) || 'unknown error') + ') — the AI writes the answers as before', 'error');
+  }).finally(() => {
+    key.reading = Math.max(0, key.reading - 1);
+    key.note = '';
+    _rapidKeyPaint();
+  });
+  _rapidKeyPaint();
+  return list.length;
+}
+
+// What a job waits on: the key's rows, or null once the key was cleared. Bounded,
+// so a read that never comes back costs one wait, never a stuck pad.
+async function _rapidKeyAwait(key) {
+  if (!key || key.cleared) return null;
+  let timer;
+  const late = new Promise(res => { timer = setTimeout(res, RAPID_KEY_WAIT_MS); });
+  try { await Promise.race([key.tail, late]); } finally { clearTimeout(timer); }
+  return key.cleared ? null : (key.rows || []);
+}
+
+function rapidKeyClear() {
+  if (_rapidKey) _rapidKey.cleared = true;   // a queued job not yet matched drops it too
+  _rapidKey = null;
+  _rapidKeyPaint();
+  showToast('Answer key cleared — the AI writes the answers again', 'info');
+}
+
+function _rapidKeyPaint() {
+  const wrap = document.getElementById('rapidKeyWrap');
+  const note = document.getElementById('rapidKeyNote');
+  const clear = document.getElementById('rapidKeyClear');
+  const k = _rapidKey;
+  if (wrap) wrap.classList.toggle('on', !!k);
+  if (clear) clear.style.display = k ? '' : 'none';
+  if (!note) return;
+  if (!k) note.textContent = 'Optional. Add the paper’s marking scheme and every question added after it takes its answer from the key, matched by question number.';
+  else if (k.reading) note.textContent = (k.note || 'Reading the marking scheme…') + ' Questions added now wait for it.';
+  else if (k.rows.length) note.textContent = '✓ ' + k.rows.length + ' answer' + (k.rows.length === 1 ? '' : 's') + ' read from ' + k.pages + ' page' + (k.pages === 1 ? '' : 's') + ' — every question added from now on takes its answer from the key.';
+  else note.textContent = 'Nothing could be read from that key — the AI writes the answers. Clear it, or add a clearer copy.';
+}
+
+function rapidKeyZoneClick() {
+  if (_rapidTouch()) { const f = document.getElementById('rapidKeyFile'); if (f) f.click(); return; }
+  const zone = document.getElementById('rapidKeyZone');
+  if (zone) zone.focus();
+}
+function rapidKeyPick(input) {
+  const files = Array.from((input && input.files) || []);
+  if (input) input.value = '';   // the same file picked twice must still fire `change`
+  if (files.length) rapidKeyAddFiles(files);
+}
+function rapidKeyPaste(e) {
+  if (e && e.stopPropagation) e.stopPropagation();   // a key screenshot is never a question
+  const items = (e && e.clipboardData && e.clipboardData.items) || [];
+  const files = [];
+  for (const it of items) {
+    if (!it || it.kind !== 'file') continue;
+    const file = it.getAsFile();
+    if (file && _rapidKeyIsFile(file)) files.push(file);
+  }
+  if (!files.length) return;
+  e.preventDefault();
+  rapidKeyAddFiles(files);
+}
+function rapidKeyDrop(e) {
+  e.preventDefault();
+  if (e.stopPropagation) e.stopPropagation();
+  const zone = document.getElementById('rapidKeyZone');
+  if (zone) zone.classList.remove('dragover');
+  rapidKeyAddFiles((e.dataTransfer && e.dataTransfer.files) || []);
 }
 
 // A screenshot is a few hundred KB; a phone camera photo is 12 megapixels and
@@ -20553,11 +20840,14 @@ function rapidAddFiles(files, how) {
   // whatever the picker had been changed to by the time it got there.
   const level = rapidLevel();
   const release = rapidRelease();
+  // 🔑 Captured here like the level: the key applies to what is queued while
+  // it is loaded, and only to that.
+  const key = (typeof _rapidKey !== 'undefined' && _rapidKey) || undefined;
   let imgs = 0, pdfs = 0, other = 0;
   for (const file of list) {
     const type = (file && file.type) || '';
-    if (type === 'application/pdf' || /\.pdf$/i.test(file.name || '')) { startRapidJob(file, level, { release }); pdfs++; }
-    else if (type.startsWith('image/')) { startRapidJob(file, level, { release }); imgs++; }
+    if (type === 'application/pdf' || /\.pdf$/i.test(file.name || '')) { startRapidJob(file, level, { release, key }); pdfs++; }
+    else if (type.startsWith('image/')) { startRapidJob(file, level, { release, key }); imgs++; }
     else other++;
   }
   if (!imgs && !pdfs) {
@@ -20573,15 +20863,18 @@ function rapidAddFiles(files, how) {
   // being held back and never saying so is how an author adds forty questions,
   // sees them all land in vetting, approves them, and cannot work out why the
   // class is not getting them.
-  const on = release ? ' · ⏳ released ' + qReleaseLabel(release) : '';
+  const on = (release ? ' · ⏳ released ' + qReleaseLabel(release) : '') + (key ? ' · 🔑 answers from the marking scheme' : '');
   _setRapidStatus('Queued ' + bits.join(' and ') + at + on + ' — add the next one whenever you like…');
   if (other) showToast(other + ' file' + (other === 1 ? ' was' : 's were') + ' not an image or a PDF and ' + (other === 1 ? 'was' : 'were') + ' skipped', 'info');
   return imgs + pdfs;
 }
 
-function _rapidQueuePdf(file, level, release) {
-  if (_rapidCloudEnabled()) return _rapidUploadPdf(file, level, release);
-  _rapidPdfQueue.push({ file, level, release });
+function _rapidQueuePdf(file, level, release, key) {
+  if (_rapidCloudEnabled()) {
+    if (key) showToast('🔑 The answer key is not used for PDFs processed online — the AI writes those answers', 'info');
+    return _rapidUploadPdf(file, level, release);
+  }
+  _rapidPdfQueue.push({ file, level, release, key });
   _rapidPdfPump();
 }
 // One PDF at a time. The pump is re-entrant-safe: every queue push calls it and
@@ -20592,7 +20885,7 @@ async function _rapidPdfPump() {
   try {
     while (_rapidPdfQueue.length) {
       const next = _rapidPdfQueue.shift();
-      await _rapidExpandPdf(next.file, next.level, next.release);
+      await _rapidExpandPdf(next.file, next.level, next.release, next.key);
     }
   } finally { _rapidPdfBusy = false; }
 }
@@ -20608,7 +20901,7 @@ function _rapidPageFile(img, name, pageNo) {
 }
 
 // Render a PDF page by page and feed each page into the ordinary queue.
-async function _rapidExpandPdf(file, level, release) {
+async function _rapidExpandPdf(file, level, release, key) {
   const name = file.name || 'PDF';
   const jobId = 'rapid_' + (++_rapidSeq);
   rapidJobs.unshift({ id: jobId, status: 'processing', title: '📄 ' + name, sub: 'Opening the PDF…', level, release, source: name });
@@ -20669,8 +20962,9 @@ async function _rapidExpandPdf(file, level, release) {
         inflight.push(startRapidJob(_rapidPageFile(img, name, p), level, {
           // Carried from the moment the PDF was DROPPED, never re-read: a
           // forty-page paper takes minutes to render and the picker is live
-          // the whole time.
+          // the whole time. The 🔑 answer key is carried the same way.
           release,
+          key,
           source: name + ' — page ' + p + ' of ' + take,
           blankOk: true,
           // Page 1 has nothing before it, so it is never asked whether it
@@ -20689,7 +20983,7 @@ async function _rapidExpandPdf(file, level, release) {
     _updateRapidCounts();
     renderVettingList();
     const at = (level ? ' at ' + level : '') + (release ? ' · ⏳ released ' + qReleaseLabel(release) : '');
-    const bits = [added + ' question' + (added === 1 ? '' : 's') + at + autoChkBatchNote(allQs) + ' from ' + pages + ' page' + (pages === 1 ? '' : 's') + ' of “' + name + '”'];
+    const bits = [added + ' question' + (added === 1 ? '' : 's') + at + autoChkBatchNote(allQs) + (typeof _rapidKeyBatchNote === 'function' ? _rapidKeyBatchNote(allQs) : '') + ' from ' + pages + ' page' + (pages === 1 ? '' : 's') + ' of “' + name + '”'];
     if (stitched) bits.push('🔗 ' + stitched + ' question' + (stitched === 1 ? '' : 's') + ' carried over a page break and ' + (stitched === 1 ? 'was' : 'were') + ' joined back up');
     if (blank) bits.push(blank + ' page' + (blank === 1 ? '' : 's') + ' had no questions on ' + (blank === 1 ? 'it' : 'them'));
     if (failed) bits.push(failed + ' page' + (failed === 1 ? '' : 's') + ' could not be read — see the red card' + (failed === 1 ? '' : 's') + ' in vetting');
@@ -20708,7 +21002,8 @@ function startRapidJob(file, level, opts) {
   if (file && (file.type === 'application/pdf' || /\.pdf$/i.test(file.name || ''))) {
     _rapidQueuePdf(file,
       level === undefined || level === null ? rapidLevel() : level,
-      o.release === undefined || o.release === null ? rapidRelease() : o.release);
+      o.release === undefined || o.release === null ? rapidRelease() : o.release,
+      o.key);
     return Promise.resolve({ queued: true });
   }
   const jobId = 'rapid_' + (++_rapidSeq);
@@ -21491,6 +21786,9 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
       // The paper's number is the signal that these are separate questions, not
       // part of any of them. The model is told not to keep it; this is the
       // guard for when it does, and it is the exam paper builder's own stripper.
+      // 🔑 The printed number is the link to the marking scheme, so it is read
+      // BEFORE the numbering comes off the wording.
+      const keyNum = o.key && typeof _rapidKeyNumberOf === 'function' ? _rapidKeyNumberOf(payload, q) : '';
       if (many) { try { _epStripNumbering(q); } catch (e) { console.warn('rapid numbering strip', e); } }
 
       // 2) Crop each AI-drawn rectangle (box_2d) out of the screenshot into its
@@ -21568,6 +21866,21 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
       const preparation = await Promise.allSettled([prepareFigures(), writeExplanations()]);
       const failed = preparation.find(result => result.status === 'rejected');
       if (failed) throw failed.reason;
+
+      // 🔑 The paper's own answer replaces the AI's — after the per-part
+      // explanations (the key's note beats the model's) and BEFORE the
+      // auto-check, so the check reads the official answer.
+      if (o.key && typeof _rapidKeyAwait === 'function') {
+        try {
+          _setRapidJobState(jobId, {
+            title: q.title || 'Question',
+            sub: (many ? `Question ${pi + 1} of ${payloads.length} — ` : '') + '🔑 matching the marking scheme…'
+          });
+          renderVettingList();
+          const keyRows = await _rapidKeyAwait(o.key);
+          if (keyRows) _rapidKeyApply(q, keyRows, keyNum);
+        } catch (e) { console.warn('rapid answer key skipped', e); }
+      }
 
       // 2c) 🚦 THE AUTO-CHECK. The question is now WHOLE — its figures
       //    cropped, uploaded and attached, its parts lettered, its answers and
@@ -21684,7 +21997,8 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
       // by itself is a thing nobody trusts: an author who cannot tell a checked
       // question from an unchecked one reads every card anyway, which is the
       // work this was added to remove.
-      + autoChkBatchNote(added);
+      + autoChkBatchNote(added)
+      + (typeof _rapidKeyBatchNote === 'function' ? _rapidKeyBatchNote(added) : '');
     // A PDF page says nothing on its own: forty pages is forty toasts, and the
     // paper's own summary lands when the last page is in. The questions are
     // already visible as vetting cards either way.
@@ -24266,6 +24580,7 @@ function renderVettingList() {
               ${autoChkCardHtml(q)}
               ${qReleaseChipHtml(q)}
               ${q.diagramWhole ? '<span class="qb-tag" style="background:#fdf4e3;color:#b45309;" title="No rectangle came back for this question\'s figure, so the WHOLE page is in the picture slot. Open it and use ✂️ Crop.">🖼 Whole page — crop it</span>' : ''}
+              ${q.answerSource === 'key' ? '<span class="qb-tag" style="background:#ecfdf5;color:#047857;" title="The answer was taken from the paper\'s own marking scheme, matched by question number">🔑 from the marking scheme</span>' : ''}
               ${isNew ? '<span class="qb-tag" style="background:var(--accent-orange-light);color:var(--accent-orange);" title="Just added by Rapid add — review and approve">⚡ Just added</span>' : ''}
               ${q.topicConfidence === 'low' ? '<span class="qb-tag" style="background:#fee2e2;color:#dc2626;" title="AI was unsure of this topic — please check it">⚠ check topic</span>' : q.topicConfidence === 'medium' ? '<span class="qb-tag" style="background:#fdf4e3;color:#b45309;" title="AI was fairly sure of this topic — worth a glance">~ topic?</span>' : ''}
               <span class="vetting-badge ${statusClass}">${statusClass.charAt(0).toUpperCase() + statusClass.slice(1)}</span>
@@ -28843,8 +29158,17 @@ function _epQuestionPrompt(n, from, total) {
     `- Plain text only, no markdown.`;
 }
 
-function _epKeyPrompt(i, total) {
-  return `The attached image is screenshot ${i} of ${total} of the ANSWER KEY / marking scheme for a Singapore primary-school science exam paper${_epPaperName ? ` ("${_epPaperName}")` : ''}.\n` +
+// `opts` lets ⚡ Rapid add reuse this prompt (v1.462.0): `count` images in ONE
+// call (pages i..i+count-1, read as a run) and its own paper name — the exam
+// builder's `_epPaperName` belongs to a different paper.
+function _epKeyPrompt(i, total, opts) {
+  const o = opts || {};
+  const name = 'paperName' in o ? String(o.paperName || '') : _epPaperName;
+  const count = Math.max(1, Number(o.count) || 1);
+  const what = count > 1
+    ? `The ${count} attached images are pages ${i} to ${i + count - 1} of ${total}, in reading order,`
+    : `The attached image is screenshot ${i} of ${total}`;
+  return `${what} of the ANSWER KEY / marking scheme for a Singapore primary-school science exam paper${name ? ` ("${name}")` : ''}.\n` +
     SCAN_READING_NOTE +
     `Read EVERY answer printed on it and return ONLY JSON: {"answers":[ {"number":"1","option":"3","answer":"","claim":"","evidence":"","reasoning":"","explanation":""}, ... ]}\n` +
     `Rules:\n` +
@@ -63942,7 +64266,7 @@ function loadLegendsThumbs(){
       f = document.createElement('iframe');
       f.id = 'legendsThumbFrame';
       f.style.cssText = 'position:absolute;width:2px;height:2px;opacity:0;pointer-events:none;left:-9999px;top:-9999px;';
-      f.src = 'science-legends.html?v=1.461.0';
+      f.src = 'science-legends.html?v=1.462.0';
       document.body.appendChild(f);
     }
     let tries = 0;
@@ -65299,7 +65623,7 @@ function openFpsGame() {
     showToast(`🎮 No game credits left today — answer ${need} more question${need === 1 ? '' : 's'} in practice to earn one`, 'error');
     return;
   }
-  window.location.href = 'fps.html?v=1.461.0';
+  window.location.href = 'fps.html?v=1.462.0';
 }
 // ---- Release announcement banner (top of screen, dismissible per device) ----
 const FPS_ANNOUNCE_KEY = 'fpsAnnounceDismissed_v1';
@@ -88710,6 +89034,11 @@ window.rapidPaste = rapidPaste;
 window.rapidDrop = rapidDrop;
 window.rapidZoneClick = rapidZoneClick;
 window.rapidPickFiles = rapidPickFiles;
+window.rapidKeyZoneClick = rapidKeyZoneClick;
+window.rapidKeyPick = rapidKeyPick;
+window.rapidKeyPaste = rapidKeyPaste;
+window.rapidKeyDrop = rapidKeyDrop;
+window.rapidKeyClear = rapidKeyClear;
 window.setRapidLevel = setRapidLevel;
 window.setRapidRelease = setRapidRelease;
 window.toggleAutoChk = toggleAutoChk;
