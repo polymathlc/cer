@@ -1,6 +1,6 @@
 import './worksheet-art.js?v=1';
-import { createGameInsightsController } from './game-insights.js?v=1.460.0';
-import { createGameUsageRecorder, createGameUsageWriter } from './game-usage.js?v=1.460.0';
+import { createGameInsightsController } from './game-insights.js?v=1.461.0';
+import { createGameUsageRecorder, createGameUsageWriter } from './game-usage.js?v=1.461.0';
 import './worksheet-art-editor.js?v=1';
 import './vendor/qrcode-generator.js';
 import './question-apps.js?v=1';
@@ -4590,7 +4590,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.460.0';
+const APP_VERSION = 'v1.461.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -7308,26 +7308,26 @@ function navigateTo(page) {
   }
   if (page === 'defenders') {
     const f = document.getElementById('defendersFrame');
-    if (f && !f.getAttribute('src')) f.setAttribute('src', 'science-defenders.html?v=1.460.0');
+    if (f && !f.getAttribute('src')) f.setAttribute('src', 'science-defenders.html?v=1.461.0');
   }
   if (page === 'raiders') {
     const f = document.getElementById('raidersFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-raiders.html?v=1.460.0'); f.addEventListener('load', pushRaidersAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-raiders.html?v=1.461.0'); f.addEventListener('load', pushRaidersAssets); }
     else pushRaidersAssets();
   }
   if (page === 'spire') {
     const f = document.getElementById('spireFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-spire.html?v=1.460.0'); f.addEventListener('load', pushSpireAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-spire.html?v=1.461.0'); f.addEventListener('load', pushSpireAssets); }
     else pushSpireAssets();
   }
   if (page === 'legends') {
     const f = document.getElementById('legendsFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-legends.html?v=1.460.0'); f.addEventListener('load', pushLegendsAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-legends.html?v=1.461.0'); f.addEventListener('load', pushLegendsAssets); }
     else pushLegendsAssets();
   }
   if (page === 'slayers') {
     const f = document.getElementById('slayersFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-slayers.html?v=1.460.0'); f.addEventListener('load', pushLegendsAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-slayers.html?v=1.461.0'); f.addEventListener('load', pushLegendsAssets); }
     else pushLegendsAssets();
   }
   if (page === 'hades') _hadesInit();
@@ -17723,7 +17723,7 @@ function _aiBuildQuestionPrompt(isPdf, imageCount, levelHint, opts) {
       ? `  {"type":"image","page":<which attached image, 1-based>,"box_2d":[ymin,xmin,ymax,xmax]}   (one diagram/picture/graph/figure/experimental setup OR one data table — "page" says which attached image it is on, and box_2d is the rectangle you draw around it on THAT image)\n`
       : `  {"type":"image","box_2d":[ymin,xmin,ymax,xmax]}   (one diagram/picture/graph/figure/experimental setup OR one data table — box_2d is the rectangle you draw around it on the page)\n`) +
     `  {"type":"text","text":"a part of the question wording, plain text","marks":2}   (include "marks" ONLY when the page prints a mark allocation for that question or part, and leave the printed "[2]" out of "text")\n` +
-    `  {"type":"mcq","options":["option 1 text","option 2 text","option 3 text","option 4 text"],"correctIndex":0}\n` +
+    `  {"type":"mcq","options":["option 1 text","option 2 text","option 3 text","option 4 text"],"correctIndex":0,"printedAsTable":false}   ("printedAsTable": true when the options are printed on the page as a TABLE with column headings, false when they are ordinary lines of words or pictures)\n` +
     `  {"type":"answer","claim":"...","evidence":"...","reasoning":"..."}\n` +
     `  {"type":"plainanswer","text":"..."}\n` +
     `  {"type":"explanation","text":"teacher explanation of the model answer"}\n` +
@@ -21368,6 +21368,23 @@ function autoChkBatchNote(list) {
   return bits.length ? ' · 🚦 ' + bits.join(' ') : '';
 }
 
+// Does this multiple-choice question still need the independent options read
+// off the page? Only a first read that said, in so many words, "not printed as
+// a table" — with options that are not table-shaped on our side either — lets
+// it be skipped. Anything else (a table, a half-table, a reply that did not
+// say) keeps the second reading.
+function _rapidOptionsCheckNeeded(q, payload) {
+  const mcq = typeof _cqMcqBlock === 'function' ? _cqMcqBlock(q) : null;
+  if (!mcq || (mcq.options || []).length < 2) return true;   // otRapidSourceCheck turns these away itself
+  const T = _ot();
+  if (!T) return true;
+  const rawMcq = ((payload && payload.blocks) || []).find(b => b && String(b.type || '').toLowerCase() === 'mcq');
+  if (!rawMcq || rawMcq.printedAsTable !== false) return true;
+  const ours = _otOptionTexts(mcq);
+  if (T.fromOptions(ours)) return true;
+  if (T.misreadTable(ours)) return true;
+  return false;
+}
 async function processRapidJob(jobId, file, batchLevel, opts) {
   const o = opts || {};
   try {
@@ -21387,7 +21404,17 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
     // whole sheet of them does not — and running out does not fail, it
     // TRUNCATES, and _repairAIJson then hands back a valid-looking reply
     // missing its last questions entirely.
-    const raw = await askGeminiVision(_aiBuildQuestionPrompt(isPdf, 1, batchLevel, { continuation: !!o.continuation }), [{ mimeType: file.type, data: b64 }], { maxOutputTokens: 8192, json: true, authoring: true });
+    //
+    // 🧠 THE READ THINKS HARDER (v1.461.0). This one call writes the wording,
+    // the options, the answers, the explanations and the figure rectangles for
+    // every question on the page, and every later call on this page exists to
+    // catch what it got wrong. It ran on the lowest thinking setting; it now runs
+    // on 'medium', which every engine understands (ChatGPT
+    // takes it as is, Gemini as thinkingLevel medium, Kimi as high). The later
+    // checks stay exactly as they were — they simply find less to fix. The
+    // budget grew with the thinking (8192 → 12288): a thinking model spends part
+    // of it thinking, and running out TRUNCATES rather than failing.
+    const raw = await askGeminiVision(_aiBuildQuestionPrompt(isPdf, 1, batchLevel, { continuation: !!o.continuation }), [{ mimeType: file.type, data: b64 }], { maxOutputTokens: 12288, json: true, authoring: true, reasoningEffort: 'medium' });
     const parsed = _parseAIJson(raw);
     const payloads = _aiQuestionPayloads(parsed);
     if (!payloads.length) {
@@ -21601,8 +21628,19 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
       //    the right row), and options that are not a table on the page must not
       //    have become one. A mismatch lights the card red with the finding and a
       //    one-tap "📋 Make the table" fix; it never withholds the question.
+      //
+      //    ✂️ ONE CALL SAVED WHEN THE PAGE HAS ALREADY ANSWERED IT (v1.461.0).
+      //    The first read now says, for every multiple-choice block, whether
+      //    its options were printed as a table (`printedAsTable`). When it says
+      //    plainly NOT a table and our options are not table-shaped either,
+      //    there is no table on either side to compare, and the second reading
+      //    could only repeat what the first one said — so it is skipped. A
+      //    table on either side, or a first read that did not say, still gets
+      //    the independent second reading exactly as before.
       try {
-        const tableCheck = await otRapidSourceCheck(q, [{ mimeType: file.type, data: b64 }]);
+        const tableCheck = _rapidOptionsCheckNeeded(q, payload)
+          ? await otRapidSourceCheck(q, [{ mimeType: file.type, data: b64 }])
+          : null;
         if (tableCheck && tableCheck.state === 'mismatch') {
           const mcqB = _cqMcqBlock(q);
           const found = _otLocalFindings(q, mcqB).filter(f => f.title === 'Options table needs checking');
@@ -63904,7 +63942,7 @@ function loadLegendsThumbs(){
       f = document.createElement('iframe');
       f.id = 'legendsThumbFrame';
       f.style.cssText = 'position:absolute;width:2px;height:2px;opacity:0;pointer-events:none;left:-9999px;top:-9999px;';
-      f.src = 'science-legends.html?v=1.460.0';
+      f.src = 'science-legends.html?v=1.461.0';
       document.body.appendChild(f);
     }
     let tries = 0;
@@ -65261,7 +65299,7 @@ function openFpsGame() {
     showToast(`🎮 No game credits left today — answer ${need} more question${need === 1 ? '' : 's'} in practice to earn one`, 'error');
     return;
   }
-  window.location.href = 'fps.html?v=1.460.0';
+  window.location.href = 'fps.html?v=1.461.0';
 }
 // ---- Release announcement banner (top of screen, dismissible per device) ----
 const FPS_ANNOUNCE_KEY = 'fpsAnnounceDismissed_v1';

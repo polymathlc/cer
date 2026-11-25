@@ -147,6 +147,25 @@ await (async () => {
   })());
 }
 
+// ✂️ v1.461.0: the first read says whether the options were printed as a
+// table, and the second reading is skipped ONLY when it plainly says not and
+// our options are not table-shaped either.
+{
+  vm.runInContext(cut('function _rapidOptionsCheckNeeded(q, payload) {', '\nasync function processRapidJob', 'options-check gate'), sandbox);
+  const plain = ['It melts.', 'It boils.', 'It freezes.', 'It condenses.'];
+  const need = (texts, raw) => { sandbox.__q = question(texts); sandbox.__p = { blocks: raw }; return run('_rapidOptionsCheckNeeded(__q, __p)'); };
+  ok('plain options the first read called "not a table" skip the second reading', need(plain, [{ type: 'text' }, { type: 'mcq', printedAsTable: false }]) === false);
+  ok('a first read that did not say still gets the second reading', need(plain, [{ type: 'mcq' }]) === true);
+  ok('a first read that saw a table still gets the second reading', need(plain, [{ type: 'mcq', printedAsTable: true }]) === true);
+  ok('table-shaped options are always read again, whatever the first read said', need(FRUIT, [{ type: 'mcq', printedAsTable: false }]) === true);
+  ok('half-table options are always read again', need([FRUIT[0], 'It boils.', FRUIT[2], 'It condenses.'], [{ type: 'mcq', printedAsTable: false }]) === true);
+  sandbox.__q = { id: 'q0', blocks: [{ id: 't', type: 'text', content: 'Explain.' }] };
+  ok('an open question is left to otRapidSourceCheck, which turns it away itself', run('_rapidOptionsCheckNeeded(__q, { blocks: [] })') === true);
+  const job = cut('async function processRapidJob(jobId, file, batchLevel, opts) {', '\nfunction _failRapidJob', 'rapid job');
+  ok('the page read runs on medium thinking with room for it', /reasoningEffort: 'medium'/.test(job) && /maxOutputTokens: 12288/.test(job));
+  ok('the build prompt asks the first read whether the options are a table', /"printedAsTable":false/.test(cut('function _aiBuildQuestionPrompt(', '\nfunction ', 'build prompt')));
+}
+
 if (process.env.SHOTS) {
   const { chromium } = require('playwright');
   sandbox.q = question(FRUIT);
