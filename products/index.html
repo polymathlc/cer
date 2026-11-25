@@ -181,6 +181,22 @@ label.lbl { display: block; font-size: 12px; font-weight: 700; color: var(--gray
 .thumb .thumb-tools button { flex: 1; border: none; background: none; color: #fff; cursor: pointer; font-size: 13px; padding: 3px 0; }
 .thumb .thumb-tools button:hover { background: rgba(255,255,255,.15); }
 .thumb .thumb-tools button:disabled { opacity: .35; cursor: default; }
+/* Videos (v1.6.0) */
+.thumb.vthumb { width: 160px; height: 96px; background: #10303a; }
+.thumb.vthumb img, .thumb.vthumb video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumb .vlabel { position: absolute; left: 4px; top: 4px; background: rgba(16,48,58,.82); color: #fff; font-size: 10px; font-weight: 800; padding: 1px 7px; border-radius: 999px; max-width: calc(100% - 50px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.thumb .vplay, .gallery-thumbs .vplay { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-60%); width: 30px; height: 30px; border-radius: 999px; background: rgba(255,255,255,.9); color: var(--deep); display: flex; align-items: center; justify-content: center; font-size: 13px; pointer-events: none; box-shadow: var(--shadow); }
+.thumb .vsize { position: absolute; right: 4px; bottom: 26px; background: rgba(0,0,0,.55); color: #fff; font-size: 10px; font-weight: 700; padding: 0 6px; border-radius: 999px; }
+.thumb .vbar { position: absolute; left: 0; right: 0; bottom: 22px; height: 4px; background: rgba(255,255,255,.25); }
+.thumb .vbar div { height: 100%; width: 0; background: var(--aqua); transition: width .2s ease; }
+.vdropzone { margin-top: 8px; }
+.card-img .vid-badge { position: absolute; left: 8px; bottom: 8px; background: rgba(16,48,58,.78); color: #fff; font-size: 11px; font-weight: 800; padding: 2px 9px; border-radius: 999px; }
+.card-img video { width: 100%; height: 100%; object-fit: cover; display: block; background: #10303a; }
+.gallery-main video { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
+.gallery-thumbs button { position: relative; }
+.gallery-thumbs .vplay { width: 22px; height: 22px; font-size: 10px; transform: translate(-50%,-50%); }
+.gallery-thumbs .vnoposter { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #10303a; color: #fff; font-size: 18px; }
+.prow .vcount { color: var(--deep); font-weight: 700; }
 
 .plist { display: flex; flex-direction: column; gap: 10px; }
 .prow { display: grid; grid-template-columns: 64px 1fr auto; gap: 14px; align-items: center; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--white); }
@@ -410,7 +426,7 @@ label.lbl { display: block; font-size: 12px; font-weight: 700; color: var(--gray
     </div>
     <div class="panel" id="product-form-card">
       <h2 id="pf-title">Add a product</h2>
-      <div class="sub">Every product has a SKU, a price, a quantity in stock and up to <span id="max-images-label"></span> pictures. The first picture is the cover.</div>
+      <div class="sub">Every product has a SKU, a price, a quantity in stock, up to <span id="max-images-label"></span> pictures and up to <span id="max-videos-label"></span> videos. The first picture is the cover; videos show after the pictures.</div>
       <div class="form-grid">
         <div>
           <label class="lbl" for="pf-name">Name</label>
@@ -443,6 +459,15 @@ label.lbl { display: block; font-size: 12px; font-weight: 700; color: var(--gray
           </div>
           <input type="file" id="pf-files" accept="image/*" multiple class="hidden">
           <div class="thumbs" id="pf-thumbs"></div>
+        </div>
+        <div class="full">
+          <label class="lbl">Videos</label>
+          <div class="dropzone vdropzone" id="vdropzone" tabindex="0" role="button" aria-label="Add videos">
+            <strong>Click to choose videos</strong> or drag them here
+            <div class="hint">MP4, MOV or WebM, up to <span id="max-video-mb-label"></span> MB each. MP4 plays on every phone. Videos upload when you press Save.</div>
+          </div>
+          <input type="file" id="pf-vfiles" accept="video/mp4,video/quicktime,video/webm,video/*" multiple class="hidden">
+          <div class="thumbs" id="pf-vthumbs"></div>
         </div>
         <div class="full">
           <label class="field-inline"><input type="checkbox" id="pf-active" checked> Show this product in the shop</label>
@@ -664,7 +689,9 @@ label.lbl { display: block; font-size: 12px; font-weight: 700; color: var(--gray
 
    Data:
      shop_products/{id}  { name, sku, skuKey, description, price, quantity
-                           (null = unlimited), images:[{url,path}], active,
+                           (null = unlimited), images:[{url,path}],
+                           videos:[{url,path,posterUrl,posterPath,name,
+                           contentType,size,duration}] (v1.6.0), active,
                            createdAt, updatedAt }
                          — the same collection schedule/ already sells from,
                            so its older docs (no sku / quantity / images)
@@ -676,6 +703,7 @@ label.lbl { display: block; font-size: 12px; font-weight: 700; color: var(--gray
                            paymentChecks[] and arrive already paid.
    Storage:
      shop-products/{productId}/...   product pictures (admin)
+     shop-products/{productId}/videos/...  product videos + poster frames (admin)
      shop-orders/{code}/...          payment screenshots (public, optional)
    ═══════════════════════════════════════════════════════════════════════ */
 'use strict';
@@ -705,7 +733,7 @@ let deliveryFee = 0;
 // shop_settings/config.cardPayments: false hides "Pay by card"; missing means on.
 // createShopCheckout refuses card checkouts too while it is false.
 let cardEnabled = true;
-const PRODUCTS_PAGE_VERSION = 'v1.5.0';
+const PRODUCTS_PAGE_VERSION = 'v1.6.0';
 const WHATSAPP_NUMBER = '6596450588';
 // Card payments (shop-function/, codebase polymath-shop). Prices are always worked
 // out again on the server; the page only sends product ids and quantities.
@@ -720,6 +748,11 @@ const CARD_STATUS_WAIT_MS = 2500;
 const CART_KEY = 'plc_shop_cart_v1';
 const CUSTOMER_KEY = 'plc_shop_customer_v1';
 const MAX_IMAGES = 8;
+const MAX_VIDEOS = 4;
+const VIDEO_MAX_MB = 200;
+const VIDEO_MAX_BYTES = VIDEO_MAX_MB * 1024 * 1024;
+const VIDEO_POSTER_SIDE = 960;
+const VIDEO_EXT = { 'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm', 'video/x-m4v': 'm4v', 'video/ogg': 'ogv', 'video/3gpp': '3gp' };
 const IMAGE_MAX_SIDE = 1600;
 const IMAGE_QUALITY = 0.85;
 const RECEIPT_MAX_SIDE = 1400;
@@ -758,6 +791,7 @@ function toast(msg, isErr) {
 function openModal(id) { const m = $(id); m.classList.add('show'); m.setAttribute('aria-hidden', 'false'); document.body.style.overflow = 'hidden'; }
 function closeModal(id) {
   const m = $(id); m.classList.remove('show'); m.setAttribute('aria-hidden', 'true');
+  pauseAllVideos(m);
   if (!document.querySelector('.modal-bg.show')) document.body.style.overflow = '';
 }
 function confirmBox(title, body, yesLabel) {
@@ -810,6 +844,32 @@ function stockBadge(p) {
 function maxBuyable(p) { const s = stockOf(p); return Math.min(MAX_QTY_PER_LINE, s === Infinity ? MAX_QTY_PER_LINE : s); }
 function imagesOf(p) { return Array.isArray(p && p.images) ? p.images.filter(i => i && i.url) : []; }
 function coverOf(p) { const imgs = imagesOf(p); return imgs.length ? imgs[0].url : ''; }
+function videosOf(p) { return Array.isArray(p && p.videos) ? p.videos.filter(v => v && v.url) : []; }
+/* Everything the detail gallery shows, in order: pictures first, then videos. */
+function mediaOf(p) {
+  return imagesOf(p).map(im => ({ kind: 'image', url: im.url }))
+    .concat(videosOf(p).map(v => ({ kind: 'video', url: v.url, poster: v.posterUrl || '', name: v.name || '', type: v.contentType || '' })));
+}
+function fmtBytes(n) {
+  n = Number(n) || 0;
+  if (n >= 1024 * 1024) return (n / 1024 / 1024).toFixed(n >= 100 * 1024 * 1024 ? 0 : 1) + ' MB';
+  if (n >= 1024) return Math.round(n / 1024) + ' KB';
+  return n + ' B';
+}
+function fmtDuration(sec) {
+  sec = Math.round(Number(sec) || 0);
+  if (!sec) return '';
+  const m = Math.floor(sec / 60), s2 = sec % 60;
+  return m + ':' + String(s2).padStart(2, '0');
+}
+function videoExt(file) {
+  const byType = VIDEO_EXT[(file && file.type || '').toLowerCase()];
+  if (byType) return byType;
+  const m = /\.([a-z0-9]{2,5})$/i.exec(file && file.name || '');
+  return m ? m[1].toLowerCase() : 'mp4';
+}
+function isVideoFile(f) { return !!f && (/^video\//.test(f.type) || (!f.type && /\.(mp4|mov|m4v|webm|ogv|3gp)$/i.test(f.name || ''))); }
+function pauseAllVideos(root) { (root || document).querySelectorAll('video').forEach(v => { try { v.pause(); } catch (e) {} }); }
 
 /* ═══ PayNow SGQR ═══ */
 function tlv(tag, value) { return tag + value.length.toString().padStart(2, '0') + value; }
@@ -1094,14 +1154,21 @@ function renderShop() {
 function cardHtml(p) {
   const cover = coverOf(p);
   const n = imagesOf(p).length;
+  const vids = videosOf(p);
+  const vCover = !cover && vids.length ? vids[0] : null;
   const out = stockOf(p) <= 0;
   const max = maxBuyable(p);
   const inCart = cartQty(p._id);
   return '<article class="card' + (p.active === false ? ' hidden-product' : '') + '" data-id="' + esc(p._id) + '">'
     + '<div class="card-img" data-act="open" data-id="' + esc(p._id) + '">'
-    + (cover ? '<img src="' + esc(cover) + '" alt="' + esc(p.name) + '" loading="lazy">' : '<div class="noimg">📘</div>')
+    + (cover ? '<img src="' + esc(cover) + '" alt="' + esc(p.name) + '" loading="lazy">'
+      : vCover ? (vCover.posterUrl
+          ? '<img src="' + esc(vCover.posterUrl) + '" alt="' + esc(p.name) + ' — video" loading="lazy">'
+          : '<video src="' + esc(vCover.url) + '#t=0.5" muted playsinline preload="metadata" aria-label="' + esc(p.name) + ' — video"></video>')
+      : '<div class="noimg">📘</div>')
     + stockBadge(p)
     + (n > 1 ? '<span class="img-count">' + n + ' photos</span>' : '')
+    + (vids.length ? '<span class="vid-badge">▶ ' + (vids.length > 1 ? vids.length + ' videos' : 'Video') + '</span>' : '')
     + '</div>'
     + '<div class="card-body">'
     + (p.active === false ? '<span class="hidden-tag">Hidden from parents</span>' : '')
@@ -1168,15 +1235,34 @@ function openDetail(id) { detailId = id; detailIdx = 0; renderDetail(); openModa
 function renderDetail() {
   const p = products.find(x => x._id === detailId);
   if (!p) { closeModal('detail-modal'); return; }
-  const imgs = imagesOf(p);
-  if (detailIdx >= imgs.length) detailIdx = 0;
+  const media = mediaOf(p);
+  if (detailIdx >= media.length) detailIdx = 0;
   const main = $('gallery-main');
-  main.innerHTML = imgs.length
-    ? '<img src="' + esc(imgs[detailIdx].url) + '" alt="' + esc(p.name) + ' — picture ' + (detailIdx + 1) + '">'
-      + (imgs.length > 1 ? '<button class="gallery-nav prev" data-gal="-1" type="button" aria-label="Previous picture">‹</button><button class="gallery-nav next" data-gal="1" type="button" aria-label="Next picture">›</button>' : '')
+  pauseAllVideos(main);
+  const cur = media[detailIdx];
+  const picNo = media.slice(0, detailIdx + 1).filter(m => m.kind === 'image').length;
+  const vidNo = media.slice(0, detailIdx + 1).filter(m => m.kind === 'video').length;
+  main.innerHTML = media.length
+    ? (cur.kind === 'video'
+        ? '<video src="' + esc(cur.url) + '" controls playsinline preload="metadata"'
+          + (cur.poster ? ' poster="' + esc(cur.poster) + '"' : '')
+          + ' aria-label="' + esc(p.name) + ' — video ' + vidNo + '">'
+          + 'Your browser cannot play this video. <a href="' + esc(cur.url) + '" target="_blank" rel="noopener">Open it</a>.</video>'
+        : '<img src="' + esc(cur.url) + '" alt="' + esc(p.name) + ' — picture ' + picNo + '">')
+      + (media.length > 1 ? '<button class="gallery-nav prev" data-gal="-1" type="button" aria-label="Previous">‹</button><button class="gallery-nav next" data-gal="1" type="button" aria-label="Next">›</button>' : '')
     : '<div class="noimg" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:64px;color:var(--teal);opacity:.5;">📘</div>';
-  $('gallery-thumbs').innerHTML = imgs.length > 1 ? imgs.map((im, i) =>
-    '<button type="button" class="' + (i === detailIdx ? 'on' : '') + '" data-gal-i="' + i + '" aria-label="Picture ' + (i + 1) + '"><img src="' + esc(im.url) + '" alt=""></button>').join('') : '';
+  let pi = 0, vi = 0;
+  $('gallery-thumbs').innerHTML = media.length > 1 ? media.map((m, i) => {
+    const on = i === detailIdx ? 'on' : '';
+    if (m.kind === 'video') {
+      vi++;
+      return '<button type="button" class="' + on + '" data-gal-i="' + i + '" aria-label="Video ' + vi + '">'
+        + (m.poster ? '<img src="' + esc(m.poster) + '" alt="">' : '<span class="vnoposter">🎬</span>')
+        + '<span class="vplay">▶</span></button>';
+    }
+    pi++;
+    return '<button type="button" class="' + on + '" data-gal-i="' + i + '" aria-label="Picture ' + pi + '"><img src="' + esc(m.url) + '" alt=""></button>';
+  }).join('') : '';
   $('detail-name').textContent = p.name || 'Untitled';
   $('detail-sku').textContent = p.sku ? 'SKU ' + p.sku : '';
   $('detail-price').textContent = money(p.price);
@@ -1195,7 +1281,7 @@ $('detail-modal').addEventListener('click', e => {
   const nav = e.target.closest('[data-gal]');
   const thumb = e.target.closest('[data-gal-i]');
   const p = products.find(x => x._id === detailId);
-  if (nav && p) { const n = imagesOf(p).length; detailIdx = (detailIdx + Number(nav.dataset.gal) + n) % n; renderDetail(); return; }
+  if (nav && p) { const n = mediaOf(p).length; detailIdx = (detailIdx + Number(nav.dataset.gal) + n) % n; renderDetail(); return; }
   if (thumb) { detailIdx = Number(thumb.dataset.galI); renderDetail(); return; }
   const act = e.target.closest('[data-act]');
   if (act && p) {
@@ -1635,13 +1721,24 @@ async function resizeImage(file, maxSide, quality) {
 let editingId = null;
 let formImages = [];
 let originalPaths = [];
+/* formVideos, like formImages, holds the videos as they will be saved:
+     { url, path, posterUrl, posterPath, name, contentType, size, duration } — in Storage
+     { file, preview, key, name, size, contentType, duration, poster(Blob), posterPreview } — not yet uploaded
+   Video files are uploaded as-is (no re-encoding), with a JPEG poster frame
+   grabbed in the browser so the shop grid and gallery thumbs load fast. */
+let formVideos = [];
+let originalVideoPaths = [];
 let saving = false;
 $('max-images-label').textContent = MAX_IMAGES;
+$('max-videos-label').textContent = MAX_VIDEOS;
+$('max-video-mb-label').textContent = VIDEO_MAX_MB;
 
 function resetProductForm() {
   editingId = null;
   formImages.forEach(im => { if (im.preview) URL.revokeObjectURL(im.preview); });
   formImages = []; originalPaths = [];
+  formVideos.forEach(revokeVideoPreview);
+  formVideos = []; originalVideoPaths = [];
   ['pf-name', 'pf-sku', 'pf-price', 'pf-qty', 'pf-desc'].forEach(x => $(x).value = '');
   $('pf-active').checked = true;
   $('pf-title').textContent = 'Add a product';
@@ -1649,6 +1746,7 @@ function resetProductForm() {
   $('pf-cancel').classList.add('hidden');
   $('pf-sku-err').classList.add('hidden');
   renderThumbs();
+  renderVideoThumbs();
 }
 function editProduct(id) {
   const p = products.find(x => x._id === id); if (!p) return;
@@ -1662,6 +1760,13 @@ function editProduct(id) {
   $('pf-active').checked = p.active !== false;
   formImages = imagesOf(p).map(im => ({ url: im.url, path: im.path || '' }));
   originalPaths = formImages.map(im => im.path).filter(Boolean);
+  formVideos = videosOf(p).map(v => ({
+    url: v.url, path: v.path || '', posterUrl: v.posterUrl || '', posterPath: v.posterPath || '',
+    name: v.name || '', contentType: v.contentType || '', size: v.size || 0, duration: v.duration || 0
+  }));
+  originalVideoPaths = [];
+  formVideos.forEach(v => { if (v.path) originalVideoPaths.push(v.path); if (v.posterPath) originalVideoPaths.push(v.posterPath); });
+  renderVideoThumbs();
   $('pf-title').textContent = 'Edit ' + (p.name || 'product');
   $('pf-save').textContent = 'Save changes';
   $('pf-cancel').classList.remove('hidden');
@@ -1691,8 +1796,11 @@ $('pf-thumbs').addEventListener('click', e => {
 });
 function addFiles(files) {
   if (!isAdmin || saving) return;
-  const imgs = Array.from(files || []).filter(f => f && /^image\//.test(f.type));
-  if (!imgs.length) { toast('Please choose picture files', true); return; }
+  const all = Array.from(files || []);
+  const vids = all.filter(isVideoFile);
+  if (vids.length) addVideoFiles(vids);
+  const imgs = all.filter(f => f && /^image\//.test(f.type));
+  if (!imgs.length) { if (!vids.length) toast('Please choose picture or video files', true); return; }
   const room = MAX_IMAGES - formImages.length;
   if (room <= 0) { toast('A product can have up to ' + MAX_IMAGES + ' pictures', true); return; }
   imgs.slice(0, room).forEach(f => formImages.push({ file: f, preview: URL.createObjectURL(f), key: Math.random().toString(36).slice(2) }));
@@ -1702,7 +1810,7 @@ function addFiles(files) {
 const dz = $('dropzone');
 dz.addEventListener('click', () => $('pf-files').click());
 dz.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('pf-files').click(); } });
-$('pf-files').addEventListener('change', e => { const f = e.target.files; e.target.value = ''; addFiles(f); });
+$('pf-files').addEventListener('change', e => { const f = Array.from(e.target.files || []); e.target.value = ''; addFiles(f); });
 ['dragenter', 'dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('drag'); }));
 ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('drag'); }));
 dz.addEventListener('drop', e => addFiles(e.dataTransfer && e.dataTransfer.files));
@@ -1711,6 +1819,136 @@ document.addEventListener('paste', e => {
   const files = Array.from((e.clipboardData && e.clipboardData.items) || []).filter(it => it.kind === 'file').map(it => it.getAsFile()).filter(Boolean);
   if (files.length) { e.preventDefault(); addFiles(files); }
 });
+/* ═══ Admin: product videos (v1.6.0) ═══ */
+function revokeVideoPreview(v) {
+  if (v && v.preview) URL.revokeObjectURL(v.preview);
+  if (v && v.posterPreview) URL.revokeObjectURL(v.posterPreview);
+}
+/* Reads the duration and grabs one frame (about 1 s in, or the middle of a
+   short clip) as a JPEG poster. Some formats (e.g. HEVC .mov on Windows)
+   cannot be decoded by the browser; then there is simply no poster and the
+   video still uploads and plays wherever the parent's device supports it. */
+function probeVideo(file) {
+  return new Promise(resolve => {
+    const url = URL.createObjectURL(file);
+    const v = document.createElement('video');
+    let done = false;
+    const finish = (out) => {
+      if (done) return; done = true;
+      clearTimeout(timer);
+      v.removeAttribute('src'); try { v.load(); } catch (e) {}
+      URL.revokeObjectURL(url);
+      resolve(out);
+    };
+    const timer = setTimeout(() => finish({ duration: isFinite(v.duration) ? v.duration : 0, poster: null, playable: false }), 15000);
+    v.muted = true; v.playsInline = true; v.preload = 'auto';
+    v.onerror = () => finish({ duration: 0, poster: null, playable: false });
+    v.onloadedmetadata = () => {
+      const d = isFinite(v.duration) ? v.duration : 0;
+      const at = d > 2 ? 1 : d / 2;
+      try { v.currentTime = Math.max(0.01, at); } catch (e) { finish({ duration: d, poster: null, playable: true }); }
+    };
+    v.onseeked = () => {
+      const d = isFinite(v.duration) ? v.duration : 0;
+      const w = v.videoWidth, h = v.videoHeight;
+      if (!w || !h) { finish({ duration: d, poster: null, playable: true }); return; }
+      const scale = Math.min(1, VIDEO_POSTER_SIDE / Math.max(w, h));
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(w * scale); cv.height = Math.round(h * scale);
+      try {
+        cv.getContext('2d').drawImage(v, 0, 0, cv.width, cv.height);
+        cv.toBlob(b => finish({ duration: d, poster: b || null, playable: true }), 'image/jpeg', 0.82);
+      } catch (e) { finish({ duration: d, poster: null, playable: true }); }
+    };
+    v.src = url;
+  });
+}
+async function addVideoFiles(files) {
+  if (!isAdmin || saving) return;
+  const vids = Array.from(files || []).filter(isVideoFile);
+  if (!vids.length) { toast('Please choose video files', true); return; }
+  const tooBig = vids.filter(f => f.size > VIDEO_MAX_BYTES);
+  const ok = vids.filter(f => f.size <= VIDEO_MAX_BYTES);
+  if (tooBig.length) toast(tooBig.map(f => f.name).join(', ') + ' is over ' + VIDEO_MAX_MB + ' MB. Please trim or compress it first.', true);
+  const room = MAX_VIDEOS - formVideos.length;
+  if (room <= 0) { toast('A product can have up to ' + MAX_VIDEOS + ' videos', true); return; }
+  if (ok.length > room) toast('Only the first ' + room + ' were added — the limit is ' + MAX_VIDEOS + ' videos', true);
+  const added = ok.slice(0, room).map(f => ({
+    file: f, preview: URL.createObjectURL(f), key: Math.random().toString(36).slice(2),
+    name: f.name || 'video', size: f.size, contentType: f.type || ('video/' + videoExt(f)), duration: 0,
+    poster: null, posterPreview: '', probing: true
+  }));
+  formVideos.push(...added);
+  renderVideoThumbs();
+  for (const v of added) {
+    const info = await probeVideo(v.file);
+    v.probing = false;
+    v.duration = info.duration || 0;
+    v.playable = info.playable;
+    if (info.poster) { v.poster = info.poster; v.posterPreview = URL.createObjectURL(info.poster); }
+    if (!info.playable) toast(v.name + ' cannot be previewed in this browser. It will still upload, but save it as MP4 (H.264) so every phone can play it.', true);
+    renderVideoThumbs();
+  }
+}
+function renderVideoThumbs() {
+  $('pf-vthumbs').innerHTML = formVideos.map((v, i) => {
+    const posterSrc = v.posterPreview || v.posterUrl;
+    const media = posterSrc
+      ? '<img src="' + esc(posterSrc) + '" alt="Video ' + (i + 1) + '">'
+      : (v.preview || v.url
+        ? '<video src="' + esc((v.preview || v.url) + '#t=0.5') + '" muted playsinline preload="metadata"></video>'
+        : '');
+    const dur = fmtDuration(v.duration);
+    return '<div class="thumb vthumb" data-vi="' + i + '" title="' + esc(v.name || ('Video ' + (i + 1))) + '">'
+      + media
+      + '<span class="vplay">▶</span>'
+      + '<span class="vlabel">' + esc(v.name || ('Video ' + (i + 1))) + '</span>'
+      + (v.file ? '<span class="new-tag">New</span>' : '')
+      + '<span class="vsize">' + (v.probing ? 'Reading…' : [dur, v.size ? fmtBytes(v.size) : ''].filter(Boolean).join(' · ')) + '</span>'
+      + (v.file ? '<div class="vbar"><div id="vbar-' + esc(v.key) + '" style="width:' + Math.round((v.progress || 0) * 100) + '%"></div></div>' : '')
+      + '<div class="thumb-tools">'
+      + '<button type="button" data-vth="left" aria-label="Move video earlier"' + (i === 0 ? ' disabled' : '') + '>◀</button>'
+      + '<button type="button" data-vth="play" aria-label="Preview video">👁</button>'
+      + '<button type="button" data-vth="del" aria-label="Remove video">🗑</button>'
+      + '<button type="button" data-vth="right" aria-label="Move video later"' + (i === formVideos.length - 1 ? ' disabled' : '') + '>▶</button>'
+      + '</div></div>';
+  }).join('');
+}
+$('pf-vthumbs').addEventListener('click', e => {
+  const b = e.target.closest('[data-vth]'); if (!b) return;
+  const i = Number(b.closest('.thumb').dataset.vi);
+  const v = formVideos[i]; if (!v) return;
+  if (b.dataset.vth === 'play') { window.open(v.preview || v.url, '_blank', 'noopener'); return; }
+  if (saving) return;
+  if (b.dataset.vth === 'del') { formVideos.splice(i, 1); revokeVideoPreview(v); }
+  if (b.dataset.vth === 'left' && i > 0) [formVideos[i - 1], formVideos[i]] = [formVideos[i], formVideos[i - 1]];
+  if (b.dataset.vth === 'right' && i < formVideos.length - 1) [formVideos[i + 1], formVideos[i]] = [formVideos[i], formVideos[i + 1]];
+  renderVideoThumbs();
+});
+const vdz = $('vdropzone');
+vdz.addEventListener('click', () => $('pf-vfiles').click());
+vdz.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('pf-vfiles').click(); } });
+$('pf-vfiles').addEventListener('change', e => { const f = Array.from(e.target.files || []); e.target.value = ''; addVideoFiles(f); });
+['dragenter', 'dragover'].forEach(ev => vdz.addEventListener(ev, e => { e.preventDefault(); vdz.classList.add('drag'); }));
+['dragleave', 'drop'].forEach(ev => vdz.addEventListener(ev, e => { e.preventDefault(); vdz.classList.remove('drag'); }));
+vdz.addEventListener('drop', e => addVideoFiles(e.dataTransfer && e.dataTransfer.files));
+/* Uploads one video with a resumable upload so big files report progress
+   and survive a brief network blip. onFrac gets 0..1 for this file. */
+function uploadVideoFile(path, file, contentType, onFrac) {
+  return new Promise((resolve, reject) => {
+    const ref = storageService.ref(path);
+    const task = ref.put(file, { contentType, cacheControl: 'public,max-age=31536000' });
+    task.on('state_changed',
+      snap => { if (snap.totalBytes) onFrac(snap.bytesTransferred / snap.totalBytes); },
+      reject,
+      async () => { try { resolve(await ref.getDownloadURL()); } catch (e) { reject(e); } });
+  });
+}
+function setVideoBar(key, frac) {
+  const el = document.getElementById('vbar-' + key);
+  if (el) el.style.width = Math.round(Math.max(0, Math.min(1, frac)) * 100) + '%';
+}
+
 $('pf-sku').addEventListener('input', () => {
   const err = $('pf-sku-err');
   const dup = skuTaken($('pf-sku').value, editingId);
@@ -1753,9 +1991,18 @@ async function saveProduct() {
   const isNew = !editingId;
   const uploadedPaths = [];
   try {
+    if (formVideos.some(v => v.probing)) {
+      toast('Still reading a video — try Save again in a moment', true);
+      throw Object.assign(new Error('Video still being read'), { quiet: true });
+    }
     const pending = formImages.filter(im => im.file);
-    let done = 0;
-    if (pending.length) setProgress(0);
+    const pendingVideos = formVideos.filter(v => v.file);
+    // Progress is weighted by bytes: a picture counts as ~300 KB, a video as its size.
+    const PIC_WEIGHT = 300 * 1024;
+    const totalWeight = pending.length * PIC_WEIGHT + pendingVideos.reduce((a, v) => a + (v.size || 1), 0);
+    let doneWeight = 0;
+    const report = extra => { if (totalWeight) setProgress((doneWeight + (extra || 0)) / totalWeight); };
+    if (pending.length || pendingVideos.length) setProgress(0);
     const images = [];
     for (const im of formImages) {
       if (!im.file) { images.push({ url: im.url, path: im.path || '' }); continue; }
@@ -1765,10 +2012,35 @@ async function saveProduct() {
       await ref.put(blob, { contentType: 'image/jpeg', cacheControl: 'public,max-age=31536000' });
       uploadedPaths.push(path);
       images.push({ url: await ref.getDownloadURL(), path });
-      done++; setProgress(done / pending.length);
+      doneWeight += PIC_WEIGHT; report();
+    }
+    const videos = [];
+    for (const v of formVideos) {
+      if (!v.file) {
+        videos.push({ url: v.url, path: v.path || '', posterUrl: v.posterUrl || '', posterPath: v.posterPath || '',
+          name: v.name || '', contentType: v.contentType || '', size: v.size || 0, duration: Math.round((v.duration || 0) * 10) / 10 });
+        continue;
+      }
+      const stem = 'shop-products/' + id + '/videos/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+      const vPath = stem + '.' + videoExt(v.file);
+      const contentType = v.file.type || ('video/' + videoExt(v.file));
+      const weight = v.size || 1;
+      const url = await uploadVideoFile(vPath, v.file, contentType, frac => { v.progress = frac; setVideoBar(v.key, frac); report(frac * weight); });
+      uploadedPaths.push(vPath);
+      let posterUrl = '', posterPath = '';
+      if (v.poster) {
+        posterPath = stem + '-poster.jpg';
+        const pref = storageService.ref(posterPath);
+        await pref.put(v.poster, { contentType: 'image/jpeg', cacheControl: 'public,max-age=31536000' });
+        uploadedPaths.push(posterPath);
+        posterUrl = await pref.getDownloadURL();
+      }
+      videos.push({ url, path: vPath, posterUrl, posterPath, name: (v.name || '').slice(0, 120), contentType,
+        size: v.size || 0, duration: Math.round((v.duration || 0) * 10) / 10 });
+      doneWeight += weight; report();
     }
     const data = {
-      name, sku, skuKey: sku, description, price: round2(price), quantity, images,
+      name, sku, skuKey: sku, description, price: round2(price), quantity, images, videos,
       active: $('pf-active').checked,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     };
@@ -1776,17 +2048,22 @@ async function saveProduct() {
     await PRODUCTS.doc(id).set(data, { merge: true });
     // Only now that the product points at the new list are removed pictures deleted.
     const keep = new Set(images.map(im => im.path).filter(Boolean));
-    const removed = originalPaths.filter(p => !keep.has(p));
+    videos.forEach(v => { if (v.path) keep.add(v.path); if (v.posterPath) keep.add(v.posterPath); });
+    const removed = originalPaths.concat(originalVideoPaths).filter(p => !keep.has(p));
     await Promise.all(removed.map(p => storageService.ref(p).delete().catch(e => console.warn('Could not delete', p, e))));
     toast(isNew ? 'Product added' : 'Product saved');
     resetProductForm();
   } catch (e) {
     console.error(e);
-    // Pictures uploaded for a save that did not land are cleaned up, so Storage
-    // does not fill with pictures no product points at.
+    // Pictures and videos uploaded for a save that did not land are cleaned up,
+    // so Storage does not fill with files no product points at.
     await Promise.all(uploadedPaths.map(p => storageService.ref(p).delete().catch(() => {})));
-    toast('Save failed: ' + (e.code === 'permission-denied' || e.code === 'storage/unauthorized'
-      ? 'this account is not allowed to write products or pictures (check the Firestore and Storage rules)'
+    formVideos.forEach(v => { v.progress = 0; });
+    renderVideoThumbs();
+    if (!e.quiet) toast('Save failed: ' + (e.code === 'permission-denied' || e.code === 'storage/unauthorized'
+      ? 'this account is not allowed to write products, pictures or videos (check the Firestore and Storage rules)'
+      : e.code === 'storage/quota-exceeded' ? 'Storage is full — remove some old videos or upgrade the Firebase plan'
+      : e.code === 'storage/retry-limit-exceeded' ? 'the upload kept failing — check the internet connection and try again'
       : (e.message || e)), true);
   } finally {
     saving = false; btn.disabled = false; btn.textContent = editingId ? 'Save changes' : 'Save product';
@@ -2016,6 +2293,7 @@ function renderManageList() {
       + '<div><div class="pname">' + esc(p.name || 'Untitled') + (p.active === false ? ' <span class="hidden-tag">Hidden</span>' : '') + (p.featured ? ' <span class="feat-tag">⭐ Featured</span>' : '') + '</div>'
       + '<div class="pmeta"><span class="sku">' + (p.sku ? 'SKU ' + esc(p.sku) : '<em>No SKU</em>') + '</span>'
       + '<span>' + money(p.price) + '</span><span>' + imagesOf(p).length + ' picture' + (imagesOf(p).length === 1 ? '' : 's') + '</span>'
+      + (videosOf(p).length ? '<span class="vcount">▶ ' + videosOf(p).length + ' video' + (videosOf(p).length === 1 ? '' : 's') + '</span>' : '')
       + '<span>' + (s === Infinity ? 'Unlimited stock' : s + ' in stock') + '</span></div></div>'
       + '<div class="ptools">'
       + (s === Infinity ? '' : '<span class="stockctl"><button type="button" data-pm="dec" aria-label="One fewer in stock">−</button><span>' + s + '</span><button type="button" data-pm="inc" aria-label="One more in stock">+</button></span>')
@@ -2049,10 +2327,11 @@ $('plist').addEventListener('click', async e => {
       });
     }
     if (act === 'delete') {
-      const ok = await confirmBox('Delete ' + (p.name || 'this product') + '?', 'This removes the product and its ' + imagesOf(p).length + ' picture(s). Past orders keep their own copy of the name and price.', 'Delete');
+      const ok = await confirmBox('Delete ' + (p.name || 'this product') + '?', 'This removes the product, its ' + imagesOf(p).length + ' picture(s) and ' + videosOf(p).length + ' video(s). Past orders keep their own copy of the name and price.', 'Delete');
       if (!ok) return;
       await PRODUCTS.doc(id).delete();
       await Promise.all(imagesOf(p).map(im => im.path ? storageService.ref(im.path).delete().catch(() => {}) : null));
+      await Promise.all(videosOf(p).flatMap(v => [v.path, v.posterPath]).filter(Boolean).map(x => storageService.ref(x).delete().catch(() => {})));
       if (editingId === id) resetProductForm();
       toast('Product deleted');
     }
