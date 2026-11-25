@@ -84,7 +84,7 @@ If either secret has not been set, provision the missing named secret with
 `firebase functions:secrets:set OPENAI_API_KEY --project mathgen--app`; never put
 a provider key in frontend code. The default
 OpenAI worker model is `gpt-6.1-sol` (`RAPID_IMPORT_OPENAI_MODEL`) for reading,
-vision and reasoning, with `gemini-2.5-flash` (`RAPID_IMPORT_MODEL`) and then
+vision and reasoning, with `gemini-3.8-flash` (`RAPID_IMPORT_MODEL`, the same Flash model the browser app uses) and then
 `kimi-k3` (`RAPID_IMPORT_KIMI_MODEL`) as backups. Explicit queued authoring
 choices are honoured, and missing backups are appended for existing jobs too.
 Empty, truncated, malformed JSON and incomplete question lists trigger the

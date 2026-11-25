@@ -2,6 +2,22 @@
 
 Guidance for Claude when working in this repo.
 
+## ⚡ Rapid add: a smarter first read (v1.461.0)
+
+Owner asked (2026-11-25) for Rapid add to use the newer models better. Step 1 of 3:
+- **The page read in `processRapidJob` runs on `reasoningEffort: 'medium'`** (was the default 'low') with
+  `maxOutputTokens: 12288` (was 8192, because a thinking model spends part of the budget thinking and running out
+  TRUNCATES). `_aiAsk` maps 'medium' for every engine (ChatGPT as is, Gemini `thinkingLevel: medium`, Kimi `high`).
+  Every later check is unchanged; they simply find less to fix.
+- **The build prompt asks each MCQ for `"printedAsTable"`**, and `_rapidOptionsCheckNeeded(q, payload)` skips
+  `otRapidSourceCheck` (one vision call) ONLY when the first read said `false` AND `PolymathOptionTable.fromOptions`
+  / `misreadTable` see no table in our options. A table on either side, or a reply that did not say, still gets the
+  independent second reading. Tests: `tools/rapid-option-table-tests.mjs`.
+- **Online worker** (`rapid-import/functions`): the Gemini backup moved from `gemini-2.5-flash` to `gemini-3.8-flash`
+  (`RAPID_IMPORT_MODEL`, default + `.env.mathgen--app`), the same Flash model as `AI_MODEL`.
+- Pages are still read ONE at a time: the page-break stitch (`continuation`) already joins a question split over two
+  pages, and a multi-page read would need every figure rectangle measured on the right page.
+
 ## 🔒 Private data is closed to signed-out browsers (rules tool, v1 2026-11-18, v2 2026-11-19)
 
 The shared Firestore catch-all of `mathgen--app` is OPEN, and on 2026-11-18 a key-less REST call could read
