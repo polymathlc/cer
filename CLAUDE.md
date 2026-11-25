@@ -2,6 +2,33 @@
 
 Guidance for Claude when working in this repo.
 
+## 🖼 Rapid add keeps clean original pictures (v1.463.0)
+
+`RAPID_KEEP_CLEAN_ORIGINALS` / `_rapidPixelStats` / **`_rapidSourceIsClean`** /
+`_rapidMeasurePixels` / `_rapidKeepOriginals` / `_rapidRedrawLooksFaithful` /
+`_rapidInkGrid` / `_rapidRedrawFaithful` (in `app.js`, search `A CLEAN SOURCE
+KEEPS ITS ORIGINAL PIXELS`); tests `tools/rapid-keep-originals-tests.mjs`.
+
+Every ⚡ Rapid-add figure was redrawn black-and-white by the image model — one
+image call each — even off a crisp screenshot, where a redraw only loses detail.
+- **Only a POOR source is redrawn.** `processRapidJob` measures the page on a
+  256px canvas WHILE the first read runs (no AI call) and passes
+  `keepOriginals` to `_fillBlocksFromAiBoxes`; the single-question whole-page
+  fallback (`wholePage`) skips its redraw on the same answer.
+- **Clean** = a page `_rapidExpandPdf` queued (`pdfPage: true` on the opts,
+  never guessed from the name) unless its pixels look like a scan (grey paper),
+  or a PNG/WebP/GIF/BMP with ≥55% near-white, ≤8% low-chroma mid-grey and no
+  paper colour cast. **Poor** = any JPEG that is not a PDF page, anything
+  `_rapidPrepFile` shrank (it marks the File `rapidPhotoShrunk`), anything
+  unmeasurable. Unsure means redraw, exactly as before.
+- **A kept figure says why**: `block.figureKept = 'clean-source'`. Its
+  `cropSource` and `_imgEnhanceState` are seeded exactly as a redrawn one's, so
+  ✨ Enhance / Touch-up / ↩ Use original work unchanged.
+- **A redraw is now checked** (`checkRedraw`, Rapid add only): if its shape
+  changed >25% or its ink grid overlaps the crop's <30%, the crop is kept
+  (`figureKept = 'redraw-unfaithful'`). Unmeasurable → the redraw stands.
+- The editor's Build-from-screenshot route passes neither flag and is unchanged.
+
 ## 🔑 Rapid add: the paper's own answer key (v1.462.0)
 
 Step 2 of 3. The ⚡ pad has an OPTIONAL 🔑 answer-key zone (`#rapidKeyWrap`, own paste/drop zone `#rapidKeyZone` and own

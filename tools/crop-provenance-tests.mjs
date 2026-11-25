@@ -116,7 +116,7 @@ test('rapid whole-page backup stores the raw upload separately from enhancement'
     const images = new Map();
     const { run, sourcePageUrl } = new Function('images', 'ready', 'raw', 'enhanced', `
       let seq = 0;
-      const file = { type: 'image/png' }, b64 = raw.split(',')[1], many = false, jobId = 'job', _BW_ENHANCE_PROMPT = '';
+      const file = { type: 'image/png' }, b64 = raw.split(',')[1], many = false, keepClean = false, jobId = 'job', _BW_ENHANCE_PROMPT = '';
       function imageAiReady() { return ready; }
       function _setRapidJobState() {} function renderVettingList() {}
       async function generateCleanEnhancedImage() { return enhanced; }
