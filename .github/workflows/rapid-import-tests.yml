@@ -28,6 +28,7 @@ jobs:
         run: |
           node tools/rapid-preview-tests.mjs
           node tools/rapid-option-table-tests.mjs
+          node tools/rapid-answer-key-tests.mjs
           node tools/rapid-preview-concurrency-tests.mjs
           node tools/rapid-cloud-tests.mjs
           node tools/rapid-add-performance-tests.mjs

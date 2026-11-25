@@ -610,7 +610,7 @@ test('it calls the SAME checker, never a second prompt of its own', () => {
 });
 
 test('a question stitched across a page break is read again, as a whole', () => {
-  const fn = cut('async function _rapidExpandPdf(file, level, release) {', '\nfunction startRapidJob', 'pdf feeder');
+  const fn = cut('async function _rapidExpandPdf(file, level, release, key) {', '\nfunction startRapidJob', 'pdf feeder');
   const settle = fn.slice(fn.indexOf('const settle'), fn.indexOf('for (let p = 1'));
   ok(/autoChkAfterMerge\(merged, level\)/.test(settle),
     'the halves were each checked ALONE — one with no last parts, one with no stem');
