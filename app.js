@@ -1,6 +1,6 @@
 import './worksheet-art.js?v=1';
-import { createGameInsightsController } from './game-insights.js?v=1.465.0';
-import { createGameUsageRecorder, createGameUsageWriter } from './game-usage.js?v=1.465.0';
+import { createGameInsightsController } from './game-insights.js?v=1.466.0';
+import { createGameUsageRecorder, createGameUsageWriter } from './game-usage.js?v=1.466.0';
 import './worksheet-art-editor.js?v=1';
 import './vendor/qrcode-generator.js';
 import './question-apps.js?v=1';
@@ -2069,6 +2069,7 @@ function _notesDetach() {
 }
 
 function stopTeachingNotes() {
+  try { _tvReset(); } catch (e) {}   // 📖 one teacher's answers never ground another account
   _notesDetach();
   _notesLoaded = false;
   _notesFirst = null;
@@ -2698,6 +2699,90 @@ function styleBlock(kind, topic, q) {
   return out;
 }
 
+// ================= 📖 THE ANSWER BOOK — the teacher's own answers (v1.466.0) =================
+// teacher-voice.js (window.TeacherVoice) is BYTE FOR BYTE Ans Key's file. Ans
+// Key is the ONE writer: every answer the teacher writes on a worksheet there
+// is kept word for word with its question in
+// users/{teacher}/aiTraining/answerBook. This portal only READS it, so an
+// answer key, an explanation, a hint or a check written here follows the
+// teacher's own answer to that question (or to the nearest one he answered).
+// - Grounding stays SYNCHRONOUS: aiGrounding never waits. The teacher's own
+//   device lists every science entry once (`_tvLoadAll`, after the notes);
+//   anyone else fetches a question's answer the first time it is asked about
+//   (`_tvBlock` primes it), and `tvPrimeFor` lets a caller fetch ahead.
+// - The cache follows the account: `_tvReset` from stopTeachingNotes.
+// - Nothing here writes to the book.
+let _tvReader = null;
+let _tvLoadedFor = '';
+function _tvOwner() {
+  if (!currentUser) return '';
+  return currentUser.role === 'admin' ? currentUser.uid : (adminUid || '');
+}
+function _tvInit() {
+  if (_tvReader) return _tvReader;
+  const TV = (typeof window !== 'undefined') ? window.TeacherVoice : null;
+  if (!TV || !db) return null;
+  _tvReader = TV.reader({
+    owner: _tvOwner,
+    getDoc: segs => getDoc(doc(db, ...segs)).then(d => (d.exists() ? d.data() : null)),
+    listEntries: () => {
+      const o = _tvOwner();
+      if (!o || !_isAdmin() || o !== currentUser.uid) return Promise.resolve([]);
+      return getDocs(collection(db, 'users', o, TV.COLL, TV.BOOK_DOC, TV.ENTRIES)).then(snap => {
+        const out = [];
+        snap.forEach(d => { const e = d.data(); if (e && (!e.sub || e.sub === 'science')) out.push(e); });
+        return out;
+      });
+    },
+    log: (msg, err) => console.warn(msg, err)
+  });
+  return _tvReader;
+}
+function _tvCtx(topic, q) {
+  let lvl = '';
+  try { if (topic) lvl = getTopicLevel(topic) || ''; } catch (e) {}
+  return { q: String(q || ''), lvl, sub: 'science' };
+}
+// The question text a call site handed aiGrounding: a string, or a question.
+function _tvQuestionText(q) {
+  if (!q) return '';
+  if (typeof q === 'string') return stripHtml(q).slice(0, 1200);
+  try {
+    if (Array.isArray(q.blocks)) {
+      return q.blocks.filter(b => b && (b.type === 'text' || b.type === 'mcq'))
+        .map(b => stripHtml(b.content || b.text || b.question || '')).join(' ').slice(0, 1200);
+    }
+    return stripHtml(q.question || q.text || q.title || '').slice(0, 1200);
+  } catch (e) { return ''; }
+}
+function _tvBlock(kind, topic, q) {
+  const r = _tvInit();
+  if (!r) return '';
+  const text = _tvQuestionText(q);
+  if (!text) return '';               // no paper open in this portal: a question, or nothing
+  const ctx = _tvCtx(topic, text);
+  try { r.primeQuestion(text, ctx).catch(() => {}); } catch (e) {}
+  try { return r.block(kind, ctx) || ''; } catch (e) { return ''; }
+}
+// Fetch a question's answer ahead of the call, bounded so nothing waits long.
+function tvPrimeFor(q, topic, ms) {
+  const r = _tvInit();
+  const text = _tvQuestionText(q);
+  if (!r || !text) return Promise.resolve(0);
+  const go = r.primeQuestion(text, _tvCtx(topic, text)).catch(() => 0);
+  return Promise.race([go, new Promise(res => setTimeout(() => res(0), ms || 1500))]);
+}
+function _tvLoadAll() {
+  const r = _tvInit();
+  if (!r || !_isAdmin()) return;
+  const o = _tvOwner();
+  if (!o || _tvLoadedFor === o) return;
+  _tvLoadedFor = o;
+  r.loadAll({ sub: 'science' }).catch(() => {});
+}
+function _tvReset() { _tvLoadedFor = ''; if (_tvReader) _tvReader.reset(); }
+// ================= End answer book =================
+
 // ---- THE ONE DOOR ----
 // Every AI call in this app that says anything about science reaches the
 // teaching notes through here. Grounding one call site and not another is how
@@ -2720,13 +2805,18 @@ function aiGrounding(kind, topic, q) {
   // place the kinds that may never see them are refused (see its section).
   const style = styleBlock(kind, topic, q);
   if (kind === 'gen') return _notesGenBlock() + style;
-  if (kind === 'answer') return _notesAnswerBlock(topic || '') + style;
-  if (kind === 'teach') return _notesTeachBlock(topic || '') + style;
-  if (kind === 'check') return _notesCheckBlock(topic || '') + style;
+  // 📖 The teacher's own answer to this question, word for word (Ans Key's
+  // answer book). `gen` gets nothing: a document being turned into questions
+  // must win, and an unknown kind is treated as marking by the book itself.
+  let voice = '';
+  try { voice = _tvBlock(kind, topic, q); } catch (e) { voice = ''; }
+  if (kind === 'answer') return _notesAnswerBlock(topic || '') + style + voice;
+  if (kind === 'teach') return _notesTeachBlock(topic || '') + style + voice;
+  if (kind === 'check') return _notesCheckBlock(topic || '') + style + voice;
   // An unknown kind degrades to MARKING, which is the kind that leaks least:
   // a typo'd 'marks' must never be the thing that hands a marker the answer.
   if (kind !== 'mark') console.error('aiGrounding: unknown kind "' + kind + '" — grounding as marking, which is the safe default');
-  return _notesMarkingBlock(topic || '') + style;
+  return _notesMarkingBlock(topic || '') + style + voice;
 }
 
 
@@ -4507,6 +4597,7 @@ async function enterApp(user) {
     loadMarkingSettings();
     loadGenSettings();
     loadTeachingNotes(); // grounds AI generation & marking on the uploaded notes
+    try { _tvLoadAll(); } catch (e) {}   // 📖 the teacher's own answers, from Ans Key
     loadAnswerStyle();   // …and on what the teacher's own edits have taught it
     loadSampleData();
     // Saved worksheets were only ever loaded on the student branch, so an admin
@@ -4645,7 +4736,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.465.0';
+const APP_VERSION = 'v1.466.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -7363,26 +7454,26 @@ function navigateTo(page) {
   }
   if (page === 'defenders') {
     const f = document.getElementById('defendersFrame');
-    if (f && !f.getAttribute('src')) f.setAttribute('src', 'science-defenders.html?v=1.465.0');
+    if (f && !f.getAttribute('src')) f.setAttribute('src', 'science-defenders.html?v=1.466.0');
   }
   if (page === 'raiders') {
     const f = document.getElementById('raidersFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-raiders.html?v=1.465.0'); f.addEventListener('load', pushRaidersAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-raiders.html?v=1.466.0'); f.addEventListener('load', pushRaidersAssets); }
     else pushRaidersAssets();
   }
   if (page === 'spire') {
     const f = document.getElementById('spireFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-spire.html?v=1.465.0'); f.addEventListener('load', pushSpireAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-spire.html?v=1.466.0'); f.addEventListener('load', pushSpireAssets); }
     else pushSpireAssets();
   }
   if (page === 'legends') {
     const f = document.getElementById('legendsFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-legends.html?v=1.465.0'); f.addEventListener('load', pushLegendsAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-legends.html?v=1.466.0'); f.addEventListener('load', pushLegendsAssets); }
     else pushLegendsAssets();
   }
   if (page === 'slayers') {
     const f = document.getElementById('slayersFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-slayers.html?v=1.465.0'); f.addEventListener('load', pushLegendsAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-slayers.html?v=1.466.0'); f.addEventListener('load', pushLegendsAssets); }
     else pushLegendsAssets();
   }
   if (page === 'hades') _hadesInit();
@@ -64464,7 +64555,7 @@ function loadLegendsThumbs(){
       f = document.createElement('iframe');
       f.id = 'legendsThumbFrame';
       f.style.cssText = 'position:absolute;width:2px;height:2px;opacity:0;pointer-events:none;left:-9999px;top:-9999px;';
-      f.src = 'science-legends.html?v=1.465.0';
+      f.src = 'science-legends.html?v=1.466.0';
       document.body.appendChild(f);
     }
     let tries = 0;
@@ -65821,7 +65912,7 @@ function openFpsGame() {
     showToast(`🎮 No game credits left today — answer ${need} more question${need === 1 ? '' : 's'} in practice to earn one`, 'error');
     return;
   }
-  window.location.href = 'fps.html?v=1.465.0';
+  window.location.href = 'fps.html?v=1.466.0';
 }
 // ---- Release announcement banner (top of screen, dismissible per device) ----
 const FPS_ANNOUNCE_KEY = 'fpsAnnounceDismissed_v1';

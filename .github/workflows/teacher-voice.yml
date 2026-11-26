@@ -1,0 +1,25 @@
+name: Answer book (the teacher's own answers)
+
+on:
+  pull_request:
+    paths: ['app.js', 'index.html', 'teacher-voice.js', 'tools/teacher-voice-tests.mjs', 'tools/cer-voice-tests.mjs', '.github/workflows/teacher-voice.yml']
+  push:
+    branches: [main]
+    paths: ['app.js', 'index.html', 'teacher-voice.js', 'tools/teacher-voice-tests.mjs', 'tools/cer-voice-tests.mjs', '.github/workflows/teacher-voice.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  teacher-voice:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: The shared reader and this portal's glue
+        run: |
+          node --check app.js
+          node --check teacher-voice.js
+          node --test tools/teacher-voice-tests.mjs tools/cer-voice-tests.mjs

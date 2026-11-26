@@ -1,5 +1,15 @@
 # CER Science Learning Portal
 
+## 📖 Explanations in the teacher's own words (v1.466.0)
+
+- Every answer Mr Chung writes on a worksheet in Ans Key is kept, word for word, with its question. When the portal's
+  AI writes an answer key, explains a question, gives a hint or checks an answer, it is now shown his own answer to
+  that question (or to the nearest one he has answered) and follows it.
+- Turning a document into questions is unchanged: the document still wins there.
+- The portal only reads these answers; Ans Key is the only place they are written.
+
+Run `node --test tools/cer-voice-tests.mjs tools/teacher-voice-tests.mjs`.
+
 ## 🎓 Science PSLE topics by level (v1.450.2)
 
 - The **By topic** buttons on 🎓 Science PSLE are grouped by the level each topic is taught at — **Primary 3, 4, 5,
