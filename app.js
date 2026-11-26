@@ -1,6 +1,6 @@
 import './worksheet-art.js?v=1';
-import { createGameInsightsController } from './game-insights.js?v=1.463.0';
-import { createGameUsageRecorder, createGameUsageWriter } from './game-usage.js?v=1.463.0';
+import { createGameInsightsController } from './game-insights.js?v=1.464.0';
+import { createGameUsageRecorder, createGameUsageWriter } from './game-usage.js?v=1.464.0';
 import './worksheet-art-editor.js?v=1';
 import './vendor/qrcode-generator.js';
 import './question-apps.js?v=1';
@@ -11,6 +11,7 @@ import { whiteboardSnapshotBytes, whiteboardDigest, whiteboardViewerUrl, validWh
 import { cropSourcesFor, normalizeCropBox, cropPixelRect, cropSourceUpdate } from './question-crop-core.mjs?v=2';
 import { questionRepairTargets, normalizeQuestionRepairPlan, applyQuestionRepairPlan } from './question-repair-core.mjs?v=3';
 import { TUTOR_NAME, TUTOR_COLLECTION, TUTOR_MAX_DOC_CHARS, htmlToPlain, extractImages, normalizeTutorPaper, tutorPaperId, tutorUrl, tutorQrSvg } from './polymath-tutor-core.mjs?v=1';
+import * as PKC from './psle-key-check-core.mjs?v=1';
 import { AI_DEFAULT_PRICES, AI_PRICES_AS_OF, AI_ROUTE_NAMES, mergePrices, priceFor, normalizeUsage, estimateUsage, costOf, createTally, tallyAdd, formatMoney, estimateCheckCost } from './ai-cost-core.mjs?v=1';
 import { NAV_LAYOUT_VERSION, NAV_LAYOUT_TOP, NAV_LAYOUT_LIMITS, cleanText, emptyLayout, emptyAudienceLayout, isEmptyAudienceLayout, normalizeLayout, planSidebar, canonicalLayout, sameLayout, planSummary, layoutMove, layoutNudge, layoutSetHidden, layoutShowAll, layoutSetLabel, layoutSetIcon, layoutAddGroup, layoutRemoveGroup, layoutAddLink, layoutUpdateLink, layoutRemoveLink, layoutSetLockHidden } from './sidebar-layout-core.mjs?v=1.451.0';
 import { measureCrop, figureFacts, figureHardIssues, questionFacts, questionHardIssues, decideReview, failuresToFindings, recropReasons, migrateDecisionsReviewState, DECISIONS_MAY_SKIP } from './decisions-review-core.mjs?v=2';
@@ -4590,7 +4591,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.463.0';
+const APP_VERSION = 'v1.464.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -7308,26 +7309,26 @@ function navigateTo(page) {
   }
   if (page === 'defenders') {
     const f = document.getElementById('defendersFrame');
-    if (f && !f.getAttribute('src')) f.setAttribute('src', 'science-defenders.html?v=1.463.0');
+    if (f && !f.getAttribute('src')) f.setAttribute('src', 'science-defenders.html?v=1.464.0');
   }
   if (page === 'raiders') {
     const f = document.getElementById('raidersFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-raiders.html?v=1.463.0'); f.addEventListener('load', pushRaidersAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-raiders.html?v=1.464.0'); f.addEventListener('load', pushRaidersAssets); }
     else pushRaidersAssets();
   }
   if (page === 'spire') {
     const f = document.getElementById('spireFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-spire.html?v=1.463.0'); f.addEventListener('load', pushSpireAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-spire.html?v=1.464.0'); f.addEventListener('load', pushSpireAssets); }
     else pushSpireAssets();
   }
   if (page === 'legends') {
     const f = document.getElementById('legendsFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-legends.html?v=1.463.0'); f.addEventListener('load', pushLegendsAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-legends.html?v=1.464.0'); f.addEventListener('load', pushLegendsAssets); }
     else pushLegendsAssets();
   }
   if (page === 'slayers') {
     const f = document.getElementById('slayersFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-slayers.html?v=1.463.0'); f.addEventListener('load', pushLegendsAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-slayers.html?v=1.464.0'); f.addEventListener('load', pushLegendsAssets); }
     else pushLegendsAssets();
   }
   if (page === 'hades') _hadesInit();
@@ -64409,7 +64410,7 @@ function loadLegendsThumbs(){
       f = document.createElement('iframe');
       f.id = 'legendsThumbFrame';
       f.style.cssText = 'position:absolute;width:2px;height:2px;opacity:0;pointer-events:none;left:-9999px;top:-9999px;';
-      f.src = 'science-legends.html?v=1.463.0';
+      f.src = 'science-legends.html?v=1.464.0';
       document.body.appendChild(f);
     }
     let tries = 0;
@@ -65766,7 +65767,7 @@ function openFpsGame() {
     showToast(`🎮 No game credits left today — answer ${need} more question${need === 1 ? '' : 's'} in practice to earn one`, 'error');
     return;
   }
-  window.location.href = 'fps.html?v=1.463.0';
+  window.location.href = 'fps.html?v=1.464.0';
 }
 // ---- Release announcement banner (top of screen, dismissible per device) ----
 const FPS_ANNOUNCE_KEY = 'fpsAnnounceDismissed_v1';
@@ -81161,6 +81162,9 @@ async function renderPapersPage(){
   // it block the analysis if it errors.
   await Promise.all([ loadPaperData(true), loadPaperMap(true), (typeof loadAttemptStats === 'function' ? loadAttemptStats().catch(()=>{}) : Promise.resolve()) ]);
   ppRenderBody();
+  // 🔍 Back from the block editor, opened from the answer key checker: reopen
+  // it on the same question rather than leaving the teacher on the map.
+  if (_pkcResume && ppIsAdmin()) { const r = _pkcResume; _pkcResume = null; _ppReturnFocus = null; pkcOpen(r.scope.kind, r.scope.value, r.id); return; }
   _ppFocusScroll();   // returning from an edit? jump back to that question
 }
 // Scroll the question we were editing back into view and flash it, so the admin
@@ -81178,6 +81182,34 @@ function _ppFocusScroll(){
     chip.style.boxShadow = '0 0 0 3px var(--primary,#0b6b4f)';
     setTimeout(() => { chip.style.boxShadow = ''; }, 2200);
   });
+}
+
+// 🔍 The answer key checker's door on the PSLE Papers page: what the free
+// checks already see, before anything is opened.
+function ppPkcCardHtml(){
+  let red = 0, amber = 0, ticked = 0;
+  const qs = ppQuestions();
+  try {
+    qs.forEach(q => {
+      if (q.keyChecked && q.keyChecked.at) ticked++;
+      const pq = { id: q.id, year: q.year, n: q.n, bk: q.bk || 'A', marks: q.marks, topic: q.topic || '', type: q.type, title: q.title || '', ans: q.ans || '' };
+      const bq = ppBankQ(q.id);
+      let topics = []; try { topics = currentTopics(); } catch (e) {}
+      const st = PKC.statusOf(PKC.localFindings({ paper: pq, official: _pkcOfficial(pq), bank: _pkcBankSummary(bq), topics }), null);
+      if (st === 'red') red++; else if (st === 'amber') amber++;
+    });
+  } catch (e) { console.warn('answer key card', e); }
+  return `<div class="pp-card pp-pkc-card">
+      <div class="pp-pkc-card-main">
+        <h3 class="pp-h" style="margin:0;">🔍 Answer key checker</h3>
+        <p class="pp-sub" style="margin:6px 0 0;">Every question as students see it, beside its answer keys, code, marks, topic and the rest — edit them in place. Free checks run straight away; the AI can solve each question and compare it with the key when you ask (the cost is shown).</p>
+        <div class="pp-pkc-counts"><span>🔴 ${red} need fixing</span><span>🟡 ${amber} worth a look</span><span>✓ ${ticked}/${qs.length} ticked off</span></div>
+      </div>
+      <div class="pp-pkc-card-btns">
+        <button class="btn btn-primary" onclick="pkcOpen('all')">🔍 Check every paper</button>
+        <button class="btn btn-outline" onclick="pkcOpen('topic', 0)">By topic</button>
+      </div>
+    </div>`;
 }
 
 function ppMarksByTopic(){ const m = {}; ppQuestions().forEach(q => { const t = ppTopicOf(q); m[t] = (m[t] || 0) + (Number(q.marks) || 0); }); return m; }
@@ -81240,7 +81272,9 @@ function ppRenderBody(){
     // question-by-question clicking.
     const bulkEditBtn = admin ? `<button class="pp-mini pp-bulkedit" title="Open the whole ${escapeHtml(y)} paper in one editor — change every question's number, marks, topic, skill, difficulty, title, analysis and answer, then save once" onclick="ppOpenPaperEdit('${escapeHtml(y)}')">🗂 Edit whole paper</button>` : '';
     const formatBtn = (!edit && admin && yAssigned) ? `<button class="pp-mini pp-format" title="Check every attached question on the ${escapeHtml(y)} paper for the three things a paper needs: an explanation for every part, keywords assigned, and marks on every part. Instant, no AI — and each row takes you straight to the question." onclick="pfCheckYear('${escapeHtml(y)}')">📋 Format check</button>` : '';
-    const yearTools = (bulkEditBtn || practiceBtn || previewBtn || printBtn || formatBtn) ? `<span class="pp-tools">${bulkEditBtn}${practiceBtn}${previewBtn}${formatBtn}${printBtn}</span>` : '';
+    // 🔍 The answer key checker, scoped to this paper.
+    const checkBtn = (!edit && admin) ? `<button class="pp-mini pp-pkc" title="Check every answer key and detail on the ${escapeHtml(y)} paper side by side: the question as students see it on the left, its keys and details on the right" onclick="pkcOpen('year','${escapeHtml(y)}')">🔍 Check keys</button>` : '';
+    const yearTools = (bulkEditBtn || checkBtn || practiceBtn || previewBtn || printBtn || formatBtn) ? `<span class="pp-tools">${bulkEditBtn}${checkBtn}${practiceBtn}${previewBtn}${formatBtn}${printBtn}</span>` : '';
     return `<div class="pp-year">
       <div class="pp-year-head"><strong>${escapeHtml(y)}</strong> <span class="pp-year-sub">${yq.length} questions &middot; ${yAssigned}/${yq.length} attached</span> ${addBtn}${yearTools}</div>
       <div class="pp-chip-row">${chips}</div>
@@ -81344,6 +81378,7 @@ function ppRenderBody(){
     </div>
 
     <div class="pp-note">${roleLine}</div>
+    ${admin && !edit ? ppPkcCardHtml() : ''}
     ${practiceCard}
     <div class="pp-card">
       <h3 class="pp-h">The concepts that keep coming back ${addConcept}${printSelBtn}${formatAllBtn}${whyBox}</h3>
@@ -81360,7 +81395,7 @@ function ppRenderBody(){
     </div>
 
     <div class="pp-card">
-      <h3 class="pp-h">Marks by topic</h3>
+      <h3 class="pp-h">Marks by topic${admin && !edit ? ` <button class="pp-add pp-pkc" title="Check the answer keys topic by topic — pick the topic in the checker" onclick="pkcOpen('topic', 0)">🔍 Check keys by topic</button>` : ''}</h3>
       <p class="pp-sub">Where the marks fall across the papers — each bar is split into the years (lighter = older). Click a year block to see that year's questions, or click a topic name to open every question in the topic as a worksheet you can print and practise. The count shows how many of that topic's questions have a bank question attached.</p>
       <div class="pp-legend">${legend}</div>
       ${bars}
@@ -82255,10 +82290,18 @@ function ppTopicRender(){
     }).join('') || '<div style="color:var(--text-muted);padding:12px 0;">No questions here yet.</div>';
   }
   const all = document.getElementById('ppTopicAllBtn'); if (all) all.style.display = yr ? '' : 'none';
+  const ck = document.getElementById('ppTopicCheckBtn'); if (ck) { ck.style.display = ppIsAdmin() ? '' : 'none'; ck.disabled = !list.length; }
   const pr = document.getElementById('ppTopicPrintBtn');
   if (pr) { pr.disabled = !attached; pr.innerHTML = '🖨 Print worksheet' + (attached ? ` (${attached})` : ''); }
   const pl = document.getElementById('ppTopicPractiseBtn');
   if (pl) { pl.disabled = !attached; pl.innerHTML = '▶ Practise all' + (attached ? ` (${attached})` : ''); }
+}
+// 🔍 The topic view's door into the answer key checker, scoped to this topic.
+function ppTopicCheck(){
+  if (!_ppTopicSel) return;
+  const t = _ppTopicSel.topic;
+  const first = ppTopicQs()[0];
+  pkcOpen('topic', t, first && first.id);
 }
 function ppTopicShowAll(){ if (_ppTopicSel) { _ppTopicSel.year = ''; ppTopicRender(); } }
 function ppTopicClose(){ const ov = document.getElementById('ppTopicOverlay'); if (ov) ov.classList.remove('active'); _ppTopicSel = null; ppHoverHide(); }
@@ -83328,6 +83371,881 @@ async function ppSavePaperEdit(quiet){
   return true;
 }
 
+// =====================================================================
+// 🔍 PSLE ANSWER KEY CHECKER (v1.464.0)
+//
+// One screen to check every PSLE paper question: the question exactly as a
+// student sees it on the LEFT, and on the RIGHT its answer keys (the
+// official PSLE key, the paper's own answer, the bank question's ticked
+// option / model answers / explanation) and every stored detail (codes,
+// booklet, marks, topic, skill, difficulty, analysis, pictures, attempts).
+// Everything on the right is editable in place; Save writes the paper
+// record (savePaperData) and the bank question (saveQuestion, with a
+// before-copy filed with the Red Light Fixer's repair history first).
+//
+// The rules (what counts as wrong, the AI prompt, how a reply is read) live
+// in psle-key-check-core.mjs. Here is only the screen.
+//
+//  • FREE CHECKS FIRST. Opening it costs nothing: every question's light
+//    comes from comparing stored values (official key vs paper answer vs the
+//    bank's ticked option, marks, blanks) plus any standing 🚦 traffic-light
+//    verdict. The AI only runs when a button is pressed.
+//  • THE AI IS A SECOND MARKER, ON THE COST METER. 🤖 asks the AI to solve the
+//    question itself (pictures included) and compare its answer with the
+//    keys. Every call goes through the shared 💲 meter (aiMeterOpen), the
+//    header shows what this session spent, and a batch states its estimate
+//    and asks first. Verdicts are remembered per question in this browser,
+//    signed with what was checked, so an edit makes a verdict "stale".
+//  • NOTHING IS SAVED UNTIL SAVE. Edits and "Apply" go to a per-question
+//    draft; the rail shows ● on unsaved questions and closing asks first.
+//  • BY PAPER OR BY TOPIC. The scope picker holds every year AND every
+//    topic, so the same checking and editing works from the topic view
+//    (the Marks-by-topic drill-down opens it already scoped to its topic).
+// =====================================================================
+const PKC_AI_STORE = 'sq_pkc_ai:';
+const PKC_AVG_STORE = 'sq_pkc_avg:';
+const PKC_SPENT_STORE = 'sq_pkc_spent:';
+const PKC_AI_PAR = 3;            // AI checks in flight at once during a batch
+const PKC_AI_KEEP = 1500;        // verdicts remembered per browser
+const PKC_MAX_IMAGES = 8;        // pictures sent with one check
+let _pkc = null;
+let _pkcResume = null;           // { scope, id } — reopen after the block editor
+let _pkcAiCache = null;
+
+function _pkcUid() { return (currentUser && currentUser.uid) || 'anon'; }
+function _pkcAiAll() {
+  if (_pkcAiCache) return _pkcAiCache;
+  try { const v = JSON.parse(localStorage.getItem(PKC_AI_STORE + _pkcUid()) || '{}'); _pkcAiCache = (v && typeof v === 'object') ? v : {}; }
+  catch (e) { _pkcAiCache = {}; }
+  return _pkcAiCache;
+}
+function _pkcAiSave() {
+  const all = _pkcAiAll();
+  const ids = Object.keys(all);
+  if (ids.length > PKC_AI_KEEP) {
+    ids.sort((a, b) => (all[a].at || 0) - (all[b].at || 0)).slice(0, ids.length - PKC_AI_KEEP).forEach(id => { delete all[id]; });
+  }
+  try { localStorage.setItem(PKC_AI_STORE + _pkcUid(), JSON.stringify(all)); } catch (e) { /* private browsing: this session only */ }
+}
+function _pkcAvg() {
+  try { const v = JSON.parse(localStorage.getItem(PKC_AVG_STORE + _pkcUid()) || 'null'); if (v && typeof v === 'object') return v; } catch (e) {}
+  return { usd: 0, n: 0 };
+}
+function _pkcAvgAdd(usd, n) {
+  if (!(n > 0) || !(usd >= 0)) return;
+  const a = _pkcAvg(); a.usd += usd; a.n += n;
+  try { localStorage.setItem(PKC_AVG_STORE + _pkcUid(), JSON.stringify(a)); } catch (e) {}
+}
+function _pkcSpent() { try { return Number(localStorage.getItem(PKC_SPENT_STORE + _pkcUid())) || 0; } catch (e) { return 0; } }
+function _pkcSpentAdd(usd) {
+  if (!(usd > 0)) return;
+  try { localStorage.setItem(PKC_SPENT_STORE + _pkcUid(), String(_pkcSpent() + usd)); } catch (e) {}
+}
+function pkcEstimate(n) {
+  const a = _pkcAvg();
+  const per = a.n >= 5 ? a.usd / a.n : 0;
+  let route = 'gemini', model = AI_MODEL;
+  try {
+    route = aiEngineOrder()[0] || 'gemini';
+    model = route === 'gemini' ? AI_MODEL : /kimi/.test(route) ? getKimiModel() : getOpenAiModel();
+  } catch (e) {}
+  return { usd: estimateCheckCost(n, per, model, route, aiPrices()), measured: per > 0 };
+}
+
+// ── turning a question into the core's plain context ─────────────────────
+function _pkcHtmlToText(html) {
+  const s = String(html == null ? '' : html)
+    .replace(/<\s*br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|tr|h[1-6])\s*>/gi, '\n')
+    .replace(/<[^>]*>/g, '');
+  let out = s;
+  try { const ta = document.createElement('textarea'); ta.innerHTML = s; out = ta.value; } catch (e) { out = s.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>'); }
+  return out.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+function _pkcTextToHtml(text) { return escapeHtml(String(text == null ? '' : text).trim()).replace(/\n/g, '<br>'); }
+
+// The answer-bearing fields of a block: [{ field, label }]
+function _pkcAnswerFields(b) {
+  if (!b) return [];
+  switch (b.type) {
+    case 'plainanswer': return [{ field: 'content', label: 'Model answer' }];
+    case 'answer': return [{ field: 'claim', label: 'Claim' }, { field: 'evidence', label: 'Evidence' }, { field: 'reasoning', label: 'Reasoning' }];
+    case 'answerLine': return [{ field: 'answer', label: stripHtml(b.label || '') || 'Answer line' }];
+    case 'answerKey': return [{ field: 'text', label: 'Answer key' }];
+    default: return [];
+  }
+}
+function _pkcBankSummary(bq) {
+  if (!bq) return null;
+  const bl = Array.isArray(bq.blocks) ? bq.blocks : [];
+  let pMap = null;
+  try { pMap = qHasParts(bl) ? qPartMap(bl) : null; } catch (e) { pMap = null; }
+  const partOf = b => { try { return pMap ? (qPartOf(pMap, b) || '') : ''; } catch (e) { return ''; } };
+  const mcqB = bl.find(b => b && b.type === 'mcq');
+  const answers = [], explanations = [];
+  bl.forEach(b => {
+    if (!b) return;
+    if (b.type === 'mcq') {
+      const ci = (b.options || []).findIndex(o => o && o.id === b.correctId);
+      answers.push({ blockId: b.id, part: partOf(b), kind: 'mcq', text: ci >= 0 ? 'Option ' + (ci + 1) : '' });
+      return;
+    }
+    const fields = _pkcAnswerFields(b);
+    if (fields.length) answers.push({ blockId: b.id, part: partOf(b), kind: b.type, text: fields.map(f => stripHtml(b[f.field] || '')).filter(Boolean).join(' | ') });
+    if (b.type === 'explanation') explanations.push({ blockId: b.id, part: partOf(b), text: stripHtml(b.content || '') });
+  });
+  let pictures = 0;
+  try { pictures = _cqImageTargets(bq).length; } catch (e) { pictures = bl.filter(b => b && b.type === 'image' && b.url).length; }
+  let marks = 0;
+  try { marks = cpbQuestionMarks(bq); } catch (e) { marks = 0; }
+  let markable = true;
+  try { markable = questionHasMarkableAnswer(bq) || !!bq.annotation; } catch (e) {}
+  return {
+    id: String(bq.id), qno: bq.qno || null, topic: String(bq.topic || ''), marks,
+    mcq: mcqB ? { options: (mcqB.options || []).map(o => _cqOptText(o)), correct: (mcqB.options || []).findIndex(o => o && o.id === mcqB.correctId) } : null,
+    answers, explanations, pictures,
+    emptyPictures: bl.some(b => b && b.type === 'image' && !b.url),
+    markable, hasParts: !!pMap,
+  };
+}
+function _pkcOfficial(p) {
+  const opt = PKC.officialOption(PP_ANSWER_KEYS, p.year, p.n, p.bk);
+  const text = opt ? '' : PKC.officialOpenAnswer(PP_OEQ_KEYS, p.year, p.n, p.bk);
+  return { option: opt, text, ocr: !!text && PP_OEQ_OCR_YEARS.has(String(p.year)) };
+}
+// The draft for a question: the paper record's fields and a clone of the bank
+// question. Made on first look, kept until saved or the checker closes.
+function _pkcDraft(id) {
+  if (!_pkc) return null;
+  if (_pkc.drafts[id]) return _pkc.drafts[id];
+  const pq = ppFindQ(id); if (!pq) return null;
+  const bq = ppBankQ(id);
+  const d = {
+    paper: { n: pq.n, bk: pq.bk || 'A', marks: pq.marks, topic: pq.topic || '', type: pq.type || 'recall', diff: pq.diff || '', title: pq.title || '', detail: pq.detail || '', ans: pq.ans || '' },
+    bank: bq ? tlRepairClone(bq) : null,
+    bankId: bq ? String(bq.id) : '',
+    texts: {},           // blockId|field → the text in its box (only once typed in)
+    dirtyP: false, dirtyB: false,
+  };
+  _pkc.drafts[id] = d;
+  return d;
+}
+function _pkcDirty(id) { const d = _pkc && _pkc.drafts[id]; return !!(d && (d.dirtyP || d.dirtyB)); }
+function _pkcCtx(id) {
+  const pq = ppFindQ(id); if (!pq) return null;
+  const d = _pkc && _pkc.drafts[id];
+  const paper = Object.assign({ id: pq.id, year: pq.year }, d ? d.paper : {
+    n: pq.n, bk: pq.bk || 'A', marks: pq.marks, topic: pq.topic || '', type: pq.type || 'recall', diff: pq.diff || '', title: pq.title || '', detail: pq.detail || '', ans: pq.ans || ''
+  });
+  const bq = d ? d.bank : ppBankQ(id);
+  let topics = [];
+  try { topics = currentTopics(); } catch (e) {}
+  return { paper, official: _pkcOfficial(paper), bank: _pkcBankSummary(bq), topics, bq };
+}
+function _pkcRepr(bq) {
+  if (!bq) return '';
+  try { return _cqRepr(bq); } catch (e) { return stripHtml((bq.blocks || []).map(b => b && (b.content || b.text || '')).join(' ')); }
+}
+function _pkcTlFindings(bq) {
+  if (!bq) return [];
+  try {
+    const st = tlStateOf(bq);
+    if (!st || !['red', 'amber'].includes(st.state) || st.stale) return [];
+    return (st.findings || []).slice(0, 4).map((f, i) => ({
+      id: 'tl-' + i, area: 'Traffic light', severity: /high/.test(f.severity) ? 'high' : /low/.test(f.severity) ? 'low' : 'med',
+      title: String(f.title || 'Traffic-light finding'), detail: String(f.detail || ''), tl: true,
+    }));
+  } catch (e) { return []; }
+}
+function _pkcForget(id) { if (_pkc && _pkc.rows) { if (id == null) _pkc.rows = {}; else delete _pkc.rows[id]; } }
+function _pkcRow(id) {
+  if (_pkc && _pkc.rows && _pkc.rows[id]) return _pkc.rows[id];
+  const r = _pkcRowNow(id);
+  if (r && _pkc && _pkc.rows) _pkc.rows[id] = r;
+  return r;
+}
+function _pkcRowNow(id) {
+  const ctx = _pkcCtx(id);
+  if (!ctx) return null;
+  const pq = ppFindQ(id);
+  let findings = [];
+  try { findings = PKC.localFindings(ctx).concat(_pkcTlFindings(ctx.bq)); } catch (e) { console.warn('answer key checker', e); }
+  const rec = _pkcAiAll()[id];
+  const sig = PKC.contextSig(ctx, _pkcRepr(ctx.bq));
+  const aiStale = !!(rec && rec.sig !== sig);
+  const ai = rec && !aiStale ? rec : null;
+  return {
+    id, pq, ctx, findings, ai: rec || null, aiStale, sig,
+    status: PKC.statusOf(findings, ai),
+    checked: !!(pq && pq.keyChecked && pq.keyChecked.at),
+  };
+}
+
+// ── scope: every paper, one paper, or one topic ──────────────────────────
+function _pkcScopeQs(scope) {
+  const s = scope || { kind: 'all', value: '' };
+  return ppQuestions()
+    .filter(q => s.kind === 'year' ? String(q.year) === String(s.value)
+      : s.kind === 'topic' ? ppTopicOf(q) === s.value : true)
+    .sort((a, b) => String(a.year).localeCompare(String(b.year)) || String(a.bk || 'A').localeCompare(String(b.bk || 'A')) || (Number(a.n) || 0) - (Number(b.n) || 0));
+}
+function _pkcScopeName(scope) {
+  if (!scope || scope.kind === 'all') return 'every PSLE paper';
+  if (scope.kind === 'year') return 'PSLE ' + scope.value;
+  return 'the topic ' + scope.value;
+}
+function _pkcRows() {
+  if (!_pkc) return [];
+  return _pkc.ids.map(id => _pkcRow(id)).filter(Boolean);
+}
+function _pkcVisible(rows) {
+  const f = _pkc ? _pkc.filter : 'all';
+  return (rows || _pkcRows()).filter(r => PKC.passesFilter(r, f) || (_pkc && r.id === _pkc.sel));
+}
+
+// ── open / close ─────────────────────────────────────────────────────────
+// kind: 'all' | 'year' | 'topic'; for a topic, `value` may be a topic name or
+// an index into the Marks-by-topic list (_ppTopicOrder).
+async function pkcOpen(kind, value, selId) {
+  if (!ppIsAdmin()) { showToast('Only admins can check the answer keys', 'error'); return; }
+  if (!_ppDataLoaded || !_ppMapLoaded) {
+    showToast('Loading the papers…', 'info');
+    await Promise.all([loadPaperData(), loadPaperMap()]);
+  }
+  let k = kind === 'year' || kind === 'topic' ? kind : 'all';
+  let v = value == null ? '' : value;
+  if (k === 'topic' && typeof v === 'number') v = _ppTopicOrder[v] || '';
+  if (k !== 'all' && !String(v)) k = 'all';
+  ppHoverHide();
+  const topicOv = document.getElementById('ppTopicOverlay');
+  if (topicOv && topicOv.classList.contains('active')) ppTopicClose();
+  if (_pkc && Object.keys(_pkc.drafts).some(_pkcDirty)) {
+    _pkcForget();
+    _pkcSetScope({ kind: k, value: String(v) }, selId);
+  } else {
+    _pkc = {
+      scope: { kind: k, value: String(v) }, filter: (_pkc && _pkc.filter) || 'all', ids: [], sel: null, drafts: {},
+      running: false, stop: false, queue: 0, done: 0, failed: 0, busy: new Set(),
+      tally: createTally(), meter: null, lastErr: '', rows: {},
+    };
+    _pkcSetScope(_pkc.scope, selId);
+  }
+  const ov = document.getElementById('pkcOverlay');
+  if (ov) ov.classList.add('show');
+  document.body.classList.add('pkc-open');
+}
+function _pkcSetScope(scope, selId) {
+  _pkc.scope = scope;
+  _pkc.ids = _pkcScopeQs(scope).map(q => q.id);
+  const rows = _pkcRows();
+  const vis = rows.filter(r => PKC.passesFilter(r, _pkc.filter));
+  _pkc.sel = (selId && _pkc.ids.includes(selId)) ? selId
+    : (vis.find(r => r.status === 'red') || vis.find(r => r.status === 'amber') || vis[0] || rows[0] || {}).id || null;
+  pkcRender();
+}
+function pkcSetScope(v) {
+  if (!_pkc) return;
+  const s = String(v || '');
+  if (s.startsWith('y:')) _pkcSetScope({ kind: 'year', value: s.slice(2) });
+  else if (s.startsWith('t:')) {
+    const i = Number(s.slice(2));
+    const topics = _pkcTopicList();
+    _pkcSetScope({ kind: 'topic', value: topics[i] || '' });
+  } else _pkcSetScope({ kind: 'all', value: '' });
+}
+function _pkcTopicList() {
+  return [...new Set(ppQuestions().map(q => ppTopicOf(q)).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+}
+function pkcClose(force) {
+  if (!_pkc) return;
+  if (_pkc.running) { showToast('Stop the AI run first', 'info'); return; }
+  const dirty = Object.keys(_pkc.drafts).filter(_pkcDirty);
+  if (!force && dirty.length && !confirm(`You have unsaved changes on ${dirty.length} question${dirty.length === 1 ? '' : 's'}. Close and throw them away?`)) return;
+  const ov = document.getElementById('pkcOverlay');
+  if (ov) ov.classList.remove('show');
+  document.body.classList.remove('pkc-open');
+  if (_pkc.meter) { try { _pkc.meter.close(); } catch (e) {} }
+  _pkc = null;
+  if (document.getElementById('page-papers')?.classList.contains('active')) ppRenderBody();
+}
+function pkcSetFilter(k) { if (!_pkc) return; _pkc.filter = k; pkcRender(); }
+function pkcSelect(id) {
+  if (!_pkc || !_pkc.ids.includes(id)) return;
+  _pkc.sel = id;
+  pkcRender({ keepRail: true });
+  const main = document.getElementById('pkcMain'); if (main) main.scrollTop = 0;
+  const side = document.getElementById('pkcSide'); if (side) side.scrollTop = 0;
+}
+function pkcStep(dir) {
+  if (!_pkc) return;
+  const vis = _pkcVisible();
+  if (!vis.length) return;
+  let i = vis.findIndex(r => r.id === _pkc.sel);
+  i = i < 0 ? 0 : Math.max(0, Math.min(vis.length - 1, i + dir));
+  pkcSelect(vis[i].id);
+  const el = document.getElementById('pkcRi_' + vis[i].id);
+  if (el) { try { el.scrollIntoView({ block: 'nearest' }); } catch (e) {} }
+}
+
+// ── rendering ────────────────────────────────────────────────────────────
+const PKC_DOT = { red: '🔴', amber: '🟡', green: '🟢', grey: '⚪' };
+const PKC_STATUS_WORD = { red: 'Needs fixing', amber: 'Needs a look', green: 'Looks right', grey: 'Not attached' };
+function pkcRender(opts) {
+  if (!_pkc) return;
+  const rows = _pkcRows();
+  _pkcRenderHead(rows);
+  _pkcRenderRail(rows);
+  _pkcRenderMain(rows);
+}
+function _pkcRenderHead(rows) {
+  const el = document.getElementById('pkcHead');
+  if (!el) return;
+  const s = PKC.summarise(rows);
+  const years = ppYears();
+  const topics = _pkcTopicList();
+  const sc = _pkc.scope;
+  const sv = sc.kind === 'year' ? 'y:' + sc.value : sc.kind === 'topic' ? 't:' + topics.indexOf(sc.value) : 'all';
+  const scopeSel = `<select class="form-select pkc-scope" aria-label="Which questions to check" onchange="pkcSetScope(this.value)">
+      <option value="all" ${sv === 'all' ? 'selected' : ''}>📚 Every paper (${ppQuestions().length})</option>
+      <optgroup label="By paper">${years.slice().reverse().map(y => `<option value="y:${escapeHtml(y)}" ${sv === 'y:' + y ? 'selected' : ''}>PSLE ${escapeHtml(y)}</option>`).join('')}</optgroup>
+      <optgroup label="By topic">${topics.map((t, i) => `<option value="t:${i}" ${sv === 't:' + i ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}</optgroup>
+    </select>`;
+  const vis = _pkcVisible(rows);
+  const toAi = vis.filter(r => r.ctx.bank && (!r.ai || r.aiStale)).length;
+  const est = toAi ? pkcEstimate(toAi) : null;
+  const dirty = Object.keys(_pkc.drafts).filter(_pkcDirty).length;
+  const running = _pkc.running;
+  const t = _pkc.tally;
+  const spent = t && t.calls ? `${t.estimatedCalls ? '≈' : ''}${aiMoney(t.usd)} · ${t.calls} call${t.calls === 1 ? '' : 's'}` : aiMoney(0);
+  el.innerHTML = `
+    <div class="pkc-head-row">
+      <div class="pkc-title">
+        <h2>🔍 Answer key checker</h2>
+        <p>The question as students see it on the left, its answer keys and every detail on the right — edit anything there and save.</p>
+      </div>
+      <button type="button" class="pkc-x" aria-label="Close" title="Close (Esc)" onclick="pkcClose()">&times;</button>
+    </div>
+    <div class="pkc-head-row pkc-tools">
+      ${scopeSel}
+      <div class="pkc-stats" aria-live="polite">
+        <span class="pkc-stat red" title="Something is wrong — a key that disagrees, a blank answer">${PKC_DOT.red} ${s.red || 0}</span>
+        <span class="pkc-stat amber" title="Worth a look">${PKC_DOT.amber} ${s.amber || 0}</span>
+        <span class="pkc-stat green" title="Nothing found">${PKC_DOT.green} ${s.green || 0}</span>
+        ${s.grey ? `<span class="pkc-stat grey" title="No bank question attached">${PKC_DOT.grey} ${s.grey}</span>` : ''}
+        <span class="pkc-stat ticked" title="Ticked off by you">✓ ${s.checked}/${s.total} ticked off</span>
+      </div>
+      <span class="pkc-spacer"></span>
+      ${dirty ? `<button type="button" class="btn btn-primary pkc-saveall" onclick="pkcSaveAll()">💾 Save all changes (${dirty})</button>` : ''}
+      ${running
+        ? `<button type="button" class="btn btn-outline pkc-ai-stop" onclick="pkcAiStop()">■ Stop AI (${_pkc.done}/${_pkc.queue})</button>`
+        : `<button type="button" class="btn btn-outline pkc-ai-all" ${toAi ? '' : 'disabled'} onclick="pkcAiCheckAll()" title="Ask the AI to solve and check every question in the list that it has not checked yet (or whose answer changed since). It asks you first, with the estimated cost.">🤖 AI-check ${toAi || ''} in this list${est ? ` <span class="pkc-est">${est.measured ? '~' : '≈'}${aiMoney(est.usd)}</span>` : ''}</button>`}
+      <span class="pkc-cost" title="What the AI checks opened from this screen have cost in this session. ≈ means part of it is estimated, because some routes do not report their token counts. Lifetime on this browser: ${escapeHtml(aiMoney(_pkcSpent()))}.">💲 ${spent}</span>
+      <button type="button" class="pkc-mini" title="AI prices used by the meter" onclick="aiPriceDialogOpen()">⚙ Prices</button>
+    </div>
+    <div class="pkc-head-row pkc-filters" role="tablist" aria-label="Show">
+      ${PKC.FILTERS.map(f => {
+        const n = rows.filter(r => PKC.passesFilter(r, f.key)).length;
+        return `<button type="button" role="tab" aria-selected="${_pkc.filter === f.key}" class="pkc-filter${_pkc.filter === f.key ? ' on' : ''}" onclick="pkcSetFilter('${f.key}')">${escapeHtml(f.label)} <b>${n}</b></button>`;
+      }).join('')}
+      ${_pkc.lastErr ? `<span class="pkc-err">${escapeHtml(_pkc.lastErr)}</span>` : ''}
+    </div>`;
+}
+function _pkcRenderRail(rows) {
+  const el = document.getElementById('pkcRail');
+  if (!el) return;
+  const keep = el.scrollTop;
+  const vis = _pkcVisible(rows);
+  if (!vis.length) {
+    el.innerHTML = `<div class="pkc-empty">${rows.length ? 'Nothing here with this filter. 🎉' : 'No questions in ' + escapeHtml(_pkcScopeName(_pkc.scope)) + '.'}</div>`;
+    return;
+  }
+  const multiYear = new Set(vis.map(r => String(r.pq.year))).size > 1 || _pkc.scope.kind !== 'year';
+  let lastY = null;
+  el.innerHTML = vis.map(r => {
+    const y = String(r.pq.year);
+    const head = multiYear && y !== lastY ? `<div class="pkc-rail-y">PSLE ${escapeHtml(y)}</div>` : '';
+    lastY = y;
+    const busy = _pkc.busy.has(r.id);
+    const top = r.findings.concat(r.ai && !r.aiStale ? r.ai.issues || [] : []).sort((a, b) => (PKC.SEVERITY_RANK[b.severity] || 0) - (PKC.SEVERITY_RANK[a.severity] || 0))[0];
+    return head + `<button type="button" class="pkc-ri st-${r.status}${r.id === _pkc.sel ? ' sel' : ''}" id="pkcRi_${escapeHtml(r.id)}" onclick="pkcSelect('${escapeHtml(r.id)}')" title="${escapeHtml(PKC_STATUS_WORD[r.status] + (top ? ': ' + top.title : ''))}">
+        <span class="pkc-ri-dot" aria-hidden="true">${busy ? '⏳' : PKC_DOT[r.status]}</span>
+        <span class="pkc-ri-main">
+          <span class="pkc-ri-q">Q${escapeHtml(String(r.pq.n))} <span class="pkc-ri-bk">${escapeHtml(String(r.pq.bk || 'A'))} · ${escapeHtml(String(r.pq.marks || 0))}m</span>${_pkcDirty(r.id) ? '<span class="pkc-ri-dirty" title="Unsaved changes">●</span>' : ''}</span>
+          <span class="pkc-ri-t">${escapeHtml(top ? top.title : (r.pq.title || ppTopicOf(r.pq) || ''))}</span>
+        </span>
+        <span class="pkc-ri-flags">${r.ai && !r.aiStale ? '<span title="Checked by the AI">🤖</span>' : (r.aiStale ? '<span title="Changed since the AI checked it">🤖⟳</span>' : '')}${r.checked ? '<span class="pkc-ri-tick" title="Ticked off">✓</span>' : ''}</span>
+      </button>`;
+  }).join('');
+  el.scrollTop = keep;
+}
+function _pkcFindingHtml(r, f) {
+  const fix = f.fix ? `<button type="button" class="pkc-mini pkc-apply" onclick="pkcApplyFix('${escapeHtml(r.id)}','${escapeHtml(f.id)}')" title="Puts this into the boxes below. Nothing is saved until you press Save.">✓ ${escapeHtml(PKC.fixLabel(f.fix))}</button>` : '';
+  const say = f.fix && (f.fix.kind === 'paperAnswer' || f.fix.kind === 'bankAnswer') ? `<div class="pkc-f-say">“${escapeHtml(f.fix.text)}”</div>` : '';
+  return `<div class="pkc-f sev-${f.severity}">
+      <div class="pkc-f-h"><span class="pkc-f-area">${escapeHtml(f.area)}${f.ai ? ' · 🤖 AI' : f.tl ? ' · 🚦' : ''}</span><b>${escapeHtml(f.title)}</b></div>
+      ${f.detail ? `<div class="pkc-f-d">${escapeHtml(f.detail)}</div>` : ''}${say}${fix}
+    </div>`;
+}
+function _pkcVerdictHtml(r) {
+  const ai = r.ai;
+  const busy = _pkc.busy.has(r.id);
+  const local = r.findings;
+  const aiIssues = ai && !r.aiStale ? (ai.issues || []) : [];
+  const word = PKC_STATUS_WORD[r.status];
+  // The app's own two-engine cross-check (ChatGPT and Gemini, separately) on
+  // this one bank question — a second, independent opinion when the first is
+  // in doubt. Same code as 🔍 Check answer keys on My Worksheets.
+  const cross = r.ctx.bank && typeof akcStart === 'function'
+    ? `<button type="button" class="pkc-mini" onclick="pkcCrossCheck('${escapeHtml(r.id)}')" title="Ask ChatGPT and Gemini to answer it separately and compare both with the key (two AI calls, on the cost meter)">🔁 Two-engine cross-check</button>` : '';
+  let aiBox;
+  if (busy) aiBox = `<div class="pkc-ai-box busy">⏳ The AI is solving this question and checking the keys…</div>`;
+  else if (ai) {
+    const pill = ai.verdict === 'ok' ? '<span class="pkc-pill ok">🤖 Key looks right</span>' : ai.verdict === 'wrong' ? '<span class="pkc-pill bad">🤖 Key looks wrong</span>' : '<span class="pkc-pill warn">🤖 Have a look</span>';
+    aiBox = `<div class="pkc-ai-box${r.aiStale ? ' stale' : ''}">
+        <div class="pkc-ai-top">${pill}${r.aiStale ? '<span class="pkc-stale">changed since — check again</span>' : ''}<span class="pkc-ai-when">${escapeHtml(new Date(ai.at || Date.now()).toLocaleString())}</span></div>
+        ${ai.ownAnswer ? `<div class="pkc-ai-own"><b>The AI's own answer:</b> ${escapeHtml(ai.ownAnswer)}</div>` : ''}
+        ${ai.summary ? `<div class="pkc-ai-sum">${escapeHtml(ai.summary)}</div>` : ''}
+        <div class="pkc-ai-btns"><button type="button" class="pkc-mini" onclick="pkcAiCheckOne('${escapeHtml(r.id)}')">🤖 Check again</button>${cross}</div>
+      </div>`;
+  } else {
+    const est = pkcEstimate(1);
+    aiBox = `<div class="pkc-ai-box none"><span>The AI has not checked this one.</span>
+      <div class="pkc-ai-btns"><button type="button" class="pkc-mini pkc-ai-one" ${r.ctx.bank || r.ctx.paper ? '' : 'disabled'} onclick="pkcAiCheckOne('${escapeHtml(r.id)}')">🤖 Ask the AI to solve and check it <span class="pkc-est">${est.measured ? '~' : '≈'}${aiMoney(est.usd)}</span></button>${cross}</div></div>`;
+  }
+  const list = local.concat(aiIssues).sort((a, b) => (PKC.SEVERITY_RANK[b.severity] || 0) - (PKC.SEVERITY_RANK[a.severity] || 0));
+  return `<div class="pkc-verdict st-${r.status}">
+      <div class="pkc-verdict-h"><span class="pkc-light">${PKC_DOT[r.status]}</span><b>${escapeHtml(word)}</b><span class="pkc-verdict-n">${list.length ? list.length + ' thing' + (list.length === 1 ? '' : 's') + ' to look at' : 'nothing found by the free checks'}</span></div>
+      ${list.map(f => _pkcFindingHtml(r, f)).join('')}
+      ${aiBox}
+    </div>`;
+}
+function _pkcRenderVerdict(id) {
+  const host = document.getElementById('pkcVerdict');
+  if (!host || !_pkc || _pkc.sel !== id) return;
+  const r = _pkcRow(id);
+  if (r) host.innerHTML = _pkcVerdictHtml(r);
+  // the rail's dot and the head's counts follow every keystroke cheaply
+  const rows = _pkcRows();
+  _pkcRenderRail(rows);
+  _pkcRenderHead(rows);
+}
+function _pkcField(label, inner, cls) {
+  return `<label class="pkc-fld${cls ? ' ' + cls : ''}"><span>${label}</span>${inner}</label>`;
+}
+function _pkcRenderMain(rows) {
+  const main = document.getElementById('pkcMain');
+  const side = document.getElementById('pkcSide');
+  if (!main || !side) return;
+  const id = _pkc.sel;
+  const r = id ? rows.find(x => x.id === id) || _pkcRow(id) : null;
+  if (!r) {
+    main.innerHTML = `<div class="pkc-empty">Pick a question on the left.</div>`;
+    side.innerHTML = '';
+    return;
+  }
+  const pq = r.pq;
+  const d = _pkcDraft(id);
+  const bq = ppBankQ(id);
+  const vis = _pkcVisible(rows);
+  const pos = vis.findIndex(x => x.id === id);
+  // ── LEFT: the question as a student sees it ──
+  const nav = `<div class="pkc-nav">
+      <button type="button" class="pkc-mini" ${pos > 0 ? '' : 'disabled'} onclick="pkcStep(-1)" title="Previous (← or K)">◀ Previous</button>
+      <span class="pkc-nav-pos">${pos >= 0 ? (pos + 1) + ' of ' + vis.length : ''}</span>
+      <button type="button" class="pkc-mini" ${pos >= 0 && pos < vis.length - 1 ? '' : 'disabled'} onclick="pkcStep(1)" title="Next (→ or J)">Next ▶</button>
+    </div>`;
+  const qhead = `<div class="pkc-qhead">
+      <span class="pkc-qcode">PSLE ${escapeHtml(String(pq.year))} · Booklet ${escapeHtml(String(pq.bk || 'A'))} · Q${escapeHtml(String(pq.n))}</span>
+      ${bq && qNoLabel(bq) ? `<span class="pkc-qno" title="The bank question's number — search ${escapeHtml(qNoLabel(bq))} anywhere to find it">${escapeHtml(qNoLabel(bq))}</span>` : ''}
+      <span class="pkc-qmarks">${escapeHtml(String(pq.marks || 0))} mark${Number(pq.marks) === 1 ? '' : 's'}</span>
+    </div>`;
+  main.innerHTML = nav + qhead + (bq
+    ? `<div class="pp-pe-preview pkc-preview" id="pkcPrev"></div>`
+    : `<div class="pkc-noq"><b>No bank question is attached.</b><br>There is nothing a student can see yet. Attach or build one from the PSLE Papers page (click the question's chip), then check it here.</div>`);
+  if (bq) {
+    const host = document.getElementById('pkcPrev');
+    try { host.innerHTML = buildOpenBody(bq, '#pkcPrev', { scoreElId: 'pkcScore', scorePrefix: '', mode: 'preview' }); }
+    catch (e) { console.warn('answer key checker preview', e); host.innerHTML = `<div class="pkc-noq">This question could not be previewed — open it in the block editor to check it.</div>`; }
+  }
+  // ── RIGHT: keys and details ──
+  const P = d.paper;
+  const off = r.ctx.official;
+  const idq = `'${escapeHtml(id)}'`;
+  const offHtml = off.option
+    ? `<div class="pkc-off"><span class="pkc-off-l">Official PSLE key</span><b class="pkc-off-v">Option ${off.option}</b></div>`
+    : off.text
+      ? `<details class="pkc-off pkc-off-oeq"${pq.bk === 'B' ? ' open' : ''}><summary><span class="pkc-off-l">Official marking scheme</span>${off.ocr ? '<span class="pkc-ocr" title="Read from a scanned PDF — expect small spelling slips">scanned</span>' : ''}</summary><div class="pkc-off-t">${escapeHtml(off.text)}</div></details>`
+      : `<div class="pkc-off none"><span class="pkc-off-l">Official PSLE key</span><span>Not on file for this question</span></div>`;
+  const b = d.bank;
+  let bankKey = '';
+  if (b) {
+    const bl = b.blocks || [];
+    let pMap = null; try { pMap = qHasParts(bl) ? qPartMap(bl) : null; } catch (e) {}
+    const partOf = blk => { try { return pMap ? (qPartOf(pMap, blk) || '') : ''; } catch (e) { return ''; } };
+    let lab = 'numbers'; try { lab = mcqLabelStyle(b); } catch (e) {}
+    const pieces = [];
+    bl.forEach(blk => {
+      if (!blk) return;
+      const part = partOf(blk);
+      const pl = part ? `<span class="pkc-part">${escapeHtml(qPartLabel(part))}</span> ` : '';
+      if (blk.type === 'mcq') {
+        const opts = (blk.options || []).map((o, i) => {
+          const on = o.id === blk.correctId;
+          let lbl = String(i + 1); try { lbl = mcqLabelOf(i, lab); } catch (e) {}
+          return `<label class="pkc-opt${on ? ' on' : ''}"><input type="radio" name="pkcCorrect_${escapeHtml(blk.id)}" ${on ? 'checked' : ''} onchange="pkcSetCorrect(${idq},'${escapeHtml(blk.id)}','${escapeHtml(o.id)}')"><span class="pkc-opt-n">(${escapeHtml(lbl)})</span><span class="pkc-opt-t">${escapeHtml(_cqOptText(o) || '(blank)')}</span></label>`;
+        }).join('');
+        pieces.push(`<div class="pkc-keyblk"><div class="pkc-keyblk-h">${pl}Correct option students are marked against</div>${opts}</div>`);
+        return;
+      }
+      const fields = _pkcAnswerFields(blk);
+      if (fields.length) {
+        pieces.push(`<div class="pkc-keyblk"><div class="pkc-keyblk-h">${pl}${blk.type === 'answer' ? 'Model answer (Claim · Evidence · Reasoning)' : 'Model answer'}${qMarksOf(blk) ? ` <span class="pkc-mk">${qMarksBracket(qMarksOf(blk))}</span>` : ''}</div>
+          ${fields.map(f => {
+            const key = blk.id + '|' + f.field;
+            const val = key in d.texts ? d.texts[key] : _pkcHtmlToText(blk[f.field] || '');
+            return _pkcField(escapeHtml(f.label), `<textarea class="form-input" rows="${Math.min(8, Math.max(2, Math.ceil(val.length / 55)))}" oninput="pkcSetBankText(${idq},'${escapeHtml(blk.id)}','${f.field}',this.value)">${escapeHtml(val)}</textarea>`, 'full');
+          }).join('')}</div>`);
+        return;
+      }
+      if (blk.type === 'explanation') {
+        const key = blk.id + '|content';
+        const val = key in d.texts ? d.texts[key] : _pkcHtmlToText(blk.content || '');
+        pieces.push(`<div class="pkc-keyblk expl"><div class="pkc-keyblk-h">${pl}Explanation students see</div>${_pkcField('', `<textarea class="form-input" rows="${Math.min(8, Math.max(2, Math.ceil(val.length / 55)))}" oninput="pkcSetBankText(${idq},'${escapeHtml(blk.id)}','content',this.value)">${escapeHtml(val)}</textarea>`, 'full')}</div>`);
+      }
+    });
+    if (b.answerKeyImage) pieces.push(`<div class="pkc-keyblk"><div class="pkc-keyblk-h">Answer-key picture</div><img class="pkc-akimg" src="${escapeHtml(transformImageUrl(b.answerKeyImage))}" alt="Answer key picture"></div>`);
+    if (b.answerKeyNote) pieces.push(`<div class="pkc-keyblk"><div class="pkc-keyblk-h">Answer-key note</div><div class="pkc-ro">${escapeHtml(stripHtml(b.answerKeyNote))}</div></div>`);
+    bankKey = pieces.join('') || `<div class="pkc-ro">This bank question has no answer section.</div>`;
+  }
+  const bs = r.ctx.bank;
+  let stats = null; try { stats = bq ? questionStats(bq.id) : null; } catch (e) {}
+  let tl = null; try { tl = bq ? tlStateOf(bq) : null; } catch (e) {}
+  const concepts = ppRecurring().filter(c => (c.hits || []).includes(id)).map(c => c.concept || 'Untitled concept');
+  const topicSel = cur => `<select class="form-select" onchange="pkcSetP(${idq},'topic',this.value)"><option value="">— no topic —</option>${ppPeTopicOptions(cur || '')}</select>`;
+  const bankTopicSel = cur => `<select class="form-select" onchange="pkcSetBankTopic(${idq},this.value)"><option value="">— no topic —</option>${ppPeTopicOptions(cur || '')}</select>`;
+  side.innerHTML = `
+    <div id="pkcVerdict">${_pkcVerdictHtml(r)}</div>
+
+    <section class="pkc-card">
+      <h3>🔑 Answer keys</h3>
+      ${offHtml}
+      ${_pkcField('Answer recorded on the paper', `<textarea class="form-input" rows="${Math.min(8, Math.max(2, Math.ceil(String(P.ans || '').length / 55)))}" placeholder="e.g. Option 3 — …" oninput="pkcSetP(${idq},'ans',this.value)">${escapeHtml(String(P.ans || ''))}</textarea>`, 'full')}
+      ${b ? `<div class="pkc-sub-h">On the bank question</div>${bankKey}` : ''}
+    </section>
+
+    <section class="pkc-card">
+      <h3>🏷 Codes and filing</h3>
+      <div class="pkc-codes">
+        <div><span>Paper code</span><code>${escapeHtml(String(pq.id))}</code></div>
+        ${bq ? `<div><span>Bank number</span><code>${escapeHtml(qNoLabel(bq) || '—')}</code></div><div><span>Bank id</span><code>${escapeHtml(String(bq.id))}</code></div>` : '<div><span>Bank question</span><code>not attached</code></div>'}
+        ${bq && bq.answerSource ? `<div><span>Answers written by</span><code>${bq.answerSource === 'key' ? 'the marking scheme' : 'the AI'}</code></div>` : ''}
+        ${bs ? `<div><span>Pictures</span><code>${bs.pictures}</code></div>` : ''}
+        ${bs ? `<div><span>Bank marks</span><code>${bs.marks || 'not set'}</code></div>` : ''}
+        ${tl && tl.state && tl.state !== 'idle' ? `<div><span>🚦 Traffic light</span><code>${escapeHtml(tl.state)}${tl.stale ? ' (stale)' : ''}</code></div>` : ''}
+        ${stats && stats.attempts ? `<div><span>Students</span><code>${stats.percent}% right of ${stats.attempts}</code></div>` : ''}
+      </div>
+      <div class="pkc-grid">
+        ${_pkcField('Year', `<input class="form-input" type="text" value="${escapeHtml(String(pq.year))}" disabled title="Change the year from 🗂 Edit whole paper">`)}
+        ${_pkcField('Q no.', `<input class="form-input" type="number" min="1" value="${escapeHtml(String(P.n == null ? '' : P.n))}" oninput="pkcSetP(${idq},'n',this.value)">`)}
+        ${_pkcField('Booklet', `<select class="form-select" onchange="pkcSetP(${idq},'bk',this.value)"><option ${P.bk === 'A' ? 'selected' : ''}>A</option><option ${P.bk === 'B' ? 'selected' : ''}>B</option></select>`)}
+        ${_pkcField('Marks', `<input class="form-input" type="number" min="1" max="20" value="${escapeHtml(String(P.marks == null ? '' : P.marks))}" oninput="pkcSetP(${idq},'marks',this.value)">`)}
+        ${_pkcField('Topic on the paper', topicSel(P.topic), 'wide')}
+        ${b ? _pkcField('Topic on the bank question <small>(the one the analysis uses)</small>', bankTopicSel(b.topic), 'wide') : ''}
+        ${_pkcField('Skill tested', `<select class="form-select" onchange="pkcSetP(${idq},'type',this.value)">${ppPeSkillOptions(P.type || 'recall')}</select>`)}
+        ${_pkcField('Difficulty', `<select class="form-select" onchange="pkcSetP(${idq},'diff',this.value)">${ppPeDiffOptions(P.diff)}</select>`)}
+      </div>
+      ${_pkcField('Short description', `<input class="form-input" type="text" value="${escapeHtml(String(P.title || ''))}" oninput="pkcSetP(${idq},'title',this.value)">`, 'full')}
+      ${_pkcField('What it tests / analysis', `<textarea class="form-input" rows="3" oninput="pkcSetP(${idq},'detail',this.value)">${escapeHtml(String(P.detail || ''))}</textarea>`, 'full')}
+      ${concepts.length ? `<div class="pkc-concepts"><span>Recurring concepts:</span> ${concepts.map(c => `<span class="pkc-chip">${escapeHtml(c)}</span>`).join('')}</div>` : ''}
+    </section>
+
+    ${r.checked && pq.keyChecked ? `<p class="pkc-ticked">✓ Ticked off ${escapeHtml(new Date(pq.keyChecked.at).toLocaleString())}${pq.keyChecked.by ? ' by ' + escapeHtml(pq.keyChecked.by) : ''}</p>` : ''}
+    <div class="pkc-actions">
+      <button type="button" class="btn btn-primary" onclick="pkcSave(${idq})" ${_pkcDirty(id) ? '' : 'disabled'} id="pkcSaveBtn">💾 Save</button>
+      <button type="button" class="btn ${r.checked ? 'btn-outline' : 'btn-primary'}" onclick="pkcTick(${idq})" title="Saves any changes, marks this question as checked by you and moves to the next one">${r.checked ? '↩ Untick' : '✓ Looks right — tick off & next'}</button>
+      ${bq ? `<button type="button" class="btn btn-outline" onclick="pkcEditInBlockEditor(${idq})" title="Open the bank question in the full block editor (wording, pictures, options). You come back here afterwards.">✏️ Edit the question itself</button>` : ''}
+    </div>`;
+}
+
+// ── editing (drafts only; typing never re-renders the boxes) ─────────────
+function _pkcTouch(id, which) {
+  const d = _pkc && _pkc.drafts[id]; if (!d) return;
+  if (which === 'bank') d.dirtyB = true; else d.dirtyP = true;
+  _pkcForget(id);
+  const btn = document.getElementById('pkcSaveBtn'); if (btn) btn.disabled = false;
+  _pkcRenderVerdict(id);
+}
+function pkcSetP(id, field, value) {
+  const d = _pkcDraft(id); if (!d) return;
+  d.paper[field] = value;
+  _pkcTouch(id, 'paper');
+}
+function pkcSetBankTopic(id, value) {
+  const d = _pkcDraft(id); if (!d || !d.bank) return;
+  d.bank.topic = value;
+  _pkcTouch(id, 'bank');
+}
+function pkcSetCorrect(id, blockId, optId) {
+  const d = _pkcDraft(id); if (!d || !d.bank) return;
+  const blk = (d.bank.blocks || []).find(b => b && b.id === blockId);
+  if (!blk) return;
+  blk.correctId = optId;
+  _pkcTouch(id, 'bank');
+  // the ticked row's highlight
+  document.querySelectorAll(`#pkcSide input[name="pkcCorrect_${CSS.escape(blockId)}"]`).forEach(inp => {
+    inp.closest('.pkc-opt')?.classList.toggle('on', inp.checked);
+  });
+}
+function pkcSetBankText(id, blockId, field, text) {
+  const d = _pkcDraft(id); if (!d || !d.bank) return;
+  const blk = (d.bank.blocks || []).find(b => b && b.id === blockId);
+  if (!blk) return;
+  d.texts[blockId + '|' + field] = text;
+  blk[field] = _pkcTextToHtml(text);
+  _pkcTouch(id, 'bank');
+}
+function pkcApplyFix(id, findingId) {
+  const r = _pkcRow(id); if (!r) return;
+  const f = r.findings.concat(r.ai && r.ai.issues ? r.ai.issues : []).find(x => x.id === findingId);
+  if (!f || !f.fix) return;
+  const d = _pkcDraft(id); if (!d) return;
+  const fx = f.fix;
+  if (fx.kind === 'paperOption') { d.paper.ans = PKC.stampOption(d.paper.ans, fx.option); d.dirtyP = true; }
+  else if (fx.kind === 'paperAnswer') { d.paper.ans = fx.text; d.dirtyP = true; }
+  else if (fx.kind === 'marks') { d.paper.marks = fx.value; d.dirtyP = true; }
+  else if (fx.kind === 'booklet') { d.paper.bk = fx.value; d.dirtyP = true; }
+  else if (fx.kind === 'topic') {
+    d.paper.topic = fx.value; d.dirtyP = true;
+    if (d.bank) { d.bank.topic = fx.value; d.dirtyB = true; }
+  } else if (fx.kind === 'bankOption') {
+    const blk = d.bank && (d.bank.blocks || []).find(b => b && b.type === 'mcq');
+    const opt = blk && (blk.options || [])[fx.option - 1];
+    if (!opt) { showToast('That option is not on the question any more', 'error'); return; }
+    blk.correctId = opt.id; d.dirtyB = true;
+  } else if (fx.kind === 'bankAnswer') {
+    const blk = d.bank && (d.bank.blocks || []).find(b => b && b.id === fx.blockId);
+    if (!blk) { showToast('That answer box is not on the question any more', 'error'); return; }
+    blk.content = _pkcTextToHtml(fx.text); d.texts[blk.id + '|content'] = fx.text; d.dirtyB = true;
+  } else return;
+  _pkcForget(id);
+  showToast('Put in the boxes — press 💾 Save to keep it', 'info');
+  pkcRender({ keepRail: true });
+}
+
+// ── saving ───────────────────────────────────────────────────────────────
+// Returns true when everything that needed saving was saved.
+async function pkcSave(id, quiet) {
+  if (!ppIsAdmin()) { showToast('Only admins can edit the papers', 'error'); return false; }
+  const d = _pkc && _pkc.drafts[id];
+  if (!d || (!d.dirtyP && !d.dirtyB)) return true;
+  const pq = ppFindQ(id);
+  if (!pq) { showToast('That question is no longer on the paper', 'error'); return false; }
+  if (d.dirtyP) {
+    const P = d.paper;
+    if (!String(P.n == null ? '' : P.n).trim()) { showToast('The question needs a number', 'error'); return false; }
+    const rec = {
+      n: (Number(P.n) || String(P.n).trim()),
+      bk: P.bk === 'B' ? 'B' : 'A',
+      marks: Math.max(1, Math.min(20, Number(P.marks) || 1)),
+      topic: P.topic || '',
+      type: P.type || 'recall',
+      title: String(P.title || '').trim(),
+      detail: String(P.detail || '').trim(),
+      ans: String(P.ans || '').trim(),
+    };
+    const diff = (P.diff === 'easy' || P.diff === 'moderate' || P.diff === 'hard') ? P.diff : '';
+    if (diff) rec.diff = diff; else delete pq.diff;
+    Object.assign(pq, rec);
+    await savePaperData();
+    d.dirtyP = false;
+    d.paper = { n: pq.n, bk: pq.bk, marks: pq.marks, topic: pq.topic, type: pq.type, diff: pq.diff || '', title: pq.title, detail: pq.detail, ans: pq.ans };
+  }
+  if (d.dirtyB && d.bank) {
+    const i = questionBank.findIndex(q => String(q.id) === d.bankId);
+    if (i < 0) { showToast('The bank question is no longer in the bank — nothing saved there', 'error'); return false; }
+    const before = questionBank[i];
+    const next = tlRepairClone(d.bank);
+    // 🗂 Before-copy first, in the same history the Red Light Fixer keeps, so a
+    // change made here can always be put back. If it cannot be filed, stop.
+    try {
+      const owner = (typeof _bankOwnerUid === 'function' && _bankOwnerUid()) || currentUser.uid;
+      await setDoc(doc(collection(db, 'users', owner, RLF_HISTORY_COL)), {
+        qid: String(before.id), where: 'bank', title: String(before.title || '').slice(0, 300), qno: before.qno || null,
+        round: 0, at: new Date().toISOString(), by: currentUser.uid,
+        findings: [], actions: [{ kind: 'answer-key-checker', target: 'answers', reason: 'Edited in the PSLE answer key checker' }],
+        before: rlfFirestoreCopy(before), afterSig: tlSig(next), undone: false,
+      });
+    } catch (e) {
+      console.warn('answer key checker history', e);
+      showToast('Could not file a before-copy, so the bank question was not changed', 'error');
+      return false;
+    }
+    const ok = await saveQuestion(next);
+    if (!ok) return false;
+    questionBank[i] = tlRepairClone(next);
+    d.bank = tlRepairClone(next);
+    d.texts = {};
+    d.dirtyB = false;
+    try { if (typeof _ppPePrevCache !== 'undefined') _ppPePrevCache = {}; } catch (e) {}
+  }
+  _pkcForget(id);
+  if (!quiet) showToast(`Saved PSLE ${pq.year} Q${pq.n}`, 'success');
+  if (!quiet) pkcRender({ keepRail: true });
+  return true;
+}
+async function pkcSaveAll() {
+  if (!_pkc) return;
+  const ids = Object.keys(_pkc.drafts).filter(_pkcDirty);
+  let ok = 0;
+  for (const id of ids) { if (await pkcSave(id, true)) ok++; }
+  showToast(`Saved ${ok} of ${ids.length} question${ids.length === 1 ? '' : 's'}`, ok === ids.length ? 'success' : 'error');
+  pkcRender({ keepRail: true });
+}
+async function pkcTick(id) {
+  const pq = ppFindQ(id); if (!pq) return;
+  if (!await pkcSave(id, true)) return;
+  const was = !!(pq.keyChecked && pq.keyChecked.at);
+  if (was) delete pq.keyChecked;
+  else pq.keyChecked = { at: new Date().toISOString(), by: (currentUser && currentUser.email) || '' };
+  await savePaperData();
+  _pkcForget(id);
+  if (was) { pkcRender({ keepRail: true }); return; }
+  // on to the next one still waiting in this list
+  const vis = _pkcVisible();
+  const pos = vis.findIndex(r => r.id === id);
+  const next = vis.slice(pos + 1).find(r => !r.checked) || vis.find(r => !r.checked && r.id !== id);
+  if (next) pkcSelect(next.id); else { pkcRender(); showToast('Every question in this list is ticked off 🎉', 'success'); }
+}
+async function pkcEditInBlockEditor(id) {
+  const bq = ppBankQ(id);
+  if (!bq) return;
+  if (_pkcDirty(id) && !await pkcSave(id, true)) return;
+  _pkcResume = { scope: _pkc ? _pkc.scope : { kind: 'all', value: '' }, id };
+  pkcClose(true);
+  editQuestionFromPapers(bq.id, id);
+}
+
+// ── 🤖 the AI second marker ──────────────────────────────────────────────
+function _pkcOnRecord(rec) {
+  if (!_pkc) return;
+  const c = tallyAdd(_pkc.tally, rec, aiPrices(), 'check');
+  _pkcSpentAdd(c.usd);
+  const el = document.querySelector('#pkcHead .pkc-cost');
+  if (el) { const t = _pkc.tally; el.textContent = `💲 ${t.estimatedCalls ? '≈' : ''}${aiMoney(t.usd)} · ${t.calls} call${t.calls === 1 ? '' : 's'}`; }
+}
+function _pkcMeterOn() {
+  if (_pkc && !_pkc.meter) _pkc.meter = aiMeterOpen(_pkcOnRecord);
+}
+async function _pkcAiRun(id) {
+  const ctx = _pkcCtx(id);
+  if (!ctx) throw new Error('That question is no longer on the paper.');
+  const bq = ctx.bq;
+  const repr = _pkcRepr(bq);
+  let media = [];
+  if (bq) {
+    try {
+      const targets = _cqImageTargets(bq).slice(0, PKC_MAX_IMAGES);
+      for (const t of targets) {
+        try {
+          const dataUrl = await _urlToDataUrlRobust(transformImageUrl(t.value));
+          const parsed = _parseImageDataUrl(dataUrl);
+          if (parsed) media.push({ mimeType: parsed.mime, data: dataUrl.split(',')[1] || '' });
+        } catch (e) { console.warn('answer key checker: a picture could not be read', e); }
+      }
+    } catch (e) { media = []; }
+  }
+  let grounding = '';
+  try { grounding = aiGrounding('check', ctx.paper.topic, bq) || ''; } catch (e) {}
+  const prompt = PKC.buildPrompt(ctx, repr, { grounding, picturesSent: media.length });
+  const opts = { maxOutputTokens: 3000, json: true, reasoningEffort: 'medium' };
+  const before = _pkc ? _pkc.tally.usd : 0;
+  const raw = media.length ? await askGeminiVision(prompt, media, opts) : await askGemini(prompt, opts);
+  const res = PKC.parseReply(_parseAIJson(raw), ctx);
+  if (bq && ctx.bank && ctx.bank.pictures > media.length) {
+    res.issues.push({ id: 'ai-pics', area: 'Picture', severity: 'low', ai: true, title: `The AI could only see ${media.length} of ${ctx.bank.pictures} pictures`, detail: 'Check the parts that depend on the missing pictures yourself.' });
+  }
+  const all = _pkcAiAll();
+  all[id] = Object.assign({ sig: PKC.contextSig(ctx, repr), at: Date.now() }, res);
+  _pkcAiSave();
+  _pkcForget(id);
+  if (_pkc) _pkcAvgAdd(Math.max(0, _pkc.tally.usd - before), 1);
+  return res;
+}
+async function pkcAiCheckOne(id) {
+  if (!_pkc || _pkc.busy.has(id)) return;
+  _pkcMeterOn();
+  _pkc.busy.add(id);
+  _pkc.lastErr = '';
+  pkcRender({ keepRail: true });
+  try { await _pkcAiRun(id); }
+  catch (e) { console.warn('answer key checker AI', e); showToast('🤖 ' + (e && e.message ? e.message : 'The AI check failed — try again'), 'error'); }
+  finally {
+    if (_pkc) { _pkc.busy.delete(id); pkcRender({ keepRail: true }); }
+  }
+}
+async function pkcAiCheckAll() {
+  if (!_pkc || _pkc.running) return;
+  const todo = _pkcVisible().filter(r => r.ctx.bank && (!r.ai || r.aiStale)).map(r => r.id);
+  if (!todo.length) { showToast('The AI has already checked every question in this list', 'info'); return; }
+  const est = pkcEstimate(todo.length);
+  if (!confirm(`Ask the AI to solve and check ${todo.length} question${todo.length === 1 ? '' : 's'} in ${_pkcScopeName(_pkc.scope)}?\n\nEstimated cost: ${est.measured ? 'about' : 'roughly'} ${aiMoney(est.usd)}${est.measured ? ' (from what checks here have cost before)' : ' (a first guess — it gets better after a few checks)'}.\nYou can stop it at any time. Nothing is changed on any question — it only flags.`)) return;
+  _pkcMeterOn();
+  _pkc.running = true; _pkc.stop = false; _pkc.queue = todo.length; _pkc.done = 0; _pkc.failed = 0; _pkc.lastErr = '';
+  pkcRender({ keepRail: true });
+  let next = 0;
+  const worker = async () => {
+    while (_pkc && !_pkc.stop && next < todo.length) {
+      const id = todo[next++];
+      _pkc.busy.add(id);
+      _pkcRenderRail(_pkcRows());
+      try { await _pkcAiRun(id); }
+      catch (e) { if (_pkc) { _pkc.failed++; _pkc.lastErr = 'Some AI checks failed: ' + (e && e.message ? e.message : 'unknown error'); } }
+      finally {
+        if (_pkc) {
+          _pkc.busy.delete(id); _pkc.done++;
+          const rows = _pkcRows();
+          _pkcRenderRail(rows); _pkcRenderHead(rows);
+          if (_pkc.sel === id) _pkcRenderVerdict(id);
+        }
+      }
+    }
+  };
+  try { await Promise.all(Array.from({ length: Math.min(PKC_AI_PAR, todo.length) }, worker)); }
+  finally {
+    if (_pkc) {
+      const stopped = _pkc.stop;
+      _pkc.running = false; _pkc.stop = false;
+      const rows = _pkcRows();
+      const flagged = rows.filter(r => todo.includes(r.id) && r.ai && !r.aiStale && r.ai.verdict !== 'ok').length;
+      showToast(`🤖 ${stopped ? 'Stopped after' : 'Checked'} ${_pkc.done - _pkc.failed} question${_pkc.done - _pkc.failed === 1 ? '' : 's'} — ${flagged} flagged${_pkc.failed ? `, ${_pkc.failed} failed` : ''}`, _pkc.failed ? 'info' : 'success');
+      if (flagged && _pkc.filter === 'all') _pkc.filter = 'attention';
+      pkcRender();
+    }
+  }
+}
+function pkcCrossCheck(id) {
+  const bq = ppBankQ(id), pq = ppFindQ(id);
+  if (!bq || !pq) return;
+  _pkcMeterOn();
+  akcStart([bq], `PSLE ${pq.year} Q${pq.n} — two-engine cross-check`);
+}
+function pkcAiStop() { if (_pkc && _pkc.running) { _pkc.stop = true; showToast('Stopping after the checks already running…', 'info'); } }
+
+// ← → / J K to move, Esc to close — never while typing in a box.
+document.addEventListener('keydown', (e) => {
+  if (!_pkc) return;
+  const ov = document.getElementById('pkcOverlay');
+  if (!ov || !ov.classList.contains('show')) return;
+  if (document.querySelector('.tl-overlay.show:not(#pkcOverlay)')) return;
+  const t = e.target;
+  const typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
+  if (e.key === 'Escape') { if (typing) { t.blur(); return; } e.preventDefault(); pkcClose(); return; }
+  if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === 'ArrowRight' || e.key === 'j' || e.key === 'J') { e.preventDefault(); pkcStep(1); }
+  else if (e.key === 'ArrowLeft' || e.key === 'k' || e.key === 'K') { e.preventDefault(); pkcStep(-1); }
+});
+// End PSLE answer key checker
+
 // -------- concept editor --------
 function ppAddConcept(){ ppOpenCEdit({ id: null, concept: '', topic: '', note: '', hits: [] }); }
 function ppEditConcept(id){ const c = ppRecurring().find(x => x.id === id); if (c) ppOpenCEdit(c); }
@@ -83682,6 +84600,26 @@ window.saveAnswerKeyFor = saveAnswerKeyFor;
 window.ppAddQuestion = ppAddQuestion;
 window.ppEditQuestion = ppEditQuestion;
 window.ppOpenPaperEdit = ppOpenPaperEdit;
+window.pkcOpen = pkcOpen;
+window.ppTopicCheck = ppTopicCheck;
+window.pkcClose = pkcClose;
+window.pkcSetScope = pkcSetScope;
+window.pkcSetFilter = pkcSetFilter;
+window.pkcSelect = pkcSelect;
+window.pkcStep = pkcStep;
+window.pkcSetP = pkcSetP;
+window.pkcSetBankTopic = pkcSetBankTopic;
+window.pkcSetCorrect = pkcSetCorrect;
+window.pkcSetBankText = pkcSetBankText;
+window.pkcApplyFix = pkcApplyFix;
+window.pkcSave = pkcSave;
+window.pkcSaveAll = pkcSaveAll;
+window.pkcTick = pkcTick;
+window.pkcEditInBlockEditor = pkcEditInBlockEditor;
+window.pkcAiCheckOne = pkcAiCheckOne;
+window.pkcAiCheckAll = pkcAiCheckAll;
+window.pkcAiStop = pkcAiStop;
+window.pkcCrossCheck = pkcCrossCheck;
 // 📋 Format check — every past-paper question dressed for the paper.
 window.pfCheckYear = pfCheckYear;
 window.pfCheckAll = pfCheckAll;

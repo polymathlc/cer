@@ -299,9 +299,9 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-  <link rel="modulepreload" href="app.js?v=1.463.0">
+  <link rel="modulepreload" href="app.js?v=1.464.0">
 <!-- 🙋 Consults (v1.446.0): the archive window shared with Study Buddy, Ans Key and the Maths portal. -->
-<link rel="stylesheet" href="consult-answer.css?v=1.463.0">
+<link rel="stylesheet" href="consult-answer.css?v=1.464.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- The "Your next lightbulb moment" card (practice-preview.js) asks the sample service for its
@@ -324,7 +324,7 @@
      preview copy these links with media="all"). quest-frames.css is loaded the
      same non-blocking way. -->
 <link rel="stylesheet" media="print" href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Pixelify+Sans:wght@400..700&display=swap">
-<link rel="stylesheet" media="print" onload="this.media='all'" href="quest-frames.css?v=1.463.0">
+<link rel="stylesheet" media="print" onload="this.media='all'" href="quest-frames.css?v=1.464.0">
 
 <!-- Tailwind, prebuilt. This used to be <script src="cdn.tailwindcss.com">:
      the Play CDN, which ships a full CSS compiler to the browser, scans the
@@ -5758,6 +5758,156 @@ body.em-editing #printProgress { z-index: 470; }
   padding: 28px 22px;
 }
 .tl-overlay.show { display: flex; }
+
+/* 🔍 PSLE ANSWER KEY CHECKER (v1.464.0) — pkc* in app.js. Question on the
+   left, answer keys and details on the right, the list of questions as a
+   narrow rail. Stacks on a phone: list → question → keys. */
+.pkc-overlay { display:none; position:fixed; inset:0; z-index:300; background:rgba(20,24,22,0.5); padding:18px; }
+.pkc-overlay.show { display:flex; }
+body.pkc-open { overflow:hidden; }
+.pkc-shell { flex:1; min-width:0; display:flex; flex-direction:column; background:var(--surface,#fff); border-radius:18px; box-shadow:0 24px 60px rgba(0,0,0,0.25); overflow:hidden; }
+.pkc-head { padding:18px 24px 12px; border-bottom:1px solid var(--border); display:flex; flex-direction:column; gap:12px; background:var(--surface,#fff); }
+.pkc-head-row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.pkc-title { flex:1; min-width:0; }
+.pkc-title h2 { margin:0; font-size:1.25rem; }
+.pkc-title p { margin:4px 0 0; font-size:0.84rem; color:var(--text-muted); line-height:1.5; }
+.pkc-x { flex:none; border:none; background:none; font-size:1.8rem; line-height:1; color:var(--text-muted); cursor:pointer; padding:0 6px; border-radius:8px; }
+.pkc-x:hover { color:var(--text); }
+.pkc-scope { width:auto; min-width:200px; max-width:320px; margin:0; font-size:0.88rem; padding:8px 10px; }
+.pkc-stats { display:flex; gap:8px; flex-wrap:wrap; font-size:0.82rem; }
+.pkc-stat { padding:4px 10px; border-radius:999px; background:var(--surface-alt,#f3f5f4); font-weight:600; white-space:nowrap; }
+.pkc-stat.ticked { color:var(--primary,#0b6b4f); }
+.pkc-spacer { flex:1; }
+.pkc-cost { font-size:0.8rem; font-variant-numeric:tabular-nums; color:var(--text-muted); padding:6px 10px; border:1px dashed var(--border); border-radius:10px; white-space:nowrap; }
+.pkc-est { font-size:0.74rem; font-weight:600; opacity:0.75; margin-left:4px; }
+.pkc-filters { gap:6px; }
+.pkc-filter { border:1px solid var(--border); background:var(--surface,#fff); color:var(--text); border-radius:999px; padding:6px 12px; font-size:0.8rem; cursor:pointer; font-family:inherit; }
+.pkc-filter b { font-weight:700; margin-left:3px; color:var(--text-muted); }
+.pkc-filter.on { background:var(--primary,#0b6b4f); border-color:var(--primary,#0b6b4f); color:#fff; }
+.pkc-filter.on b { color:#fff; }
+.pkc-err { font-size:0.78rem; color:var(--accent-red,#b23b36); }
+.pkc-body { flex:1; min-height:0; display:grid; grid-template-columns:230px minmax(0,1fr) minmax(360px,440px); }
+.pkc-rail { overflow-y:auto; border-right:1px solid var(--border); padding:10px 8px 24px; background:var(--surface-alt,#fafbfa); }
+.pkc-rail-y { font-size:0.7rem; font-weight:800; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-muted); padding:12px 8px 6px; }
+.pkc-ri { width:100%; display:flex; align-items:flex-start; gap:8px; padding:8px 9px; border:1px solid transparent; border-radius:10px; background:none; text-align:left; cursor:pointer; font-family:inherit; color:var(--text); }
+.pkc-ri:hover { background:var(--surface,#fff); border-color:var(--border); }
+.pkc-ri.sel { background:var(--surface,#fff); border-color:var(--primary,#0b6b4f); box-shadow:inset 3px 0 0 var(--primary,#0b6b4f); }
+.pkc-ri-dot { flex:none; font-size:0.8rem; line-height:1.4; }
+.pkc-ri-main { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+.pkc-ri-q { font-size:0.86rem; font-weight:700; }
+.pkc-ri-bk { font-size:0.7rem; font-weight:600; color:var(--text-muted); margin-left:4px; }
+.pkc-ri-dirty { color:#b7791f; margin-left:5px; }
+.pkc-ri-t { font-size:0.74rem; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.pkc-ri-flags { flex:none; font-size:0.72rem; display:flex; gap:3px; align-items:center; }
+.pkc-ri-tick { color:var(--primary,#0b6b4f); font-weight:800; }
+.pkc-main { overflow-y:auto; padding:18px 26px 40px; display:flex; flex-direction:column; gap:14px; }
+.pkc-nav { display:flex; align-items:center; gap:10px; }
+.pkc-nav-pos { flex:1; text-align:center; font-size:0.8rem; color:var(--text-muted); }
+.pkc-qhead { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.pkc-qcode { font-size:1rem; font-weight:800; }
+.pkc-qno, .pkc-qmarks { font-size:0.76rem; font-weight:700; padding:3px 9px; border-radius:999px; background:var(--primary-light,#eaf3ef); color:var(--primary-dark,#064834); }
+.pkc-qmarks { background:var(--surface-alt,#f3f5f4); color:var(--text-muted); }
+.pkc-preview { background:var(--surface-alt,#fafbfa); }
+.pkc-noq, .pkc-empty { padding:28px; text-align:center; color:var(--text-muted); font-size:0.9rem; line-height:1.6; border:1px dashed var(--border); border-radius:14px; }
+.pkc-rail .pkc-empty { border:none; padding:24px 10px; }
+.pkc-side { overflow-y:auto; border-left:1px solid var(--border); padding:18px 20px 0; display:flex; flex-direction:column; gap:16px; background:var(--surface,#fff); }
+.pkc-verdict { border-radius:14px; padding:14px 16px; border:1px solid var(--border); display:flex; flex-direction:column; gap:10px; }
+.pkc-verdict.st-red { border-color:#e8b4b0; background:#fdf3f2; }
+.pkc-verdict.st-amber { border-color:#ecd49a; background:#fdf8ec; }
+.pkc-verdict.st-green { border-color:#b9dcc9; background:#f1f8f4; }
+.pkc-verdict-h { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.pkc-verdict-n { font-size:0.78rem; color:var(--text-muted); margin-left:auto; }
+.pkc-f { background:var(--surface,#fff); border:1px solid var(--border); border-left-width:4px; border-radius:10px; padding:9px 12px; display:flex; flex-direction:column; gap:5px; }
+.pkc-f.sev-high { border-left-color:#b23b36; }
+.pkc-f.sev-med { border-left-color:#b7791f; }
+.pkc-f.sev-low { border-left-color:#8a9a93; }
+.pkc-f-h { display:flex; flex-direction:column; gap:2px; font-size:0.86rem; line-height:1.4; }
+.pkc-f-area { font-size:0.68rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted); }
+.pkc-f-d { font-size:0.8rem; color:var(--text-muted); line-height:1.5; }
+.pkc-f-say { font-size:0.82rem; font-style:italic; background:var(--surface-alt,#f6f8f7); border-radius:8px; padding:6px 9px; }
+.pkc-apply { align-self:flex-start; }
+.pkc-ai-box { border:1px dashed var(--border); border-radius:10px; padding:10px 12px; display:flex; flex-direction:column; gap:7px; font-size:0.84rem; background:var(--surface,#fff); }
+.pkc-ai-box.none { flex-direction:row; align-items:center; flex-wrap:wrap; justify-content:space-between; color:var(--text-muted); }
+.pkc-ai-box.busy { color:var(--text-muted); }
+.pkc-ai-box.stale { opacity:0.8; }
+.pkc-ai-box .pkc-mini { align-self:flex-start; }
+.pkc-ai-btns { display:flex; gap:8px; flex-wrap:wrap; }
+.pkc-ai-top { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.pkc-ai-when { margin-left:auto; font-size:0.72rem; color:var(--text-muted); }
+.pkc-pill { font-size:0.76rem; font-weight:700; border-radius:999px; padding:3px 10px; }
+.pkc-pill.ok { background:#e3f2ea; color:#0f7a5a; }
+.pkc-pill.warn { background:#fbf0d6; color:#8a5a10; }
+.pkc-pill.bad { background:#f8dedb; color:#9b2c26; }
+.pkc-stale { font-size:0.74rem; color:#8a5a10; }
+.pkc-ai-own { line-height:1.5; }
+.pkc-ai-sum { color:var(--text-muted); line-height:1.5; }
+.pkc-card { border:1px solid var(--border); border-radius:14px; padding:16px 16px 18px; display:flex; flex-direction:column; gap:12px; }
+.pkc-card h3 { margin:0; font-size:0.98rem; }
+.pkc-sub-h { font-size:0.74rem; font-weight:800; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted); margin-top:4px; }
+.pkc-off { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; border-radius:10px; background:var(--primary-light,#eaf3ef); font-size:0.86rem; }
+.pkc-off.none { background:var(--surface-alt,#f3f5f4); color:var(--text-muted); }
+.pkc-off-l { font-size:0.74rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:var(--primary-dark,#064834); }
+.pkc-off.none .pkc-off-l { color:var(--text-muted); }
+.pkc-off-v { font-size:1rem; }
+.pkc-off-oeq { display:block; }
+.pkc-off-oeq summary { cursor:pointer; display:flex; align-items:center; gap:8px; }
+.pkc-off-t { margin-top:8px; font-size:0.84rem; line-height:1.55; white-space:pre-wrap; }
+.pkc-ocr { font-size:0.68rem; background:#fbf0d6; color:#8a5a10; border-radius:999px; padding:1px 8px; }
+.pkc-keyblk { display:flex; flex-direction:column; gap:8px; padding:10px 0 2px; border-top:1px solid var(--border); }
+.pkc-keyblk-h { font-size:0.8rem; font-weight:700; }
+.pkc-part { display:inline-block; font-weight:800; color:var(--primary,#0b6b4f); }
+.pkc-mk { font-weight:600; color:var(--text-muted); }
+.pkc-opt { display:flex; align-items:flex-start; gap:8px; padding:7px 9px; border:1px solid var(--border); border-radius:9px; cursor:pointer; font-size:0.84rem; line-height:1.45; }
+.pkc-opt input { -webkit-appearance:radio; appearance:auto; width:16px; height:16px; margin:2px 0 0; flex:none; accent-color:var(--primary,#0b6b4f); background:none; border:none; }
+.pkc-opt.on { border-color:var(--primary,#0b6b4f); background:var(--primary-light,#eaf3ef); }
+.pkc-opt-n { font-weight:700; flex:none; }
+.pkc-akimg { max-width:100%; border-radius:8px; border:1px solid var(--border); }
+.pkc-ro { font-size:0.84rem; color:var(--text-muted); }
+.pkc-fld { display:flex; flex-direction:column; gap:5px; font-size:0.76rem; font-weight:700; color:var(--text-muted); min-width:0; }
+.pkc-fld small { font-weight:500; }
+.pkc-fld .form-input, .pkc-fld .form-select { margin:0; font-size:0.86rem; padding:8px 10px; font-weight:400; color:var(--text); width:100%; box-sizing:border-box; }
+.pkc-fld textarea.form-input { resize:vertical; line-height:1.5; font-family:inherit; }
+.pkc-grid { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:10px 12px; }
+.pkc-grid .pkc-fld.wide { grid-column:1 / -1; }
+.pkc-codes { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:8px 12px; font-size:0.78rem; }
+.pkc-codes > div { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.pkc-codes span { color:var(--text-muted); font-weight:600; }
+.pkc-codes code { font-size:0.8rem; overflow-wrap:anywhere; background:var(--surface-alt,#f3f5f4); border-radius:6px; padding:2px 6px; }
+.pkc-concepts { font-size:0.8rem; display:flex; flex-wrap:wrap; gap:6px; align-items:center; color:var(--text-muted); }
+.pkc-chip { background:var(--surface-alt,#f3f5f4); border-radius:999px; padding:2px 9px; color:var(--text); }
+.pkc-actions { display:flex; gap:10px; flex-wrap:wrap; position:sticky; bottom:0; margin-top:auto; padding:14px 0 18px; background:var(--surface,#fff); border-top:1px solid var(--border); z-index:2; }
+.pkc-actions .btn { padding:10px 16px; font-size:0.88rem; }
+.pkc-mini { display:inline-flex; align-items:center; gap:5px; border:1px solid var(--border); background:var(--surface,#fff); color:var(--text); border-radius:9px; padding:7px 12px; font-size:0.8rem; font-weight:600; font-family:inherit; cursor:pointer; line-height:1.3; }
+.pkc-mini:hover:not(:disabled) { border-color:var(--primary,#0b6b4f); color:var(--primary,#0b6b4f); }
+.pkc-mini:disabled { opacity:0.45; cursor:default; }
+.pkc-ticked { margin:0 0 16px; font-size:0.78rem; color:var(--primary,#0b6b4f); }
+.pp-pkc-card { display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
+.pp-pkc-card-main { flex:1; min-width:260px; }
+.pp-pkc-card-btns { display:flex; gap:10px; flex-wrap:wrap; }
+.pp-pkc-counts { display:flex; gap:14px; flex-wrap:wrap; font-size:0.82rem; margin-top:10px; font-weight:600; }
+@media (max-width: 1180px) {
+  .pkc-body { grid-template-columns:200px minmax(0,1fr); grid-template-rows:auto; overflow-y:auto; }
+  .pkc-rail { grid-row:1 / span 2; }
+  .pkc-main, .pkc-side { overflow:visible; border-left:none; }
+  .pkc-side { grid-column:2; }
+}
+@media (max-width: 760px) {
+  .pkc-overlay { padding:0; }
+  .pkc-shell { border-radius:0; }
+  .pkc-head { padding:14px 16px 10px; }
+  .pkc-title p { display:none; }
+  .pkc-head { gap:9px; }
+  .pkc-scope { flex:1 1 100%; max-width:none; }
+  .pkc-body { display:flex; flex-direction:column; overflow-y:auto; }
+  .pkc-rail { display:flex; gap:6px; overflow-x:auto; overflow-y:hidden; border-right:none; border-bottom:1px solid var(--border); padding:8px; flex:none; }
+  .pkc-rail-y { display:none; }
+  .pkc-ri { width:auto; flex:none; max-width:150px; }
+  .pkc-ri-t { display:none; }
+  .pkc-main { padding:14px 16px 20px; }
+  .pkc-side { padding:14px 16px 30px; }
+  .pkc-grid, .pkc-codes { grid-template-columns:minmax(0,1fr); }
+}
+@media print { .pkc-overlay { display:none !important; } }
 .tl-crop-tools { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
 .tl-crop-tools[hidden], #cropSourceWrap[hidden] { display:none !important; }
 .tl-crop-tools p { flex-basis:100%; margin:0; font-size:0.85rem; }
@@ -13389,7 +13539,7 @@ html { scroll-behavior:smooth; }
           </div>
           <div class="subtitle">Tower Defense MCQ — answer 3 science questions before each round. Every question also pays 🪙 points into your wallet for booster packs.</div>
         </div>
-        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;"><div class="game-pts" title="Points the questions in this game have paid you this run. Spend them on Realm of Embers booster packs, Spire packs and the shop."><span class="ico">🪙</span><b data-game-pts>0</b><span class="lbl">points this run</span></div><a class="btn btn-outline" href="science-defenders.html?v=1.463.0" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a></div>
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;"><div class="game-pts" title="Points the questions in this game have paid you this run. Spend them on Realm of Embers booster packs, Spire packs and the shop."><span class="ico">🪙</span><b data-game-pts>0</b><span class="lbl">points this run</span></div><a class="btn btn-outline" href="science-defenders.html?v=1.464.0" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a></div>
       </div>
       <iframe id="defendersFrame" class="embed-frame" title="Science Defenders — Tower Defense MCQ"></iframe>
     </div>
@@ -13403,7 +13553,7 @@ html { scroll-behavior:smooth; }
           </div>
           <div class="subtitle">Roguelite top-down shooter — clear rooms, answer science questions to pick power-ups. Every question also pays 🪙 points into your wallet for booster packs.</div>
         </div>
-        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;"><div class="game-pts" title="Points the questions in this game have paid you this run. Spend them on Realm of Embers booster packs, Spire packs and the shop."><span class="ico">🪙</span><b data-game-pts>0</b><span class="lbl">points this run</span></div><a class="btn btn-outline" href="science-raiders.html?v=1.463.0" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a></div>
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;"><div class="game-pts" title="Points the questions in this game have paid you this run. Spend them on Realm of Embers booster packs, Spire packs and the shop."><span class="ico">🪙</span><b data-game-pts>0</b><span class="lbl">points this run</span></div><a class="btn btn-outline" href="science-raiders.html?v=1.464.0" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a></div>
       </div>
       <iframe id="raidersFrame" class="embed-frame" title="Science Raiders — Roguelite Shooter MCQ"></iframe>
     </div>
@@ -13419,7 +13569,7 @@ html { scroll-behavior:smooth; }
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <div class="game-pts" title="Points the questions in this game have paid you this run. Spend them on Realm of Embers booster packs, Spire packs and the shop."><span class="ico">🪙</span><b data-game-pts>0</b><span class="lbl">points this run</span></div><button class="btn btn-primary" id="spireBookBtn" type="button" style="font-size:0.82rem;">🃏 Spellbook &amp; Packs</button>
-          <a class="btn btn-outline" href="science-spire.html?v=1.463.0" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a>
+          <a class="btn btn-outline" href="science-spire.html?v=1.464.0" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a>
         </div>
       </div>
       <iframe id="spireFrame" class="embed-frame" title="Science Spire — Deck-building MCQ Roguelike"></iframe>
@@ -13434,7 +13584,7 @@ html { scroll-behavior:smooth; }
           </div>
           <div class="subtitle">Top-down action RPG — pick a class, grow a Diablo-style skill tree, and answer a science question every 20 seconds. Beta: no game leaderboard yet, but questions still count.</div>
         </div>
-        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;"><div class="game-pts" title="Points the questions in this game have paid you this run. Spend them on Realm of Embers booster packs, Spire packs and the shop."><span class="ico">🪙</span><b data-game-pts>0</b><span class="lbl">points this run</span></div><a class="btn btn-outline admin-only" href="science-legends.html?v=1.463.0" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a></div>
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;"><div class="game-pts" title="Points the questions in this game have paid you this run. Spend them on Realm of Embers booster packs, Spire packs and the shop."><span class="ico">🪙</span><b data-game-pts>0</b><span class="lbl">points this run</span></div><a class="btn btn-outline admin-only" href="science-legends.html?v=1.464.0" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a></div>
       </div>
       <iframe id="legendsFrame" class="embed-frame" title="Science Legends — Top-Down Action RPG MCQ (BETA)"></iframe>
     </div>
@@ -13448,7 +13598,7 @@ html { scroll-behavior:smooth; }
           </div>
           <div class="subtitle">Dungeon crawler — procedural floors, idle monster packs, boss loot, and questions powered by action points: answer wrong and you fight the next turn on ⅓ actions.</div>
         </div>
-        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;"><div class="game-pts" title="Points the questions in this game have paid you this run. Spend them on Realm of Embers booster packs, Spire packs and the shop."><span class="ico">🪙</span><b data-game-pts>0</b><span class="lbl">points this run</span></div><a class="btn btn-outline admin-only" href="science-slayers.html?v=1.463.0" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a></div>
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;"><div class="game-pts" title="Points the questions in this game have paid you this run. Spend them on Realm of Embers booster packs, Spire packs and the shop."><span class="ico">🪙</span><b data-game-pts>0</b><span class="lbl">points this run</span></div><a class="btn btn-outline admin-only" href="science-slayers.html?v=1.464.0" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a></div>
       </div>
       <iframe id="slayersFrame" class="embed-frame" title="Science Slayers — Dungeon Crawler MCQ (BETA)"></iframe>
     </div>
@@ -14768,8 +14918,21 @@ html { scroll-behavior:smooth; }
         <button class="btn btn-primary" id="ppTopicPractiseBtn" title="Practise every available question in this list, one after another" onclick="ppTopicPractise()">▶ Practise all</button>
         <button class="btn btn-outline" id="ppTopicPrintBtn" title="Print every available question in this list as ONE worksheet — answer key on the last pages" onclick="ppTopicPrint()">🖨 Print worksheet</button>
         <button class="btn btn-outline" id="ppTopicAllBtn" onclick="ppTopicShowAll()" style="display:none;">Show all years</button>
+        <button class="btn btn-outline" id="ppTopicCheckBtn" title="Check every answer key and detail in this topic side by side, and edit them" onclick="ppTopicCheck()" style="display:none;">🔍 Check answer keys</button>
       </div>
       <button class="btn btn-outline" onclick="ppTopicClose()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 🔍 PSLE ANSWER KEY CHECKER (pkc* in app.js) ==================== -->
+<div class="pkc-overlay" id="pkcOverlay" role="dialog" aria-modal="true" aria-label="Answer key checker">
+  <div class="pkc-shell">
+    <div class="pkc-head" id="pkcHead"></div>
+    <div class="pkc-body">
+      <nav class="pkc-rail" id="pkcRail" aria-label="Questions"></nav>
+      <div class="pkc-main" id="pkcMain"></div>
+      <aside class="pkc-side" id="pkcSide" aria-label="Answer keys and details"></aside>
     </div>
   </div>
 </div>
@@ -16993,19 +17156,19 @@ body.lore-reading { overflow: hidden; }
      before the page can paint, and the browser fetches and compiles it in
      parallel with the markup instead of afterwards. -->
 <script defer src="landing-motion.js"></script>
-<link rel="stylesheet" href="game-insights.css?v=1.463.0">
+<link rel="stylesheet" href="game-insights.css?v=1.464.0">
 <script defer src="rpg-svg-art.js"></script>
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
 <script defer src="shape-snap.js"></script>
-<script defer src="pwa-install.js?v=1.463.0"></script>
-  <script src="worksheet-cover.js?v=1.463.0"></script>
-  <script src="quest-frames.js?v=1.463.0"></script>
-  <script defer src="consult-answer.js?v=1.463.0"></script>
-  <script defer src="consult-bridge.js?v=1.463.0"></script>
-  <script src="game-question-pressure.js?v=1.463.0"></script>
-  <script src="game-question-flag.js?v=1.463.0"></script>
-  <script type="module" src="app.js?v=1.463.0"></script>
+<script defer src="pwa-install.js?v=1.464.0"></script>
+  <script src="worksheet-cover.js?v=1.464.0"></script>
+  <script src="quest-frames.js?v=1.464.0"></script>
+  <script defer src="consult-answer.js?v=1.464.0"></script>
+  <script defer src="consult-bridge.js?v=1.464.0"></script>
+  <script src="game-question-pressure.js?v=1.464.0"></script>
+  <script src="game-question-flag.js?v=1.464.0"></script>
+  <script type="module" src="app.js?v=1.464.0"></script>
 <!-- 🔐 Polymath student access (v1.0.0): the enrolment pop-up every Polymath app shares. A signed-in student is
      blocked here until an admin approves them at polymathlc.com.sg/student/#admin. Source: polymathlc/cer student/access-gate.js -->
 <script defer src="student/access-gate.js?v=1.2.0" data-app="science" data-subject="science"></script>

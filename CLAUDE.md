@@ -2,6 +2,34 @@
 
 Guidance for Claude when working in this repo.
 
+## 🔍 PSLE answer key checker (v1.464.0)
+
+`pkc*` / `_pkc*` / `PKC_*` in `app.js` (search `🔍 PSLE ANSWER KEY CHECKER`, just before the concept editor), the pure
+rules in **`psle-key-check-core.mjs`** (imported as `PKC`), `#pkcOverlay` / `.pkc-*` CSS in `index.html`. **Not `akc*`**:
+that prefix (and `#akcOverlay`, `_akc`) is the older two-engine ANSWER KEY CROSS-CHECK, which this reuses (`akcStart`) for
+its 🔁 button. Owner asked (2026-11-26) to check every PSLE question's answer key, code and details with the question on
+the left and the keys on the right, editable, by paper and by topic.
+
+- **Doors** (admin only, `ppIsAdmin`): the 🔍 card at the top of 🎓 PSLE Papers (every paper / by topic), 🔍 Check keys on
+  each year, 🔍 Check keys by topic on Marks by topic, and 🔍 Check answer keys in the topic drill-down (`ppTopicCheck`).
+  The scope picker holds every year AND every topic. It is an overlay, not a page, so nothing in the sidebar changed.
+- **Layout**: rail of questions (lights, ✓ ticked off, 🤖, ● unsaved) | the question through `buildOpenBody` (inert via
+  `.pp-pe-preview`) | verdict, 🔑 keys (official `PP_ANSWER_KEYS` / `PP_OEQ_KEYS`, the paper's `ans`, the bank's ticked
+  option, model answers per part, explanations) and 🏷 codes/filing (paper id, `#qno`, bank id, marks, topic on BOTH the
+  paper and the bank, skill, difficulty, analysis, concepts, attempts). ≤1180px two columns, ≤760px stacked.
+- **Free checks first** (`PKC.localFindings` + a standing 🚦 `tlStateOf` verdict): opening costs nothing. Every fix the
+  core offers (`paperOption`, `bankOption`, `marks`, `topic`, `booklet`, `paperAnswer`, `bankAnswer`) only fills the DRAFT.
+- **🤖 AI = second marker**: `_pkcAiRun` sends the question text (`_cqRepr`), up to 8 pictures, the official key and both
+  answers (`PKC.buildPrompt`); `PKC.parseReply` drops any fix the app cannot carry out. Verdicts live in localStorage
+  `sq_pkc_ai:<uid>`, signed by `PKC.contextSig` — an edit makes one stale. Calls run under `aiMeterOpen` (header shows
+  the session's spend; `sq_pkc_spent:` / `sq_pkc_avg:` for lifetime and estimates); a batch confirms with its estimate.
+- **Saving**: paper fields → `savePaperData`; a ✓ tick writes `keyChecked: {at, by}` on the paper record. Bank edits →
+  a before-copy in `users/{owner}/questionRepairs` (the Red Light Fixer's history, `actions: answer-key-checker`) FIRST,
+  then `saveQuestion`; refused history = nothing saved. ✏️ Edit the question itself goes to the block editor and
+  `_pkcResume` reopens the checker on the same question when the papers page renders again.
+- Run `node --test tools/psle-key-checker-tests.mjs` and `PW=… node tools/psle-key-checker-browser.mjs` (the shipped block
+  on a fake world, desktop/tablet/phone). CI: `.github/workflows/psle-key-checker.yml`.
+
 ## 🖼 Rapid add keeps clean original pictures (v1.463.0)
 
 `RAPID_KEEP_CLEAN_ORIGINALS` / `_rapidPixelStats` / **`_rapidSourceIsClean`** /
