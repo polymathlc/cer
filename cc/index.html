@@ -1,0 +1,1331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0b1026">
+<title>Robux Quest Board · Caius &amp; Caris</title>
+<!-- 🗺️ Robux Quest Board (polymathlc.com.sg/cc), v1.0.0, 26 Nov 2026, for Zhi Kai's family.
+     Caius (a Gas user) and Caris (a Kitsune user) take on quests their dad sets, each worth
+     some Robux. Dad marks each one Success or Failed, records Robux he pays out (redeemed),
+     and can add bonuses or penalties; balance = earned + bonuses − penalties − redeemed.
+     Anyone with the link can look (the children do not sign in); only Zhi Kai's Google
+     accounts (CC_ADMINS in cc-core.mjs, and the Firestore rules in tools/cc-rules.mjs) can
+     change anything. Data: Firestore ccQuests, ccLedger, ccSettings in mathgen--app.
+     The page is private family use: noindex, not in the sitemap, not linked from the site.
+     Offline checks: tools/cc-quests-tests.mjs; browser check: tools/cc-quests-browser.mjs. -->
+<link rel="icon" href="../assets/branding/polymath-learning-centre.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b1026;
+    --bg-2: #121a3a;
+    --panel: rgba(255, 255, 255, 0.06);
+    --panel-solid: #151d40;
+    --panel-2: rgba(255, 255, 255, 0.1);
+    --line: rgba(255, 255, 255, 0.12);
+    --line-strong: rgba(255, 255, 255, 0.22);
+    --text: #f1f5ff;
+    --muted: #a5b0d6;
+    --faint: #6f7aa6;
+    --gold: #fbbf24;
+    --gold-deep: #b45309;
+    --good: #34d399;
+    --good-bg: rgba(52, 211, 153, 0.14);
+    --bad: #fb7185;
+    --bad-bg: rgba(251, 113, 133, 0.14);
+    --warn: #fbbf24;
+    --warn-bg: rgba(251, 191, 36, 0.14);
+    --open: #93c5fd;
+    --open-bg: rgba(147, 197, 253, 0.12);
+    --caius: #8b5cf6;
+    --caius-glow: #c4b5fd;
+    --caius-accent: #2dd4bf;
+    --caris: #3b82f6;
+    --caris-glow: #bae6fd;
+    --caris-accent: #f472b6;
+    --radius: 18px;
+    --radius-sm: 12px;
+    --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    --font-head: 'Fredoka', 'Nunito', system-ui, sans-serif;
+    --font-body: 'Nunito', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; min-height: 100vh; color: var(--text); font-family: var(--font-body); font-size: 15px; line-height: 1.45;
+    background:
+      radial-gradient(1200px 600px at 10% -10%, rgba(139, 92, 246, 0.28), transparent 60%),
+      radial-gradient(1000px 600px at 100% 0%, rgba(59, 130, 246, 0.25), transparent 60%),
+      linear-gradient(180deg, #0b1026 0%, #0a0f22 100%);
+    background-color: var(--bg);
+    background-attachment: fixed;
+  }
+  body::before {
+    /* faint stars */
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: 0.5;
+    background-image:
+      radial-gradient(1px 1px at 20% 30%, #fff 50%, transparent 51%),
+      radial-gradient(1px 1px at 70% 20%, #fff 50%, transparent 51%),
+      radial-gradient(1.5px 1.5px at 40% 80%, #c7d2fe 50%, transparent 51%),
+      radial-gradient(1px 1px at 85% 65%, #fff 50%, transparent 51%),
+      radial-gradient(1px 1px at 10% 70%, #e0f2fe 50%, transparent 51%),
+      radial-gradient(1.5px 1.5px at 55% 45%, #fff 50%, transparent 51%);
+    background-size: 600px 600px;
+  }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  a { color: #93c5fd; }
+  .wrap { position: relative; z-index: 1; max-width: 1080px; margin: 0 auto; padding: 18px 16px 80px; padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+  .hidden { display: none !important; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* ---------- Header ---------- */
+  header.top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+  .brand { display: flex; align-items: center; gap: 12px; flex: 1 1 auto; min-width: 0; }
+  .brand-badge { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; font-size: 26px; flex: none;
+    background: linear-gradient(135deg, #8b5cf6, #3b82f6); box-shadow: 0 6px 20px rgba(99, 102, 241, 0.45); }
+  .brand h1 { margin: 0; font-family: var(--font-head); font-weight: 700; font-size: clamp(22px, 4.6vw, 30px); letter-spacing: 0.2px; line-height: 1.1; }
+  .brand p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+  .admin-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; background: var(--warn-bg); color: var(--warn); font-weight: 700; font-size: 12px; border: 1px solid rgba(251, 191, 36, 0.35); }
+
+  /* ---------- Banners ---------- */
+  .banner { border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 14px; font-size: 14px; border: 1px solid var(--line); background: var(--panel); }
+  .banner.error { background: var(--bad-bg); border-color: rgba(251, 113, 133, 0.4); color: #fecdd3; }
+  .banner.info { background: var(--open-bg); border-color: rgba(147, 197, 253, 0.35); }
+  .banner button { margin-left: 8px; }
+
+  /* ---------- Player cards ---------- */
+  .players { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px; }
+  .player { position: relative; border-radius: 24px; padding: 16px; overflow: hidden; border: 1px solid var(--line); box-shadow: var(--shadow);
+    display: grid; grid-template-columns: 132px 1fr; gap: 16px; align-items: center; cursor: pointer; transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease; text-align: left; width: 100%; }
+  .player:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+  .player:hover { transform: translateY(-2px); }
+  .player.caius { background: linear-gradient(140deg, rgba(139, 92, 246, 0.35), rgba(45, 212, 191, 0.08) 70%), var(--panel-solid); }
+  .player.caris { background: linear-gradient(140deg, rgba(59, 130, 246, 0.35), rgba(244, 114, 182, 0.08) 70%), var(--panel-solid); }
+  .player.selected.caius { border-color: var(--caius-glow); box-shadow: 0 0 0 2px rgba(196, 181, 253, 0.5), var(--shadow); }
+  .player.selected.caris { border-color: var(--caris-glow); box-shadow: 0 0 0 2px rgba(186, 230, 253, 0.5), var(--shadow); }
+  .player.dimmed { opacity: 0.55; }
+  .avatar { width: 132px; height: 132px; border-radius: 50%; position: relative; flex: none; }
+  .avatar .avatar-svg { width: 100%; height: 100%; display: block; filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.45)); }
+  .avatar .lvl { position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%); background: #0b1026; border: 2px solid var(--gold); color: var(--gold);
+    border-radius: 999px; padding: 1px 10px; font-family: var(--font-head); font-weight: 700; font-size: 13px; white-space: nowrap; }
+  .p-name { font-family: var(--font-head); font-size: 26px; font-weight: 700; margin: 0; line-height: 1; }
+  .p-rank { color: var(--muted); font-size: 13px; margin: 4px 0 8px; font-weight: 700; }
+  .caius .p-rank { color: var(--caius-glow); }
+  .caris .p-rank { color: var(--caris-glow); }
+  .balance { display: flex; align-items: center; gap: 8px; font-family: var(--font-head); font-weight: 700; font-size: clamp(28px, 5vw, 38px); line-height: 1; }
+  .balance .coin { width: 30px; height: 30px; }
+  .balance small { font-size: 13px; color: var(--muted); font-family: var(--font-body); font-weight: 700; }
+  .xp { margin-top: 10px; }
+  .xp-bar { height: 8px; background: rgba(255, 255, 255, 0.1); border-radius: 999px; overflow: hidden; }
+  .xp-bar > i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--gold), #fde68a); transition: width .6s ease; }
+  .xp-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 4px; font-weight: 700; }
+  .p-stats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 800; background: var(--panel-2); color: var(--text); white-space: nowrap; }
+  .pill.good { background: var(--good-bg); color: var(--good); }
+  .pill.bad { background: var(--bad-bg); color: var(--bad); }
+  .pill.warn { background: var(--warn-bg); color: var(--warn); }
+  .pill.open { background: var(--open-bg); color: var(--open); }
+  .pill.gold { background: rgba(251, 191, 36, 0.16); color: var(--gold); }
+  .goal { margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .goal .xp-bar > i { background: linear-gradient(90deg, #34d399, #a7f3d0); }
+  .goal b { color: var(--text); }
+  .p-tagline { font-size: 12px; color: var(--muted); margin: 0; font-style: italic; }
+
+  /* ---------- Toolbar ---------- */
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 14px; position: sticky; top: 0; z-index: 5;
+    padding: 10px 0; background: linear-gradient(180deg, rgba(11, 16, 38, 0.96) 70%, rgba(11, 16, 38, 0)); backdrop-filter: blur(6px); }
+  .seg { display: inline-flex; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 3px; gap: 2px; }
+  .seg button { border: 0; background: transparent; padding: 7px 14px; border-radius: 999px; font-weight: 800; font-size: 13px; color: var(--muted); white-space: nowrap; }
+  .seg button[aria-pressed="true"], .seg button[aria-selected="true"] { background: #fff; color: #0b1026; }
+  .seg button:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+  .admin-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid transparent; border-radius: 12px; padding: 9px 14px; font-weight: 800; font-size: 14px;
+    background: linear-gradient(135deg, #8b5cf6, #3b82f6); color: #fff; box-shadow: 0 6px 16px rgba(79, 70, 229, 0.35); transition: transform .1s ease, filter .1s ease; }
+  .btn:hover { filter: brightness(1.08); }
+  .btn:active { transform: translateY(1px); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn.ghost { background: var(--panel); border-color: var(--line-strong); box-shadow: none; color: var(--text); }
+  .btn.gold { background: linear-gradient(135deg, #fbbf24, #f59e0b); color: #3b1d00; box-shadow: 0 6px 16px rgba(245, 158, 11, 0.35); }
+  .btn.good { background: linear-gradient(135deg, #10b981, #34d399); color: #022c22; box-shadow: 0 6px 16px rgba(16, 185, 129, 0.3); }
+  .btn.bad { background: linear-gradient(135deg, #e11d48, #fb7185); color: #fff; box-shadow: 0 6px 16px rgba(225, 29, 72, 0.3); }
+  .btn.small { padding: 6px 10px; font-size: 13px; border-radius: 10px; }
+  .btn.tiny { padding: 4px 8px; font-size: 12px; border-radius: 8px; }
+  .icon-btn { border: 0; background: transparent; color: var(--muted); padding: 6px; border-radius: 8px; font-size: 16px; line-height: 1; }
+  .icon-btn:hover { background: var(--panel-2); color: var(--text); }
+
+  /* ---------- Sections ---------- */
+  .section-title { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 22px 0 10px; }
+  .section-title h2 { margin: 0; font-family: var(--font-head); font-size: 20px; font-weight: 600; }
+  .section-title .count { color: var(--muted); font-size: 13px; font-weight: 700; }
+  .empty { text-align: center; padding: 30px 16px; color: var(--muted); background: var(--panel); border: 1px dashed var(--line-strong); border-radius: var(--radius); }
+  .empty .big { font-size: 40px; display: block; margin-bottom: 6px; }
+
+  /* ---------- Quest cards ---------- */
+  .quests { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+  .quest { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; display: flex; flex-direction: column; gap: 10px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2); transition: border-color .2s ease; animation: pop .25s ease both; }
+  .quest.late { border-color: rgba(251, 113, 133, 0.45); }
+  .quest.settled { opacity: 0.92; }
+  .quest.archived { opacity: 0.6; }
+  @keyframes pop { from { transform: scale(0.97); opacity: 0; } to { transform: none; opacity: 1; } }
+  .q-head { display: flex; gap: 12px; align-items: flex-start; }
+  .q-icon { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; font-size: 24px; background: var(--panel-2); flex: none; }
+  .q-main { flex: 1; min-width: 0; }
+  .q-title { margin: 0; font-family: var(--font-head); font-weight: 600; font-size: 17px; line-height: 1.2; word-wrap: break-word; }
+  .q-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .q-details { margin: 0; color: var(--muted); font-size: 13.5px; white-space: pre-wrap; word-wrap: break-word; }
+  .reward { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-head); font-weight: 700; font-size: 18px; color: var(--gold); white-space: nowrap; }
+  .reward .coin { width: 20px; height: 20px; }
+  .q-results { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 10px; }
+  .q-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .mini { width: 32px; height: 32px; border-radius: 50%; overflow: hidden; flex: none; }
+  .mini .avatar-svg { width: 100%; height: 100%; display: block; }
+  .q-row .who { font-weight: 800; min-width: 52px; }
+  .status { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 800; }
+  .status.open { background: var(--open-bg); color: var(--open); }
+  .status.success { background: var(--good-bg); color: var(--good); }
+  .status.failed { background: var(--bad-bg); color: var(--bad); }
+  .q-row .marks { margin-left: auto; display: flex; gap: 6px; }
+  .q-row .when { color: var(--faint); font-size: 11.5px; font-weight: 700; }
+  .q-menu { position: absolute; top: 8px; right: 8px; }
+  .menu { position: absolute; right: 0; top: 34px; background: #1b2450; border: 1px solid var(--line-strong); border-radius: 12px; padding: 6px; min-width: 170px; box-shadow: var(--shadow); z-index: 6; }
+  .menu button { display: flex; width: 100%; gap: 8px; align-items: center; border: 0; background: transparent; padding: 8px 10px; border-radius: 8px; text-align: left; font-weight: 700; font-size: 14px; }
+  .menu button:hover { background: var(--panel-2); }
+  .menu button.danger { color: var(--bad); }
+  .more { display: flex; justify-content: center; margin-top: 12px; }
+
+  /* ---------- History ---------- */
+  .history { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+  .h-row { display: grid; grid-template-columns: 36px 1fr auto; gap: 12px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  .h-row:last-child { border-bottom: 0; }
+  .h-title { font-weight: 700; word-wrap: break-word; min-width: 0; }
+  .h-sub { color: var(--muted); font-size: 12px; font-weight: 700; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .h-delta { font-family: var(--font-head); font-weight: 700; font-size: 17px; text-align: right; white-space: nowrap; }
+  .h-delta.plus { color: var(--good); }
+  .h-delta.minus { color: var(--bad); }
+  .h-delta.zero { color: var(--faint); }
+  .h-day { padding: 8px 14px; font-size: 12px; font-weight: 800; color: var(--faint); text-transform: uppercase; letter-spacing: .6px; background: rgba(255, 255, 255, 0.03); border-bottom: 1px solid var(--line); }
+  .h-actions { display: flex; gap: 4px; justify-content: flex-end; margin-top: 2px; }
+
+  /* ---------- Stats ---------- */
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .stat-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+  .stat-card h3 { margin: 0 0 12px; font-family: var(--font-head); font-weight: 600; font-size: 18px; display: flex; align-items: center; gap: 10px; }
+  .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+  .tile { background: rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 10px; }
+  .tile b { display: block; font-family: var(--font-head); font-size: 20px; font-weight: 700; }
+  .tile span { font-size: 11.5px; color: var(--muted); font-weight: 700; }
+  .chart { width: 100%; height: auto; display: block; }
+  .chart text { fill: var(--muted); font-size: 10px; font-family: var(--font-body); font-weight: 700; }
+  .legend { display: flex; gap: 12px; font-size: 12px; color: var(--muted); font-weight: 700; margin-top: 6px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+  .ring-wrap { display: flex; align-items: center; gap: 14px; margin-top: 12px; }
+  .ring-wrap p { margin: 0; color: var(--muted); font-size: 13px; }
+
+  /* ---------- How it works ---------- */
+  details.how { margin-top: 26px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 16px; }
+  details.how summary { cursor: pointer; font-weight: 800; font-family: var(--font-head); font-size: 16px; }
+  details.how ol { margin: 10px 0 4px; padding-left: 20px; color: var(--muted); }
+  details.how li { margin-bottom: 6px; }
+
+  footer.foot { margin-top: 30px; text-align: center; color: var(--faint); font-size: 12px; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+
+  /* ---------- Dialogs ---------- */
+  dialog { border: 1px solid var(--line-strong); border-radius: 22px; padding: 0; background: #131b3d; color: var(--text); width: min(560px, calc(100vw - 24px)); max-height: calc(100vh - 24px); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6); }
+  dialog::backdrop { background: rgba(3, 6, 20, 0.7); backdrop-filter: blur(3px); }
+  .dlg { display: flex; flex-direction: column; max-height: calc(100vh - 26px); }
+  .dlg-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px 8px; }
+  .dlg-head h2 { margin: 0; font-family: var(--font-head); font-weight: 600; font-size: 21px; }
+  .dlg-body { padding: 6px 18px 12px; overflow: auto; }
+  .dlg-foot { display: flex; gap: 8px; justify-content: flex-end; padding: 12px 18px 16px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+  .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .field > label, .field > .label { font-weight: 800; font-size: 13px; color: var(--muted); }
+  .field input[type=text], .field input[type=number], .field input[type=date], .field select, .field textarea {
+    width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line-strong); background: rgba(255, 255, 255, 0.06); font-size: 16px; }
+  .field textarea { min-height: 70px; resize: vertical; }
+  .field input:focus, .field select:focus, .field textarea:focus { outline: 2px solid #8b5cf6; border-color: transparent; }
+  .field select option { background: #131b3d; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { border: 1px solid var(--line-strong); background: var(--panel); border-radius: 999px; padding: 6px 11px; font-weight: 700; font-size: 13px; }
+  .chip[aria-pressed="true"] { background: #fff; color: #0b1026; border-color: #fff; }
+  .chip.kid-caius[aria-pressed="true"] { background: var(--caius); color: #fff; border-color: var(--caius-glow); }
+  .chip.kid-caris[aria-pressed="true"] { background: var(--caris); color: #fff; border-color: var(--caris-glow); }
+  #templates { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; -webkit-overflow-scrolling: touch; }
+  #templates .chip { flex: none; }
+  .chip .mini { width: 22px; height: 22px; display: inline-block; vertical-align: middle; margin-right: 4px; }
+  .emoji-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 4px; }
+  .emoji-grid button { border: 1px solid transparent; background: var(--panel); border-radius: 10px; font-size: 20px; padding: 6px 0; }
+  .emoji-grid button[aria-pressed="true"] { border-color: #fff; background: var(--panel-2); }
+  .form-errors { background: var(--bad-bg); color: #fecdd3; border-radius: 12px; padding: 8px 12px; font-size: 13px; margin-bottom: 12px; }
+  .form-errors ul { margin: 0; padding-left: 18px; }
+  .hint { font-size: 12px; color: var(--faint); font-weight: 700; }
+  .avail { font-size: 13px; color: var(--muted); font-weight: 700; }
+  .avail b { color: var(--gold); }
+
+  /* ---------- Toasts & confetti ---------- */
+  .toasts { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; z-index: 50; width: min(440px, calc(100vw - 24px)); }
+  .toast { background: #1f2a5c; border: 1px solid var(--line-strong); border-radius: 14px; padding: 10px 14px; box-shadow: var(--shadow); display: flex; align-items: center; gap: 10px; font-weight: 700; animation: toastIn .25s ease both; }
+  .toast.good { border-color: rgba(52, 211, 153, 0.5); }
+  .toast.bad { border-color: rgba(251, 113, 133, 0.5); }
+  .toast span { flex: 1; }
+  @keyframes toastIn { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
+  #confetti { position: fixed; inset: 0; pointer-events: none; z-index: 40; width: 100%; height: 100%; }
+
+  .loading { display: flex; justify-content: center; align-items: center; gap: 10px; padding: 40px; color: var(--muted); font-weight: 700; }
+  .spinner { width: 22px; height: 22px; border: 3px solid rgba(255, 255, 255, 0.2); border-top-color: #fff; border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 760px) {
+    .players { grid-template-columns: 1fr; gap: 12px; }
+    .player { grid-template-columns: 104px 1fr; gap: 12px; padding: 14px; }
+    .avatar { width: 104px; height: 104px; }
+    .p-name { font-size: 23px; }
+    .stats-grid { grid-template-columns: 1fr; }
+    .quests { grid-template-columns: 1fr; }
+    .toolbar { gap: 8px; }
+    .toolbar .seg button { padding: 7px 11px; }
+  }
+  @media (max-width: 420px) {
+    .player { grid-template-columns: 88px 1fr; }
+    .avatar { width: 88px; height: 88px; }
+    .balance { font-size: 28px; }
+    .row2 { grid-template-columns: 1fr; }
+    .tiles { grid-template-columns: repeat(3, 1fr); }
+    .q-row .marks { margin-left: 0; width: 100%; }
+    .q-row .marks .btn { flex: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+  }
+</style>
+</head>
+<body>
+<div id="coin-defs"></div>
+<canvas id="confetti" aria-hidden="true"></canvas>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <div class="brand-badge" aria-hidden="true">🗺️</div>
+      <div>
+        <h1>Robux Quest Board</h1>
+        <p>Caius &amp; Caris · finish quests, earn Robux</p>
+      </div>
+    </div>
+    <span class="admin-chip hidden" id="admin-chip">🛡️ Dad mode</span>
+  </header>
+
+  <div id="banner" class="banner hidden" role="status"></div>
+
+  <section class="players" id="players" aria-label="Players"></section>
+
+  <div class="toolbar">
+    <div class="seg" role="tablist" aria-label="View" id="tabs">
+      <button role="tab" data-tab="quests" aria-selected="true">⚔️ Quests</button>
+      <button role="tab" data-tab="history" aria-selected="false">📜 History</button>
+      <button role="tab" data-tab="stats" aria-selected="false">📊 Stats</button>
+    </div>
+    <div class="seg" aria-label="Show quests for" id="kid-filter">
+      <button data-kid="" aria-pressed="true">Both</button>
+      <button data-kid="caius" aria-pressed="false">Caius</button>
+      <button data-kid="caris" aria-pressed="false">Caris</button>
+    </div>
+    <div class="admin-actions hidden" id="admin-actions">
+      <button class="btn small" data-action="new-quest">＋ New quest</button>
+      <button class="btn small gold" data-action="new-ledger">🎁 Pay out Robux</button>
+    </div>
+  </div>
+
+  <main id="main">
+    <div class="loading" id="loading"><div class="spinner"></div> Loading the quest board…</div>
+    <section id="view-quests" class="hidden" aria-labelledby="h-active">
+      <div class="section-title"><h2 id="h-active">Active quests</h2><span class="count" id="active-count"></span></div>
+      <div class="quests" id="active-list"></div>
+      <div class="section-title"><h2>Finished quests</h2><span class="count" id="done-count"></span></div>
+      <div class="quests" id="done-list"></div>
+      <div class="more"><button class="btn ghost small hidden" id="more-done" data-action="more-done">Show more</button></div>
+      <div class="more"><button class="btn ghost small hidden" id="toggle-archived" data-action="toggle-archived">Show archived quests</button></div>
+    </section>
+    <section id="view-history" class="hidden" aria-label="History">
+      <div class="section-title"><h2>History</h2><span class="count" id="history-count"></span></div>
+      <div class="history" id="history-list"></div>
+      <div class="more"><button class="btn ghost small hidden" id="more-history" data-action="more-history">Show more</button></div>
+    </section>
+    <section id="view-stats" class="hidden" aria-label="Stats">
+      <div class="section-title"><h2>Stats</h2><span class="count">last 8 weeks</span></div>
+      <div class="stats-grid" id="stats-grid"></div>
+      <div class="more admin-only hidden"><button class="btn ghost small" data-action="edit-goals">🎯 Set savings goals</button>
+        <button class="btn ghost small" data-action="export-csv">⬇️ Download history (CSV)</button></div>
+    </section>
+  </main>
+
+  <details class="how">
+    <summary>How the quest board works</summary>
+    <ol>
+      <li>Dad adds a quest for Caius, Caris or both, with the Robux it is worth.</li>
+      <li>Finish the quest, then tell Dad. He marks it <b>Success</b> and the Robux go into your balance.</li>
+      <li>If a quest is not done in time, Dad may mark it <b>Failed</b>. Some quests have a penalty, which is taken off your balance.</li>
+      <li>Earned Robux raise your level. Caris grows another fox tail every two levels, and Caius's gas grows stronger.</li>
+      <li>When you want your Robux, ask Dad. He pays them out and records it here, so the balance is always right.</li>
+    </ol>
+  </details>
+
+  <footer class="foot">
+    <div id="auth-area">
+      <button class="btn ghost small" id="sign-in" data-action="sign-in">🔑 Parent login</button>
+      <span id="signed-in" class="hidden"><span id="who"></span> · <button class="btn ghost tiny" data-action="sign-out">Sign out</button></span>
+    </div>
+    <div>Robux Quest Board v<span id="version"></span> · made for Caius &amp; Caris · Robux are paid out by Dad</div>
+  </footer>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<!-- ======================= Quest editor ======================= -->
+<dialog id="quest-dialog" aria-labelledby="quest-dialog-title">
+  <form class="dlg" id="quest-form" method="dialog" novalidate>
+    <div class="dlg-head"><h2 id="quest-dialog-title">New quest</h2><button type="button" class="icon-btn" data-action="close-dialog" aria-label="Close">✕</button></div>
+    <div class="dlg-body">
+      <div class="form-errors hidden" id="quest-errors"></div>
+      <div class="field" id="templates-field">
+        <span class="label">Quick add <span class="hint">(swipe for more)</span></span>
+        <div class="chips" id="templates"></div>
+      </div>
+      <div class="field">
+        <label for="q-title">Quest</label>
+        <input type="text" id="q-title" maxlength="80" placeholder="e.g. Finish the maths worksheet" autocomplete="off" required>
+      </div>
+      <div class="field">
+        <span class="label">For</span>
+        <div class="chips" id="q-kids"></div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label for="q-reward">Reward (Robux)</label>
+          <input type="number" id="q-reward" min="0" max="100000" step="1" inputmode="numeric" value="20">
+          <div class="chips" id="reward-presets"></div>
+        </div>
+        <div class="field">
+          <label for="q-penalty">Penalty if failed (Robux)</label>
+          <input type="number" id="q-penalty" min="0" max="100000" step="1" inputmode="numeric" value="0">
+          <span class="hint">0 = nothing taken off</span>
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label for="q-due">Due date (optional)</label>
+          <input type="date" id="q-due">
+          <div class="chips" id="due-presets"></div>
+        </div>
+        <div class="field">
+          <label for="q-repeat">Repeat</label>
+          <select id="q-repeat">
+            <option value="">Once</option>
+            <option value="daily">Every day</option>
+            <option value="weekly">Every week</option>
+          </select>
+          <span class="hint">A new copy appears once it is marked for everyone</span>
+        </div>
+      </div>
+      <div class="field">
+        <label for="q-category">Type</label>
+        <select id="q-category"></select>
+      </div>
+      <div class="field">
+        <span class="label">Icon</span>
+        <div class="emoji-grid" id="q-icons"></div>
+      </div>
+      <div class="field">
+        <label for="q-details">Details (optional)</label>
+        <textarea id="q-details" maxlength="400" placeholder="What counts as done?"></textarea>
+      </div>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" class="btn ghost" data-action="close-dialog">Cancel</button>
+      <button type="submit" class="btn" id="quest-save">Add quest</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- ======================= Ledger (pay out / bonus / penalty) ======================= -->
+<dialog id="ledger-dialog" aria-labelledby="ledger-dialog-title">
+  <form class="dlg" id="ledger-form" method="dialog" novalidate>
+    <div class="dlg-head"><h2 id="ledger-dialog-title">Pay out Robux</h2><button type="button" class="icon-btn" data-action="close-dialog" aria-label="Close">✕</button></div>
+    <div class="dlg-body">
+      <div class="form-errors hidden" id="ledger-errors"></div>
+      <div class="field">
+        <span class="label">Child</span>
+        <div class="chips" id="l-kids"></div>
+      </div>
+      <div class="field">
+        <span class="label">What is it?</span>
+        <div class="chips" id="l-types"></div>
+      </div>
+      <div class="field">
+        <label for="l-amount">Robux</label>
+        <input type="number" id="l-amount" min="1" max="100000" step="1" inputmode="numeric" placeholder="e.g. 400">
+        <div class="chips" id="amount-presets"></div>
+        <span class="avail" id="l-avail"></span>
+      </div>
+      <div class="field">
+        <label for="l-note">Note (optional)</label>
+        <input type="text" id="l-note" maxlength="160" placeholder="e.g. Bought a game pass" autocomplete="off">
+      </div>
+      <label class="hint" id="overdraw-wrap"><input type="checkbox" id="l-overdraw"> Allow going below 0 (an advance)</label>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" class="btn ghost" data-action="close-dialog">Cancel</button>
+      <button type="submit" class="btn gold" id="ledger-save">Record</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- ======================= Savings goals ======================= -->
+<dialog id="goals-dialog" aria-labelledby="goals-dialog-title">
+  <form class="dlg" id="goals-form" method="dialog" novalidate>
+    <div class="dlg-head"><h2 id="goals-dialog-title">Savings goals</h2><button type="button" class="icon-btn" data-action="close-dialog" aria-label="Close">✕</button></div>
+    <div class="dlg-body" id="goals-body"></div>
+    <div class="dlg-foot">
+      <button type="button" class="btn ghost" data-action="close-dialog">Cancel</button>
+      <button type="submit" class="btn">Save goals</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- ======================= Confirm ======================= -->
+<dialog id="confirm-dialog" aria-labelledby="confirm-title">
+  <form class="dlg" method="dialog">
+    <div class="dlg-head"><h2 id="confirm-title">Are you sure?</h2></div>
+    <div class="dlg-body"><p id="confirm-text" style="margin:0;color:var(--muted)"></p></div>
+    <div class="dlg-foot">
+      <button value="no" class="btn ghost">Cancel</button>
+      <button value="yes" class="btn bad" id="confirm-yes">Yes</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script type="module">
+import * as C from './cc-core.mjs?v=1.0.0';
+import { avatarFor, coinSvg, COIN_DEFS } from './cc-avatars.mjs?v=1.0.0';
+
+/* ============================================================
+   Firebase (the same project as the rest of the site)
+   ============================================================ */
+const $ = id => document.getElementById(id);
+const banner = (text, kind = 'info', html = false) => {
+  const b = $('banner');
+  if (!text) { b.classList.add('hidden'); b.textContent = ''; return; }
+  b.className = 'banner ' + kind;
+  if (html) b.innerHTML = text; else b.textContent = text;
+};
+if (typeof firebase === 'undefined') {
+  $('loading').innerHTML = 'The quest board could not load. Check the internet connection and <a href="">try again</a>.';
+  throw new Error('Firebase did not load');
+}
+firebase.initializeApp({
+  apiKey: "AIzaSyAUSI3Uh28IeqASEp0JhH4QPaVt-O3meBo",
+  authDomain: "mathgen--app.firebaseapp.com",
+  projectId: "mathgen--app",
+  storageBucket: "mathgen--app.firebasestorage.app",
+  messagingSenderId: "165654161198",
+  appId: "1:165654161198:web:16c8bd60eb3a2aa7edbcbf",
+  measurementId: "G-0MWZFG211D"
+});
+const db = firebase.firestore();
+const auth = firebase.auth();
+try { db.enablePersistence({ synchronizeTabs: true }).catch(() => {}); } catch (e) { /* not supported here */ }
+const QUESTS = db.collection('ccQuests');
+const LEDGER = db.collection('ccLedger');
+const SETTINGS = db.collection('ccSettings').doc('main');
+
+/* ============================================================
+   State
+   ============================================================ */
+const state = {
+  quests: [], ledger: [], settings: { goals: {} },
+  loaded: { quests: false, ledger: false, settings: false },
+  user: null, isAdmin: false,
+  kid: '', tab: 'quests',
+  doneLimit: 12, historyLimit: 40, showArchived: false,
+  stats: C.computeStats([], []),
+  openMenu: ''
+};
+let lastLevels = {};            // so a level-up can be celebrated
+let firstStats = true;
+const avatarCache = {};         // kid → key of the avatar drawn, so animations are not restarted
+
+$('version').textContent = C.VERSION;
+$('coin-defs').innerHTML = COIN_DEFS;
+const COIN = coinSvg(18);
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const robux = (n, cls = '') => `<span class="reward ${cls}">${COIN}${esc(C.formatRobux(n))}</span>`;
+const mini = (kid, uid) => `<span class="mini" aria-hidden="true">${avatarFor(kid, { uid: 'mini-' + uid, animate: false, level: 3, tails: 3 })}</span>`;
+const kidName = id => C.kidById(id)?.name || id;
+
+/* ============================================================
+   Live data
+   ============================================================ */
+function onDataError(what, error) {
+  console.error('[cc] ' + what, error);
+  $('loading').classList.add('hidden');
+  banner('Could not load the ' + what + ' (' + (error && (error.code || error.message) || 'error') + '). Pull down to refresh, or try again in a moment.', 'error');
+  showView();
+}
+QUESTS.onSnapshot(snap => {
+  state.quests = snap.docs.map(d => ({ ...C.normaliseQuest(d.data(), d.id), raw: d.data() }));
+  state.loaded.quests = true;
+  refresh();
+}, e => onDataError('quests', e));
+LEDGER.onSnapshot(snap => {
+  state.ledger = snap.docs.map(d => C.normaliseLedger(d.data(), d.id)).filter(e => e.kid);
+  state.loaded.ledger = true;
+  refresh();
+}, e => onDataError('Robux history', e));
+SETTINGS.onSnapshot(snap => {
+  const data = snap.exists ? snap.data() : {};
+  state.settings = { goals: (data && data.goals) || {} };
+  state.loaded.settings = true;
+  refresh();
+}, e => { state.loaded.settings = true; console.warn('[cc] settings', e); refresh(); });
+
+function ready() { return state.loaded.quests && state.loaded.ledger; }
+
+function refresh() {
+  if (!ready()) return;
+  $('loading').classList.add('hidden');
+  state.stats = C.computeStats(state.quests, state.ledger);
+  celebrateLevelUps();
+  render();
+}
+
+/* ============================================================
+   Auth (Google sign-in; only CC_ADMINS may change things)
+   ============================================================ */
+auth.onAuthStateChanged(user => {
+  state.user = user || null;
+  state.isAdmin = !!user && C.isAdminEmail(user.email, user.emailVerified);
+  if (user && !state.isAdmin) {
+    toast(`${user.email} can only look. Sign in with Dad's Google account to make changes.`, 'bad');
+  }
+  $('admin-chip').classList.toggle('hidden', !state.isAdmin);
+  $('admin-actions').classList.toggle('hidden', !state.isAdmin);
+  document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('hidden', !state.isAdmin));
+  $('sign-in').classList.toggle('hidden', !!user);
+  $('signed-in').classList.toggle('hidden', !user);
+  $('who').textContent = user ? (user.email || 'Signed in') : '';
+  if (ready()) render();
+});
+auth.getRedirectResult?.().catch(e => { if (e && e.code) toast('Sign-in failed: ' + (e.message || e.code), 'bad'); });
+
+async function signIn() {
+  const provider = new firebase.auth.GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
+  try {
+    await auth.signInWithPopup(provider);
+  } catch (e) {
+    if (e && (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request')) return;
+    if (e && (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment')) {
+      try { await auth.signInWithRedirect(provider); } catch (e2) { toast('Sign-in failed: ' + (e2.message || e2), 'bad'); }
+      return;
+    }
+    toast('Sign-in failed: ' + (e.message || e), 'bad');
+  }
+}
+function requireAdmin() {
+  if (state.isAdmin) return true;
+  toast('Only Dad can change the quest board. Use "Parent login" at the bottom.', 'bad');
+  return false;
+}
+function writeFailed(e) {
+  console.error('[cc] write', e);
+  const denied = e && (e.code === 'permission-denied' || /permission/i.test(e.message || ''));
+  toast(denied ? 'Not allowed: sign in with Dad\'s Google account.' : 'Could not save: ' + (e.message || e), 'bad');
+}
+
+/* ============================================================
+   Rendering
+   ============================================================ */
+function render() {
+  renderPlayers();
+  renderTabs();
+  if (state.tab === 'quests') renderQuests();
+  if (state.tab === 'history') renderHistory();
+  if (state.tab === 'stats') renderStats();
+  showView();
+}
+function showView() {
+  if (!ready()) return;
+  for (const t of ['quests', 'history', 'stats']) $('view-' + t).classList.toggle('hidden', state.tab !== t);
+}
+
+function renderPlayers() {
+  const host = $('players');
+  for (const kid of C.KIDS) {
+    const s = state.stats[kid.id];
+    const lv = C.levelFor(s.lifetime);
+    const tails = C.tailsFor(lv.level);
+    let card = host.querySelector(`[data-player="${kid.id}"]`);
+    if (!card) {
+      card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'player ' + kid.id;
+      card.dataset.player = kid.id;
+      card.dataset.action = 'pick-kid';
+      card.dataset.kid = kid.id;
+      card.innerHTML = `<div class="avatar"><div class="avatar-art"></div><span class="lvl"></span></div>
+        <div class="p-info">
+          <p class="p-name">${esc(kid.name)}</p>
+          <p class="p-rank"></p>
+          <div class="balance"></div>
+          <div class="xp"><div class="xp-bar"><i></i></div><div class="xp-label"><span class="xp-a"></span><span class="xp-b"></span></div></div>
+          <div class="p-stats"></div>
+          <div class="goal hidden"></div>
+        </div>`;
+      host.appendChild(card);
+    }
+    const key = `${kid.id}:${kid.id === 'caris' ? tails : Math.min(10, lv.level)}`;
+    if (avatarCache[kid.id] !== key) {
+      card.querySelector('.avatar-art').innerHTML = avatarFor(kid.id, { uid: 'hero-' + kid.id, level: lv.level, tails });
+      avatarCache[kid.id] = key;
+    }
+    card.querySelector('.lvl').textContent = 'Lv ' + lv.level;
+    card.querySelector('.p-rank').textContent = `${C.rankFor(kid.id, lv.level)} · ${kid.power}`;
+    card.querySelector('.balance').innerHTML = `${coinSvg(30)}<span data-balance="${kid.id}">${esc(C.formatRobux(s.balance))}</span><small>Robux</small>`;
+    card.querySelector('.xp-bar > i').style.width = Math.round(lv.progress * 100) + '%';
+    card.querySelector('.xp-a').textContent = `${C.formatRobux(lv.into)} / ${C.formatRobux(lv.need)} to Lv ${lv.level + 1}`;
+    card.querySelector('.xp-b').textContent = `${C.formatRobux(s.lifetime)} earned`;
+    card.querySelector('.p-stats').innerHTML = [
+      `<span class="pill open" title="Quests to do">⚔️ ${s.open} to do</span>`,
+      `<span class="pill good" title="Successful quests">✓ ${s.success}</span>`,
+      `<span class="pill bad" title="Failed quests">✗ ${s.failed}</span>`,
+      s.streak >= 2 ? `<span class="pill warn" title="Successes in a row">🔥 ${s.streak} streak</span>` : '',
+      s.redeemed ? `<span class="pill gold" title="Robux already paid out">🎁 ${C.formatRobux(s.redeemed)} paid out</span>` : ''
+    ].join('');
+    const goal = C.goalProgress(state.settings.goals?.[kid.id], s.balance);
+    const g = card.querySelector('.goal');
+    g.classList.toggle('hidden', !goal);
+    if (goal) g.innerHTML = `🎯 <b>${esc(goal.label)}</b> · ${goal.left ? C.formatRobux(goal.left) + ' Robux to go' : 'Reached! 🎉'}
+      <div class="xp-bar" style="margin-top:4px"><i style="width:${Math.round(goal.progress * 100)}%"></i></div>`;
+    card.classList.toggle('selected', state.kid === kid.id);
+    card.classList.toggle('dimmed', !!state.kid && state.kid !== kid.id);
+    card.setAttribute('aria-pressed', String(state.kid === kid.id));
+    card.setAttribute('aria-label', `${kid.name}: ${C.formatRobux(s.balance)} Robux, level ${lv.level}. Show only ${kid.name}'s quests.`);
+  }
+}
+
+function renderTabs() {
+  document.querySelectorAll('#tabs [data-tab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === state.tab)));
+  document.querySelectorAll('#kid-filter [data-kid]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.kid === state.kid)));
+}
+
+function visibleQuests() {
+  return state.quests.filter(q => !state.kid || q.kids.includes(state.kid));
+}
+function isPendingFor(q) {
+  const kids = state.kid ? [state.kid] : q.kids;
+  return kids.some(k => q.results[k]?.status === 'open');
+}
+
+function questCard(q) {
+  const today = C.sgDate();
+  const due = C.dueLabel(q.due, today);
+  const pending = isPendingFor(q);
+  const kids = state.kid ? q.kids.filter(k => k === state.kid) : q.kids;
+  const late = pending && due.tone === 'late';
+  const meta = [
+    q.penalty ? `<span class="pill bad" title="Taken off if failed">−${esc(C.formatRobux(q.penalty))} if failed</span>` : '',
+    due.text && pending ? `<span class="pill ${due.tone === 'late' ? 'bad' : due.tone === 'soon' ? 'warn' : ''}">📅 ${esc(due.text)}</span>` : '',
+    !pending && q.due ? `<span class="pill">📅 ${esc(C.formatDay(q.due))}</span>` : '',
+    q.repeat ? `<span class="pill">🔁 ${q.repeat === 'daily' ? 'Daily' : 'Weekly'}</span>` : '',
+    `<span class="pill">${esc(C.categoryById(q.category).label)}</span>`,
+    q.archived ? '<span class="pill">🗄️ Archived</span>' : ''
+  ].join('');
+  const rows = kids.map(k => {
+    const r = q.results[k] || { status: 'open' };
+    const statusText = r.status === 'success' ? '✓ Success' : r.status === 'failed' ? '✗ Failed' : '⏳ To do';
+    let marks = '';
+    if (state.isAdmin) {
+      marks = r.status === 'open'
+        ? `<button class="btn tiny good" data-action="mark" data-id="${esc(q.id)}" data-kid="${k}" data-status="success">✓ Success</button>
+           <button class="btn tiny bad" data-action="mark" data-id="${esc(q.id)}" data-kid="${k}" data-status="failed">✗ Failed</button>`
+        : `<button class="btn tiny ghost" data-action="mark" data-id="${esc(q.id)}" data-kid="${k}" data-status="open" title="Undo the result">↺ Reset</button>`;
+    }
+    const delta = r.status === 'success' ? `<span class="pill good">+${esc(C.formatRobux(q.reward))}</span>`
+      : r.status === 'failed' && q.penalty ? `<span class="pill bad">−${esc(C.formatRobux(q.penalty))}</span>` : '';
+    return `<div class="q-row" data-row="${esc(q.id)}:${k}">
+      ${mini(k, q.id + k)}<span class="who">${esc(kidName(k))}</span>
+      <span class="status ${r.status}">${statusText}</span>${delta}
+      ${r.at && r.status !== 'open' ? `<span class="when">${esc(C.formatWhen(r.at))}</span>` : ''}
+      ${marks ? `<span class="marks">${marks}</span>` : ''}
+    </div>`;
+  }).join('');
+  const menu = state.isAdmin ? `<div class="q-menu">
+      <button class="icon-btn" data-action="menu" data-id="${esc(q.id)}" aria-label="More for ${esc(q.title)}" aria-haspopup="true" aria-expanded="${state.openMenu === q.id}">⋯</button>
+      ${state.openMenu === q.id ? `<div class="menu" role="menu">
+        <button role="menuitem" data-action="edit" data-id="${esc(q.id)}">✏️ Edit</button>
+        <button role="menuitem" data-action="duplicate" data-id="${esc(q.id)}">📄 Duplicate</button>
+        <button role="menuitem" data-action="archive" data-id="${esc(q.id)}">${q.archived ? '📤 Unarchive' : '🗄️ Archive'}</button>
+        <button role="menuitem" class="danger" data-action="delete" data-id="${esc(q.id)}">🗑️ Delete</button>
+      </div>` : ''}
+    </div>` : '';
+  return `<article class="quest ${late ? 'late' : ''} ${pending ? '' : 'settled'} ${q.archived ? 'archived' : ''}" data-quest="${esc(q.id)}">
+    ${menu}
+    <div class="q-head">
+      <div class="q-icon" aria-hidden="true">${esc(q.icon)}</div>
+      <div class="q-main" style="${state.isAdmin ? 'padding-right:28px' : ''}">
+        <h3 class="q-title">${esc(q.title)}</h3>
+        <div class="q-meta">${robux(q.reward)}${meta}</div>
+      </div>
+    </div>
+    ${q.details ? `<p class="q-details">${esc(q.details)}</p>` : ''}
+    <div class="q-results">${rows}</div>
+  </article>`;
+}
+
+function renderQuests() {
+  const list = C.sortQuests(visibleQuests(), state.kid);
+  const active = list.filter(q => isPendingFor(q) && !q.archived);
+  const doneAll = list.filter(q => !isPendingFor(q) && (state.showArchived || !q.archived));
+  const archivedPending = list.filter(q => isPendingFor(q) && q.archived);
+  const done = [...(state.showArchived ? archivedPending : []), ...doneAll];
+  const who = state.kid ? kidName(state.kid) : 'Caius and Caris';
+  $('active-count').textContent = active.length ? `${active.length} to do · ${C.formatRobux(active.reduce((t, q) => t + q.reward * (state.kid ? 1 : q.kids.filter(k => q.results[k]?.status === 'open').length), 0))} Robux up for grabs` : '';
+  $('active-list').innerHTML = active.length ? active.map(questCard).join('')
+    : `<div class="empty"><span class="big">🏝️</span>No quests for ${esc(who)} right now.${state.isAdmin ? '<br><button class="btn small" style="margin-top:10px" data-action="new-quest">＋ Add a quest</button>' : ' Ask Dad for a new one!'}</div>`;
+  $('done-count').textContent = done.length ? `${done.length}` : '';
+  const shown = done.slice(0, state.doneLimit);
+  $('done-list').innerHTML = shown.length ? shown.map(questCard).join('') : `<div class="empty">Finished quests will show here.</div>`;
+  $('more-done').classList.toggle('hidden', done.length <= state.doneLimit);
+  const archivedCount = state.quests.filter(q => q.archived).length;
+  const toggle = $('toggle-archived');
+  toggle.classList.toggle('hidden', !state.isAdmin || !archivedCount);
+  toggle.textContent = state.showArchived ? 'Hide archived quests' : `Show archived quests (${archivedCount})`;
+}
+
+function renderHistory() {
+  const rows = C.buildHistory(state.quests, state.ledger, state.kid);
+  $('history-count').textContent = rows.length ? `${rows.length} entries` : '';
+  if (!rows.length) {
+    $('history-list').innerHTML = `<div class="empty" style="border:0"><span class="big">📜</span>Nothing yet. Finished quests and Robux payouts will show here.</div>`;
+    $('more-history').classList.add('hidden');
+    return;
+  }
+  let html = '', lastDay = '';
+  for (const r of rows.slice(0, state.historyLimit)) {
+    const day = r.at ? C.sgDate(r.at) : '';
+    if (day !== lastDay) {
+      html += `<div class="h-day">${esc(day ? (day === C.sgDate() ? 'Today' : day === C.addDays(C.sgDate(), -1) ? 'Yesterday' : C.formatDay(day)) : 'Earlier')}</div>`;
+      lastDay = day;
+    }
+    const tone = r.delta > 0 ? 'plus' : r.delta < 0 ? 'minus' : 'zero';
+    const sub = r.kind === 'quest'
+      ? `<span class="status ${r.status}">${r.status === 'success' ? '✓ Success' : '✗ Failed'}</span>`
+      : `<span class="pill ${r.type === 'redeem' ? 'gold' : r.type === 'bonus' ? 'good' : 'bad'}">${esc(C.LEDGER_TYPES[r.type].icon + ' ' + C.LEDGER_TYPES[r.type].label)}</span>`;
+    const actions = state.isAdmin ? (r.kind === 'ledger'
+      ? `<button class="btn tiny ghost" data-action="delete-ledger" data-id="${esc(r.ledgerId)}" title="Remove this entry">🗑️ Remove</button>`
+      : `<button class="btn tiny ghost" data-action="mark" data-id="${esc(r.questId)}" data-kid="${r.kid}" data-status="open" title="Undo the result">↺ Reset</button>`) : '';
+    html += `<div class="h-row" data-history="${esc(r.key)}">
+      ${mini(r.kid, r.key.replace(/\W/g, ''))}
+      <div style="min-width:0"><div class="h-title">${esc(r.icon)} ${esc(r.title)}</div>
+        <div class="h-sub">${esc(kidName(r.kid))} · ${esc(C.formatWhen(r.at))} ${sub}</div></div>
+      <div><div class="h-delta ${tone}">${r.delta > 0 ? '+' : ''}${esc(C.formatRobux(r.delta))}</div>${actions ? `<div class="h-actions">${actions}</div>` : ''}</div>
+    </div>`;
+  }
+  $('history-list').innerHTML = html;
+  $('more-history').classList.toggle('hidden', rows.length <= state.historyLimit);
+}
+
+function barChart(weeks, color) {
+  const W = 320, H = 130, pad = 22, max = Math.max(10, ...weeks.map(w => Math.max(w.earned, w.spent)));
+  const bw = (W - pad * 2) / weeks.length;
+  let bars = '';
+  weeks.forEach((w, i) => {
+    const x = pad + i * bw;
+    const he = (w.earned / max) * (H - 40), hs = (w.spent / max) * (H - 40);
+    bars += `<rect x="${(x + 3).toFixed(1)}" y="${(H - 18 - he).toFixed(1)}" width="${(bw / 2 - 4).toFixed(1)}" height="${he.toFixed(1)}" rx="3" fill="${color}"><title>Earned ${w.earned}</title></rect>`;
+    bars += `<rect x="${(x + bw / 2).toFixed(1)}" y="${(H - 18 - hs).toFixed(1)}" width="${(bw / 2 - 4).toFixed(1)}" height="${hs.toFixed(1)}" rx="3" fill="#fbbf24" opacity="0.85"><title>Paid out or taken off ${w.spent}</title></rect>`;
+    const d = new Date(w.end);
+    bars += `<text x="${(x + bw / 2).toFixed(1)}" y="${H - 4}" text-anchor="middle">${d.toLocaleDateString('en-SG', { timeZone: C.TZ, day: 'numeric', month: 'short' })}</text>`;
+  });
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Robux per week">
+    <line x1="${pad}" y1="${H - 18}" x2="${W - pad}" y2="${H - 18}" stroke="rgba(255,255,255,0.2)"/>
+    <text x="${pad}" y="12">${max.toLocaleString()}</text>${bars}</svg>`;
+}
+function ring(rate, color) {
+  const r = 26, c = 2 * Math.PI * r;
+  return `<svg width="70" height="70" viewBox="0 0 70 70" aria-hidden="true">
+    <circle cx="35" cy="35" r="${r}" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="8"/>
+    <circle cx="35" cy="35" r="${r}" fill="none" stroke="${color}" stroke-width="8" stroke-linecap="round"
+      stroke-dasharray="${(c * rate).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 35 35)"/>
+    <text x="35" y="40" text-anchor="middle" font-size="14" font-weight="800" fill="#fff">${Math.round(rate * 100)}%</text></svg>`;
+}
+function renderStats() {
+  const history = C.buildHistory(state.quests, state.ledger);
+  const kids = state.kid ? C.KIDS.filter(k => k.id === state.kid) : C.KIDS;
+  $('stats-grid').innerHTML = kids.map(kid => {
+    const s = state.stats[kid.id];
+    const weeks = C.weeklyEarned(history, kid.id, 8);
+    return `<div class="stat-card">
+      <h3>${mini(kid.id, 'stat' + kid.id)} ${esc(kid.name)}</h3>
+      <div class="tiles">
+        <div class="tile"><b style="color:var(--gold)">${esc(C.formatRobux(s.balance))}</b><span>Balance</span></div>
+        <div class="tile"><b>${esc(C.formatRobux(s.earned + s.bonus))}</b><span>Earned</span></div>
+        <div class="tile"><b>${esc(C.formatRobux(s.redeemed))}</b><span>Paid out</span></div>
+        <div class="tile"><b style="color:var(--good)">${s.success}</b><span>Successes</span></div>
+        <div class="tile"><b style="color:var(--bad)">${s.failed}</b><span>Failed</span></div>
+        <div class="tile"><b>🔥 ${s.best}</b><span>Best streak</span></div>
+      </div>
+      ${barChart(weeks, kid.colors.main)}
+      <div class="legend"><span><i style="background:${kid.colors.main}"></i>Earned</span><span><i style="background:#fbbf24"></i>Paid out / taken off</span></div>
+      <div class="ring-wrap">${ring(s.successRate, kid.colors.glow)}
+        <p>${s.success + s.failed ? `Succeeded in <b>${s.success}</b> of <b>${s.success + s.failed}</b> quests.` : 'No finished quests yet.'}
+        ${s.bonus ? `<br>Bonuses: +${esc(C.formatRobux(s.bonus))}.` : ''}${s.penalty + s.failedPenalty ? `<br>Penalties: −${esc(C.formatRobux(s.penalty + s.failedPenalty))}.` : ''}</p></div>
+    </div>`;
+  }).join('');
+}
+
+/* ============================================================
+   Toasts, confirm and confetti
+   ============================================================ */
+function toast(text, kind = '', action = null, ms = 4200) {
+  const el = document.createElement('div');
+  el.className = 'toast ' + kind;
+  el.innerHTML = `<span></span>`;
+  el.querySelector('span').textContent = text;
+  if (action) {
+    const b = document.createElement('button');
+    b.className = 'btn tiny ghost';
+    b.textContent = action.label;
+    b.addEventListener('click', () => { el.remove(); action.run(); });
+    el.appendChild(b);
+    ms = Math.max(ms, 7000);
+  }
+  $('toasts').appendChild(el);
+  setTimeout(() => el.remove(), ms);
+  while ($('toasts').children.length > 3) $('toasts').firstChild.remove();
+}
+function confirmBox(title, text, yes = 'Yes') {
+  const d = $('confirm-dialog');
+  $('confirm-title').textContent = title;
+  $('confirm-text').textContent = text;
+  $('confirm-yes').textContent = yes;
+  return new Promise(resolve => {
+    d.addEventListener('close', () => resolve(d.returnValue === 'yes'), { once: true });
+    d.returnValue = '';
+    d.showModal();
+  });
+}
+
+const confetti = (() => {
+  const cv = $('confetti'), ctx = cv.getContext('2d');
+  let parts = [], raf = 0;
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function size() { cv.width = innerWidth * devicePixelRatio; cv.height = innerHeight * devicePixelRatio; }
+  addEventListener('resize', size); size();
+  function tick() {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    parts = parts.filter(p => p.life > 0);
+    for (const p of parts) {
+      p.vy += 0.18 * devicePixelRatio; p.x += p.vx; p.y += p.vy; p.rot += p.vr; p.life -= 1;
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.globalAlpha = Math.min(1, p.life / 40);
+      if (p.coin) {
+        ctx.fillStyle = '#fbbf24'; ctx.strokeStyle = '#b45309'; ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) { const a = Math.PI / 3 * i - Math.PI / 2; ctx.lineTo(Math.cos(a) * p.s, Math.sin(a) * p.s); }
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+      } else { ctx.fillStyle = p.c; ctx.fillRect(-p.s / 2, -p.s / 4, p.s, p.s / 2); }
+      ctx.restore();
+    }
+    raf = parts.length ? requestAnimationFrame(tick) : 0;
+  }
+  return function burst(colors = ['#8b5cf6', '#3b82f6', '#2dd4bf', '#f472b6', '#fbbf24'], x = innerWidth / 2, y = innerHeight / 3) {
+    if (reduce) return;
+    const k = devicePixelRatio;
+    for (let i = 0; i < 120; i++) {
+      const a = Math.random() * Math.PI * 2, v = (3 + Math.random() * 7) * k;
+      parts.push({ x: x * k, y: y * k, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 5 * k, rot: Math.random() * 6, vr: (Math.random() - 0.5) * 0.3,
+        s: (6 + Math.random() * 6) * k, c: colors[i % colors.length], coin: i % 4 === 0, life: 90 + Math.random() * 50 });
+    }
+    if (!raf) raf = requestAnimationFrame(tick);
+  };
+})();
+
+function celebrateLevelUps() {
+  for (const kid of C.KIDS) {
+    const level = C.levelFor(state.stats[kid.id].lifetime).level;
+    if (!firstStats && lastLevels[kid.id] && level > lastLevels[kid.id]) {
+      toast(`⬆️ ${kid.name} reached level ${level}: ${C.rankFor(kid.id, level)}!`, 'good');
+      confetti([kid.colors.main, kid.colors.glow, kid.colors.accent, '#fbbf24']);
+    }
+    lastLevels[kid.id] = level;
+  }
+  firstStats = false;
+}
+
+/* ============================================================
+   Writes (admin only)
+   ============================================================ */
+const now = () => Date.now();
+const byWho = () => (state.user && state.user.email) || '';
+const questById = id => state.quests.find(q => q.id === id);
+
+async function markResult(id, kid, status, { silent = false } = {}) {
+  if (!requireAdmin()) return;
+  const q = questById(id);
+  if (!q || !q.kids.includes(kid)) return;
+  const before = { ...(q.results[kid] || { status: 'open', at: 0, note: '' }) };
+  if (before.status === status) return;
+  const after = { status, at: status === 'open' ? 0 : now(), note: '' };
+  const batch = db.batch();
+  const ref = QUESTS.doc(id);
+  batch.update(ref, { [`results.${kid}`]: after, updatedAt: now() });
+  // A repeating quest gets its next copy once every child's result is in.
+  let nextRef = null;
+  const results = { ...q.results, [kid]: after };
+  const settled = q.kids.every(k => results[k] && results[k].status !== 'open');
+  if (q.repeat && settled && !q.raw?.nextId) {
+    nextRef = QUESTS.doc();
+    batch.set(nextRef, {
+      title: q.title, details: q.details, icon: q.icon, category: q.category, reward: q.reward, penalty: q.penalty,
+      kids: q.kids, results: C.mergeResults(q.kids), due: C.nextRepeatDue(q), repeat: q.repeat, archived: false,
+      createdAt: now(), updatedAt: now(), createdBy: byWho(), repeatOf: id
+    });
+    batch.update(ref, { nextId: nextRef.id });
+  }
+  try {
+    await batch.commit();
+  } catch (e) { writeFailed(e); return; }
+  if (silent) return;
+  const name = kidName(kid);
+  if (status === 'success') {
+    const card = document.querySelector(`[data-row="${CSS.escape(id + ':' + kid)}"]`);
+    const rect = card ? card.getBoundingClientRect() : null;
+    const k = C.kidById(kid).colors;
+    confetti([k.main, k.glow, k.accent, '#fbbf24'], rect ? rect.left + rect.width / 2 : innerWidth / 2, rect ? rect.top : innerHeight / 3);
+    toast(`🎉 +${C.formatRobux(q.reward)} Robux for ${name}!`, 'good', { label: 'Undo', run: () => undoMark(id, kid, before, nextRef) });
+  } else if (status === 'failed') {
+    toast(`${name}: "${q.title}" failed${q.penalty ? ` (−${C.formatRobux(q.penalty)} Robux)` : ''}.`, 'bad', { label: 'Undo', run: () => undoMark(id, kid, before, nextRef) });
+  } else {
+    toast(`${name}: "${q.title}" is back to do.`, '', { label: 'Undo', run: () => undoMark(id, kid, before, null) });
+  }
+  if (nextRef) toast(`🔁 The next "${q.title}" is ready (${C.formatDay(C.nextRepeatDue(q))}).`);
+}
+async function undoMark(id, kid, before, nextRef) {
+  if (!requireAdmin()) return;
+  const batch = db.batch();
+  batch.update(QUESTS.doc(id), { [`results.${kid}`]: before, updatedAt: now(), ...(nextRef ? { nextId: firebase.firestore.FieldValue.delete() } : {}) });
+  if (nextRef) batch.delete(nextRef);
+  try { await batch.commit(); toast('Undone.'); } catch (e) { writeFailed(e); }
+}
+
+async function deleteQuest(id) {
+  if (!requireAdmin()) return;
+  const q = questById(id);
+  if (!q) return;
+  const earned = q.kids.filter(k => q.results[k]?.status === 'success');
+  const extra = earned.length ? ` ${earned.map(kidName).join(' and ')} would lose the ${C.formatRobux(q.reward)} Robux it earned. Archive it instead to keep the Robux.` : '';
+  if (!await confirmBox('Delete this quest?', `"${q.title}" will be removed for good.${extra}`, 'Delete')) return;
+  try { await QUESTS.doc(id).delete(); toast('Quest deleted.'); } catch (e) { writeFailed(e); }
+}
+async function archiveQuest(id) {
+  if (!requireAdmin()) return;
+  const q = questById(id);
+  if (!q) return;
+  try { await QUESTS.doc(id).update({ archived: !q.archived, updatedAt: now() }); toast(q.archived ? 'Quest is back on the board.' : 'Quest archived. Its Robux still count.'); }
+  catch (e) { writeFailed(e); }
+}
+async function duplicateQuest(id) {
+  if (!requireAdmin()) return;
+  const q = questById(id);
+  if (!q) return;
+  openQuestDialog(null, { ...q, title: q.title, due: '' });
+}
+
+async function deleteLedger(id) {
+  if (!requireAdmin()) return;
+  const e = state.ledger.find(x => x.id === id);
+  if (!e) return;
+  const t = C.LEDGER_TYPES[e.type];
+  if (!await confirmBox('Remove this entry?', `${t.label}: ${C.formatRobux(e.amount)} Robux for ${kidName(e.kid)}${e.note ? ` ("${e.note}")` : ''}. The balance will change back.`, 'Remove')) return;
+  try { await LEDGER.doc(id).delete(); toast('Entry removed.'); } catch (err) { writeFailed(err); }
+}
+
+/* ============================================================
+   Quest editor
+   ============================================================ */
+const ICONS = ['⭐', '📚', '📖', '✍️', '💯', '🧮', '🔬', '🎹', '🎨', '🧹', '🍽️', '🧺', '🛏️', '🦷', '🏃', '⚽', '🏊', '🚴', '💛', '🤝', '⏰', '📵', '🏆', '🎯', '🧠', '🌱', '🐶', '🍎', '🔥', '⚔️'];
+const editor = { id: null, kids: ['caius', 'caris'], icon: '⭐', iconTouched: false };
+
+function setupQuestForm() {
+  $('templates').innerHTML = C.TEMPLATES.map((t, i) => `<button type="button" class="chip" data-template="${i}">${esc(t.icon)} ${esc(t.title)} · ${t.reward}</button>`).join('');
+  $('reward-presets').innerHTML = [10, 20, 50, 100, 200, 500].map(n => `<button type="button" class="chip" data-reward="${n}">${n}</button>`).join('');
+  $('due-presets').innerHTML = [['Today', 0], ['Tomorrow', 1], ['In a week', 7], ['No date', null]].map(([l, d]) => `<button type="button" class="chip" data-due="${d ?? ''}">${l}</button>`).join('');
+  $('q-category').innerHTML = C.CATEGORIES.map(c => `<option value="${c.id}">${c.icon} ${esc(c.label)}</option>`).join('');
+  $('q-icons').innerHTML = ICONS.map(e => `<button type="button" data-icon="${e}" aria-label="Icon ${e}" aria-pressed="false">${e}</button>`).join('');
+  $('q-kids').innerHTML = C.KIDS.map(k => `<button type="button" class="chip kid-${k.id}" data-qkid="${k.id}" aria-pressed="true">${mini(k.id, 'qk' + k.id)}${esc(k.name)}</button>`).join('')
+    + `<button type="button" class="chip" data-qkid="both">Both</button>`;
+
+  $('quest-dialog').addEventListener('click', e => {
+    const t = e.target.closest('button');
+    if (!t) return;
+    if (t.dataset.template != null) {
+      const tpl = C.TEMPLATES[+t.dataset.template];
+      $('q-title').value = tpl.title; $('q-reward').value = tpl.reward; $('q-category').value = tpl.category;
+      setIcon(tpl.icon, true);
+    } else if (t.dataset.reward) {
+      $('q-reward').value = t.dataset.reward;
+    } else if (t.dataset.due != null && t.closest('#due-presets')) {
+      $('q-due').value = t.dataset.due === '' ? '' : C.addDays(C.sgDate(), +t.dataset.due);
+    } else if (t.dataset.icon) {
+      setIcon(t.dataset.icon, true);
+    } else if (t.dataset.qkid) {
+      const k = t.dataset.qkid;
+      if (k === 'both') editor.kids = [...C.KID_IDS];
+      else editor.kids = editor.kids.includes(k) ? editor.kids.filter(x => x !== k) : [...editor.kids, k];
+      paintKids();
+    }
+  });
+  $('q-category').addEventListener('change', () => { if (!editor.iconTouched) setIcon(C.categoryById($('q-category').value).icon, false); });
+  $('quest-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    await saveQuest();
+  });
+}
+function setIcon(icon, touched) {
+  editor.icon = icon;
+  if (touched) editor.iconTouched = true;
+  document.querySelectorAll('#q-icons [data-icon]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.icon === icon)));
+}
+function paintKids() {
+  document.querySelectorAll('#q-kids [data-qkid]').forEach(b => {
+    const k = b.dataset.qkid;
+    b.setAttribute('aria-pressed', String(k === 'both' ? editor.kids.length === C.KID_IDS.length : editor.kids.includes(k)));
+  });
+}
+function openQuestDialog(id = null, preset = null) {
+  if (!requireAdmin()) return;
+  const q = id ? questById(id) : null;
+  const src = q || preset || {};
+  editor.id = q ? q.id : null;
+  editor.kids = src.kids && src.kids.length ? [...src.kids] : (state.kid ? [state.kid] : [...C.KID_IDS]);
+  editor.iconTouched = !!(q || preset);
+  $('quest-dialog-title').textContent = q ? 'Edit quest' : preset ? 'Copy quest' : 'New quest';
+  $('quest-save').textContent = q ? 'Save changes' : 'Add quest';
+  $('templates-field').classList.toggle('hidden', !!q);
+  $('q-title').value = src.title || '';
+  $('q-reward').value = src.reward ?? 20;
+  $('q-penalty').value = src.penalty ?? 0;
+  $('q-due').value = src.due || '';
+  $('q-repeat').value = src.repeat || '';
+  $('q-category').value = src.category || 'study';
+  $('q-details').value = src.details || '';
+  setIcon(src.icon || C.categoryById($('q-category').value).icon, false);
+  paintKids();
+  $('quest-errors').classList.add('hidden');
+  $('quest-dialog').showModal();
+  setTimeout(() => $('q-title').focus(), 30);
+}
+async function saveQuest() {
+  if (!requireAdmin()) return;
+  const check = C.validateQuestInput({
+    title: $('q-title').value, reward: $('q-reward').value, penalty: $('q-penalty').value, kids: editor.kids,
+    due: $('q-due').value, repeat: $('q-repeat').value, category: $('q-category').value, details: $('q-details').value, icon: editor.icon
+  });
+  if (!check.ok) {
+    $('quest-errors').innerHTML = '<ul>' + check.errors.map(e => `<li>${esc(e)}</li>`).join('') + '</ul>';
+    $('quest-errors').classList.remove('hidden');
+    return;
+  }
+  const v = check.value;
+  const btn = $('quest-save');
+  btn.disabled = true;
+  try {
+    if (editor.id) {
+      const q = questById(editor.id);
+      await QUESTS.doc(editor.id).update({ ...v, results: C.mergeResults(v.kids, q ? q.results : {}), updatedAt: now() });
+      toast('Quest updated.');
+    } else {
+      await QUESTS.add({ ...v, results: C.mergeResults(v.kids), archived: false, createdAt: now(), updatedAt: now(), createdBy: byWho() });
+      toast(`⚔️ New quest for ${v.kids.map(kidName).join(' and ')}: ${v.title}`, 'good');
+    }
+    $('quest-dialog').close();
+  } catch (e) { writeFailed(e); }
+  finally { btn.disabled = false; }
+}
+
+/* ============================================================
+   Ledger editor (pay out, bonus, penalty)
+   ============================================================ */
+const ledgerEd = { kid: 'caius', type: 'redeem' };
+function setupLedgerForm() {
+  $('l-kids').innerHTML = C.KIDS.map(k => `<button type="button" class="chip kid-${k.id}" data-lkid="${k.id}">${mini(k.id, 'lk' + k.id)}${esc(k.name)}</button>`).join('');
+  $('l-types').innerHTML = Object.entries(C.LEDGER_TYPES).map(([id, t]) => `<button type="button" class="chip" data-ltype="${id}">${t.icon} ${esc(t.label)}</button>`).join('');
+  $('amount-presets').innerHTML = [80, 100, 200, 400, 800, 1000].map(n => `<button type="button" class="chip" data-amount="${n}">${n}</button>`).join('')
+    + `<button type="button" class="chip" data-amount="all">All</button>`;
+  $('ledger-dialog').addEventListener('click', e => {
+    const t = e.target.closest('button');
+    if (!t) return;
+    if (t.dataset.lkid) { ledgerEd.kid = t.dataset.lkid; paintLedger(); }
+    else if (t.dataset.ltype) { ledgerEd.type = t.dataset.ltype; paintLedger(); }
+    else if (t.dataset.amount) {
+      $('l-amount').value = t.dataset.amount === 'all' ? Math.max(0, state.stats[ledgerEd.kid].balance) : t.dataset.amount;
+    }
+  });
+  $('ledger-form').addEventListener('submit', async e => { e.preventDefault(); await saveLedger(); });
+}
+function paintLedger() {
+  document.querySelectorAll('#l-kids [data-lkid]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lkid === ledgerEd.kid)));
+  document.querySelectorAll('#l-types [data-ltype]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.ltype === ledgerEd.type)));
+  const t = C.LEDGER_TYPES[ledgerEd.type];
+  $('ledger-dialog-title').textContent = ledgerEd.type === 'redeem' ? 'Pay out Robux' : ledgerEd.type === 'bonus' ? 'Give a bonus' : 'Take off a penalty';
+  $('ledger-save').textContent = 'Record ' + t.label.toLowerCase();
+  $('l-avail').innerHTML = `${esc(kidName(ledgerEd.kid))} has <b>${esc(C.formatRobux(state.stats[ledgerEd.kid].balance))}</b> Robux now.`;
+  $('overdraw-wrap').classList.toggle('hidden', ledgerEd.type !== 'redeem');
+  $('amount-presets').querySelector('[data-amount="all"]').classList.toggle('hidden', ledgerEd.type !== 'redeem');
+  $('l-note').placeholder = ledgerEd.type === 'redeem' ? 'e.g. Bought a game pass' : ledgerEd.type === 'bonus' ? 'e.g. Extra helpful this week' : 'e.g. Rude to sibling';
+}
+function openLedgerDialog(kid = state.kid || 'caius', type = 'redeem') {
+  if (!requireAdmin()) return;
+  ledgerEd.kid = kid; ledgerEd.type = type;
+  $('l-amount').value = ''; $('l-note').value = ''; $('l-overdraw').checked = false;
+  $('ledger-errors').classList.add('hidden');
+  paintLedger();
+  $('ledger-dialog').showModal();
+  setTimeout(() => $('l-amount').focus(), 30);
+}
+async function saveLedger() {
+  if (!requireAdmin()) return;
+  const check = C.validateLedgerInput({ kid: ledgerEd.kid, type: ledgerEd.type, amount: $('l-amount').value, note: $('l-note').value, allowOverdraw: $('l-overdraw').checked },
+    state.stats[ledgerEd.kid].balance);
+  if (!check.ok) {
+    $('ledger-errors').innerHTML = '<ul>' + check.errors.map(e => `<li>${esc(e)}</li>`).join('') + '</ul>';
+    $('ledger-errors').classList.remove('hidden');
+    return;
+  }
+  const v = check.value;
+  $('ledger-save').disabled = true;
+  try {
+    const ref = await LEDGER.add({ ...v, at: now(), by: byWho() });
+    $('ledger-dialog').close();
+    const t = C.LEDGER_TYPES[v.type];
+    toast(`${t.icon} ${t.label}: ${v.type === 'bonus' ? '+' : '−'}${C.formatRobux(v.amount)} Robux for ${kidName(v.kid)}.`, v.type === 'bonus' ? 'good' : '',
+      { label: 'Undo', run: async () => { try { await ref.delete(); toast('Undone.'); } catch (e) { writeFailed(e); } } });
+    if (v.type === 'bonus') confetti();
+  } catch (e) { writeFailed(e); }
+  finally { $('ledger-save').disabled = false; }
+}
+
+/* ============================================================
+   Savings goals
+   ============================================================ */
+function openGoalsDialog() {
+  if (!requireAdmin()) return;
+  $('goals-body').innerHTML = C.KIDS.map(k => {
+    const g = state.settings.goals?.[k.id] || {};
+    return `<div class="row2">
+      <div class="field"><label for="g-label-${k.id}">${esc(k.name)}'s goal</label>
+        <input type="text" id="g-label-${k.id}" maxlength="${C.LIMITS.goalLabel}" placeholder="e.g. A new game pass" value="${esc(g.label || '')}"></div>
+      <div class="field"><label for="g-amount-${k.id}">Robux needed</label>
+        <input type="number" id="g-amount-${k.id}" min="0" step="1" inputmode="numeric" placeholder="0 = no goal" value="${esc(g.amount || '')}"></div>
+    </div>`;
+  }).join('') + '<p class="hint">The goal bar shows on each player card. Leave the Robux at 0 to hide it.</p>';
+  $('goals-dialog').showModal();
+}
+$('goals-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  if (!requireAdmin()) return;
+  const goals = {};
+  for (const k of C.KIDS) {
+    goals[k.id] = { label: C.cleanText($(`g-label-${k.id}`).value, C.LIMITS.goalLabel), amount: Math.max(0, C.toInt($(`g-amount-${k.id}`).value)) };
+  }
+  try { await SETTINGS.set({ goals, updatedAt: now() }, { merge: true }); $('goals-dialog').close(); toast('🎯 Goals saved.'); }
+  catch (err) { writeFailed(err); }
+});
+
+function exportCsv() {
+  const rows = C.buildHistory(state.quests, state.ledger);
+  const q = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const lines = [['Date', 'Child', 'What', 'Result', 'Robux'].map(q).join(',')];
+  for (const r of rows) lines.push([C.formatWhen(r.at), kidName(r.kid), r.title, r.kind === 'quest' ? r.status : C.LEDGER_TYPES[r.type].label, r.delta].map(q).join(','));
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `robux-quests-${C.sgDate()}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+/* ============================================================
+   Events
+   ============================================================ */
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-action], [data-tab], #kid-filter [data-kid]');
+  if (!el) { if (state.openMenu) { state.openMenu = ''; renderQuests(); } return; }
+  if (el.dataset.tab) {
+    state.tab = el.dataset.tab; state.openMenu = '';
+    try { localStorage.setItem('cc_tab', state.tab); } catch (err) { /* private mode */ }
+    render(); return;
+  }
+  if (el.closest('#kid-filter')) { setKid(el.dataset.kid); return; }
+  const a = el.dataset.action, id = el.dataset.id;
+  if (a !== 'menu' && state.openMenu) { state.openMenu = ''; if (state.tab === 'quests') renderQuests(); }
+  switch (a) {
+    case 'pick-kid': setKid(state.kid === el.dataset.kid ? '' : el.dataset.kid); break;
+    case 'sign-in': signIn(); break;
+    case 'sign-out': auth.signOut(); toast('Signed out.'); break;
+    case 'new-quest': openQuestDialog(); break;
+    case 'new-ledger': openLedgerDialog(); break;
+    case 'edit-goals': openGoalsDialog(); break;
+    case 'export-csv': exportCsv(); break;
+    case 'mark': markResult(id, el.dataset.kid, el.dataset.status); break;
+    case 'menu': state.openMenu = state.openMenu === id ? '' : id; renderQuests(); break;
+    case 'edit': openQuestDialog(id); break;
+    case 'duplicate': duplicateQuest(id); break;
+    case 'archive': archiveQuest(id); break;
+    case 'delete': deleteQuest(id); break;
+    case 'delete-ledger': deleteLedger(id); break;
+    case 'more-done': state.doneLimit += 12; renderQuests(); break;
+    case 'more-history': state.historyLimit += 40; renderHistory(); break;
+    case 'toggle-archived': state.showArchived = !state.showArchived; renderQuests(); break;
+    case 'close-dialog': el.closest('dialog')?.close(); break;
+  }
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && state.openMenu) { state.openMenu = ''; renderQuests(); }
+});
+function setKid(kid) {
+  state.kid = kid || '';
+  state.openMenu = '';
+  try { localStorage.setItem('cc_kid', state.kid); } catch (err) { /* private mode */ }
+  if (ready()) render(); else renderTabs();
+}
+
+// Remember the last view per device (a convenience only).
+try {
+  const t = localStorage.getItem('cc_tab'); if (['quests', 'history', 'stats'].includes(t)) state.tab = t;
+  const k = localStorage.getItem('cc_kid'); if (C.KID_IDS.includes(k)) state.kid = k;
+} catch (err) { /* private mode */ }
+// #caius / #caris open straight onto one child (handy as a home-screen bookmark).
+const hashKid = location.hash.replace('#', '').toLowerCase();
+if (C.KID_IDS.includes(hashKid)) state.kid = hashKid;
+if (hashKid === 'admin' || hashKid === 'dad') setTimeout(() => { if (!state.user) signIn(); }, 400);
+
+setupQuestForm();
+setupLedgerForm();
+renderTabs();
+addEventListener('online', () => banner(''));
+addEventListener('offline', () => banner('You are offline. The board shows the last saved quests and will update when the internet is back.', 'info'));
+window.__cc = { state, C };
+</script>
+</body>
+</html>
