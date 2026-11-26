@@ -255,7 +255,7 @@ function firebase() {
     const auth = au.getAuth(app);
     // The portal's own tutor engine, under The Polymath's name. Keep the model and its
     // thinking floor in step with AI_MODEL / AI_THINK_MIN in app.js.
-    const model = ai.getGenerativeModel(ai.getAI(app, { backend: new ai.GoogleAIBackend() }), { model: 'gemini-3.8-flash' });
+    const model = ai.getGenerativeModel(ai.getAI(app, { backend: new ai.GoogleAIBackend() }), { model: 'gemini-4-hydrogen' });
     return { app, db, fs, model, auth, au, ac, appCheck };
   })();
   return firebaseReady;

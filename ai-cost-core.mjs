@@ -22,7 +22,7 @@
 //  • PRICES ARE DATA. Every number below is a default the admin can change in
 //    the price dialog; the overrides are merged over these, never replace them.
 
-export const AI_PRICES_AS_OF = '2026-11-06';
+export const AI_PRICES_AS_OF = '2026-11-26';
 
 // USD per million tokens. `perImage` is the fallback for a picture whose
 // tokens were not reported. Image models price input text, input images and
@@ -31,6 +31,9 @@ export const AI_DEFAULT_PRICES = {
   'gpt-6.1-sol':        { label: 'GPT-6.1 Sol',            in: 2.00, out: 10.00 },
   'gpt-6-luna':         { label: 'GPT-6 Luna',             in: 0.10, out: 0.50 },
   'gpt-6-astra':        { label: 'GPT-6 Astra',            in: 2.00, out: 10.00, assumed: true },
+  // Gemini 4 Hydrogen (12 Nov 2026) is the app's Gemini model from v1.465.0.
+  'gemini-4-hydrogen':  { label: 'Gemini 4 Hydrogen',      in: 1.50, out: 7.50 },
+  // The model before it, kept for the fallback and for totals that still hold its calls.
   'gemini-3.8-flash':   { label: 'Gemini 3.8 Flash',       in: 0.75, out: 3.75 },
   'kimi-k3':            { label: 'Kimi K3',                in: 3.00, out: 15.00 },
   // ChatGPT Images 2.6 (gpt-image-2.6-flare / -sunburst, November 2026): the
@@ -52,15 +55,17 @@ const FAMILY_RULES = [
   [/^gpt-image-2\.5/i, 'gpt-image-2.5'],
   [/^gpt-image/i, 'gpt-image-2.6'],
   [/^gemini-.*image/i, 'gemini-image'],
+  [/^gemini-nano-banana/i, 'gemini-image'],
   [/^gpt-6\.1-sol/i, 'gpt-6.1-sol'],
   [/^gpt-6-luna/i, 'gpt-6-luna'],
   [/^gpt-6-astra/i, 'gpt-6-astra'],
+  [/^gemini-4-hydrogen/i, 'gemini-4-hydrogen'],
   [/^gemini-3\.8-flash/i, 'gemini-3.8-flash'],
   [/^kimi-k3/i, 'kimi-k3'],
 ];
 // The family default for an id the table has never seen.
 const ROUTE_DEFAULT = {
-  gemini: 'gemini-3.8-flash', openai: 'gpt-6.1-sol', openaiKey: 'gpt-6.1-sol',
+  gemini: 'gemini-4-hydrogen', openai: 'gpt-6.1-sol', openaiKey: 'gpt-6.1-sol',
   kimi: 'kimi-k3', kimiKey: 'kimi-k3',
   imgServer: 'gpt-image-2.6', imgKey: 'gpt-image-2.6', imgGemini: 'gemini-image',
 };
@@ -88,7 +93,7 @@ function num(v) { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : 
 export function priceKeyFor(model, route) {
   const id = String(model || '').trim();
   for (const [re, key] of FAMILY_RULES) if (re.test(id)) return { key, known: true };
-  const fallback = ROUTE_DEFAULT[route] || (/image/i.test(id) ? 'gpt-image-2.6' : /gemini/i.test(id) ? 'gemini-3.8-flash' : /kimi|moonshot/i.test(id) ? 'kimi-k3' : 'gpt-6.1-sol');
+  const fallback = ROUTE_DEFAULT[route] || (/image/i.test(id) ? 'gpt-image-2.6' : /gemini/i.test(id) ? 'gemini-4-hydrogen' : /kimi|moonshot/i.test(id) ? 'kimi-k3' : 'gpt-6.1-sol');
   return { key: fallback, known: false };
 }
 

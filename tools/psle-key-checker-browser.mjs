@@ -24,6 +24,10 @@ const css = [...html.slice(0, html.indexOf('</head>')).matchAll(/<style\b[^>]*>(
 const cut = (src, from, to) => { const a = src.indexOf(from), b = src.indexOf(to, a + from.length); assert.ok(a >= 0 && b > a, 'found ' + from.slice(0, 40)); return src.slice(a, b); };
 const overlay = cut(html, '<div class="pkc-overlay" id="pkcOverlay"', '<!-- ==================== PAST PAPER — EDIT A QUESTION');
 const block = cut(app, '// 🔍 PSLE ANSWER KEY CHECKER', '// End PSLE answer key checker');
+// 🔑 The app's OWN keyword walker and word list (v1.465.0), cut from app.js like
+// the checker block, so the strip is tested against the code the exported
+// answer key really prints from, never against a stand-in.
+const kwBlock = cut(app, 'const KW_WORD_RE = ', '// ---- rendering: the blanks a student fills in');
 const priceOverlay = '<div class="tl-overlay aip-overlay" id="aiPriceOverlay"></div>';
 const shell = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>' + css
   + '</style></head><body>' + overlay + priceOverlay + '<div id="toasts"></div></body></html>';
@@ -36,7 +40,7 @@ window.S = S;
 var currentUser = { uid: 'admin1', email: 'teacher@example.com', role: 'admin' };
 var db = {};
 var RLF_HISTORY_COL = 'questionRepairs';
-var AI_MODEL = 'gemini-3.8-flash';
+var AI_MODEL = 'gemini-4-hydrogen';
 var _ppDataLoaded = true, _ppMapLoaded = true;
 var _ppTopicOrder = ['Heat', 'Light'];
 var _ppPePrevCache = {};
@@ -58,7 +62,8 @@ var questionBank = [
     { id: 'b31_pa', type: 'text', part: 'a', content: '<p>(a) Why does the ball not pass?</p>' },
     { id: 'b31_aa', type: 'plainanswer', part: 'a', marks: 1, content: 'The ball expands.' },
     { id: 'b31_pb', type: 'text', part: 'b', content: '<p>(b) Explain.</p>' },
-    { id: 'b31_ab', type: 'plainanswer', part: 'b', marks: 1, content: '' } ] },
+    { id: 'b31_ab', type: 'plainanswer', part: 'b', marks: 1, content: '' } ],
+    answerKeywords: { b31_aa: { 2: true } } },      // "expands" is the keyword the teacher marked
 ];
 var ppData = { questions: [
   { id: 's_2023_1', year: '2023', n: 1, bk: 'A', marks: 2, topic: 'Heat', type: 'recall', title: 'Conductors', ans: 'Option 2 — metal' },
@@ -129,8 +134,9 @@ const { createTally, tallyAdd, estimateCheckCost } = COST;
 async function _fakeAsk(prompt, media) {
   S.aiCalls++; S.lastPrompt = prompt; S.lastMedia = (media || []).length;
   await new Promise(r => setTimeout(r, 30));
-  _meters.forEach(m => m.fn({ kind: 'text', route: 'gemini', model: 'gemini-3.8-flash', usage: { inTok: 3000, imgInTok: 1000, outTok: 600, images: 1, reported: true }, at: Date.now() }));
+  _meters.forEach(m => m.fn({ kind: 'text', route: 'gemini', model: 'gemini-4-hydrogen', usage: { inTok: 3000, imgInTok: 1000, outTok: 600, images: 1, reported: true }, at: Date.now() }));
   const pick = typeof S.aiReply === 'function' ? S.aiReply(prompt) : S.aiReply;
+  if (typeof pick === 'string') return pick;       // a box button gets plain text back, not JSON
   return JSON.stringify(pick || { verdict: 'ok', ownAnswer: 'Option 2', summary: 'Key is right', issues: [] });
 }
 async function askGemini(p, o) { return _fakeAsk(p, null); }
@@ -151,14 +157,14 @@ async function fixture(width, height = 900) {
     return route.fulfill({ contentType: 'text/html; charset=utf-8', body: shell });
   });
   await page.goto('https://pkc.test/');
-  await page.evaluate(async ({ world, block }) => {
+  await page.evaluate(async ({ world, block, kwBlock }) => {
     const PKC = await import('/pkc-core.mjs');
     const COST = await import('/cost-core.mjs');
-    const names = ['pkcOpen', 'pkcClose', 'pkcSetScope', 'pkcSetFilter', 'pkcSelect', 'pkcStep', 'pkcSetP', 'pkcSetBankTopic', 'pkcSetCorrect', 'pkcSetBankText', 'pkcApplyFix', 'pkcSave', 'pkcSaveAll', 'pkcTick', 'pkcEditInBlockEditor', 'pkcAiCheckOne', 'pkcAiCheckAll', 'pkcAiStop', 'pkcCrossCheck', '_pkcRows', '_pkcOfficial', '_pkcBankSummary'];
-    const api = new Function('PKC', 'COST', world + block + '\nreturn {' + names.map(n => n + ':' + n).join(',') + ', get state(){ return _pkc; }, world: { ppData, questionBank, paperMap } };')(PKC, COST);
+    const names = ['pkcOpen', 'pkcClose', 'pkcSetScope', 'pkcSetFilter', 'pkcSelect', 'pkcStep', 'pkcSetP', 'pkcSetBankTopic', 'pkcSetCorrect', 'pkcSetBankText', 'pkcKwToggle', 'pkcKwClear', 'pkcAiField', 'pkcAiUndo', 'pkcApplyFix', 'pkcSave', 'pkcSaveAll', 'pkcTick', 'pkcEditInBlockEditor', 'pkcAiCheckOne', 'pkcAiCheckAll', 'pkcAiStop', 'pkcCrossCheck', '_pkcRows', '_pkcOfficial', '_pkcBankSummary'];
+    const api = new Function('PKC', 'COST', world + kwBlock + block + '\nreturn {' + names.map(n => n + ':' + n).join(',') + ', get state(){ return _pkc; }, world: { ppData, questionBank, paperMap } };')(PKC, COST);
     Object.assign(window, api);
     window.api = api;
-  }, { world, block });
+  }, { world, block, kwBlock });
   return { page, errors, close: () => context.close() };
 }
 const noOverflow = async (page, what) => {
@@ -265,6 +271,164 @@ try {
     await page.waitForFunction(() => S.qsaves.some(q => q.id === 'b31'));
     ok((await page.evaluate(() => S.qsaves.find(q => q.id === 'b31').blocks.find(b => b.id === 'b31_ab').content)).startsWith('Heat flows'), 'part (b) saved');
 
+    // ───────── 🔑 keywords, as the exported answer key prints them ─────────
+    {
+      const kwA = page.locator('#pkcKw_b31_aa_content'), kwB = page.locator('#pkcKw_b31_ab_content');
+      const onWords = loc => loc.locator('.pkc-kw-w.on').evaluateAll(els => els.map(e => e.textContent));
+      ok(JSON.stringify(await onWords(kwA)) === '["expands"]', 'the marked keyword is shown under its model answer');
+      const look = await kwA.locator('.pkc-kw-w.on').first().evaluate(el => { const c = getComputedStyle(el); return { w: Number(c.fontWeight), u: c.textDecorationLine }; });
+      ok(look.w >= 700 && /underline/.test(look.u), 'bold and underlined, like the exported answer key (' + JSON.stringify(look) + ')');
+      const plain = await kwA.locator('.pkc-kw-w', { hasText: 'ball' }).evaluate(el => { const c = getComputedStyle(el); return { w: Number(c.fontWeight), u: c.textDecorationLine }; });
+      ok(plain.w < 600 && !/underline/.test(plain.u), 'a word that is not a keyword stays plain');
+      ok(/1 marked: expands/.test(await kwA.locator('.pkc-kw-h').innerText()), 'the heading names the keyword');
+      ok(/1 keyword marked/.test(await page.locator('#pkcKwTotal').innerText()), 'the question\'s keyword count is shown');
+      // the key bolds a keyword wherever it appears: part (b) says "expands" too
+      ok(JSON.stringify(await kwB.locator('.pkc-kw-w.echo').evaluateAll(els => els.map(e => e.textContent))) === '["expands"]', 'the same word prints bold in the other part, as on the key');
+      ok((await onWords(kwB)).length === 0, 'but it is not marked there');
+      ok(await page.locator('.pkc-kw').count() === 2, 'one keyword strip per model answer box, none on the paper answer');
+      // click = mark, in the draft only
+      const savesBefore = await page.evaluate(() => S.qsaves.length);
+      await kwA.locator('.pkc-kw-w', { hasText: 'ball' }).click();
+      ok(JSON.stringify(await onWords(kwA)) === '["ball","expands"]', 'clicking a word makes it a keyword');
+      ok(/2 marked: ball, expands/.test(await kwA.locator('.pkc-kw-h').innerText()), 'heading follows');
+      ok(/2 keywords marked/.test(await page.locator('#pkcKwTotal').innerText()), 'count follows');
+      ok((await page.evaluate(() => S.qsaves.length)) === savesBefore, 'nothing is saved by a click');
+      ok(/●/.test(await page.locator('#pkcRi_s_2023_31').innerText()), 'the rail marks the question unsaved');
+      ok(!(await page.locator('#pkcSaveBtn').isDisabled()), 'Save is offered');
+      ok(await kwA.locator('.pkc-kw-w', { hasText: 'ball' }).evaluate(el => el === document.activeElement), 'the clicked word keeps the focus');
+      // click again = unmark; Clear = none
+      await kwA.locator('.pkc-kw-w', { hasText: 'ball' }).click();
+      ok(JSON.stringify(await onWords(kwA)) === '["expands"]', 'clicking it again unmarks it');
+      await kwA.locator('.pkc-kw-clear').click();
+      ok((await onWords(kwA)).length === 0 && /None marked yet/.test(await kwA.locator('.pkc-kw-h').innerText()), 'Clear unmarks every keyword in that answer');
+      ok((await kwB.locator('.pkc-kw-w.echo').count()) === 0, 'and the word stops printing bold in the other part');
+      await kwA.locator('.pkc-kw-w', { hasText: 'expands' }).click();
+      await kwA.locator('.pkc-kw-w', { hasText: 'ball' }).click();
+      // retyping the answer carries the marks to where the words went
+      const taA = page.locator('#pkcBox_b31_aa_content');
+      await taA.fill('The heated metal ball expands.');
+      ok(JSON.stringify(await onWords(kwA)) === '["ball","expands"]', 'two words typed in front: the SAME words stay marked');
+      ok(await taA.evaluate(el => el === document.activeElement), 'and the box keeps the caret');
+      await taA.fill('The heated metal ball expands a lot.');
+      ok(JSON.stringify(await onWords(kwA)) === '["ball","expands"]', 'words typed after: still the same');
+      await taA.fill('The heated metal expands a lot.');
+      ok(JSON.stringify(await onWords(kwA)) === '["expands"]', 'a deleted keyword loses its mark and no neighbour inherits it');
+      await taA.fill('The heated metal ball expands.');
+      await kwA.locator('.pkc-kw-w', { hasText: 'ball' }).click();
+      // save: before-copy first, then the bank question with its keywords
+      const nSaves = await page.evaluate(() => S.qsaves.length), nHist = await page.evaluate(() => S.history.length);
+      await page.locator('#pkcSaveBtn').click();
+      await page.waitForFunction(n => S.qsaves.length === n + 1, nSaves);
+      const saved = await page.evaluate(() => S.qsaves[S.qsaves.length - 1]);
+      ok(saved.id === 'b31' && JSON.stringify(saved.answerKeywords) === '{"b31_aa":{"3":true,"4":true}}', 'saved with the keywords at their new positions: ' + JSON.stringify(saved.answerKeywords));
+      const h = await page.evaluate(n => S.history[n], nHist);
+      ok(h && h.afterQsaves === nSaves && JSON.stringify(h.data.before.answerKeywords) === '{"b31_aa":{"2":true}}', 'the before-copy holds the keywords as they were');
+      ok(JSON.stringify(await onWords(page.locator('#pkcKw_b31_aa_content'))) === '["ball","expands"]', 'still shown after the save');
+      await page.screenshot({ path: out + 'desktop-keywords.png' });
+    }
+
+    // ───────── 🤖 ✂️ ✍️ on every answer box ─────────
+    {
+      const boxes = await page.locator('#pkcSide .pkc-card').first().locator('textarea').count();
+      ok(boxes === 3 && (await page.locator('.pkc-aibar').count()) === boxes, 'every answer box has its own AI buttons');
+      ok(JSON.stringify(await page.locator('#pkcAiBar_b31_ab_content .pkc-ai-btn').evaluateAll(els => els.map(e => e.dataset.mode))) === '["answer","shorten","complete"]', 'Answer, Shorten and Complete');
+      const calls = () => page.evaluate(() => S.aiCalls);
+      const taB = page.locator('#pkcBox_b31_ab_content'), barB = page.locator('#pkcAiBar_b31_ab_content');
+      const was = await taB.inputValue();
+      // 🤖 Answer: writes THAT part, from the question and the official key
+      await page.evaluate(() => { S.aiReply = p => /WRITE: the model answer for part \(b\) ONLY/.test(p) ? '**Answer:** "The ring gains heat from the hot water and expands."' : 'WRONG BOX'; });
+      let n = await calls();
+      await barB.locator('.pkc-ai-answer').click();
+      await page.waitForFunction(() => document.getElementById('pkcBox_b31_ab_content').value.startsWith('The ring gains heat'));
+      ok((await taB.inputValue()) === 'The ring gains heat from the hot water and expands.', 'the reply is cleaned of its label, bold and quotes and put in the box');
+      ok((await calls()) === n + 1, 'one AI call');
+      const prompt = await page.evaluate(() => S.lastPrompt);
+      ok(/OFFICIAL answer from the marking scheme/.test(prompt) && /Heat flows from the hot water to the cold ring/.test(prompt), 'the official marking scheme went with it');
+      ok(/KEYWORDS[^\n]*"ball"[^\n]*"expands"|KEYWORDS[^\n]*"expands"[^\n]*"ball"/.test(prompt), 'so did the teacher\'s keywords');
+      ok(/\(a\) Model answer: The heated metal ball expands\./.test(prompt), 'and what the other boxes already say');
+      ok(/It is worth 1 mark/.test(prompt) && /\(b\) Explain\./.test(prompt), 'and the marks and the question');
+      ok(/●/.test(await page.locator('#pkcRi_s_2023_31').innerText()) && !(await page.locator('#pkcSaveBtn').isDisabled()), 'it is a draft edit: unsaved until Save');
+      ok(JSON.stringify(await page.locator('#pkcKw_b31_ab_content .pkc-kw-w.echo').evaluateAll(els => els.map(e => e.textContent))) === '["expands"]', 'the keyword strip follows the new wording');
+      // ↩ Undo: one step back
+      ok(await barB.locator('.pkc-ai-undo').count() === 1, 'Undo appears on the box the AI changed');
+      await barB.locator('.pkc-ai-undo').click();
+      ok((await taB.inputValue()) === was, 'Undo puts back what was there');
+      ok(await barB.locator('.pkc-ai-undo').count() === 0, 'and goes away');
+      // ✂️ Shorten: shorter, same keywords
+      await page.evaluate(() => { S.aiReply = () => 'Heat flows from the hot water, so the ring expands.'; });
+      await barB.locator('.pkc-ai-shorten').click();
+      await page.waitForFunction(() => document.getElementById('pkcBox_b31_ab_content').value === 'Heat flows from the hot water, so the ring expands.');
+      ok(/SHORTEN the text/.test(await page.evaluate(() => S.lastPrompt)) && (await page.evaluate(() => S.lastMedia)) === 0, 'Shorten sends the text, not the pictures');
+      ok(/Shortened ✂️ 13 → 10 words/.test(JSON.stringify(await page.evaluate(() => S.toasts.slice(-1)))), 'and says by how much');
+      // too short to shorten: no call at all
+      n = await calls();
+      await barB.locator('.pkc-ai-shorten').click();
+      ok((await calls()) === n && /already short/.test(JSON.stringify(await page.evaluate(() => S.toasts.slice(-1)))), 'a short answer is not sent to be shortened');
+      // a shorter text that lost a keyword is refused
+      await taB.fill('Heat flows from the hot water to the cold metal ring, and so the metal ring expands and gets bigger.');
+      await page.evaluate(() => { S.aiReply = () => 'Heat flows from the hot water to the ring, so it gets bigger.'; });
+      n = await calls();
+      await barB.locator('.pkc-ai-shorten').click();
+      await page.waitForFunction(k => S.aiCalls === k + 1 && !document.querySelector('#pkcAiBar_b31_ab_content .pkc-ai-btn:disabled'), n);
+      ok((await taB.inputValue()).endsWith('expands and gets bigger.'), 'a shortening that dropped a keyword is not used');
+      ok(/dropped the keyword expands/.test(JSON.stringify(await page.evaluate(() => S.toasts.slice(-1)))), 'and the teacher is told which one');
+      // ✍️ Complete: adds, never rewrites — on the paper's own answer box
+      const taP = page.locator('#pkcBox_paper_ans'), barP = page.locator('#pkcAiBar_paper_ans');
+      await taP.fill('(a) The ball gains heat and');
+      await page.evaluate(() => { S.aiReply = p => /CARRY ON WRITING/.test(p) ? '(a) The ball gains heat and expands, so it cannot pass through the ring.' : 'WRONG'; });
+      await barP.locator('.pkc-ai-complete').click();
+      await page.waitForFunction(() => /cannot pass through the ring\.$/.test(document.getElementById('pkcBox_paper_ans').value));
+      ok((await taP.inputValue()) === '(a) The ball gains heat and expands, so it cannot pass through the ring.', 'the echoed opening is taken off and only the rest is added');
+      ok((await page.evaluate(() => api.state.drafts['s_2023_31'].paper.ans)).endsWith('through the ring.'), 'the paper draft took it');
+      // an empty box cannot be completed, and says to use Answer
+      await taP.fill('');
+      n = await calls();
+      await barP.locator('.pkc-ai-complete').click();
+      ok((await calls()) === n && /Answer writes it from nothing/.test(JSON.stringify(await page.evaluate(() => S.toasts.slice(-1)))), 'Complete on an empty box makes no call');
+      // 🤖 Answer on the paper box of an open-ended question
+      await page.evaluate(() => { S.aiReply = p => /answer recorded on the paper for this open-ended question/.test(p) ? '(a) The ball expands.\n(b) Heat flows from the hot water to the ring.' : 'WRONG'; });
+      await barP.locator('.pkc-ai-answer').click();
+      await page.waitForFunction(() => document.getElementById('pkcBox_paper_ans').value.includes('(b) Heat flows'));
+      ok((await taP.inputValue()) === '(a) The ball expands.\n(b) Heat flows from the hot water to the ring.', 'the paper answer is written part by part');
+      // the buttons are disabled while their box is being written
+      await page.evaluate(() => { S.aiReply = () => 'Heat flows from the hot water to the ring, so the ring expands.'; });
+      const pending = page.evaluate(() => pkcAiField('s_2023_31', 'b31_ab|content', 'answer'));
+      await page.waitForSelector('#pkcAiBar_b31_ab_content .pkc-ai-answer:disabled');
+      ok((await barB.locator('.pkc-ai-btn:disabled').count()) >= 3 && /…/.test(await barB.locator('.pkc-ai-answer').innerText()), 'a busy box disables its buttons and shows which one is working');
+      ok((await barP.locator('.pkc-ai-btn:disabled').count()) === 0, 'the other boxes stay usable');
+      await pending;
+      ok((await taB.inputValue()) === 'Heat flows from the hot water to the ring, so the ring expands.', 'and the answer lands');
+      ok(/\d+ calls/.test(await page.locator('.pkc-cost').innerText()), 'every box call is on the meter');
+      // a failed call changes nothing
+      await page.evaluate(() => { S.aiReply = () => '   '; });
+      await barB.locator('.pkc-ai-answer').click();
+      await page.waitForFunction(() => /returned nothing/.test(JSON.stringify(S.toasts.slice(-1))));
+      ok((await taB.inputValue()) === 'Heat flows from the hot water to the ring, so the ring expands.', 'an empty reply leaves the box alone');
+      // save it all: paper and bank
+      await page.locator('#pkcSaveBtn').click();
+      await page.waitForFunction(() => !document.getElementById('pkcSaveBtn') || document.getElementById('pkcSaveBtn').disabled);
+      const last = await page.evaluate(() => S.qsaves[S.qsaves.length - 1]);
+      ok(last.id === 'b31' && last.blocks.find(b => b.id === 'b31_ab').content.startsWith('Heat flows from the hot water to the ring') && JSON.stringify(last.answerKeywords) === '{"b31_aa":{"3":true,"4":true}}', 'the AI\'s text is saved like any other edit and the keywords are untouched');
+      ok((await page.evaluate(() => api.world.ppData.questions[3].ans)).startsWith('(a) The ball expands.'), 'the paper answer too');
+      // an MCQ: the paper box is told the official option, the explanation box explains
+      await page.evaluate(() => pkcSetFilter('all'));
+      await page.locator('#pkcRi_s_2023_1').click();
+      ok(await page.locator('#pkcAiBar_b1_e_content .pkc-ai-btn').count() >= 3 && await page.locator('#pkcAiBar_paper_ans .pkc-ai-btn').count() >= 3, 'the explanation and the paper answer of an MCQ have the buttons too');
+      ok(await page.locator('.pkc-kw').count() === 0, 'an MCQ has no keyword strip');
+      await page.evaluate(() => { S.aiReply = p => /N MUST be 2/.test(p) ? 'Option 2 — metal is a good conductor of heat.' : 'WRONG'; });
+      await page.locator('#pkcAiBar_paper_ans .pkc-ai-answer').click();
+      await page.waitForFunction(() => document.getElementById('pkcBox_paper_ans').value.startsWith('Option 2 — metal is a good'));
+      ok((await page.evaluate(() => S.lastMedia)) === 1, 'Answer sends the question\'s picture');
+      await page.evaluate(() => { S.aiReply = p => /WRITE: the explanation a student reads/.test(p) ? 'Metal is a good conductor of heat, so heat travels through it fastest.' : 'WRONG'; });
+      await page.locator('#pkcAiBar_b1_e_content .pkc-ai-answer').click();
+      await page.waitForFunction(() => document.getElementById('pkcBox_b1_e_content').value.startsWith('Metal is a good conductor'));
+      ok(true, 'the explanation box is written as an explanation');
+      await page.locator('#pkcSaveBtn').click();
+      await page.waitForFunction(() => S.qsaves.some(q => q.id === 'b1' && /travels through it fastest/.test(q.blocks.find(b => b.type === 'explanation').content)));
+      await page.evaluate(() => { S.aiReply = null; });
+      await page.screenshot({ path: out + 'desktop-ai-buttons.png' });
+    }
+
     // the topic view: scope by topic
     await page.selectOption('.pkc-scope', { label: 'Light' });
     await page.evaluate(() => pkcSetFilter('all'));
@@ -310,6 +474,14 @@ try {
     }
     await page.locator('#pkcRi_s_2023_3').click();
     await page.screenshot({ path: out + tag + '.png', fullPage: false });
+    // 🔑 keywords and the AI buttons fit a narrow screen too
+    await page.locator('#pkcRi_s_2023_31').click();
+    await page.waitForSelector('#pkcKw_b31_aa_content .pkc-kw-w.on');
+    await noOverflow(page, tag + ' with keywords');
+    const fit = await page.evaluate(() => { const s = document.getElementById('pkcSide').getBoundingClientRect(); return [...document.querySelectorAll('.pkc-aibar, .pkc-kw')].every(el => { const r = el.getBoundingClientRect(); return r.left >= s.left - 1 && r.right <= s.right + 1; }); });
+    ok(fit, tag + ': the keyword strips and AI buttons stay inside the keys pane');
+    await page.locator('#pkcKw_b31_aa_content').scrollIntoViewIfNeeded();
+    await page.screenshot({ path: out + tag + '-keywords.png', fullPage: false });
     ok(!f.errors.length, tag + ': no page errors: ' + f.errors.join(' | '));
     await f.close();
   }

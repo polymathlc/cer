@@ -1504,7 +1504,7 @@ import {
 /* =============================================================================
    1. CONFIG
    ============================================================================= */
-const APP_VERSION = "1.0.0";   // bump on every change; shown under the logo
+const APP_VERSION = "1.1.0";   // bump on every change; shown under the logo
 
 // Same public web config as your CER / Polymath apps (mathgen--app).
 const firebaseConfig = {
@@ -1527,15 +1527,17 @@ const RECAPTCHA_SITE_KEY = "6Le98gwtAAAAAAzkjJTZXFM5D8tpjx_P4rtRuhuH";
 const SHOP_ID = "cc-collectibles";
 const ALLOWED_EMAILS = ["chungzhikai@gmail.com"];
 
-// Gemini models through Firebase AI Logic. gemini-3.8-flash is the CER app's
+// Gemini models through Firebase AI Logic (line-up as of 26 Nov 2026). gemini-4-hydrogen is the CER app's
 // AI_MODEL and is what Shop Guard falls back to if a chosen model is missing.
-const FALLBACK_MODEL = "gemini-3.8-flash";
+const FALLBACK_MODEL = "gemini-4-hydrogen";
+// The model before it. If FALLBACK_MODEL itself is not on this project yet, the
+// camera's checks must not stop: the previous model takes over (askVision).
+const LAST_RESORT_MODEL = "gemini-3.8-flash";
 const MODEL_OPTIONS = [
   { id: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash-Lite (fast, lowest cost)" },
-  { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash (the CER app's model)" },
-  { id: "gemini-3.5-flash", label: "Gemini 3.5 Flash" },
-  { id: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash-Lite" },
-  { id: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro preview (slow, most careful)" }
+  { id: "gemini-4-hydrogen", label: "Gemini 4 Hydrogen (the CER app's model)" },
+  { id: "gemini-4-carbon", label: "Gemini 4 Carbon (slow, most careful, paid plan only)" },
+  { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash (the previous model)" }
 ];
 
 // What fraction of the small motion picture must change to count as movement.
@@ -1570,7 +1572,7 @@ const DEFAULT_SETTINGS = {
   idleCheckSec: 60,
   motionSensitivity: 50,
   screenModel: "gemini-3.5-flash-lite",
-  confirmModel: "gemini-3.8-flash",
+  confirmModel: "gemini-4-hydrogen",
   confirmEnabled: true,
   drawZonesForAI: true,
   learnedNotes: [],
@@ -3434,11 +3436,17 @@ async function askVision(modelName, thinkingLevel, prompt, frames) {
     } catch (err) {
       const msg = String(err?.message || err);
       const missing = /not found|NOT_FOUND|404|is not supported|unknown model|does not exist/i.test(msg);
-      if (missing && model !== FALLBACK_MODEL) {
+      if (missing && model !== FALLBACK_MODEL && model !== LAST_RESORT_MODEL) {
         // A retired or unavailable model: use the CER app's model and say so once.
         S.ai.modelSwap[modelName] = FALLBACK_MODEL;
         toast(`${model} isn't available on your project, so Shop Guard is using ${FALLBACK_MODEL} instead. You can change this in Settings.`, "warn", 9000);
         model = FALLBACK_MODEL;
+      } else if (missing && model === FALLBACK_MODEL && LAST_RESORT_MODEL !== FALLBACK_MODEL) {
+        // The CER app's model is itself not here yet: the previous one carries on.
+        S.ai.modelSwap[modelName] = LAST_RESORT_MODEL;
+        if (FALLBACK_MODEL !== modelName) S.ai.modelSwap[FALLBACK_MODEL] = LAST_RESORT_MODEL;
+        toast(`${model} isn't available on your project yet, so Shop Guard is using ${LAST_RESORT_MODEL} instead.`, "warn", 9000);
+        model = LAST_RESORT_MODEL;
       } else if (!missing && thinkingLevel && !S.ai.thinkingOff[model] && /thinking|400|INVALID_ARGUMENT|invalid/i.test(msg)) {
         // Some models don't accept a thinking setting: retry without it and remember.
         S.ai.thinkingOff[model] = true;

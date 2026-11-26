@@ -1,6 +1,6 @@
 import './worksheet-art.js?v=1';
-import { createGameInsightsController } from './game-insights.js?v=1.464.0';
-import { createGameUsageRecorder, createGameUsageWriter } from './game-usage.js?v=1.464.0';
+import { createGameInsightsController } from './game-insights.js?v=1.465.0';
+import { createGameUsageRecorder, createGameUsageWriter } from './game-usage.js?v=1.465.0';
 import './worksheet-art-editor.js?v=1';
 import './vendor/qrcode-generator.js';
 import './question-apps.js?v=1';
@@ -11,8 +11,8 @@ import { whiteboardSnapshotBytes, whiteboardDigest, whiteboardViewerUrl, validWh
 import { cropSourcesFor, normalizeCropBox, cropPixelRect, cropSourceUpdate } from './question-crop-core.mjs?v=2';
 import { questionRepairTargets, normalizeQuestionRepairPlan, applyQuestionRepairPlan } from './question-repair-core.mjs?v=3';
 import { TUTOR_NAME, TUTOR_COLLECTION, TUTOR_MAX_DOC_CHARS, htmlToPlain, extractImages, normalizeTutorPaper, tutorPaperId, tutorUrl, tutorQrSvg } from './polymath-tutor-core.mjs?v=1';
-import * as PKC from './psle-key-check-core.mjs?v=1';
-import { AI_DEFAULT_PRICES, AI_PRICES_AS_OF, AI_ROUTE_NAMES, mergePrices, priceFor, normalizeUsage, estimateUsage, costOf, createTally, tallyAdd, formatMoney, estimateCheckCost } from './ai-cost-core.mjs?v=1';
+import * as PKC from './psle-key-check-core.mjs?v=3';
+import { AI_DEFAULT_PRICES, AI_PRICES_AS_OF, AI_ROUTE_NAMES, mergePrices, priceFor, normalizeUsage, estimateUsage, costOf, createTally, tallyAdd, formatMoney, estimateCheckCost } from './ai-cost-core.mjs?v=2';
 import { NAV_LAYOUT_VERSION, NAV_LAYOUT_TOP, NAV_LAYOUT_LIMITS, cleanText, emptyLayout, emptyAudienceLayout, isEmptyAudienceLayout, normalizeLayout, planSidebar, canonicalLayout, sameLayout, planSummary, layoutMove, layoutNudge, layoutSetHidden, layoutShowAll, layoutSetLabel, layoutSetIcon, layoutAddGroup, layoutRemoveGroup, layoutAddLink, layoutUpdateLink, layoutRemoveLink, layoutSetLockHidden } from './sidebar-layout-core.mjs?v=1.451.0';
 import { measureCrop, figureFacts, figureHardIssues, questionFacts, questionHardIssues, decideReview, failuresToFindings, recropReasons, migrateDecisionsReviewState, DECISIONS_MAY_SKIP } from './decisions-review-core.mjs?v=2';
 import { findRapidDuplicates, rapidDuplicateThreshold, rapidDuplicateFingerprint, rapidDuplicatePairCurrent } from './rapid-duplicates.js';
@@ -176,9 +176,17 @@ const googleProvider = new GoogleAuthProvider();
 //         Until a real key is pasted, App Check stays off and AI still
 //         works while App Check enforcement is disabled.
 const RECAPTCHA_SITE_KEY = "6Le98gwtAAAAAAzkjJTZXFM5D8tpjx_P4rtRuhuH";
-const AI_MODEL = "gemini-3.8-flash"; // best Flash-tier reasoning; same speed/price band as 3.7 Flash
+const AI_MODEL = "gemini-4-hydrogen"; // Gemini 4 Hydrogen: the newest Flash-tier model (12 Nov 2026), free tier kept
+// The model this one replaced. A model id is a thing that gets renamed and
+// rolled out project by project, and an id this project cannot reach yet is a
+// 404 on EVERY Gemini call in the app. So `askGeminiDirect` tries AI_MODEL
+// first and, only when the reply says the MODEL is missing, lets the previous
+// one carry the call for AI_MODEL_DOWN_MS before trying the new one again.
+// A success clears the mark, so nothing has to be redeployed the day it answers.
+const AI_MODEL_FALLBACK = "gemini-3.8-flash";
+const AI_MODEL_DOWN_MS = 10 * 60 * 1000;
 // The FLOOR of the thinking scale, and the only one this app asks for by
-// default. Gemini 3.8 Flash keeps 3.7's scale: it still rejects the "minimal"
+// default. Gemini 4 Hydrogen (like 3.7 and 3.8 Flash before it) is not sent the "minimal"
 // level 3.6 accepted — sending it comes back 400 INVALID_ARGUMENT, so every
 // call in the app would fail.
 // The scale is low / medium / high (medium is the model's own default); "low"
@@ -211,11 +219,50 @@ try {
 } catch (e) { console.warn('consult: the button could not start', e); }
 
 let geminiModel = null;
+let geminiFallbackModel = null;      // AI_MODEL_FALLBACK, built on first need
+let _geminiDownUntil = 0;            // AI_MODEL said "no such model" — use the fallback until then
 let _aiInstance = null;
+
+/* Did Gemini refuse because the MODEL ID is unknown to this project (not
+   rolled out here yet, renamed, withdrawn)? That and nothing else is what the
+   previous model may stand in for. */
+function _geminiModelMissing(err) {
+  const msg = String((err && (err.message || err)) || '');
+  const code = String((err && (err.code || err.status || (err.customErrorData && err.customErrorData.status))) || '');
+  if (/\b404\b|NOT_FOUND/i.test(code)) return true;
+  return /\b404\b|NOT_FOUND|is not found for API version|model[^.]{0,80}(not found|does not exist|is not supported|not available|no longer available)|unknown model/i.test(msg);
+}
+
+/* One Gemini text call: AI_MODEL, or the previous model while AI_MODEL is
+   marked missing. Returns the reply AND the model that wrote it, so the cost
+   meter prices what was really used. */
+async function _geminiGenerate(request) {
+  const fallback = () => {
+    if (!geminiFallbackModel && _aiInstance && AI_MODEL_FALLBACK && AI_MODEL_FALLBACK !== AI_MODEL) {
+      try { geminiFallbackModel = getGenerativeModel(_aiInstance, { model: AI_MODEL_FALLBACK }); } catch (e) { geminiFallbackModel = null; }
+    }
+    return geminiFallbackModel;
+  };
+  if (Date.now() < _geminiDownUntil && fallback()) {
+    return { res: await geminiFallbackModel.generateContent(request), model: AI_MODEL_FALLBACK };
+  }
+  try {
+    const res = await geminiModel.generateContent(request);
+    _geminiDownUntil = 0;
+    return { res, model: AI_MODEL };
+  } catch (err) {
+    // ONLY "this model is not there". A quota, a safety block, a bad request
+    // or a dropped connection would fail the same way on the older model.
+    if (!_geminiModelMissing(err) || !fallback()) throw err;
+    _geminiDownUntil = Date.now() + AI_MODEL_DOWN_MS;
+    console.warn('Gemini: ' + AI_MODEL + ' is not available here yet, using ' + AI_MODEL_FALLBACK, err);
+    return { res: await geminiFallbackModel.generateContent(request), model: AI_MODEL_FALLBACK };
+  }
+}
 // Image generation / editing models ("Nano Banana"). Tried in order; the
 // first that returns an image wins. Change/extend the list if your Firebase
 // AI project exposes different image-capable model ids.
-const AI_IMAGE_MODELS = ["gemini-3.1-flash-image-preview", "gemini-2.5-flash-image"];
+const AI_IMAGE_MODELS = ["gemini-nano-banana-2.1", "gemini-3.1-flash-image"];
 let geminiImageModels = [];
 try {
   _aiInstance = getAI(app, { backend: new GoogleAIBackend() });
@@ -929,10 +976,17 @@ async function askGeminiDirect(prompt, media, { maxOutputTokens = 512, temperatu
   (media || []).forEach(m => parts.push({ inlineData: { mimeType: m.mimeType, data: m.data } }));
   const generationConfig = { maxOutputTokens, temperature, thinkingConfig: { thinkingLevel: ['high', 'xhigh', 'max'].includes(reasoningEffort) ? 'high' : reasoningEffort === 'medium' ? 'medium' : AI_THINK_MIN } };
   if (json) generationConfig.responseMimeType = 'application/json';
-  const res = await geminiModel.generateContent({ contents: [{ role: 'user', parts }], generationConfig });
+  const request = { contents: [{ role: 'user', parts }], generationConfig };
+  // AI_MODEL first, the previous model behind it when the id is missing here
+  // (`_geminiGenerate`, beside AI_MODEL_FALLBACK). The guard is for the test
+  // harnesses that cut this function out on its own.
+  const ran = typeof _geminiGenerate === 'function'
+    ? await _geminiGenerate(request)
+    : { res: await geminiModel.generateContent(request), model: typeof AI_MODEL === 'string' ? AI_MODEL : '' };
+  const res = ran.res, usedModel = ran.model;
   let replyText = '';
   try { replyText = res.response.text() || ''; } catch (_) { /* metered from the reported usage alone */ }
-  if (typeof _aiMeterText === 'function') _aiMeterText('gemini', AI_MODEL, 'gemini', res && res.response && res.response.usageMetadata, prompt, media, replyText, true);
+  if (typeof _aiMeterText === 'function') _aiMeterText('gemini', usedModel, 'gemini', res && res.response && res.response.usageMetadata, prompt, media, replyText, true);
   if (res.response?.candidates?.some(c => c.finishReason === 'MAX_TOKENS')) throw new Error('Gemini response was incomplete: the token limit was reached.');
   const text = (res.response.text() || '').trim();
   if (!text) throw new Error('Gemini returned an empty response.');
@@ -4591,7 +4645,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.464.0';
+const APP_VERSION = 'v1.465.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -7309,26 +7363,26 @@ function navigateTo(page) {
   }
   if (page === 'defenders') {
     const f = document.getElementById('defendersFrame');
-    if (f && !f.getAttribute('src')) f.setAttribute('src', 'science-defenders.html?v=1.464.0');
+    if (f && !f.getAttribute('src')) f.setAttribute('src', 'science-defenders.html?v=1.465.0');
   }
   if (page === 'raiders') {
     const f = document.getElementById('raidersFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-raiders.html?v=1.464.0'); f.addEventListener('load', pushRaidersAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-raiders.html?v=1.465.0'); f.addEventListener('load', pushRaidersAssets); }
     else pushRaidersAssets();
   }
   if (page === 'spire') {
     const f = document.getElementById('spireFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-spire.html?v=1.464.0'); f.addEventListener('load', pushSpireAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-spire.html?v=1.465.0'); f.addEventListener('load', pushSpireAssets); }
     else pushSpireAssets();
   }
   if (page === 'legends') {
     const f = document.getElementById('legendsFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-legends.html?v=1.464.0'); f.addEventListener('load', pushLegendsAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-legends.html?v=1.465.0'); f.addEventListener('load', pushLegendsAssets); }
     else pushLegendsAssets();
   }
   if (page === 'slayers') {
     const f = document.getElementById('slayersFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-slayers.html?v=1.464.0'); f.addEventListener('load', pushLegendsAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-slayers.html?v=1.465.0'); f.addEventListener('load', pushLegendsAssets); }
     else pushLegendsAssets();
   }
   if (page === 'hades') _hadesInit();
@@ -64410,7 +64464,7 @@ function loadLegendsThumbs(){
       f = document.createElement('iframe');
       f.id = 'legendsThumbFrame';
       f.style.cssText = 'position:absolute;width:2px;height:2px;opacity:0;pointer-events:none;left:-9999px;top:-9999px;';
-      f.src = 'science-legends.html?v=1.464.0';
+      f.src = 'science-legends.html?v=1.465.0';
       document.body.appendChild(f);
     }
     let tries = 0;
@@ -65767,7 +65821,7 @@ function openFpsGame() {
     showToast(`🎮 No game credits left today — answer ${need} more question${need === 1 ? '' : 's'} in practice to earn one`, 'error');
     return;
   }
-  window.location.href = 'fps.html?v=1.464.0';
+  window.location.href = 'fps.html?v=1.465.0';
 }
 // ---- Release announcement banner (top of screen, dismissible per device) ----
 const FPS_ANNOUNCE_KEY = 'fpsAnnounceDismissed_v1';
@@ -83401,6 +83455,22 @@ async function ppSavePaperEdit(quiet){
 //  • BY PAPER OR BY TOPIC. The scope picker holds every year AND every
 //    topic, so the same checking and editing works from the topic view
 //    (the Marks-by-topic drill-down opens it already scoped to its topic).
+//  • 🔑 KEYWORDS SIT UNDER EVERY MODEL ANSWER (v1.465.0). The words the
+//    exported worksheet's answer key prints BOLD AND UNDERLINED are shown
+//    the same way under each model answer box, read from the same field
+//    (`q.answerKeywords`) through the same walker (`_kwParse`) and the same
+//    word list (`qKeywordWords`) the print path uses, so what the checker
+//    shows is what the key prints. Click a word to mark or unmark it; like
+//    every other edit it only changes the draft until 💾 Save. Retyping the
+//    answer carries each mark to where its word went
+//    (`PKC.remapKeywords`), because a mark is a word POSITION.
+//  • 🤖 ✂️ ✍️ ON EVERY ANSWER BOX (v1.465.0). The paper's answer, every
+//    model answer field and every explanation carry 🤖 Answer, ✂️ Shorten
+//    and ✍️ Complete. All three are shown the question, its pictures and
+//    the official key (`PKC.buildFieldPrompt`), run on the shared 💲 meter,
+//    and write through the SAME draft edit a keystroke uses, so the
+//    keywords are carried, the light updates and nothing is saved until
+//    💾 Save. Each box keeps a one-step ↩ Undo of its last AI change.
 // =====================================================================
 const PKC_AI_STORE = 'sq_pkc_ai:';
 const PKC_AVG_STORE = 'sq_pkc_avg:';
@@ -83903,14 +83973,16 @@ function _pkcRenderMain(rows) {
           ${fields.map(f => {
             const key = blk.id + '|' + f.field;
             const val = key in d.texts ? d.texts[key] : _pkcHtmlToText(blk[f.field] || '');
-            return _pkcField(escapeHtml(f.label), `<textarea class="form-input" rows="${Math.min(8, Math.max(2, Math.ceil(val.length / 55)))}" oninput="pkcSetBankText(${idq},'${escapeHtml(blk.id)}','${f.field}',this.value)">${escapeHtml(val)}</textarea>`, 'full');
+            return _pkcField(escapeHtml(f.label), `<textarea class="form-input" id="${escapeHtml(_pkcBoxDomId(key))}" rows="${Math.min(8, Math.max(2, Math.ceil(val.length / 55)))}" oninput="pkcSetBankText(${idq},'${escapeHtml(blk.id)}','${f.field}',this.value)">${escapeHtml(val)}</textarea>`, 'full')
+              + _pkcAiBarHtml(id, key)
+              + _pkcKwStripHtml(id, b, blk, f.field);
           }).join('')}</div>`);
         return;
       }
       if (blk.type === 'explanation') {
         const key = blk.id + '|content';
         const val = key in d.texts ? d.texts[key] : _pkcHtmlToText(blk.content || '');
-        pieces.push(`<div class="pkc-keyblk expl"><div class="pkc-keyblk-h">${pl}Explanation students see</div>${_pkcField('', `<textarea class="form-input" rows="${Math.min(8, Math.max(2, Math.ceil(val.length / 55)))}" oninput="pkcSetBankText(${idq},'${escapeHtml(blk.id)}','content',this.value)">${escapeHtml(val)}</textarea>`, 'full')}</div>`);
+        pieces.push(`<div class="pkc-keyblk expl"><div class="pkc-keyblk-h">${pl}Explanation students see</div>${_pkcField('', `<textarea class="form-input" id="${escapeHtml(_pkcBoxDomId(key))}" rows="${Math.min(8, Math.max(2, Math.ceil(val.length / 55)))}" oninput="pkcSetBankText(${idq},'${escapeHtml(blk.id)}','content',this.value)">${escapeHtml(val)}</textarea>`, 'full')}${_pkcAiBarHtml(id, key)}</div>`);
       }
     });
     if (b.answerKeyImage) pieces.push(`<div class="pkc-keyblk"><div class="pkc-keyblk-h">Answer-key picture</div><img class="pkc-akimg" src="${escapeHtml(transformImageUrl(b.answerKeyImage))}" alt="Answer key picture"></div>`);
@@ -83929,8 +84001,9 @@ function _pkcRenderMain(rows) {
     <section class="pkc-card">
       <h3>🔑 Answer keys</h3>
       ${offHtml}
-      ${_pkcField('Answer recorded on the paper', `<textarea class="form-input" rows="${Math.min(8, Math.max(2, Math.ceil(String(P.ans || '').length / 55)))}" placeholder="e.g. Option 3 — …" oninput="pkcSetP(${idq},'ans',this.value)">${escapeHtml(String(P.ans || ''))}</textarea>`, 'full')}
-      ${b ? `<div class="pkc-sub-h">On the bank question</div>${bankKey}` : ''}
+      ${_pkcField('Answer recorded on the paper', `<textarea class="form-input" id="${escapeHtml(_pkcBoxDomId(PKC_PAPER_BOX))}" rows="${Math.min(8, Math.max(2, Math.ceil(String(P.ans || '').length / 55)))}" placeholder="e.g. Option 3 — …" oninput="pkcSetP(${idq},'ans',this.value)">${escapeHtml(String(P.ans || ''))}</textarea>`, 'full')}
+      ${_pkcAiBarHtml(id, PKC_PAPER_BOX)}
+      ${b ? `<div class="pkc-sub-h">On the bank question${_pkcKwTargets(b).length ? ` <span class="pkc-kw-total" id="pkcKwTotal" title="Keywords print bold and underlined on the exported answer key, and are the blanks in Fill-in-the-Blanks practice">${escapeHtml(_pkcKwTotalText(b))}</span>` : ''}</div>${bankKey}` : ''}
     </section>
 
     <section class="pkc-card">
@@ -83967,6 +84040,363 @@ function _pkcRenderMain(rows) {
     </div>`;
 }
 
+// ── 🔑 keywords (v1.465.0) ───────────────────────────────────────────────
+// The exported worksheet's answer key prints a question's keywords bold and
+// underlined. This is the same thing on the checker: under each model answer
+// box, the answer with those words picked out, each word a button.
+//
+//  • ONE SOURCE. The marks are `q.answerKeywords` on the bank question (here,
+//    on its draft clone), read with the keyword section's own `kwBlockFields`
+//    / `kwFieldKey` / `kwIndices` / `_kwParse` / `qKeywordWords`. Nothing is
+//    copied or re-derived, so the checker cannot disagree with the print.
+//  • WHAT IS SHOWN IS WHAT PRINTS. The key bolds a keyword WHEREVER it
+//    appears in the question's answers, not only at the position that was
+//    clicked. So a word shown bold here is one of two things: marked at this
+//    spot (`.on`, tinted) or the same word marked somewhere else (`.echo`).
+//    Both print bold; only the tinted ones are blanked in 🔲 Fill-in-the-
+//    Blanks practice. A marked word under KW_MIN_BOLD letters is blanked in
+//    practice but NOT printed bold, and its tooltip says so.
+//  • A CLICK IS A DRAFT EDIT like every other box on this screen: it sets
+//    `dirtyB`, the rail shows ●, and 💾 Save files the before-copy first.
+//  • A block that cannot hold keywords (an MCQ, an answer line, an
+//    explanation) gets no strip, exactly as the block editor offers no
+//    🔑 Assign keywords button there.
+function _pkcKwCan(blk, field) {
+  try {
+    if (typeof kwBlockTakesKeywords !== 'function' || !kwBlockTakesKeywords(blk)) return false;
+    return kwBlockFields(blk).some(f => f.field === field);
+  } catch (e) { return false; }
+}
+function _pkcKwDomId(blockId, field) { return 'pkcKw_' + String(blockId) + '_' + String(field); }
+// Every answer field of a bank question that can carry keywords, in order.
+function _pkcKwTargets(bq) {
+  const out = [];
+  ((bq && bq.blocks) || []).forEach(blk => {
+    if (!blk) return;
+    _pkcAnswerFields(blk).forEach(f => { if (_pkcKwCan(blk, f.field)) out.push({ blk, field: f.field, label: f.label }); });
+  });
+  return out;
+}
+// How many keywords a bank question (or its draft) has marked.
+function _pkcKwCount(bq) {
+  let n = 0;
+  _pkcKwTargets(bq).forEach(t => { try { n += kwIndices(bq.answerKeywords, t.blk, t.field).length; } catch (e) {} });
+  return n;
+}
+// The inside of one strip: heading (count + the words) and the answer line.
+function _pkcKwInnerHtml(id, bq, blk, field) {
+  const parsed = _kwParse((blk && blk[field]) || '');
+  const idq = `'${escapeHtml(id)}'`;
+  const bid = escapeHtml(String(blk.id));
+  if (!parsed.words.length) {
+    return `<div class="pkc-kw-h"><span class="pkc-kw-t">🔑 Keywords</span><span class="pkc-kw-n">Write the model answer above, then click its key words here.</span></div>`;
+  }
+  const idxs = kwIndices(bq.answerKeywords, blk, field, parsed);
+  const marked = new Set(idxs);
+  const everywhere = qKeywordWords(bq);            // what the printed key bolds by
+  const sum = PKC.keywordSummary(parsed.words.map(w => w.w), idxs);
+  let line = '', last = 0, echoes = 0;
+  parsed.words.forEach((w, i) => {
+    const on = marked.has(i);
+    const prints = everywhere.has(w.w.toLowerCase());
+    const echo = !on && prints;
+    if (echo) echoes++;
+    const short = on && !prints;                   // marked, but under KW_MIN_BOLD letters
+    const cls = 'pkc-kw-w' + (on ? ' on' : '') + (echo ? ' echo' : '') + (short ? ' short' : '');
+    const tip = on
+      ? (short ? 'Marked: blanked in Fill-in-the-Blanks practice, but too short to print bold. Click to unmark.' : 'Keyword: prints bold and underlined on the answer key. Click to unmark.')
+      : (echo ? 'Prints bold because this word is marked as a keyword elsewhere in the answer. Click to mark it here too.' : 'Click to make this a keyword');
+    line += escapeHtml(parsed.plain.slice(last, w.pa))
+      + `<button type="button" class="${cls}" aria-pressed="${on ? 'true' : 'false'}" title="${escapeHtml(tip)}" onclick="pkcKwToggle(${idq},'${bid}','${escapeHtml(field)}',${i})">${escapeHtml(w.w)}</button>`;
+    last = w.pb;
+  });
+  line += escapeHtml(parsed.plain.slice(last));
+  return `<div class="pkc-kw-h">
+        <span class="pkc-kw-t">🔑 Keywords</span>
+        <span class="pkc-kw-n${sum.count ? ' has' : ''}">${escapeHtml(sum.count ? sum.text : 'None marked yet. Click a word below to mark it.')}</span>
+        ${sum.count ? `<button type="button" class="pkc-mini pkc-kw-clear" onclick="pkcKwClear(${idq},'${bid}','${escapeHtml(field)}')" title="Unmark every keyword in this answer">Clear</button>` : ''}
+      </div>
+      <div class="pkc-kw-line" title="How this answer prints on the exported answer key">${line}</div>
+      ${echoes ? `<div class="pkc-kw-note">A word also prints bold wherever else it appears, as on the exported answer key.</div>` : ''}`;
+}
+function _pkcKwStripHtml(id, bq, blk, field) {
+  if (!_pkcKwCan(blk, field)) return '';
+  try {
+    return `<div class="pkc-kw" id="${escapeHtml(_pkcKwDomId(blk.id, field))}">${_pkcKwInnerHtml(id, bq, blk, field)}</div>`;
+  } catch (e) { console.warn('answer key checker keywords', e); return ''; }
+}
+// Repaint every strip of the question on screen, in place. All of them, not
+// just the one clicked: marking "heat" in part (a) makes "heat" print bold in
+// part (b) as well. The answer boxes themselves are never touched, so the
+// caret stays where the teacher is typing.
+function _pkcKwRefresh(id) {
+  if (!_pkc || _pkc.sel !== id) return;
+  const d = _pkc.drafts[id];
+  if (!d || !d.bank) return;
+  _pkcKwTargets(d.bank).forEach(t => {
+    const el = document.getElementById(_pkcKwDomId(t.blk.id, t.field));
+    if (!el) return;
+    try { el.innerHTML = _pkcKwInnerHtml(id, d.bank, t.blk, t.field); } catch (e) { console.warn('answer key checker keywords', e); }
+  });
+  const badge = document.getElementById('pkcKwTotal');
+  if (badge) badge.textContent = _pkcKwTotalText(d.bank);
+}
+function _pkcKwTotalText(bq) {
+  const n = _pkcKwCount(bq);
+  return n ? `🔑 ${n} keyword${n === 1 ? '' : 's'} marked` : '🔑 No keywords marked';
+}
+// The wording of one answer field is about to change to `nextHtml`. A mark is
+// a word POSITION in the old wording, so move each one to where its word went
+// (PKC.remapKeywords) before the old wording is gone.
+function _pkcKwCarry(bq, blk, field, nextHtml) {
+  try {
+    const store = bq && bq.answerKeywords;
+    if (!store || typeof store !== 'object') return;
+    const key = kwFieldKey(blk.id, field);
+    const cur = store[key];
+    if (!cur || typeof cur !== 'object' || !Object.keys(cur).length) return;
+    const before = _kwParse((blk && blk[field]) || '').words.map(w => w.w);
+    const after = _kwParse(nextHtml || '').words.map(w => w.w);
+    const next = PKC.remapKeywords(before, after, cur);
+    if (Object.keys(next).length) store[key] = next; else delete store[key];
+  } catch (e) { console.warn('answer key checker keyword carry', e); }
+}
+function _pkcKwBlock(id, blockId, field) {
+  const d = _pkcDraft(id); if (!d || !d.bank) return null;
+  const blk = (d.bank.blocks || []).find(b => b && String(b.id) === String(blockId));
+  if (!blk || !_pkcKwCan(blk, field)) return null;
+  return { d, blk };
+}
+function pkcKwToggle(id, blockId, field, idx) {
+  const hit = _pkcKwBlock(id, blockId, field); if (!hit) return;
+  const { d, blk } = hit;
+  const i = parseInt(idx, 10);
+  const total = _kwParse(blk[field] || '').words.length;
+  if (!Number.isInteger(i) || i < 0 || i >= total) return;
+  if (!d.bank.answerKeywords || typeof d.bank.answerKeywords !== 'object' || Array.isArray(d.bank.answerKeywords)) d.bank.answerKeywords = {};
+  const store = d.bank.answerKeywords;
+  const key = kwFieldKey(blk.id, field);
+  const map = (store[key] && typeof store[key] === 'object') ? store[key] : (store[key] = {});
+  if (map[i]) delete map[i]; else map[i] = true;
+  if (!Object.keys(map).length) delete store[key];
+  _pkcTouch(id, 'bank');
+  _pkcKwRefresh(id);
+  // The button that was clicked has just been redrawn; hand the focus back so
+  // a keyboard user can carry on along the sentence.
+  try {
+    const el = document.getElementById(_pkcKwDomId(blk.id, field));
+    const btn = el && el.querySelectorAll('.pkc-kw-w')[i];
+    if (btn) btn.focus({ preventScroll: true });
+  } catch (e) {}
+}
+function pkcKwClear(id, blockId, field) {
+  const hit = _pkcKwBlock(id, blockId, field); if (!hit) return;
+  const { d, blk } = hit;
+  const store = d.bank.answerKeywords;
+  if (!store || typeof store !== 'object') return;
+  const key = kwFieldKey(blk.id, field);
+  if (!(key in store)) return;
+  delete store[key];
+  _pkcTouch(id, 'bank');
+  _pkcKwRefresh(id);
+}
+
+// ── 🤖 ✂️ ✍️ AI on each answer box (v1.465.0) ─────────────────────────────
+// Three buttons under every answer box. The prompts, the cleaning of the
+// reply and the decision about what may go in the box are all in the core
+// (`PKC.buildFieldPrompt` / `PKC.applyFieldReply`); this is the wiring.
+//
+//  • A BOX IS NAMED BY A KEY: `PKC_PAPER_BOX` for the paper's recorded
+//    answer, `<blockId>|<field>` for a box on the bank question — the same
+//    key `d.texts` already uses.
+//  • THE RESULT GOES THROUGH THE ORDINARY EDIT PATH (`pkcSetP` /
+//    `pkcSetBankText`), never straight onto the question. That one decision
+//    is what carries the keywords to their new positions, turns the rail ●,
+//    re-runs the free checks and makes the AI check "stale".
+//  • A BOX CAN BE OFF SCREEN BY THE TIME THE REPLY COMES. The teacher may
+//    have moved to the next question; the draft still takes the text and
+//    the toast names the question it went to. A closed checker takes nothing.
+//  • ONE CALL PER BOX AT A TIME (`_pkc.boxBusy`), and the buttons of a busy
+//    box are disabled even after a re-render.
+const PKC_PAPER_BOX = 'paper|ans';
+const PKC_FIELD_AI = {
+  answer:   { maxOutputTokens: 2400, temperature: 0.2, reasoningEffort: 'medium', pictures: true },
+  shorten:  { maxOutputTokens: 1200, temperature: 0.2, reasoningEffort: 'low', pictures: false },
+  complete: { maxOutputTokens: 1200, temperature: 0.4, reasoningEffort: 'low', pictures: true },
+};
+function _pkcBoxDomId(key) { return 'pkcBox_' + String(key).replace(/[^A-Za-z0-9_-]/g, '_'); }
+function _pkcAiBarDomId(key) { return 'pkcAiBar_' + String(key).replace(/[^A-Za-z0-9_-]/g, '_'); }
+function _pkcBoxBusyKey(id, key) { return String(id) + '::' + String(key); }
+function _pkcAiBarInner(id, key) {
+  const idq = `'${escapeHtml(id)}'`;
+  const kq = `'${escapeHtml(key)}'`;
+  const busy = (_pkc && _pkc.boxBusy && _pkc.boxBusy.get(_pkcBoxBusyKey(id, key))) || '';   // '' or the mode that is running
+  const d = _pkc && _pkc.drafts[id];
+  const canUndo = !!(d && d.aiUndo && Object.prototype.hasOwnProperty.call(d.aiUndo, key));
+  return PKC.FIELD_AI_MODES.map(mode =>
+    `<button type="button" class="pkc-mini pkc-ai-btn pkc-ai-${mode}" data-mode="${mode}" ${busy ? 'disabled' : ''} title="${escapeHtml(PKC.FIELD_AI_TITLE[mode])}" onclick="pkcAiField(${idq},${kq},'${mode}')">${busy === mode ? escapeHtml(PKC.FIELD_AI_LABEL[mode].split(' ')[0]) + ' …' : escapeHtml(PKC.FIELD_AI_LABEL[mode])}</button>`
+  ).join('') + (canUndo ? `<button type="button" class="pkc-mini pkc-ai-btn pkc-ai-undo" ${busy ? 'disabled' : ''} title="Put back what was in this box before the AI changed it" onclick="pkcAiUndo(${idq},${kq})">↩ Undo</button>` : '');
+}
+function _pkcAiBarHtml(id, key) {
+  return `<div class="pkc-aibar" id="${escapeHtml(_pkcAiBarDomId(key))}" role="group" aria-label="AI help for this box">${_pkcAiBarInner(id, key)}</div>`;
+}
+function _pkcAiBarRefresh(id, key) {
+  if (!_pkc || _pkc.sel !== id) return;
+  const el = document.getElementById(_pkcAiBarDomId(key));
+  if (el) el.innerHTML = _pkcAiBarInner(id, key);
+}
+// What a box key points at on the draft: its kind, part, marks and label.
+function _pkcBoxTarget(d, key) {
+  if (key === PKC_PAPER_BOX) return { kind: 'paper', label: 'Answer recorded on the paper' };
+  if (!d || !d.bank) return null;
+  const cut = String(key).lastIndexOf('|');
+  if (cut < 1) return null;
+  const blockId = key.slice(0, cut), field = key.slice(cut + 1);
+  const bl = d.bank.blocks || [];
+  const blk = bl.find(b => b && String(b.id) === blockId);
+  if (!blk) return null;
+  let part = '';
+  try { if (qHasParts(bl)) part = qPartOf(qPartMap(bl), blk) || ''; } catch (e) { part = ''; }
+  let marks = 0; try { marks = qMarksOf(blk) || 0; } catch (e) {}
+  if (blk.type === 'explanation') return field === 'content' ? { kind: 'explanation', blk, field, part, label: 'Explanation' } : null;
+  const f = _pkcAnswerFields(blk).find(x => x.field === field);
+  if (!f) return null;
+  return { kind: blk.type, blk, field, part, marks, label: f.label };
+}
+// The text a box holds right now, as the teacher sees it.
+function _pkcBoxText(d, key) {
+  if (key === PKC_PAPER_BOX) return String((d && d.paper && d.paper.ans) || '');
+  if (d && d.texts && key in d.texts) return String(d.texts[key] || '');
+  const t = _pkcBoxTarget(d, key);
+  return t && t.blk ? _pkcHtmlToText(t.blk[t.field] || '') : '';
+}
+// Put text in a box: on screen when it is, and always through the edit path.
+function _pkcBoxWrite(id, key, text) {
+  if (_pkc && _pkc.sel === id) {
+    const el = document.getElementById(_pkcBoxDomId(key));
+    if (el) {
+      el.value = text;
+      try { el.rows = Math.min(8, Math.max(2, Math.ceil(String(text).length / 55))); } catch (e) {}
+    }
+  }
+  if (key === PKC_PAPER_BOX) { pkcSetP(id, 'ans', text); return true; }
+  const cut = String(key).lastIndexOf('|');
+  pkcSetBankText(id, key.slice(0, cut), key.slice(cut + 1), text);
+  return true;
+}
+// What the other boxes of the question hold, so one box neither repeats nor
+// contradicts its neighbours.
+function _pkcBoxOthers(d, key) {
+  const out = [];
+  if (!d) return out;
+  if (key !== PKC_PAPER_BOX && d.paper && String(d.paper.ans || '').trim()) out.push({ label: 'Answer recorded on the paper', text: String(d.paper.ans) });
+  const bl = (d.bank && d.bank.blocks) || [];
+  let pMap = null; try { pMap = qHasParts(bl) ? qPartMap(bl) : null; } catch (e) {}
+  bl.forEach(blk => {
+    if (!blk) return;
+    let part = ''; try { part = pMap ? (qPartOf(pMap, blk) || '') : ''; } catch (e) {}
+    const lead = part ? '(' + part + ') ' : '';
+    const fields = blk.type === 'explanation' ? [{ field: 'content', label: 'Explanation students see' }] : _pkcAnswerFields(blk);
+    fields.forEach(f => {
+      const k = blk.id + '|' + f.field;
+      if (k === key) return;
+      const text = _pkcBoxText(d, k).trim();
+      if (text) out.push({ label: lead + (f.label || 'Answer'), text });
+    });
+  });
+  return out;
+}
+// The pictures of a bank question, ready to send. Shared with the 🤖 check.
+async function _pkcMedia(bq) {
+  const media = [];
+  if (!bq) return media;
+  try {
+    const targets = _cqImageTargets(bq).slice(0, PKC_MAX_IMAGES);
+    for (const t of targets) {
+      try {
+        const dataUrl = await _urlToDataUrlRobust(transformImageUrl(t.value));
+        const parsed = _parseImageDataUrl(dataUrl);
+        if (parsed) media.push({ mimeType: parsed.mime, data: dataUrl.split(',')[1] || '' });
+      } catch (e) { console.warn('answer key checker: a picture could not be read', e); }
+    }
+  } catch (e) { return []; }
+  return media;
+}
+async function pkcAiField(id, key, mode) {
+  if (!_pkc) return;
+  if (!ppIsAdmin()) { showToast('Only admins can edit the papers', 'error'); return; }
+  if (!PKC.FIELD_AI_MODES.includes(mode)) return;
+  const d = _pkcDraft(id);
+  const target = d && _pkcBoxTarget(d, key);
+  if (!d || !target) { showToast('That box is not on the question any more', 'error'); return; }
+  if (!_pkc.boxBusy) _pkc.boxBusy = new Map();
+  const bk = _pkcBoxBusyKey(id, key);
+  if (_pkc.boxBusy.get(bk)) return;
+  const current = _pkcBoxText(d, key);
+  const gate = PKC.fieldAiGate(mode, current);
+  if (!gate.ok) { showToast(gate.why, 'info'); return; }
+  const ready = (typeof window !== 'undefined' && typeof window.__aiReady === 'function') ? window.__aiReady() : true;
+  if (!ready) { showToast('AI is not ready yet. Try again in a moment', 'error'); return; }
+  const session = _pkc;
+  _pkcMeterOn();
+  _pkc.boxBusy.set(bk, mode);
+  _pkcAiBarRefresh(id, key);
+  const pq = ppFindQ(id);
+  const name = pq ? `PSLE ${pq.year} Q${pq.n}` : 'that question';
+  try {
+    const ctx = _pkcCtx(id);
+    if (!ctx) throw new Error('That question is no longer on the paper.');
+    const cfg = PKC_FIELD_AI[mode];
+    const media = cfg.pictures ? await _pkcMedia(ctx.bq) : [];
+    let grounding = '';
+    try { grounding = aiGrounding('answer', ctx.paper.topic, ctx.bq || current) || ''; } catch (e) {}
+    let keywords = [];
+    try { if (d.bank && typeof qKeywordWords === 'function') keywords = Array.from(qKeywordWords(d.bank)); } catch (e) { keywords = []; }
+    const prompt = PKC.buildFieldPrompt(ctx, _pkcRepr(ctx.bq), {
+      mode, current, keywords, grounding,
+      target: { kind: target.kind, part: target.part || '', field: target.field || '', label: target.label || '', marks: target.marks || 0 },
+      others: _pkcBoxOthers(d, key),
+      picturesSent: cfg.pictures ? media.length : null,
+    });
+    const opts = { maxOutputTokens: cfg.maxOutputTokens, temperature: cfg.temperature, reasoningEffort: cfg.reasoningEffort };
+    const raw = media.length ? await askGeminiVision(prompt, media, opts) : await askGemini(prompt, opts);
+    if (_pkc !== session) return;                       // the checker was closed (or reopened) meanwhile
+    const live = _pkc.drafts[id];
+    if (!live || !_pkcBoxTarget(live, key)) { showToast('That box is not on the question any more, so the AI\'s text was not used', 'error'); return; }
+    // The teacher may have typed while the AI was writing. Shorten and
+    // Complete are answers ABOUT the old text, so they are not laid over a
+    // box that has moved on; Answer replaces the box either way.
+    const now = _pkcBoxText(live, key);
+    if (mode !== 'answer' && now.trim() !== current.trim()) { showToast('The box changed while the AI was working, so it was left as you have it', 'info'); return; }
+    const res = PKC.applyFieldReply(mode, current, raw, keywords);
+    if (!res.ok) { showToast(res.why, 'info'); return; }
+    if (res.text.trim() === now.trim()) { showToast('The AI wrote what is already in the box', 'info'); return; }
+    if (!live.aiUndo) live.aiUndo = {};
+    live.aiUndo[key] = now;
+    _pkcBoxWrite(id, key, res.text);
+    const off = _pkc.sel !== id;
+    showToast(`${res.note}${off ? ' in ' + name : ''}. Check it, then press 💾 Save`, 'success');
+    if (off) pkcRender({ keepRail: false });
+  } catch (e) {
+    console.warn('answer key checker box AI', e);
+    showToast('🤖 ' + (e && e.message ? e.message : 'The AI could not do that. Try again'), 'error');
+  } finally {
+    if (session.boxBusy) session.boxBusy.delete(bk);
+    if (_pkc === session) _pkcAiBarRefresh(id, key);
+  }
+}
+// One step back: what the box held before the AI last changed it.
+function pkcAiUndo(id, key) {
+  const d = _pkc && _pkc.drafts[id];
+  if (!d || !d.aiUndo || !Object.prototype.hasOwnProperty.call(d.aiUndo, key)) return;
+  if (!_pkcBoxTarget(d, key)) return;
+  const prev = d.aiUndo[key];
+  delete d.aiUndo[key];
+  _pkcBoxWrite(id, key, prev);
+  _pkcAiBarRefresh(id, key);
+  showToast('Put back what was in the box', 'info');
+}
+
 // ── editing (drafts only; typing never re-renders the boxes) ─────────────
 function _pkcTouch(id, which) {
   const d = _pkc && _pkc.drafts[id]; if (!d) return;
@@ -84001,8 +84431,11 @@ function pkcSetBankText(id, blockId, field, text) {
   const blk = (d.bank.blocks || []).find(b => b && b.id === blockId);
   if (!blk) return;
   d.texts[blockId + '|' + field] = text;
-  blk[field] = _pkcTextToHtml(text);
+  const html = _pkcTextToHtml(text);
+  _pkcKwCarry(d.bank, blk, field, html);     // BEFORE the wording changes: the marks are positions in the old one
+  blk[field] = html;
   _pkcTouch(id, 'bank');
+  _pkcKwRefresh(id);
 }
 function pkcApplyFix(id, findingId) {
   const r = _pkcRow(id); if (!r) return;
@@ -84025,7 +84458,9 @@ function pkcApplyFix(id, findingId) {
   } else if (fx.kind === 'bankAnswer') {
     const blk = d.bank && (d.bank.blocks || []).find(b => b && b.id === fx.blockId);
     if (!blk) { showToast('That answer box is not on the question any more', 'error'); return; }
-    blk.content = _pkcTextToHtml(fx.text); d.texts[blk.id + '|content'] = fx.text; d.dirtyB = true;
+    const fixedHtml = _pkcTextToHtml(fx.text);
+    _pkcKwCarry(d.bank, blk, 'content', fixedHtml);
+    blk.content = fixedHtml; d.texts[blk.id + '|content'] = fx.text; d.dirtyB = true;
   } else return;
   _pkcForget(id);
   showToast('Put in the boxes — press 💾 Save to keep it', 'info');
@@ -84086,6 +84521,7 @@ async function pkcSave(id, quiet) {
     d.bank = tlRepairClone(next);
     d.texts = {};
     d.dirtyB = false;
+    if (d.aiUndo) Object.keys(d.aiUndo).forEach(k => { if (k !== PKC_PAPER_BOX) delete d.aiUndo[k]; });
     try { if (typeof _ppPePrevCache !== 'undefined') _ppPePrevCache = {}; } catch (e) {}
   }
   _pkcForget(id);
@@ -84141,19 +84577,7 @@ async function _pkcAiRun(id) {
   if (!ctx) throw new Error('That question is no longer on the paper.');
   const bq = ctx.bq;
   const repr = _pkcRepr(bq);
-  let media = [];
-  if (bq) {
-    try {
-      const targets = _cqImageTargets(bq).slice(0, PKC_MAX_IMAGES);
-      for (const t of targets) {
-        try {
-          const dataUrl = await _urlToDataUrlRobust(transformImageUrl(t.value));
-          const parsed = _parseImageDataUrl(dataUrl);
-          if (parsed) media.push({ mimeType: parsed.mime, data: dataUrl.split(',')[1] || '' });
-        } catch (e) { console.warn('answer key checker: a picture could not be read', e); }
-      }
-    } catch (e) { media = []; }
-  }
+  const media = await _pkcMedia(bq);
   let grounding = '';
   try { grounding = aiGrounding('check', ctx.paper.topic, bq) || ''; } catch (e) {}
   const prompt = PKC.buildPrompt(ctx, repr, { grounding, picturesSent: media.length });
@@ -84611,6 +85035,10 @@ window.pkcSetP = pkcSetP;
 window.pkcSetBankTopic = pkcSetBankTopic;
 window.pkcSetCorrect = pkcSetCorrect;
 window.pkcSetBankText = pkcSetBankText;
+window.pkcKwToggle = pkcKwToggle;
+window.pkcKwClear = pkcKwClear;
+window.pkcAiField = pkcAiField;
+window.pkcAiUndo = pkcAiUndo;
 window.pkcApplyFix = pkcApplyFix;
 window.pkcSave = pkcSave;
 window.pkcSaveAll = pkcSaveAll;

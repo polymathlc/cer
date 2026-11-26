@@ -28,8 +28,8 @@ const firebaseConfig = {
 const RECAPTCHA_SITE_KEY = "6Le98gwtAAAAAAzkjJTZXFM5D8tpjx_P4rtRuhuH";
 
 // Model used app-wide (text + vision)
-const AI_MODEL = "gemini-3.8-flash";
-// The floor of the thinking scale — 3.8 Flash rejects the "minimal" level
+const AI_MODEL = "gemini-4-hydrogen";
+// The floor of the thinking scale — Gemini 4 Hydrogen is not sent the "minimal" level
 // 3.6 took, with a 400, so "low" is the cheapest level it will accept.
 const AI_THINK_MIN = "low";
 ```
@@ -52,8 +52,8 @@ import { getAI, getGenerativeModel, GoogleAIBackend } from "https://www.gstatic.
 
 const firebaseConfig = { /* …from section 1… */ };
 const RECAPTCHA_SITE_KEY = "6Le98gwtAAAAAAzkjJTZXFM5D8tpjx_P4rtRuhuH";
-const AI_MODEL = "gemini-3.8-flash";
-// The floor of the thinking scale — 3.8 Flash rejects the "minimal" level
+const AI_MODEL = "gemini-4-hydrogen";
+// The floor of the thinking scale — Gemini 4 Hydrogen is not sent the "minimal" level
 // 3.6 took, with a 400, so "low" is the cheapest level it will accept.
 const AI_THINK_MIN = "low";
 
@@ -86,7 +86,7 @@ const aiReady = () => !!geminiModel;
 budget goes to the answer (faster + cheaper for short tasks). Gemini 3.x rejects
 the older numeric `thinkingBudget` with 400 INVALID_ARGUMENT.
 
-**On 3.8 Flash the valid levels are `"low"`, `"medium"` (the default) and
+**On Gemini 4 Hydrogen the valid levels are `"low"`, `"medium"` (the default) and
 `"high"`.** The `"minimal"` level 3.6 accepted was dropped and now comes back
 400 — so keep the floor in one constant (`AI_THINK_MIN`) rather than writing the
 string at each call site, and a future model change is one edit rather than a
@@ -228,7 +228,7 @@ const data = _parseAIJson(raw); // object or array, throws with a clear message 
   localStorage, falls back to `askGeminiVision` on any failure): see
   `bar-model.html` `askOpenAiVision` ~line 4100 and the engine picker ~line 4068.
 - **Image generation ("Nano Banana")**: `index.html` ~line 7868 —
-  `AI_IMAGE_MODELS = ["gemini-3.1-flash-image-preview", "gemini-2.5-flash-image"]`
+  `AI_IMAGE_MODELS = ["gemini-nano-banana-2.1", "gemini-3.1-flash-image"]`
   with `responseModalities: [TEXT, IMAGE]`.
 - **Session request cache** (`_aiHash`, djb2 hash of the prompt): `index.html`
   ~line 7965.

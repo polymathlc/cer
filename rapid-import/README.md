@@ -84,7 +84,7 @@ If either secret has not been set, provision the missing named secret with
 `firebase functions:secrets:set OPENAI_API_KEY --project mathgen--app`; never put
 a provider key in frontend code. The default
 OpenAI worker model is `gpt-6.1-sol` (`RAPID_IMPORT_OPENAI_MODEL`) for reading,
-vision and reasoning, with `gemini-3.8-flash` (`RAPID_IMPORT_MODEL`, the same Flash model the browser app uses) and then
+vision and reasoning, with `gemini-4-hydrogen` (`RAPID_IMPORT_MODEL`, the same Flash model the browser app uses) and then
 `kimi-k3` (`RAPID_IMPORT_KIMI_MODEL`) as backups. Explicit queued authoring
 choices are honoured, and missing backups are appended for existing jobs too.
 Empty, truncated, malformed JSON and incomplete question lists trigger the
@@ -253,7 +253,7 @@ immediately and keep their existing provider/fidelity budgets inside the
 identity. Repeated deliveries cannot replace a later checkpoint or duplicate a
 published question. An unavailable service, changed label or failed crop keeps
 the original and records an enhancement finding rather than dropping the question.
-`RAPID_IMPORT_IMAGE_MODEL` defaults to `gemini-3.1-flash-image`, using the
+`RAPID_IMPORT_IMAGE_MODEL` defaults to `gemini-nano-banana-2.1`, using the
 existing `GEMINI_API_KEY` secret; no new API key is required.
 
 Page preparation overlaps three independent questions while sharing a maximum

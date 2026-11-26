@@ -1720,7 +1720,7 @@ input, button, select, textarea { font-family: inherit; }
         <label>Marking engine</label>
         <div class="admin-engine-row" id="engineRow">
           <div class="admin-engine-option" data-engine="gemini" role="button" tabindex="0">
-            Gemini 3.8 Flash
+            Gemini 4 Hydrogen
             <span class="engine-note">Automatic backup &middot; Firebase AI Logic</span>
           </div>
           <div class="admin-engine-option selected" data-engine="openai" role="button" tabindex="0">
@@ -1824,8 +1824,8 @@ input, button, select, textarea { font-family: inherit; }
   }
 
   // Same model the CER app marks with (see AI_MODEL in app.js)
-  const AI_MODEL = "gemini-3.8-flash";
-  // The floor of the thinking scale — 3.8 Flash rejects the "minimal" level
+  const AI_MODEL = "gemini-4-hydrogen";
+  // The floor of the thinking scale — Gemini 4 Hydrogen is not sent the "minimal" level
   // 3.6 took, with a 400, so "low" is the cheapest level it will accept.
   const AI_THINK_MIN = "low";
   let geminiModel = null;
@@ -3557,7 +3557,7 @@ function renderReferenceModel(shapes) {
    AI MARKING PIPELINE — same recipe as the Science CER app
    1. Snapshot the student's SVG → PNG (base64)
    2. Serialise the element list into a human-readable structure summary
-   3. Send scenario + rubric + structure + image to Gemini 3.8 Flash
+   3. Send scenario + rubric + structure + image to Gemini 4 Hydrogen
       (Firebase AI Logic, App Check protected — see the module script)
    4. Parse the strict-JSON verdict through the CER app's tolerant JSON
       repair parser and animate the feedback panel
@@ -3943,7 +3943,7 @@ async function runAiCheck() {
 
     var rawResponse = await window.askGeminiVision(prompt, pngBase64, 'image/png', { maxOutputTokens: 1200, json: true });
     var route = window.barAiLastCall || {};
-    var labels = { openai: 'ChatGPT (server)', openaiKey: 'ChatGPT (browser backup)', gemini: 'Gemini 3.8 Flash', kimi: 'Kimi' };
+    var labels = { openai: 'ChatGPT (server)', openaiKey: 'ChatGPT (browser backup)', gemini: 'Gemini 4 Hydrogen', kimi: 'Kimi' };
     var engineUsed = (labels[route.engine] || 'AI') + (route.fellBack ? ' (backup)' : '');
 
     var result = parseMarkingResponse(rawResponse);

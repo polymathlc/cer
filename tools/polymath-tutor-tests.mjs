@@ -205,7 +205,7 @@ test('the page builds nothing from the document as HTML, and wears only The Poly
   assert.doesNotMatch(UI, /innerHTML|insertAdjacentHTML|outerHTML/);
   assert.doesNotMatch(PAGE + UI, /Chung GPT/, 'a student never sees the engine\'s other name');
   assert.match(PAGE, /<title>The Polymath<\/title>/);
-  assert.ok(PAGE.includes("model: 'gemini-3.8-flash'"));
+  assert.ok(PAGE.includes("model: 'gemini-4-hydrogen'"));
   const appModel = APP.match(/const AI_MODEL = "([^"]+)"/)[1];
   assert.ok(PAGE.includes(`model: '${appModel}'`), 'the page runs the same model as the portal');
   assert.match(PAGE, /TUTOR_COLLECTION/);

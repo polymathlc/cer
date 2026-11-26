@@ -8,7 +8,7 @@
      TEXT     aiText()     ChatGPT through the shared `askOpenAi` callable
                            (the server's OPENAI_API_KEY; any signed-in account,
                            with its own daily allowance), and Gemini through
-                           Firebase AI Logic (gemini-3.8-flash). The order is
+                           Firebase AI Logic (gemini-4-hydrogen). The order is
                            chosen per job: the voice builder leads with Gemini
                            (it is the fastest), app building leads with ChatGPT.
      PICTURES aiImage()    ChatGPT Images 2.6 through `openAiImage`, then the
@@ -43,11 +43,11 @@ export const firebaseConfig = {
 };
 // App Check (reCAPTCHA v3) — the same site key as every Polymath app.
 const RECAPTCHA_SITE_KEY = '6Le98gwtAAAAAAzkjJTZXFM5D8tpjx_P4rtRuhuH';
-// The cer app's text model and the floor of its thinking scale (3.8 Flash rejects "minimal").
-export const AI_MODEL = 'gemini-3.8-flash';
+// The cer app's text model and the floor of its thinking scale (Gemini 4 Hydrogen is not sent "minimal").
+export const AI_MODEL = 'gemini-4-hydrogen';
 const AI_THINK_MIN = 'low';
 // Image models, tried in order (cer app.js AI_IMAGE_MODELS).
-export const AI_IMAGE_MODELS = ['gemini-3.1-flash-image-preview', 'gemini-2.5-flash-image'];
+export const AI_IMAGE_MODELS = ['gemini-nano-banana-2.1', 'gemini-3.1-flash-image'];
 // The light ChatGPT tier any account may name (cheaper than the default).
 export const OPENAI_LIGHT_MODEL = 'gpt-6-luna';
 // Keep equal to ACCESS_ADMINS in ../student/access-gate.js.
