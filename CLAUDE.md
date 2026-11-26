@@ -2,6 +2,46 @@
 
 Guidance for Claude when working in this repo.
 
+## 🔑 Keywords and 🤖 ✂️ ✍️ AI buttons in the answer key checker; Gemini 4 Hydrogen (v1.465.0)
+
+Owner asked (2026-11-26) for the checker to show the keywords the exported worksheet prints bold and underlined, for AI
+buttons on each field (answer, shorten, auto complete), and for every Gemini model to move to the current frontier one.
+
+- **🔑 Keyword strip under every model answer box** (`_pkcKw*`, `pkcKwToggle`, `pkcKwClear`, `.pkc-kw*` CSS). It reads
+  `q.answerKeywords` on the draft through the keyword section's own `kwBlockFields` / `kwFieldKey` / `kwIndices` /
+  `_kwParse` / `qKeywordWords`, so it shows exactly what `qKeyFieldHtml` prints. `.on` = marked at that position (tinted,
+  and the blank in Fill-in-the-Blanks); `.echo` = the same word marked elsewhere, which the key also prints bold. A click
+  is a draft edit (`dirtyB`), saved by 💾 Save with the before-copy first. MCQs, answer lines and explanations get no strip.
+- **A mark is a word POSITION, so retyping an answer carries the marks** (`_pkcKwCarry` → `PKC.remapKeywords`: unchanged
+  words keep their mark, a one-for-one replacement keeps it, a deleted word loses it). It runs BEFORE `blk[field]` is
+  replaced, in `pkcSetBankText` and in the `bankAnswer` fix. The block editor does NOT do this; only the checker does.
+- **🤖 Answer / ✂️ Shorten / ✍️ Complete under every answer box** (`pkcAiField`, `pkcAiUndo`, `_pkcAiBar*`, `_pkcBox*`):
+  the paper's answer (`PKC_PAPER_BOX`), each model answer field, each explanation. A box is named `<blockId>|<field>`.
+  Prompts and the reply rules are pure in the core (`buildFieldPrompt`, `cleanFieldReply`, `applyFieldReply`,
+  `fieldAiGate`): the model sees the question, pictures (not for Shorten), the official key (authoritative), the marked
+  keywords and the other boxes. Shorten is refused if it is not shorter or dropped a keyword; Complete strips an echoed
+  opening. The result goes through `pkcSetP` / `pkcSetBankText` (never straight onto the question), runs on the checker's
+  💲 meter, and each box keeps a one-step ↩ Undo (`d.aiUndo`). These are the checker's own, NOT the block editor's
+  `.shorten-btn` / `.complete-btn` handlers, which only see the text in the box.
+- **Gemini models (line-up checked 2026-11-26 against Firebase AI Logic's supported-models page):** `AI_MODEL` is
+  **`gemini-4-hydrogen`** (the Flash-tier Gemini 4, 12 Nov 2026; US$1.50 in / $7.50 out per 1M, the price 3.8 Flash moves
+  to after 31 Dec 2026) in `app.js`, `mindmap/`, `fractions.html`, `math.html`, `video-review.html`, `bar-model.html`,
+  `polymath.html`, Shop Guard (`FALLBACK_MODEL`, default `confirmModel`) and the rapid-import worker
+  (`RAPID_IMPORT_MODEL`). Image fallbacks are `gemini-nano-banana-2.1` then `gemini-3.1-flash-image` (the old
+  `gemini-3.1-flash-image-preview` is no longer listed and `gemini-2.5-flash-image` was shut down); ChatGPT Images 2.6 is
+  still the image engine. Unchanged because they are current: `gemini-3.5-flash-lite` (Shop Guard's screen model) and
+  `gemini-3.5-transcribe`. Shop Guard's list now offers Hydrogen, `gemini-4-carbon` (paid plan only) and 3.8 Flash.
+  - **`askGeminiDirect` falls back to `AI_MODEL_FALLBACK` (`gemini-3.8-flash`)** for `AI_MODEL_DOWN_MS` when, and only
+    when, the error says the MODEL is missing (`_geminiModelMissing`), so an id not rolled out to the project is not a
+    dead app. The meter prices the model that answered (`_geminiGenerate`, beside `AI_MODEL`, is the one generator).
+    Shop Guard has the same net (`LAST_RESORT_MODEL`, v1.1.0). The other standalone pages have none; they sit behind ChatGPT.
+  - 💲 `ai-cost-core.mjs` (`?v=2`, prices as of 2026-11-26): new `gemini-4-hydrogen` row, the Gemini default; the 3.8
+    row stays for old calls; `gemini-nano-banana*` prices as the Gemini image row.
+  - Other repos that keep their model equal to this one (tutor, anskey, math, scan…) were NOT changed here.
+- The core is imported as `psle-key-check-core.mjs?v=3`; bump it whenever the core changes.
+- Tests: `node --test tools/psle-key-checker-tests.mjs` and the browser harness, which now cuts the app's real keyword
+  walker out of `app.js` beside the checker block.
+
 ## 🔍 PSLE answer key checker (v1.464.0)
 
 `pkc*` / `_pkc*` / `PKC_*` in `app.js` (search `🔍 PSLE ANSWER KEY CHECKER`, just before the concept editor), the pure

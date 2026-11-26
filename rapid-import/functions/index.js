@@ -25,8 +25,8 @@ const openaiKey = defineSecret('OPENAI_API_KEY');
 // Review decisions use the shared server-side OpenAI secret.
 const openaiModel = defineString('RAPID_IMPORT_OPENAI_MODEL', {default:'gpt-6.1-sol'});
 const kimiModel = defineString('RAPID_IMPORT_KIMI_MODEL', {default:'kimi-k3'});
-const model = defineString('RAPID_IMPORT_MODEL', {default:'gemini-3.8-flash'});
-const imageModel = defineString('RAPID_IMPORT_IMAGE_MODEL', {default:'gemini-3.1-flash-image'});
+const model = defineString('RAPID_IMPORT_MODEL', {default:'gemini-4-hydrogen'});
+const imageModel = defineString('RAPID_IMPORT_IMAGE_MODEL', {default:'gemini-nano-banana-2.1'});
 const JOBS = 'cerRapidImports';
 const callOpts = {region:'us-central1', timeoutSeconds:120, memory:'512MiB', maxInstances:4};
 const validId = id => typeof id === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(id);

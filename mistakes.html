@@ -292,7 +292,7 @@ const storage = getStorage(app);
 /* The image models, in the same order and with the same fallback the portal's
    own art and diagram work uses: the newer one first, the older one behind it,
    because a project without access to one very often has the other. */
-const AI_IMAGE_MODELS = ["gemini-3.1-flash-image-preview", "gemini-2.5-flash-image"];
+const AI_IMAGE_MODELS = ["gemini-nano-banana-2.1", "gemini-3.1-flash-image"];
 let imageModels = [];
 try {
   const ai = getAI(app, { backend: new GoogleAIBackend() });

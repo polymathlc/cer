@@ -64,7 +64,7 @@ let currentEditingQuestion = null, _tlPanelId = '';
 let _wkSuppress = 0;
 const _imgEnhanceState = {};
 const _tlCache = H.cache;
-const TL_PAR = 3, AI_MODEL = 'gemini-3.8-flash';
+const TL_PAR = 3, AI_MODEL = 'gemini-4-hydrogen';
 const db = {};
 function _isAdmin() { return currentUser && currentUser.role === 'admin'; }
 function _canAuthor() { return _isAdmin(); }

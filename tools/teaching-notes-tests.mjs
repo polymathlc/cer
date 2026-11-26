@@ -353,6 +353,7 @@ const UNGROUNDED_BY_DESIGN = {
   _aiAsk: 'the failover loop — it is handed a finished prompt',
   askGemini: 'the door every text call goes through; the prompt arrives built',
   askGeminiDirect: 'the raw Gemini call',
+  _geminiGenerate: 'the raw Gemini call one layer down: AI_MODEL, or the previous model while that id is missing (v1.465.0). It sends the request askGeminiDirect built',
   askGeminiCached: 'a cache in front of askGemini',
   askGeminiVision: 'the door every vision call goes through',
   askChatGpt: 'a named-engine wrapper round the same door',

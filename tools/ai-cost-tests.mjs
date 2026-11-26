@@ -19,7 +19,7 @@ const test = (name, fn) => cases.push({ name, fn });
 const near = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-9, `${msg}: ${a} vs ${b}`);
 
 test('every model the app calls has a published price row', () => {
-  for (const id of ['gpt-6.1-sol', 'gpt-6-luna', 'gemini-3.8-flash', 'kimi-k3', 'gpt-image-2.6-flare', 'gpt-image-2.6-sunburst', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst']) {
+  for (const id of ['gpt-6.1-sol', 'gpt-6-luna', 'gemini-4-hydrogen', 'gemini-3.8-flash', 'kimi-k3', 'gpt-image-2.6-flare', 'gpt-image-2.6-sunburst', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst']) {
     const p = core.priceFor(id, '');
     assert.ok(p.row && p.row.out > 0, id + ' has a price');
   }
@@ -27,6 +27,8 @@ test('every model the app calls has a published price row', () => {
   assert.equal(core.priceFor('gpt-6.1-sol').row.out, 10);
   assert.equal(core.priceFor('gpt-6-luna').row.in, 0.1);
   assert.equal(core.priceFor('gemini-3.8-flash').row.out, 3.75);
+  assert.equal(core.priceFor('gemini-4-hydrogen').row.in, 1.5);
+  assert.equal(core.priceFor('gemini-4-hydrogen').row.out, 7.5);
   assert.equal(core.priceFor('kimi-k3').row.out, 15);
 });
 
@@ -37,6 +39,8 @@ test('a dated snapshot or variant is priced as its family', () => {
   assert.equal(core.priceKeyFor('gpt-image-2.6-flare-2026-11-04').key, 'gpt-image-2.6');
   assert.equal(core.priceKeyFor('gpt-image-1').key, 'gpt-image-2.6', 'an older id is priced on the current generation');
   assert.equal(core.priceKeyFor('gemini-3.1-flash-image-preview').key, 'gemini-image');
+  assert.equal(core.priceKeyFor('gemini-nano-banana-2.1').key, 'gemini-image');
+  assert.equal(core.priceKeyFor('gemini-3.1-flash-image').key, 'gemini-image');
   assert.equal(core.priceKeyFor('kimi-k3-turbo').key, 'kimi-k3');
 });
 
@@ -45,7 +49,7 @@ test('an unknown model is never free: it takes its route family and is flagged a
   assert.equal(p.key, 'gpt-6.1-sol');
   assert.equal(p.assumed, true);
   const g = core.priceFor('gemini-9-pro', 'gemini');
-  assert.equal(g.key, 'gemini-3.8-flash');
+  assert.equal(g.key, 'gemini-4-hydrogen');
   assert.equal(g.assumed, true);
   const c = core.costOf({ kind: 'text', route: 'kimi', model: 'kimi-k9', usage: { inTok: 1e6, outTok: 0, reported: true } });
   assert.ok(c.usd > 0, 'an unknown Kimi model still costs Kimi money');
