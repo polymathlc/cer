@@ -2,7 +2,13 @@
 // A child's browser stores only which reveals they watched and which wins Dad can review.
 import { KID_IDS, isAdminEmail, sgDate } from './cc-core.mjs';
 
-export const ARCADE_VERSION = '1.1.0';
+export const ARCADE_VERSION = '1.1.1';
+
+export function arcadeAssetPath(file) {
+  const version = file === 'caius-form.webp' || file === 'caius-banner.webp' ? '?v=' + ARCADE_VERSION : '';
+  return './assets/' + file + version;
+}
+
 export const ARCADE_STORAGE_PREFIX = 'cc.arcade.v1:';
 export const WIN_REWARD = 5;
 export const GAMES = Object.freeze([
@@ -12,7 +18,7 @@ export const GAMES = Object.freeze([
 ].map(Object.freeze));
 
 const relics = [
-  ['smoke-vial', 'Smoke Vial', 'A curl of Caius’s smoke swirls under the cork.', 'Common', 15],
+  ['smoke-vial', 'Smoke Vial', 'A wisp from Caius’s Gas Fruit swirls under the cork.', 'Common', 15],
   ['fox-lantern', 'Foxfire Lantern', 'A blue fox-flame lights the trail home.', 'Common', 15],
   ['tide-compass', 'Tide Compass', 'Its needle follows the pull of the hidden moon.', 'Common', 15],
   ['anchor-bracelet', 'Anchor Bracelet', 'A pocket-sized anchor from the first island voyage.', 'Common', 15],
