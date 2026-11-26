@@ -5,20 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0b1026">
-<title>Robux Quest Board · Caius &amp; Caris</title>
-<!-- 🗺️ Robux Quest Board (polymathlc.com.sg/cc), v1.0.0, 26 Nov 2026, for Zhi Kai's family.
-     Caius (a Gas user) and Caris (a Kitsune user) take on quests their dad sets, each worth
-     some Robux. Dad marks each one Success or Failed, records Robux he pays out (redeemed),
-     and can add bonuses or penalties; balance = earned + bonuses − penalties − redeemed.
-     Anyone with the link can look (the children do not sign in); only Zhi Kai's Google
-     accounts (CC_ADMINS in cc-core.mjs, and the Firestore rules in tools/cc-rules.mjs) can
-     change anything. Data: Firestore ccQuests, ccLedger, ccSettings in mathgen--app.
-     The page is private family use: noindex, not in the sitemap, not linked from the site.
-     Offline checks: tools/cc-quests-tests.mjs; browser check: tools/cc-quests-browser.mjs. -->
+<title>Robux Quest Board · Elemental Arcade</title>
+
 <link rel="icon" href="../assets/branding/polymath-learning-centre.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./cc-games.css?v=1.1.0">
+<link rel="stylesheet" href="./cc-arcade.css?v=1.1.0">
 <style>
   :root {
     --bg: #0b1026;
@@ -301,6 +295,36 @@
     .q-row .marks { margin-left: 0; width: 100%; }
     .q-row .marks .btn { flex: 1; }
   }
+  .player.caius, .player.caris { display: block; padding: 0; background: #141c36; }
+  .player-banner { position: relative; display: flex; align-items: flex-end; min-height: 126px; padding: 16px 20px; isolation: isolate; }
+  .player-banner > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 42%; z-index: -2; }
+  .player-banner::before { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg,rgba(6,9,25,.85),rgba(6,9,25,.18) 66%),linear-gradient(0deg,#141c36,transparent 38%); z-index: -1; }
+  .p-name { color: white; font-size: clamp(27px,4vw,36px); }
+  .p-rank { margin: 4px 0; }
+  .player-summary { padding: 0 20px 15px; display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; align-items: center; }
+  .player-summary .avatar { grid-area: 1 / 2 / 3; width: 52px; height: 52px; }
+  .player-summary .avatar .lvl { font-size: 11px; padding: 0 6px; }
+  .player-summary .balance { font-size: 28px; }
+  .player-summary :is(.p-stats,.goal) { grid-column: 1 / -1; }
+  .player-summary .xp { margin-top: 4px; }
+  .shared-win { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; justify-content: space-between; }
+  .shared-win p { margin: 0; }
+  @media (max-width: 760px) {
+    .players { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+    .player-banner { min-height: 108px; padding: 10px; }
+    .player-summary { display: block; padding: 0 10px 10px; }
+    .player-banner > img { object-position: 66% center; }
+    .player-summary .avatar { float: right; width: 36px; height: 36px; margin: 0 2px 7px 4px; }
+    .player-summary .balance { font-size: 21px; gap: 3px; }
+    .player-summary .balance .coin { width: 19px; height: 19px; }
+    .player-summary .balance small { font-size: 11px; }
+    .player-summary .xp { clear: both; padding-top: 5px; }
+    .player-summary .xp-label { flex-wrap: wrap; column-gap: 4px; }
+    .player-summary .p-stats { gap: 4px; }
+    .player-summary .pill { padding: 2px 5px; font-size: 11px; }
+    #tabs { max-width: 100%; }
+    #tabs button { padding-inline: clamp(5px,2.2vw,11px); }
+  }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
   }
@@ -315,7 +339,7 @@
       <div class="brand-badge" aria-hidden="true">🗺️</div>
       <div>
         <h1>Robux Quest Board</h1>
-        <p>Caius &amp; Caris · finish quests, earn Robux</p>
+        <p>Quests and elemental arcade</p>
       </div>
     </div>
     <span class="admin-chip hidden" id="admin-chip">🛡️ Dad mode</span>
@@ -323,11 +347,16 @@
 
   <div id="banner" class="banner hidden" role="status"></div>
 
+  <aside id="shared-win" class="banner info shared-win hidden" aria-label="Shared arcade win">
+    <p id="shared-win-text"></p><button type="button" class="btn small" data-action="review-win" id="review-win"></button>
+  </aside>
+
   <section class="players" id="players" aria-label="Players"></section>
 
   <div class="toolbar">
     <div class="seg" role="tablist" aria-label="View" id="tabs">
       <button role="tab" data-tab="quests" aria-selected="true">⚔️ Quests</button>
+      <button role="tab" data-tab="arcade" aria-selected="false">🎮 Arcade</button>
       <button role="tab" data-tab="history" aria-selected="false">📜 History</button>
       <button role="tab" data-tab="stats" aria-selected="false">📊 Stats</button>
     </div>
@@ -352,6 +381,7 @@
       <div class="more"><button class="btn ghost small hidden" id="more-done" data-action="more-done">Show more</button></div>
       <div class="more"><button class="btn ghost small hidden" id="toggle-archived" data-action="toggle-archived">Show archived quests</button></div>
     </section>
+    <section id="view-arcade" class="hidden" aria-label="Elemental arcade"></section>
     <section id="view-history" class="hidden" aria-label="History">
       <div class="section-title"><h2>History</h2><span class="count" id="history-count"></span></div>
       <div class="history" id="history-list"></div>
@@ -368,10 +398,12 @@
   <details class="how">
     <summary>How the quest board works</summary>
     <ol>
-      <li>Dad adds a quest for Caius, Caris or both, with the Robux it is worth.</li>
+      <li>Dad assigns each quest and sets its Robux reward.</li>
       <li>Finish the quest, then tell Dad. He marks it <b>Success</b> and the Robux go into your balance.</li>
       <li>If a quest is not done in time, Dad may mark it <b>Failed</b>. Some quests have a penalty, which is taken off your balance.</li>
-      <li>Earned Robux raise your level. Caris grows another fox tail every two levels, and Caius's gas grows stronger.</li>
+      <li>Earned Robux raise your level. The Kitsune grows another fox tail every two levels and the Smoke form grows stronger.</li>
+      <li>Open the Arcade and choose your hero. A successful quest unlocks one free relic draw, including quests you finished earlier.</li>
+      <li>The first win in each mini-game each Singapore day earns a 5 Robux request. Dad can approve it here or open a win link you share.</li>
       <li>When you want your Robux, ask Dad. He pays them out and records it here, so the balance is always right.</li>
     </ol>
   </details>
@@ -381,7 +413,7 @@
       <button class="btn ghost small" id="sign-in" data-action="sign-in">🔑 Parent login</button>
       <span id="signed-in" class="hidden"><span id="who"></span> · <button class="btn ghost tiny" data-action="sign-out">Sign out</button></span>
     </div>
-    <div>Robux Quest Board v<span id="version"></span> · made for Caius &amp; Caris · Robux are paid out by Dad</div>
+    <div>Robux Quest Board v<span id="version"></span> · Robux are paid out by Dad</div>
   </footer>
 </div>
 
@@ -515,6 +547,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script type="module">
 import * as C from './cc-core.mjs?v=1.0.0';
+import { createArcade } from './cc-arcade.mjs?v=1.1.0';
+import { receiptFor, arcadeLedgerEntry, GAMES, WIN_REWARD, ARCADE_VERSION } from './cc-arcade-core.mjs?v=1.1.0';
 import { avatarFor, coinSvg, COIN_DEFS } from './cc-avatars.mjs?v=1.0.0';
 
 /* ============================================================
@@ -527,11 +561,8 @@ const banner = (text, kind = 'info', html = false) => {
   b.className = 'banner ' + kind;
   if (html) b.innerHTML = text; else b.textContent = text;
 };
-if (typeof firebase === 'undefined') {
-  $('loading').innerHTML = 'The quest board could not load. Check the internet connection and <a href="">try again</a>.';
-  throw new Error('Firebase did not load');
-}
-firebase.initializeApp({
+const onlineBoard = !!(window.firebase?.firestore && window.firebase?.auth);
+if (onlineBoard) firebase.initializeApp({
   apiKey: "AIzaSyAUSI3Uh28IeqASEp0JhH4QPaVt-O3meBo",
   authDomain: "mathgen--app.firebaseapp.com",
   projectId: "mathgen--app",
@@ -540,12 +571,13 @@ firebase.initializeApp({
   appId: "1:165654161198:web:16c8bd60eb3a2aa7edbcbf",
   measurementId: "G-0MWZFG211D"
 });
-const db = firebase.firestore();
-const auth = firebase.auth();
-try { db.enablePersistence({ synchronizeTabs: true }).catch(() => {}); } catch (e) { /* not supported here */ }
-const QUESTS = db.collection('ccQuests');
-const LEDGER = db.collection('ccLedger');
-const SETTINGS = db.collection('ccSettings').doc('main');
+const db = onlineBoard ? firebase.firestore() : null;
+const auth = onlineBoard ? firebase.auth() : null;
+if (!db) banner('Could not connect to the quest board. You can still play in the Arcade. Reload to reconnect.', 'info');
+try { db?.enablePersistence({ synchronizeTabs: true }).catch(() => {}); } catch (e) { /* not supported here */ }
+const QUESTS = db?.collection('ccQuests');
+const LEDGER = db?.collection('ccLedger');
+const SETTINGS = db?.collection('ccSettings').doc('main');
 
 /* ============================================================
    State
@@ -563,12 +595,15 @@ let lastLevels = {};            // so a level-up can be celebrated
 let firstStats = true;
 const avatarCache = {};         // kid → key of the avatar drawn, so animations are not restarted
 
-$('version').textContent = C.VERSION;
+$('version').textContent = ARCADE_VERSION;
 $('coin-defs').innerHTML = COIN_DEFS;
 const COIN = coinSvg(18);
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const robux = (n, cls = '') => `<span class="reward ${cls}">${COIN}${esc(C.formatRobux(n))}</span>`;
+const arcade = createArcade($('view-arcade'), { approveWin, notify: toast, selectKid: setKid });
+let sharedWin = null;
+let reviewingWin = false;
 const mini = (kid, uid) => `<span class="mini" aria-hidden="true">${avatarFor(kid, { uid: 'mini-' + uid, animate: false, level: 3, tails: 3 })}</span>`;
 const kidName = id => C.kidById(id)?.name || id;
 
@@ -577,21 +612,22 @@ const kidName = id => C.kidById(id)?.name || id;
    ============================================================ */
 function onDataError(what, error) {
   console.error('[cc] ' + what, error);
+  state.dataError = true;
   $('loading').classList.add('hidden');
   banner('Could not load the ' + what + ' (' + (error && (error.code || error.message) || 'error') + '). Pull down to refresh, or try again in a moment.', 'error');
   showView();
 }
-QUESTS.onSnapshot(snap => {
+QUESTS?.onSnapshot(snap => {
   state.quests = snap.docs.map(d => ({ ...C.normaliseQuest(d.data(), d.id), raw: d.data() }));
   state.loaded.quests = true;
   refresh();
 }, e => onDataError('quests', e));
-LEDGER.onSnapshot(snap => {
+LEDGER?.onSnapshot(snap => {
   state.ledger = snap.docs.map(d => C.normaliseLedger(d.data(), d.id)).filter(e => e.kid);
   state.loaded.ledger = true;
   refresh();
 }, e => onDataError('Robux history', e));
-SETTINGS.onSnapshot(snap => {
+SETTINGS?.onSnapshot(snap => {
   const data = snap.exists ? snap.data() : {};
   state.settings = { goals: (data && data.goals) || {} };
   state.loaded.settings = true;
@@ -601,7 +637,7 @@ SETTINGS.onSnapshot(snap => {
 function ready() { return state.loaded.quests && state.loaded.ledger; }
 
 function refresh() {
-  if (!ready()) return;
+  if (!ready()) { render(); return; }
   $('loading').classList.add('hidden');
   state.stats = C.computeStats(state.quests, state.ledger);
   celebrateLevelUps();
@@ -611,7 +647,7 @@ function refresh() {
 /* ============================================================
    Auth (Google sign-in; only CC_ADMINS may change things)
    ============================================================ */
-auth.onAuthStateChanged(user => {
+auth?.onAuthStateChanged(user => {
   state.user = user || null;
   state.isAdmin = !!user && C.isAdminEmail(user.email, user.emailVerified);
   if (user && !state.isAdmin) {
@@ -623,11 +659,12 @@ auth.onAuthStateChanged(user => {
   $('sign-in').classList.toggle('hidden', !!user);
   $('signed-in').classList.toggle('hidden', !user);
   $('who').textContent = user ? (user.email || 'Signed in') : '';
-  if (ready()) render();
+  render();
 });
-auth.getRedirectResult?.().catch(e => { if (e && e.code) toast('Sign-in failed: ' + (e.message || e.code), 'bad'); });
+auth?.getRedirectResult?.().catch(e => { if (e && e.code) toast('Sign-in failed: ' + (e.message || e.code), 'bad'); });
 
 async function signIn() {
+  if (!auth) { toast('Reconnect and reload to sign in.', 'bad'); return; }
   const provider = new firebase.auth.GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
   try {
@@ -656,16 +693,28 @@ function writeFailed(e) {
    Rendering
    ============================================================ */
 function render() {
-  renderPlayers();
+  if (ready()) renderPlayers();
   renderTabs();
+  showView();
+  renderSharedWin();
+  if (state.tab === 'arcade') {
+    arcade.update({ kid: state.kid, quests: state.quests, ledger: state.ledger, isAdmin: state.isAdmin,
+      questsReady: state.loaded.quests, ledgerReady: state.loaded.ledger });
+  } else {
+    arcade.hide();
+  }
+  if (!ready()) return;
   if (state.tab === 'quests') renderQuests();
   if (state.tab === 'history') renderHistory();
   if (state.tab === 'stats') renderStats();
-  showView();
 }
 function showView() {
-  if (!ready()) return;
-  for (const t of ['quests', 'history', 'stats']) $('view-' + t).classList.toggle('hidden', state.tab !== t);
+  const inArcade = state.tab === 'arcade';
+  $('players').classList.toggle('hidden', inArcade);
+  $('loading').classList.toggle('hidden', inArcade || ready() || !db || state.dataError);
+  for (const t of ['quests', 'arcade', 'history', 'stats']) {
+    $('view-' + t).classList.toggle('hidden', state.tab !== t || (t !== 'arcade' && !ready()));
+  }
 }
 
 function renderPlayers() {
@@ -682,10 +731,10 @@ function renderPlayers() {
       card.dataset.player = kid.id;
       card.dataset.action = 'pick-kid';
       card.dataset.kid = kid.id;
-      card.innerHTML = `<div class="avatar"><div class="avatar-art"></div><span class="lvl"></span></div>
-        <div class="p-info">
-          <p class="p-name">${esc(kid.name)}</p>
-          <p class="p-rank"></p>
+      card.innerHTML = `<div class="player-banner"><img src="./assets/${kid.id}-banner.webp" alt="">
+          <div><p class="p-name">${esc(kid.name)}</p><p class="p-rank"></p></div></div>
+        <div class="player-summary">
+          <div class="avatar"><div class="avatar-art"></div><span class="lvl"></span></div>
           <div class="balance"></div>
           <div class="xp"><div class="xp-bar"><i></i></div><div class="xp-label"><span class="xp-a"></span><span class="xp-b"></span></div></div>
           <div class="p-stats"></div>
@@ -699,7 +748,7 @@ function renderPlayers() {
       avatarCache[kid.id] = key;
     }
     card.querySelector('.lvl').textContent = 'Lv ' + lv.level;
-    card.querySelector('.p-rank').textContent = `${C.rankFor(kid.id, lv.level)} · ${kid.power}`;
+    card.querySelector('.p-rank').textContent = `${C.rankFor(kid.id, lv.level)} · ${kid.id === 'caius' ? 'Smoke' : kid.power}`;
     card.querySelector('.balance').innerHTML = `${coinSvg(30)}<span data-balance="${kid.id}">${esc(C.formatRobux(s.balance))}</span><small>Robux</small>`;
     card.querySelector('.xp-bar > i').style.width = Math.round(lv.progress * 100) + '%';
     card.querySelector('.xp-a').textContent = `${C.formatRobux(lv.into)} / ${C.formatRobux(lv.need)} to Lv ${lv.level + 1}`;
@@ -760,7 +809,8 @@ function questCard(q) {
            <button class="btn tiny bad" data-action="mark" data-id="${esc(q.id)}" data-kid="${k}" data-status="failed">✗ Failed</button>`
         : `<button class="btn tiny ghost" data-action="mark" data-id="${esc(q.id)}" data-kid="${k}" data-status="open" title="Undo the result">↺ Reset</button>`;
     }
-    const delta = r.status === 'success' ? `<span class="pill good">+${esc(C.formatRobux(q.reward))}</span>`
+    const delta = r.status === 'success' ? `<span class="pill good">+${esc(C.formatRobux(q.reward))}</span>
+      <button class="btn ghost tiny" data-action="quest-relic" data-kid="${k}" data-id="${esc(q.id)}">Quest relic</button>`
       : r.status === 'failed' && q.penalty ? `<span class="pill bad">−${esc(C.formatRobux(q.penalty))}</span>` : '';
     return `<div class="q-row" data-row="${esc(q.id)}:${k}">
       ${mini(k, q.id + k)}<span class="who">${esc(kidName(k))}</span>
@@ -979,6 +1029,51 @@ const now = () => Date.now();
 const byWho = () => (state.user && state.user.email) || '';
 const questById = id => state.quests.find(q => q.id === id);
 
+// A shared link is a child's request. Only an explicit approval by Dad credits it.
+async function approveWin(receipt) {
+  if (!state.isAdmin || !db) throw new Error('Sign in with Dad’s account to approve this win.');
+  const entry = arcadeLedgerEntry(receipt, byWho());
+  if (!entry) throw new Error('This win request is invalid.');
+  const ref = LEDGER.doc(receipt.id);
+  return db.runTransaction(async transaction => {
+    if ((await transaction.get(ref)).exists) return false;
+    transaction.set(ref, entry);
+    return true;
+  });
+}
+
+function renderSharedWin() {
+  const host = $('shared-win');
+  host.classList.toggle('hidden', !sharedWin);
+  if (!sharedWin) return;
+  const name = kidName(sharedWin.kid);
+  const game = GAMES.find(g => g.id === sharedWin.gameId);
+  const paid = state.ledger.some(entry => entry.id === sharedWin.id);
+  const btn = $('review-win');
+  $('shared-win-text').textContent = paid ? `${name}’s ${game.name} win is already credited.`
+    : `${name} shared a ${game.name} win for ${sharedWin.day} · ${WIN_REWARD} Robux.`;
+  btn.classList.toggle('hidden', paid);
+  btn.textContent = state.isAdmin ? 'Review win' : 'Parent login to review';
+  btn.disabled = reviewingWin || (state.isAdmin && !state.loaded.ledger);
+}
+
+async function reviewSharedWin() {
+  if (!sharedWin || reviewingWin) return;
+  if (!state.isAdmin) { await signIn(); return; }
+  const receipt = sharedWin;
+  const name = kidName(receipt.kid);
+  const game = GAMES.find(g => g.id === receipt.gameId);
+  reviewingWin = true;
+  renderSharedWin();
+  try {
+    const accepted = await confirmBox('Approve this win?', `${name} says they won ${game.name} on ${receipt.day}. Add ${WIN_REWARD} Robux to their quest board balance?`, 'Approve win');
+    if (!accepted) return;
+    const credited = await approveWin(receipt);
+    toast(credited ? `Added ${WIN_REWARD} Robux to ${name}’s balance.` : 'This win was already credited.', 'good');
+  } catch (error) { writeFailed(error); }
+  finally { reviewingWin = false; renderSharedWin(); }
+}
+
 async function markResult(id, kid, status, { silent = false } = {}) {
   if (!requireAdmin()) return;
   const q = questById(id);
@@ -1012,7 +1107,7 @@ async function markResult(id, kid, status, { silent = false } = {}) {
     const rect = card ? card.getBoundingClientRect() : null;
     const k = C.kidById(kid).colors;
     confetti([k.main, k.glow, k.accent, '#fbbf24'], rect ? rect.left + rect.width / 2 : innerWidth / 2, rect ? rect.top : innerHeight / 3);
-    toast(`🎉 +${C.formatRobux(q.reward)} Robux for ${name}!`, 'good', { label: 'Undo', run: () => undoMark(id, kid, before, nextRef) });
+    toast(`🎉 +${C.formatRobux(q.reward)} Robux for ${name}! One relic draw is ready.`, 'good', { label: 'Undo', run: () => undoMark(id, kid, before, nextRef) });
   } else if (status === 'failed') {
     toast(`${name}: "${q.title}" failed${q.penalty ? ` (−${C.formatRobux(q.penalty)} Robux)` : ''}.`, 'bad', { label: 'Undo', run: () => undoMark(id, kid, before, nextRef) });
   } else {
@@ -1280,6 +1375,12 @@ document.addEventListener('click', e => {
   const a = el.dataset.action, id = el.dataset.id;
   if (a !== 'menu' && state.openMenu) { state.openMenu = ''; if (state.tab === 'quests') renderQuests(); }
   switch (a) {
+    case 'review-win': reviewSharedWin(); break;
+    case 'quest-relic':
+      state.tab = 'arcade';
+      setKid(el.dataset.kid);
+      arcade.openQuest(id);
+      break;
     case 'pick-kid': setKid(state.kid === el.dataset.kid ? '' : el.dataset.kid); break;
     case 'sign-in': signIn(); break;
     case 'sign-out': auth.signOut(); toast('Signed out.'); break;
@@ -1307,12 +1408,12 @@ function setKid(kid) {
   state.kid = kid || '';
   state.openMenu = '';
   try { localStorage.setItem('cc_kid', state.kid); } catch (err) { /* private mode */ }
-  if (ready()) render(); else renderTabs();
+  render();
 }
 
 // Remember the last view per device (a convenience only).
 try {
-  const t = localStorage.getItem('cc_tab'); if (['quests', 'history', 'stats'].includes(t)) state.tab = t;
+  const t = localStorage.getItem('cc_tab'); if (['quests', 'arcade', 'history', 'stats'].includes(t)) state.tab = t;
   const k = localStorage.getItem('cc_kid'); if (C.KID_IDS.includes(k)) state.kid = k;
 } catch (err) { /* private mode */ }
 // #caius / #caris open straight onto one child (handy as a home-screen bookmark).
@@ -1320,10 +1421,28 @@ const hashKid = location.hash.replace('#', '').toLowerCase();
 if (C.KID_IDS.includes(hashKid)) state.kid = hashKid;
 if (hashKid === 'admin' || hashKid === 'dad') setTimeout(() => { if (!state.user) signIn(); }, 400);
 
+function applyArcadeLink() {
+  const hash = location.hash.slice(1);
+  if (hash === 'arcade') state.tab = 'arcade';
+  sharedWin = null;
+  if (hash.startsWith('arcade-win/')) {
+    const fields = hash.split('/');
+    const receipt = fields.length === 4 && receiptFor(fields[1], fields[2], fields[3]);
+    if (receipt) {
+      sharedWin = receipt;
+      state.tab = 'arcade';
+      state.kid = receipt.kid;
+    } else {
+      toast('This win link is invalid. Ask for a new link from the Arcade.', 'bad');
+    }
+  }
+}
+addEventListener('hashchange', () => { applyArcadeLink(); render(); });
+applyArcadeLink();
 setupQuestForm();
 setupLedgerForm();
-renderTabs();
-addEventListener('online', () => banner(''));
+render();
+addEventListener('online', () => { if (db) banner(''); });
 addEventListener('offline', () => banner('You are offline. The board shows the last saved quests and will update when the internet is back.', 'info'));
 window.__cc = { state, C };
 </script>

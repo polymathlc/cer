@@ -12,6 +12,7 @@ import { readFile, mkdir } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
+import { CC_ADMINS } from '../cc/cc-core.mjs';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
@@ -19,7 +20,7 @@ const { chromium } = require('playwright');
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const SHOTS = process.env.CC_SCREENSHOTS || '';
 
-const TYPES = { '.html': 'text/html', '.mjs': 'text/javascript', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.json': 'application/json' };
+const TYPES = { '.html': 'text/html', '.mjs': 'text/javascript', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.json': 'application/json' };
 const server = createServer(async (req, res) => {
   try {
     let path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
@@ -54,7 +55,7 @@ const FAKE_FIREBASE = String.raw`
   }
   function guard() {
     const u = window.__ccFakeAuth.user;
-    const ok = u && u.emailVerified && ['chungzhikai@gmail.com', 'admin@polymathlc.com.sg'].includes(String(u.email).toLowerCase());
+    const ok = u && u.emailVerified && window.__testParents.includes(String(u.email).toLowerCase());
     window.__ccWrites = (window.__ccWrites || 0) + 1;
     if (!ok) { const e = new Error('Missing or insufficient permissions.'); e.code = 'permission-denied'; throw e; }
   }
@@ -91,6 +92,27 @@ const FAKE_FIREBASE = String.raw`
       async commit() { guard(); ops.forEach(f => f()); emit(); }
     };
   }
+  let transactionQueue = Promise.resolve();
+  function runTransaction(operation) {
+    const run = transactionQueue.then(async () => {
+      const writes = [];
+      const value = await operation({
+        async get(ref) {
+          const doc = store[ref._col][ref.id];
+          return { exists: !!doc, data: () => doc && structuredClone(doc) };
+        },
+        set(ref, data) { writes.push([ref, structuredClone(data)]); }
+      });
+      if (writes.length) {
+        guard();
+        for (const [ref, data] of writes) store[ref._col][ref.id] = data;
+        emit();
+      }
+      return value;
+    });
+    transactionQueue = run.catch(() => {});
+    return run;
+  }
   const authListeners = [];
   window.__ccFakeAuth = {
     user: null,
@@ -98,13 +120,13 @@ const FAKE_FIREBASE = String.raw`
   };
   const authObj = {
     onAuthStateChanged(f) { authListeners.push(f); setTimeout(() => f(window.__ccFakeAuth.user), 10); return () => {}; },
-    async signInWithPopup() { window.__ccFakeAuth.setUser(window.__CC_LOGIN || { email: 'chungzhikai@gmail.com', emailVerified: true }); return { user: window.__ccFakeAuth.user }; },
+    async signInWithPopup() { window.__ccFakeAuth.setUser(window.__CC_LOGIN || { email: window.__testParents[0], emailVerified: true }); return { user: window.__ccFakeAuth.user }; },
     async signInWithRedirect() {},
     async getRedirectResult() { return null; },
     async signOut() { window.__ccFakeAuth.setUser(null); }
   };
   function GoogleAuthProvider() { this.setCustomParameters = () => {}; }
-  const firestoreFn = () => ({ collection, batch, enablePersistence: () => Promise.resolve() });
+  const firestoreFn = () => ({ collection, batch, runTransaction, enablePersistence: () => Promise.resolve() });
   firestoreFn.FieldValue = { delete: () => DELETE };
   window.__ccStore = store;
   window.firebase = {
@@ -147,7 +169,7 @@ const SEED = {
 
 const browser = await chromium.launch();
 const failures = [];
-async function run(name, viewport, fn, { isMobile = false } = {}) {
+async function run(name, viewport, fn, { isMobile = false, hash = '' } = {}) {
   const context = await browser.newContext({ viewport, deviceScaleFactor: SHOTS ? 2 : 1, isMobile, hasTouch: isMobile });
   const page = await context.newPage();
   const errors = [];
@@ -157,10 +179,10 @@ async function run(name, viewport, fn, { isMobile = false } = {}) {
   await page.route(/gstatic\.com\/firebasejs\//, r => r.fulfill({ contentType: 'text/javascript', body: '' }));
   await page.route(/gstatic\.com\/firebasejs\/.*firebase-app-compat\.js/, r => r.fulfill({ contentType: 'text/javascript', body: FAKE_FIREBASE }));
   await page.route(/fonts\.(googleapis|gstatic)\.com/, r => r.fulfill({ contentType: 'text/css', body: '' }));
-  await page.addInitScript(seed => { window.__CC_SEED = seed; try { localStorage.clear(); } catch (e) {} }, SEED);
+  await page.addInitScript(({ seed, parents }) => { window.__CC_SEED = seed; window.__testParents = parents; }, { seed: SEED, parents: CC_ADMINS });
   try {
-    await page.goto(BASE + '/cc/', { waitUntil: 'load' });
-    await page.waitForSelector('[data-balance="caius"]');
+    await page.goto(BASE + '/cc/' + hash, { waitUntil: 'load' });
+    await page.waitForSelector('[data-balance="caius"]', { state: 'attached' });
     await fn(page);
     assert.deepEqual(errors, [], 'no page errors');
     console.log('ok  ' + name);
@@ -354,6 +376,86 @@ await run('dad on a phone', PHONE, async page => {
   await page.waitForSelector('#ledger-dialog[open]');
   await shot(page, 'phone-pay-out.png', false);
 }, { isMobile: true });
+
+await run('phone arcade, quest draws and replayable games', PHONE, async page => {
+  await page.click('#tabs [data-tab="arcade"]');
+  await page.click('[data-arc="player"][data-value="caris"]');
+  const transform = page.locator('[data-arc="transform"]');
+  await transform.click();
+  assert.match(await transform.innerText(), /replay transformation/i);
+  assert.match(await page.locator('.arc-full-form').getAttribute('src'), /caris-form\.webp/);
+  assert.equal(await page.locator('[data-arc="play"]').count(), 3);
+  assert.equal(await page.locator('[data-arc="item"]').count(), 12);
+  assert.equal(await page.locator('.arc-available').innerText(), '3 ready');
+  await page.click('[data-arc="draw"]');
+  const draw = page.getByRole('dialog', { name: 'Quest draw' });
+  const relic = await draw.locator('h3').innerText();
+  await draw.getByRole('button', { name: 'Back to arcade' }).click();
+  assert.match(await page.locator('.arc-owned').innerText(), new RegExp(relic));
+  assert.equal(await page.locator('.arc-available').innerText(), '2 ready');
+  await page.reload();
+  await page.waitForSelector('.arc-owned');
+  assert.match(await page.locator('.arc-owned').innerText(), new RegExp(relic));
+  assert.equal(await page.locator('.arc-available').innerText(), '2 ready');
+  assert.equal(await page.locator('[data-arc="approve"]').count(), 0);
+
+  for (const game of ['dash', 'signals']) {
+    await page.click('[data-arc="play"][data-value="' + game + '"]');
+    const gameDialog = page.getByRole('dialog');
+    await gameDialog.getByRole('button', { name: 'Start game' }).click();
+    await gameDialog.getByRole('button', { name: 'Pause' }).click();
+    await gameDialog.getByRole('button', { name: 'Close dialog' }).click();
+    assert.equal(await page.locator('dialog[open]').count(), 0);
+  }
+  const width = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  assert.ok(width <= 0, 'arcade has no horizontal overflow on a phone (' + width + 'px)');
+  await shot(page, 'phone-arcade.png');
+
+  await page.click('[data-arc="play"][data-value="rush"]');
+  const gameDialog = page.getByRole('dialog');
+  await gameDialog.getByRole('button', { name: 'Start game' }).click();
+  for (let run = 0; run < 2; run++) {
+    for (let i = 0; i < 10; i++) await gameDialog.getByRole('button', { name: /^\d+, relic$/ }).click();
+    const feedback = gameDialog.locator('.arc-win-feedback');
+    assert.match(await feedback.innerText(), run ? /already recorded/ : /5 Robux win/);
+    if (!run) await gameDialog.getByRole('button', { name: 'Play again' }).click();
+  }
+  await gameDialog.getByRole('button', { name: 'Close dialog' }).click();
+  assert.equal(await page.locator('[data-arc="share"]').count(), 1);
+  assert.equal(await text(page, '[data-balance="caris"]'), '175');
+  assert.equal(await page.evaluate(() => window.__ccWrites || 0), 0);
+
+  await page.click('[data-action="sign-in"]');
+  await page.click('[data-arc="approve"]');
+  await page.waitForFunction(() => document.querySelector('[data-balance="caris"]').textContent === '180');
+  assert.equal(await page.locator('[data-arc="approve"]').count(), 0);
+  assert.equal(await page.evaluate(() => Object.keys(window.__ccStore.ccLedger).length), 3);
+  await page.click('#tabs [data-tab="history"]');
+  await page.locator('.h-row', { hasText: 'Relic Rush win' }).waitFor();
+}, { isMobile: true });
+
+await run('parent approval on a second device', { width: 1100, height: 800 }, async page => {
+  assert.equal(await text(page, '[data-balance="caius"]'), '60');
+  await page.click('#review-win');
+  await page.waitForSelector('#admin-chip:not(.hidden)');
+  await page.click('#review-win');
+  // Another parent device approves the same win while the confirmation is open.
+  // The pending transaction must keep that original credit and timestamp.
+  const receiptId = 'arcade-caius-dash-' + sgDate(NOW);
+  await page.evaluate(async id => {
+    await window.firebase.firestore().collection('ccLedger').doc(id).set({
+      kid: 'caius', type: 'bonus', amount: 5, note: 'Already approved on the phone', at: 1000
+    });
+  }, receiptId);
+  await page.click('#confirm-yes');
+  await page.waitForFunction(() => document.querySelector('[data-balance="caius"]').textContent === '65');
+  await page.locator('.toast', { hasText: 'This win was already credited' }).waitFor();
+  assert.equal(await page.evaluate(id => window.__ccStore.ccLedger[id].at, receiptId), 1000);
+  assert.equal(await page.evaluate(() => window.__ccWrites), 1);
+  assert.match(await page.locator('#shared-win-text').innerText(), /already credited/i);
+  assert.equal(await page.locator('#review-win').isVisible(), false);
+  assert.equal(await page.evaluate(() => Object.keys(window.__ccStore.ccLedger).length), 3);
+}, { hash: '#arcade-win/caius/dash/' + sgDate(NOW) });
 
 await browser.close();
 server.close();

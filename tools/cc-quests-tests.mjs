@@ -4,6 +4,7 @@
 // linked from the site), and the Firestore rules patch for its collections.
 //
 //   node --test tools/cc-quests-tests.mjs
+import './cc-arcade-tests.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -188,8 +189,8 @@ test('normalising never trusts stored data', () => {
 });
 
 test('only verified admin emails may change the board, and the page and rules agree on who', () => {
-  assert.equal(C.isAdminEmail('ChungZhiKai@gmail.com', true), true);
-  assert.equal(C.isAdminEmail('chungzhikai@gmail.com', false), false);
+  assert.equal(C.isAdminEmail(C.CC_ADMINS[0].toUpperCase(), true), true);
+  assert.equal(C.isAdminEmail(C.CC_ADMINS[0], false), false);
   assert.equal(C.isAdminEmail('someone@example.com', true), false);
   assert.deepEqual([...C.CC_ADMINS], [...CC_ADMINS]);
 });
