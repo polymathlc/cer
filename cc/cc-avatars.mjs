@@ -1,147 +1,47 @@
-// 🎨 Original avatars for the Robux Quest Board (drawn here as SVG, no game art).
-//
-//   Caius — a "Gas" power user: a grinning kid whose body trails off into
-//           living purple smoke, with a swirling gas orb in one hand.
-//   Caris — a "Kitsune" power user: a fox-spirit girl with fox ears and a fox
-//           mask, blue fox-fire wisps around her and up to nine glowing tails
-//           (one more tail every two levels, so she "grows" her tails).
-//
-// Both are inspired by the themes only; every shape is drawn from scratch.
-// Each call takes a unique `uid` so several avatars can sit on one page
-// without their gradient ids clashing. `animate: false` gives a still picture
-// (used for small badges and for screenshots in tests).
+// Portrait badges for the family quest board. Caius uses the shared Gas Knight
+// artwork and Caris grows an illustrated fox tail every two levels.
+import { arcadeAssetPath } from './cc-arcade-core.mjs?v=1.1.1';
 
 const esc = s => String(s).replace(/[^\w-]/g, '');
+const label = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-/* ======================================================================== */
-/*                                  CAIUS                                   */
-/* ======================================================================== */
-export function caiusAvatar({ uid = 'c', level = 1, animate = true, title = 'Caius, the Gas user' } = {}) {
+export function caiusAvatar({ uid = 'c', level = 1, animate = true, title = 'Caius in his transformed Gas Knight form' } = {}) {
   const u = 'cg' + esc(uid);
-  const spin = (dur, from = 0, to = 360, cx = 100, cy = 120) => animate
-    ? `<animateTransform attributeName="transform" type="rotate" from="${from} ${cx} ${cy}" to="${to} ${cx} ${cy}" dur="${dur}s" repeatCount="indefinite"/>` : '';
-  const drift = (dur, dy = -6) => animate
-    ? `<animateTransform attributeName="transform" type="translate" values="0 0; 0 ${dy}; 0 0" dur="${dur}s" repeatCount="indefinite"/>` : '';
-  const pulse = (dur, a = 0.55, b = 1) => animate
-    ? `<animate attributeName="opacity" values="${a};${b};${a}" dur="${dur}s" repeatCount="indefinite"/>` : '';
-  // Small rising smoke puffs; more of them at higher levels.
-  const puffs = Math.min(10, 4 + Math.floor(level / 2));
-  let puffSvg = '';
-  for (let i = 0; i < puffs; i++) {
-    const x = 30 + ((i * 47) % 140), r = 5 + (i % 3) * 3, d = 4 + (i % 4);
-    puffSvg += `<circle cx="${x}" cy="${178 - (i % 5) * 6}" r="${r}" fill="url(#${u}-puff)" opacity="0.7">${animate
-      ? `<animate attributeName="cy" values="${180 - (i % 5) * 6};${40 + (i % 4) * 10}" dur="${d}s" begin="${(i * 0.7).toFixed(1)}s" repeatCount="indefinite"/>
-         <animate attributeName="opacity" values="0;0.75;0" dur="${d}s" begin="${(i * 0.7).toFixed(1)}s" repeatCount="indefinite"/>
-         <animate attributeName="r" values="${r};${r * 2.2}" dur="${d}s" begin="${(i * 0.7).toFixed(1)}s" repeatCount="indefinite"/>` : ''}</circle>`;
-  }
-  return `<svg class="avatar-svg" viewBox="0 0 200 200" role="img" aria-label="${title}" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <radialGradient id="${u}-bg" cx="50%" cy="42%" r="65%">
-      <stop offset="0%" stop-color="#5b21b6"/>
-      <stop offset="55%" stop-color="#2e1065"/>
-      <stop offset="100%" stop-color="#0f0a1f"/>
-    </radialGradient>
-    <radialGradient id="${u}-puff" cx="40%" cy="40%" r="60%">
-      <stop offset="0%" stop-color="#ede9fe" stop-opacity="0.9"/>
-      <stop offset="60%" stop-color="#a78bfa" stop-opacity="0.55"/>
-      <stop offset="100%" stop-color="#7c3aed" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="${u}-gasbody" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#6d28d9"/>
-      <stop offset="45%" stop-color="#7c3aed" stop-opacity="0.9"/>
-      <stop offset="100%" stop-color="#c4b5fd" stop-opacity="0"/>
-    </linearGradient>
-    <linearGradient id="${u}-hood" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#312e81"/>
-      <stop offset="100%" stop-color="#1e1b4b"/>
-    </linearGradient>
-    <linearGradient id="${u}-hair" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#1e1b4b"/>
-      <stop offset="100%" stop-color="#4c1d95"/>
-    </linearGradient>
-    <radialGradient id="${u}-skin" cx="45%" cy="40%" r="65%">
-      <stop offset="0%" stop-color="#fde7d4"/>
-      <stop offset="100%" stop-color="#f2c6a5"/>
-    </radialGradient>
-    <radialGradient id="${u}-orb" cx="40%" cy="35%" r="65%">
-      <stop offset="0%" stop-color="#f0fdfa"/>
-      <stop offset="35%" stop-color="#5eead4"/>
-      <stop offset="75%" stop-color="#8b5cf6"/>
-      <stop offset="100%" stop-color="#4c1d95" stop-opacity="0"/>
-    </radialGradient>
-    <filter id="${u}-smoke" x="-30%" y="-30%" width="160%" height="160%">
-      <feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="3" seed="7" result="n">${animate
-        ? '<animate attributeName="baseFrequency" values="0.03;0.045;0.03" dur="9s" repeatCount="indefinite"/>' : ''}</feTurbulence>
-      <feDisplacementMap in="SourceGraphic" in2="n" scale="16" xChannelSelector="R" yChannelSelector="G"/>
-      <feGaussianBlur stdDeviation="1.6"/>
-    </filter>
-    <filter id="${u}-glow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="3" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-    <clipPath id="${u}-clip"><circle cx="100" cy="100" r="98"/></clipPath>
-  </defs>
-  <g clip-path="url(#${u}-clip)">
-    <rect width="200" height="200" fill="url(#${u}-bg)"/>
-    <!-- swirling gas rings behind him -->
-    <g filter="url(#${u}-smoke)" opacity="0.85">
-      <g>${spin(26)}
-        <path d="M30 120 C 30 60, 170 60, 170 120 C 170 150, 120 160, 100 150" fill="none" stroke="#a78bfa" stroke-width="14" stroke-linecap="round" opacity="0.55"/>
-        <path d="M45 150 C 20 110, 70 70, 110 80" fill="none" stroke="#2dd4bf" stroke-width="8" stroke-linecap="round" opacity="0.35"/>
-      </g>
-      <g>${spin(34, 360, 0)}
-        <path d="M160 160 C 190 110, 140 50, 90 60 C 60 66, 50 90, 62 100" fill="none" stroke="#c4b5fd" stroke-width="10" stroke-linecap="round" opacity="0.4"/>
-      </g>
+  const count = Math.min(10, 4 + Math.floor(Math.max(1, Number(level) || 1) / 2));
+  const puffs = Array.from({ length: count }, (_, i) => {
+    const x = 48 + (i * 47) % 109;
+    const y = 165 - (i * 17) % 52;
+    const delay = animate ? ` style="animation-delay:-${(i * 0.7).toFixed(1)}s"` : '';
+    return `<circle class="${u}-wisp" cx="${x}" cy="${y}" r="${6 + (i % 3) * 3}" fill="url(#${u}-puff)"${delay}/>`;
+  }).join('');
+  const motion = animate ? `<style>
+    @media (prefers-reduced-motion: no-preference) {
+      .${u}-wisp { animation: ${u}-rise 6s ease-out infinite; }
+      @keyframes ${u}-rise {
+        0% { opacity: 0; transform: translateY(12px); }
+        40% { opacity: .75; }
+        100% { opacity: 0; transform: translateY(-70px); }
+      }
+    }
+  </style>` : '';
+  return `<svg class="avatar-svg" viewBox="0 0 200 200" role="img" aria-label="${label(title)}" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <radialGradient id="${u}-bg" cx="50%" cy="42%" r="65%">
+        <stop stop-color="#593691"/><stop offset=".62" stop-color="#281846"/><stop offset="1" stop-color="#0f0a1f"/>
+      </radialGradient>
+      <radialGradient id="${u}-puff">
+        <stop stop-color="#d7b6ff"/><stop offset="1" stop-color="#ab80f9" stop-opacity="0"/>
+      </radialGradient>
+      <clipPath id="${u}-clip"><circle cx="100" cy="100" r="98"/></clipPath>
+    </defs>
+    ${motion}
+    <g clip-path="url(#${u}-clip)">
+      <circle cx="100" cy="100" r="98" fill="url(#${u}-bg)"/>
+      ${puffs}
+      <image x="4" y="3" width="192" height="192" href="${arcadeAssetPath('caius-form.webp')}" preserveAspectRatio="xMidYMid meet"/>
     </g>
-    ${puffSvg}
-    <!-- body that turns into smoke -->
-    <g>${drift(4.5)}
-      <path d="M62 128 C 58 150, 70 170, 60 196 L 140 196 C 130 172, 142 150, 138 128 C 126 118, 74 118, 62 128 Z" fill="url(#${u}-gasbody)" filter="url(#${u}-smoke)"/>
-      <path d="M68 126 C 76 114, 124 114, 132 126 L 136 150 C 120 160, 80 160, 64 150 Z" fill="url(#${u}-hood)"/>
-      <path d="M100 124 L 92 150 M100 124 L 108 150" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
-      <!-- the gas emblem on his hoodie: three curls -->
-      <g fill="none" stroke="#5eead4" stroke-width="2.4" stroke-linecap="round" opacity="0.9">
-        <path d="M86 140 c 4 -6, 10 0, 6 4"/><path d="M98 136 c 4 -6, 10 0, 6 4"/><path d="M110 140 c 4 -6, 10 0, 6 4"/>
-      </g>
-      <!-- right arm raised holding a gas orb -->
-      <path d="M132 130 C 146 124, 152 110, 154 98" stroke="#312e81" stroke-width="11" stroke-linecap="round" fill="none"/>
-      <circle cx="155" cy="95" r="6" fill="url(#${u}-skin)"/>
-      <g filter="url(#${u}-glow)">
-        <circle cx="157" cy="80" r="15" fill="url(#${u}-orb)">${pulse(2.2, 0.75, 1)}</circle>
-        <path d="M150 80 c 3 -8, 14 -6, 12 2 c -1 5, -8 6, -9 1" fill="none" stroke="#f0fdfa" stroke-width="1.8" stroke-linecap="round">${spin(3, 0, 360, 157, 80)}</path>
-      </g>
-      <!-- left arm melting into gas -->
-      <path d="M68 132 C 54 140, 46 150, 40 164" stroke="url(#${u}-gasbody)" stroke-width="12" stroke-linecap="round" fill="none" filter="url(#${u}-smoke)"/>
-      <!-- head -->
-      <g>
-        <ellipse cx="100" cy="92" rx="34" ry="33" fill="url(#${u}-skin)"/>
-        <ellipse cx="66" cy="96" rx="5" ry="7" fill="#f2c6a5"/>
-        <ellipse cx="134" cy="96" rx="5" ry="7" fill="#f2c6a5"/>
-        <!-- spiky hair with smoky tips -->
-        <path d="M64 88 C 58 66, 70 50, 82 54 C 82 40, 102 38, 106 50 C 112 36, 134 42, 130 58 C 142 58, 144 76, 136 88
-                 C 130 76, 120 72, 112 74 C 116 66, 108 62, 100 70 C 96 62, 86 64, 88 74 C 78 70, 68 76, 64 88 Z" fill="url(#${u}-hair)"/>
-        <path d="M82 54 c -6 -8, -2 -16, 4 -18 M106 50 c 0 -10, 8 -14, 12 -14 M130 58 c 6 -6, 12 -4, 14 0"
-              stroke="#a78bfa" stroke-width="3" stroke-linecap="round" fill="none" opacity="0.7" filter="url(#${u}-smoke)"/>
-        <!-- glowing eyes -->
-        <g filter="url(#${u}-glow)">
-          <ellipse cx="87" cy="95" rx="6.5" ry="7.5" fill="#fff"/>
-          <ellipse cx="113" cy="95" rx="6.5" ry="7.5" fill="#fff"/>
-          <circle cx="88" cy="96" r="4.4" fill="#14b8a6">${pulse(3, 0.8, 1)}</circle>
-          <circle cx="114" cy="96" r="4.4" fill="#14b8a6">${pulse(3, 0.8, 1)}</circle>
-          <circle cx="88" cy="96" r="2" fill="#042f2e"/><circle cx="114" cy="96" r="2" fill="#042f2e"/>
-          <circle cx="86.5" cy="94" r="1.3" fill="#fff"/><circle cx="112.5" cy="94" r="1.3" fill="#fff"/>
-        </g>
-        <!-- confident eyebrows and a cheeky grin -->
-        <path d="M79 85 L 94 88 M121 85 L 106 88" stroke="#1e1b4b" stroke-width="3" stroke-linecap="round"/>
-        <path d="M88 110 C 94 118, 108 118, 114 108" fill="#7f1d1d" stroke="#3b0764" stroke-width="2" stroke-linecap="round"/>
-        <path d="M92 111 L 110 110" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/>
-        <ellipse cx="78" cy="106" rx="5" ry="3" fill="#fb7185" opacity="0.35"/>
-        <ellipse cx="122" cy="106" rx="5" ry="3" fill="#fb7185" opacity="0.35"/>
-      </g>
-    </g>
-  </g>
-  <circle cx="100" cy="100" r="97" fill="none" stroke="#a78bfa" stroke-width="3" opacity="0.8"/>
-</svg>`;
+    <circle cx="100" cy="100" r="97" fill="none" stroke="#a78bfa" stroke-width="3" opacity=".8"/>
+  </svg>`;
 }
 
 /* ======================================================================== */

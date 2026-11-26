@@ -11,8 +11,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./cc-games.css?v=1.1.0">
-<link rel="stylesheet" href="./cc-arcade.css?v=1.1.0">
+<link rel="stylesheet" href="./cc-games.css?v=1.1.1">
+<link rel="stylesheet" href="./cc-arcade.css?v=1.1.1">
 <style>
   :root {
     --bg: #0b1026;
@@ -401,7 +401,7 @@
       <li>Dad assigns each quest and sets its Robux reward.</li>
       <li>Finish the quest, then tell Dad. He marks it <b>Success</b> and the Robux go into your balance.</li>
       <li>If a quest is not done in time, Dad may mark it <b>Failed</b>. Some quests have a penalty, which is taken off your balance.</li>
-      <li>Earned Robux raise your level. The Kitsune grows another fox tail every two levels and the Smoke form grows stronger.</li>
+      <li>Earned Robux raise your level. The Kitsune grows another fox tail every two levels and Caius grows stronger in his Gas Knight form.</li>
       <li>Open the Arcade and choose your hero. A successful quest unlocks one free relic draw, including quests you finished earlier.</li>
       <li>The first win in each mini-game each Singapore day earns a 5 Robux request. Dad can approve it here or open a win link you share.</li>
       <li>When you want your Robux, ask Dad. He pays them out and records it here, so the balance is always right.</li>
@@ -547,9 +547,9 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script type="module">
 import * as C from './cc-core.mjs?v=1.0.0';
-import { createArcade } from './cc-arcade.mjs?v=1.1.0';
-import { receiptFor, arcadeLedgerEntry, GAMES, WIN_REWARD, ARCADE_VERSION } from './cc-arcade-core.mjs?v=1.1.0';
-import { avatarFor, coinSvg, COIN_DEFS } from './cc-avatars.mjs?v=1.0.0';
+import { createArcade } from './cc-arcade.mjs?v=1.1.1';
+import { receiptFor, arcadeLedgerEntry, GAMES, WIN_REWARD, ARCADE_VERSION, arcadeAssetPath } from './cc-arcade-core.mjs?v=1.1.1';
+import { avatarFor, coinSvg, COIN_DEFS } from './cc-avatars.mjs?v=1.1.1';
 
 /* ============================================================
    Firebase (the same project as the rest of the site)
@@ -731,7 +731,7 @@ function renderPlayers() {
       card.dataset.player = kid.id;
       card.dataset.action = 'pick-kid';
       card.dataset.kid = kid.id;
-      card.innerHTML = `<div class="player-banner"><img src="./assets/${kid.id}-banner.webp" alt="">
+      card.innerHTML = `<div class="player-banner"><img src="${arcadeAssetPath(kid.id + '-banner.webp')}" alt="">
           <div><p class="p-name">${esc(kid.name)}</p><p class="p-rank"></p></div></div>
         <div class="player-summary">
           <div class="avatar"><div class="avatar-art"></div><span class="lvl"></span></div>
@@ -748,7 +748,7 @@ function renderPlayers() {
       avatarCache[kid.id] = key;
     }
     card.querySelector('.lvl').textContent = 'Lv ' + lv.level;
-    card.querySelector('.p-rank').textContent = `${C.rankFor(kid.id, lv.level)} · ${kid.id === 'caius' ? 'Smoke' : kid.power}`;
+    card.querySelector('.p-rank').textContent = `${C.rankFor(kid.id, lv.level)} · ${kid.id === 'caius' ? 'Gas Fruit' : kid.power}`;
     card.querySelector('.balance').innerHTML = `${coinSvg(30)}<span data-balance="${kid.id}">${esc(C.formatRobux(s.balance))}</span><small>Robux</small>`;
     card.querySelector('.xp-bar > i').style.width = Math.round(lv.progress * 100) + '%';
     card.querySelector('.xp-a').textContent = `${C.formatRobux(lv.into)} / ${C.formatRobux(lv.need)} to Lv ${lv.level + 1}`;

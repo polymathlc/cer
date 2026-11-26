@@ -9,6 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import * as C from '../cc/cc-core.mjs';
+import { ARCADE_VERSION } from '../cc/cc-arcade-core.mjs';
 import { caiusAvatar, carisAvatar, avatarFor, coinSvg } from '../cc/cc-avatars.mjs';
 import { addCcRules, CC_RULE, CC_COLLECTIONS, CC_ADMINS, ccRuleTests, ccPreservedTests, publishCcRules } from './cc-rules.mjs';
 import { addTrialRules } from './trial-rules.mjs';
@@ -196,11 +197,17 @@ test('only verified admin emails may change the board, and the page and rules ag
 });
 
 /* ============================== Avatars ============================== */
-test('the avatars are self-made SVG with unique ids, and Caris shows her tails', () => {
+test('avatar badges use distinct ids, Caius wears his Gas Knight form and Caris shows her tails', () => {
   const a = caiusAvatar({ uid: 'one' }), b = caiusAvatar({ uid: 'two' });
   assert.match(a, /^<svg[^>]+viewBox="0 0 200 200"/);
   assert.ok(a.includes('id="cgone-bg"') && b.includes('id="cgtwo-bg"'));
-  assert.ok(!a.includes('<image') && !a.includes('href="http'), 'no outside images');
+  const portrait = './assets/caius-form.webp?v=' + ARCADE_VERSION;
+  assert.deepEqual([...a.matchAll(/<image\b[^>]*\bhref="([^"]+)"/g)].map(m => m[1]), [portrait]);
+  const mini = avatarFor('caius', { uid: 'mini', level: 99, animate: false });
+  assert.ok(mini.includes('href="' + portrait + '"') && !mini.includes('@keyframes'));
+  assert.equal((mini.match(/class="cgmini-wisp"/g) || []).length, 10);
+  assert.equal((a.match(/class="cgone-wisp"/g) || []).length, 4);
+  assert.ok(a.includes('(prefers-reduced-motion: no-preference)'), 'animate only when motion is enabled');
   for (const n of [1, 5, 9]) {
     const svg = carisAvatar({ uid: 't' + n, tails: n, animate: false });
     assert.equal((svg.match(/fill="url\(#kft\d-tail\)"/g) || []).length, n, `${n} tails`);
@@ -234,7 +241,7 @@ test('the page is private: noindex, not in the sitemap, not linked from the site
 
 test('the page loads its logic as modules and uses the shared Firebase project', () => {
   assert.ok(page.includes("from './cc-core.mjs?v=" + C.VERSION + "'"), 'the core import carries the version');
-  assert.ok(page.includes("from './cc-avatars.mjs?v=" + C.VERSION + "'"));
+  assert.ok(page.includes("from './cc-avatars.mjs?v=" + ARCADE_VERSION + "'"));
   assert.ok(page.includes('projectId: "mathgen--app"'));
   for (const name of CC_COLLECTIONS) {
     if (name === 'ccSettings') assert.ok(page.includes("collection('ccSettings').doc('main')"));

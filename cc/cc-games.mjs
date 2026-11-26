@@ -1,4 +1,6 @@
 // The game owns only the DOM inside its host. Reward persistence belongs to the quest board.
+import { arcadeAssetPath } from './cc-arcade-core.mjs?v=1.1.1';
+
 const games = {
   dash: {
     title: 'Foxfire Dash',
@@ -22,7 +24,7 @@ const games = {
     create: createRush
   }
 };
-const asset = file => new URL('./assets/' + file, import.meta.url).href;
+const asset = file => new URL(arcadeAssetPath(file), import.meta.url).href;
 const pick = count => Math.floor(Math.random() * count);
 const lanes = ['Left', 'Middle', 'Right'];
 const runes = [

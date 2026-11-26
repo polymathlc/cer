@@ -1,6 +1,6 @@
 import { KIDS, kidById, formatDay } from './cc-core.mjs';
-import { ARCADE_STORAGE_PREFIX, GAMES, ITEMS, WIN_REWARD, createArcadeStore } from './cc-arcade-core.mjs';
-import { mountGame } from './cc-games.mjs';
+import { ARCADE_STORAGE_PREFIX, GAMES, ITEMS, WIN_REWARD, createArcadeStore, arcadeAssetPath } from './cc-arcade-core.mjs?v=1.1.1';
+import { mountGame } from './cc-games.mjs?v=1.1.1';
 
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -12,11 +12,11 @@ const descriptions = {
   rush: 'Catch ten relics before time runs out.'
 };
 const gameById = id => GAMES.find(game => game.id === id);
-const elementName = { caius: 'Smoke', caris: 'Kitsune' };
+const elementName = { caius: 'Gas Fruit', caris: 'Kitsune' };
 
 function playerChoices() {
   return KIDS.map(kid => `<button class="arc-player arc-player-${kid.id}" data-arc="player" data-value="${kid.id}">
-    <img src="./assets/${kid.id}-banner.webp" alt="">
+    <img src="${arcadeAssetPath(kid.id + '-banner.webp')}" alt="">
     <span><strong>${kid.name}</strong><small>${elementName[kid.id]} transformation</small></span>
   </button>`).join('');
 }
@@ -24,15 +24,15 @@ function playerChoices() {
 function heroStage(kid, replayed, rewardNote) {
   const player = kidById(kid);
   return `<div class="arc-transform arc-transform-${kid}">
-    <img class="arc-transform-bg" src="./assets/${kid}-banner.webp" alt="">
-    <div class="arc-transform-copy"><p class="arc-form-name">${elementName[kid]} transformation</p>
+    <img class="arc-transform-bg" src="${arcadeAssetPath(kid + '-banner.webp')}" alt="">
+    <div class="arc-transform-copy"><p class="arc-form-name">${kid === 'caius' ? 'Gas Knight · Vapor Condensation' : 'Kitsune transformation'}</p>
       <h2>${player.name}’s arcade</h2><p>${rewardNote}</p>
       <div class="arc-actions"><button class="arc-button" data-arc="transform">${replayed ? 'Replay transformation' : 'Transform'}</button>
         <button class="arc-secondary" data-arc="switch">Switch hero</button></div>
     </div>
     <div class="arc-transform-art">
       <div class="arc-transform-fx" aria-hidden="true">${Array.from({length: 9}, (_, i) => `<i style="--index:${i};--angle:${-76 + i * 19}deg"></i>`).join('')}</div>
-      <img class="arc-full-form" src="./assets/${kid}-form.webp" alt="${kid === 'caius' ? 'Caius in his swirling Smoke form' : 'Caris in her blue nine-tailed Kitsune form'}">
+      <img class="arc-full-form" src="${arcadeAssetPath(kid + '-form.webp')}" alt="${kid === 'caius' ? 'Caius transformed into the armoured Gas Knight by Vapor Condensation' : 'Caris in her blue nine-tailed Kitsune form'}">
     </div>
   </div>`;
 }
@@ -46,7 +46,7 @@ function gameArt(id) {
     </span>`;
   }
   const hero = id === 'dash' ? 'caris' : 'caius';
-  return `<span class="arc-game-art arc-art-${id}" aria-hidden="true"><img src="./assets/${hero}-banner.webp" alt=""></span>`;
+  return `<span class="arc-game-art arc-art-${id}" aria-hidden="true"><img src="${arcadeAssetPath(hero + '-banner.webp')}" alt=""></span>`;
 }
 
 function gameCards(kid, store, ledger) {
