@@ -1,0 +1,39 @@
+name: PSLE answer key checker
+
+on:
+  pull_request:
+    paths: ['app.js', 'index.html', 'psle-key-check-core.mjs', 'ai-cost-core.mjs', 'tools/psle-key-checker*.mjs', '.github/workflows/psle-key-checker.yml']
+  push:
+    branches: [main]
+    paths: ['app.js', 'index.html', 'psle-key-check-core.mjs', 'ai-cost-core.mjs', 'tools/psle-key-checker*.mjs', '.github/workflows/psle-key-checker.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  answer-key-checker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Rules and wiring
+        run: |
+          node --check app.js
+          node --test tools/psle-key-checker-tests.mjs
+      - name: Install browser test runtime
+        run: |
+          npm install --prefix "$RUNNER_TEMP/pkc-browser" playwright@1.62.1
+          "$RUNNER_TEMP/pkc-browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Desktop, tablet and phone in a real browser
+        env:
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/pkc-browser/node_modules/playwright
+          PKC_QA_DIR: ${{ runner.temp }}/answer-key-checker-screenshots/
+        run: node tools/psle-key-checker-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: answer-key-checker-screenshots
+          path: ${{ runner.temp }}/answer-key-checker-screenshots/
+          if-no-files-found: ignore
