@@ -2,6 +2,22 @@
 
 Guidance for Claude when working in this repo.
 
+## 📖 The answer book — explanations and keys in the teacher's own words (v1.466.0)
+
+`teacher-voice.js` (`window.TeacherVoice`) is **byte for byte the same file in polymathlc/anskey, tutor, cer and scan**;
+`tools/teacher-voice-tests.mjs` (also shared) compares the copies when siblings are checked out beside this repo. Ans Key
+is the ONLY writer (`users/{admin}/aiTraining/answerBook/entries`, `answerIndex-<bucket>`, `answerIndex`): every answer
+the teacher writes on a worksheet there, word for word with its question.
+- Glue `📖 THE ANSWER BOOK — the teacher's own answers` just above `// ---- THE ONE DOOR ----` in app.js: `_tvInit` (the
+  reader: `getDoc`; `listEntries` only for the admin on their own account, science entries), `_tvBlock(kind, topic, q)`
+  (appended by `aiGrounding` to answer / teach / check / mark as `voice`; `gen` gets nothing; `q` may be a string or a
+  question object, read through its text/mcq blocks; with a question it also primes it for next time), `tvPrimeFor(q,
+  topic, ms)` (fetch ahead, bounded), `_tvLoadAll` (after the admin's `loadTeachingNotes`), `_tvReset`
+  (`stopTeachingNotes`). Grounding stays SYNCHRONOUS: an unprimed question gets nothing this time, never a wait.
+- `teacher-voice.js` is a classic script loaded right before the `app.js` module tag, at the release `?v=`.
+- Nothing here writes to the book (the test fails on a write in the glue).
+- Checks: `node --test tools/cer-voice-tests.mjs tools/teacher-voice-tests.mjs` (CI: `.github/workflows/teacher-voice.yml`).
+
 ## 🔑 Keywords and 🤖 ✂️ ✍️ AI buttons in the answer key checker; Gemini 4 Hydrogen (v1.465.0)
 
 Owner asked (2026-11-26) for the checker to show the keywords the exported worksheet prints bold and underlined, for AI
